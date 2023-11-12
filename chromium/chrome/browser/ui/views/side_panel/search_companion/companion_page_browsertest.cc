@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/base_paths.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -23,7 +23,6 @@
 #include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/companion/core/mojom/companion.mojom.h"
 #include "chrome/browser/companion/core/proto/companion_url_params.pb.h"
-#include "chrome/browser/companion/visual_search/features.h"
 #include "chrome/browser/companion/visual_search/visual_search_classifier_host.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
@@ -42,10 +41,12 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_toolbar_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/companion/visual_search/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/lens/lens_features.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/core/test_optimization_guide_model_provider.h"
 #include "components/optimization_guide/proto/visual_search_model_metadata.pb.h"
@@ -352,14 +353,19 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
   // the page to load.
   void ClickUrlInCompanion(const GURL& url,
                            bool wait_for_navigation = true,
-                           bool wait_for_message = false) {
+                           bool wait_for_message = false,
+                           bool click_in_nested_iframe = false) {
     std::string waitForMessage = wait_for_message ? "waitForMessage();" : "";
     std::string script =
         "const link = document.createElement('a');link.target = "
         "\"blank_\";link.href=\"" +
         url.spec() + "\";document.body.appendChild(link);link.click();" +
         waitForMessage;
-    ExecJs(script);
+    if (click_in_nested_iframe) {
+      ExecJsInNestedIframe(script);
+    } else {
+      ExecJs(script);
+    }
     if (wait_for_navigation) {
       content::TestNavigationObserver nav_observer(web_contents());
       nav_observer.Wait();
@@ -376,6 +382,16 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
     nav_observer.Wait();
   }
 
+  // Mimics a user clicking a link in the main page to `url` that opens a new
+  // tab
+  void ClickNewTabUrlInMainPage(const GURL& url) {
+    std::string script =
+        "const link = document.createElement('a');link.target = "
+        "\"blank_\";link.href=\"" +
+        url.spec() + "\";document.body.appendChild(link);link.click();";
+    ExecJsInMainPage(script);
+  }
+
   // Mimics pressing the back arrow
   void PressBackButton() {
     content::TestNavigationObserver nav_observer(web_contents());
@@ -389,6 +405,19 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
         content::ChildFrameAt(GetCompanionWebContents(browser()), 0);
 
     return content::ExecJs(iframe, code);
+  }
+
+  ::testing::AssertionResult ExecJsInNestedIframe(const std::string& code) {
+    // Create a nested iframe and execute test in it.
+    content::RenderFrameHost* iframe =
+        content::ChildFrameAt(GetCompanionWebContents(browser()), 0);
+    std::string createIframeScript =
+        "const frame = document.createElement('iframe');"
+        "document.body.appendChild(frame);";
+    content::ExecJs(iframe, createIframeScript);
+    content::RenderFrameHost* nested_iframe = content::ChildFrameAt(iframe, 0);
+
+    return content::ExecJs(nested_iframe, code);
   }
 
   // Executes Javascript in the active tab.
@@ -416,6 +445,8 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
     if (request.method == net::test_server::HttpMethod::METHOD_POST) {
       net::GetValueForKeyInQuery(url, "sourcelang", &last_sourcelang_);
       net::GetValueForKeyInQuery(url, "targetlang", &last_targetlang_);
+      net::GetValueForKeyInQuery(url, "vpw", &last_viewport_width_param_);
+      net::GetValueForKeyInQuery(url, "vph", &last_viewport_height_param_);
     }
     return nullptr;
   }
@@ -431,12 +462,34 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
 
   std::string GetLastTargetLang() { return last_targetlang_; }
 
+  int GetLastViewportWidthParam() {
+    if (last_viewport_width_param_.empty()) {
+      return 0;
+    }
+
+    int viewport_width;
+    base::StringToInt(last_viewport_width_param_, &viewport_width);
+    return viewport_width;
+  }
+
+  int GetLastViewportHeightParam() {
+    if (last_viewport_height_param_.empty()) {
+      return 0;
+    }
+
+    int viewport_height;
+    base::StringToInt(last_viewport_height_param_, &viewport_height);
+    return viewport_height;
+  }
+
   companion::proto::CompanionUrlParams DeserializeCompanionRequest(
       const std::string& companion_url_param) {
+    std::string serialized_proto;
+    EXPECT_TRUE(base::Base64UrlDecode(
+        companion_url_param, base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+        &serialized_proto));
+
     companion::proto::CompanionUrlParams proto;
-    auto base64_decoded = base::Base64Decode(companion_url_param);
-    auto serialized_proto = std::string(base64_decoded.value().begin(),
-                                        base64_decoded.value().end());
     EXPECT_TRUE(proto.ParseFromString(serialized_proto));
     return proto;
   }
@@ -512,6 +565,14 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
         companion_server_.GetURL("/upload").spec();
 
     std::vector<base::test::FeatureRefAndParams> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+    if (enable_feature_lens_standalone_) {
+      enabled_features.emplace_back(base::test::FeatureRefAndParams(
+          lens::features::kLensStandalone, /*params*/ {}));
+    } else {
+      disabled_features.emplace_back(lens::features::kLensStandalone);
+    }
+
     if (enable_feature_side_panel_companion_) {
       enabled_features.emplace_back(
           companion::features::internal::kSidePanelCompanion, params);
@@ -528,13 +589,19 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
         params2);
 
     feature_list_.InitWithFeaturesAndParameters(enabled_features,
-                                                /*disabled_features=*/{});
+                                                disabled_features);
   }
 
   virtual std::string ShouldOpenLinkInCurrentTab() { return "false"; }
 
   void WaitForTabCount(int expected) {
     while (browser()->tab_strip_model()->count() != expected) {
+      base::RunLoop().RunUntilIdle();
+    }
+  }
+
+  void WaitForSidePanelEntryShowing(SidePanelEntry::Id expected) {
+    while (side_panel_coordinator()->GetCurrentEntryId() != expected) {
       base::RunLoop().RunUntilIdle();
     }
   }
@@ -608,8 +675,11 @@ class CompanionPageBrowserTest : public InProcessBrowserTest {
   size_t requests_received_on_server_ = 0;
   std::string last_sourcelang_;
   std::string last_targetlang_;
+  std::string last_viewport_width_param_;
+  std::string last_viewport_height_param_;
   bool enable_feature_side_panel_companion_ = true;
   bool enable_feature_visual_search_ = true;
+  bool enable_feature_lens_standalone_ = true;
 };
 
 IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest, InitialNavigationWithoutMsbb) {
@@ -799,6 +869,30 @@ IN_PROC_BROWSER_TEST_F(
   // Go back from page A2. We should return to the initial page.
   PressBackButton();
   EXPECT_EQ(initial_url, web_contents()->GetURL());
+}
+
+IN_PROC_BROWSER_TEST_F(CompanionPageSameTabBrowserTest,
+                       LinkClickInNestedIframeOpens) {
+  const GURL initial_url = CreateUrl(kHost, "/initial.html");
+  const GURL clicked_url = CreateUrl(kHost, "/clicked.html");
+
+  // Load a page on the active tab and open companion side panel
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), initial_url));
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kSearchCompanion);
+
+  WaitForCompanionToBeLoaded();
+  EXPECT_EQ(1u, requests_received_on_server());
+  EXPECT_EQ(side_panel_coordinator()->GetCurrentEntryId(),
+            SidePanelEntry::Id::kSearchCompanion);
+  EXPECT_EQ(2, web_contents()->GetController().GetEntryCount());
+
+  // Click a URL that appears in a nested iframe
+  ClickUrlInCompanion(clicked_url,
+                      /*wait_for_navigation=*/true,
+                      /*wait_for_message=*/false,
+                      /*click_in_nested_iframe=*/true);
+
+  EXPECT_EQ(3, web_contents()->GetController().GetEntryCount());
 }
 
 IN_PROC_BROWSER_TEST_F(CompanionPageSameTabBrowserTest,
@@ -1552,6 +1646,8 @@ IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
   ExpectUkmEntry(
       &ukm_recorder, ukm::builders::Companion_PageView::kOpenTriggerName,
       static_cast<int>(SidePanelOpenTrigger::kContextMenuSearchOption));
+  histogram_tester_->ExpectBucketCount("Companion.SidePanel.ShowUiSuccess",
+                                       true, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
@@ -1600,6 +1696,13 @@ IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
   // The language params should be unset when is_image_translate=false.
   EXPECT_EQ(GetLastSourceLang(), "");
   EXPECT_EQ(GetLastTargetLang(), "");
+  // The viewport dimension params should be set to a value
+  EXPECT_TRUE(GetLastViewportHeightParam() > 0);
+  EXPECT_TRUE(GetLastViewportWidthParam() > 0);
+  histogram_tester_->ExpectBucketCount(
+      "Search.Lens.ViewportDimensionsSent.Success", true, 1);
+  histogram_tester_->ExpectBucketCount("Companion.SidePanel.ShowUiSuccess",
+                                       true, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
@@ -1647,6 +1750,8 @@ IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
                  static_cast<int>(SidePanelOpenTrigger::kLensContextMenu));
   EXPECT_EQ(GetLastSourceLang(), source_lang);
   EXPECT_EQ(GetLastTargetLang(), target_lang);
+  histogram_tester_->ExpectBucketCount("Companion.SidePanel.ShowUiSuccess",
+                                       true, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest, OpenedFromEntryPoint) {
@@ -1671,6 +1776,8 @@ IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest, OpenedFromEntryPoint) {
   ExpectUkmEntry(&ukm_recorder,
                  ukm::builders::Companion_PageView::kOpenTriggerName,
                  static_cast<int>(SidePanelOpenTrigger::kComboboxSelected));
+  histogram_tester_->ExpectBucketCount("Companion.SidePanel.ShowUiSuccess",
+                                       true, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
@@ -1705,6 +1812,105 @@ IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
   ExpectUkmEntry(
       &ukm_recorder, ukm::builders::Companion_PageView::kOpenTriggerName,
       static_cast<int>(SidePanelOpenTrigger::kPinnedEntryToolbarButton));
+}
+
+IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest,
+                       RefreshCompanionPageMessageDoesReload) {
+  EnableSignInMsbbExps(/*signed_in=*/true, /*msbb=*/true, /*exps=*/true);
+
+  // Load a page on the active tab and open companion side panel
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), CreateUrl(kHost, kRelativeUrl1)));
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kSearchCompanion);
+  WaitForCompanionToBeLoaded();
+  auto proto = GetLastCompanionProtoFromUrlLoad();
+  EXPECT_TRUE(proto.has_value());
+  EXPECT_EQ(proto->page_url(), CreateUrl(kHost, kRelativeUrl1));
+
+  // Simulate a message to refresh companion page.
+  CompanionScriptBuilder builder(MethodType::kRefreshCompanionPage);
+  EXPECT_TRUE(ExecJs(builder.Build()));
+
+  WaitForCompanionIframeReload();
+  proto = GetLastCompanionProtoFromUrlLoad();
+  EXPECT_TRUE(proto.has_value());
+  EXPECT_EQ(proto->page_url(), CreateUrl(kHost, kRelativeUrl1));
+}
+
+// This test verifies that a new tab that was opened from a page with Search
+// Companion open, also opens Search Companion in the new tab.
+IN_PROC_BROWSER_TEST_F(CompanionPageBrowserTest, NewTabFromMainPageOpensCsc) {
+  EnableSignInMsbbExps(/*signed_in=*/true, /*msbb=*/true, /*exps=*/true);
+  // Load a page on the active tab and open companion side panel
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), CreateUrl(kHost, kRelativeUrl1)));
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kSearchCompanion,
+                                 SidePanelOpenTrigger::kComboboxSelected);
+
+  WaitForCompanionToBeLoaded();
+  EXPECT_EQ(1u, requests_received_on_server());
+  EXPECT_EQ(side_panel_coordinator()->GetCurrentEntryId(),
+            SidePanelEntry::Id::kSearchCompanion);
+
+  ClickNewTabUrlInMainPage(CreateUrl(kHost, kRelativeUrl2));
+
+  WaitForTabCount(2);
+  EXPECT_TRUE(side_panel_coordinator()->IsSidePanelEntryShowing(
+      SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion)));
+}
+
+// This test verifies that a new tab that was opened from a page with side panel
+// open but not on Search Companion, does not open Search Companion in the new
+// tab.
+IN_PROC_BROWSER_TEST_F(
+    CompanionPageBrowserTest,
+    NewTabFromMainPageWhileCompanionHiddenDoesNotOpenCompanion) {
+  EnableSignInMsbbExps(/*signed_in=*/true, /*msbb=*/true, /*exps=*/true);
+  // Load a page on the active tab and open companion side panel
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), CreateUrl(kHost, kRelativeUrl1)));
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kSearchCompanion,
+                                 SidePanelOpenTrigger::kComboboxSelected);
+
+  WaitForCompanionToBeLoaded();
+  EXPECT_EQ(1u, requests_received_on_server());
+  EXPECT_EQ(side_panel_coordinator()->GetCurrentEntryId(),
+            SidePanelEntry::Id::kSearchCompanion);
+
+  // Hide Search Companion
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kReadingList);
+  WaitForSidePanelEntryShowing(SidePanelEntry::Id::kReadingList);
+
+  ClickNewTabUrlInMainPage(CreateUrl(kHost, kRelativeUrl2));
+
+  WaitForTabCount(2);
+  EXPECT_FALSE(side_panel_coordinator()->IsSidePanelEntryShowing(
+      SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion)));
+}
+
+// This test verifies that a new tab that was opened from a page with side panel
+// closed, does not open Search Companion in the new tab.
+IN_PROC_BROWSER_TEST_F(
+    CompanionPageBrowserTest,
+    NewTabFromMainPageWhileSidePanelClosedDoesNotOpenCompanion) {
+  EnableSignInMsbbExps(/*signed_in=*/true, /*msbb=*/true, /*exps=*/true);
+  // Load a page on the active tab and open companion side panel
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), CreateUrl(kHost, kRelativeUrl1)));
+  side_panel_coordinator()->Show(SidePanelEntry::Id::kSearchCompanion,
+                                 SidePanelOpenTrigger::kComboboxSelected);
+
+  WaitForCompanionToBeLoaded();
+  EXPECT_EQ(1u, requests_received_on_server());
+  EXPECT_EQ(side_panel_coordinator()->GetCurrentEntryId(),
+            SidePanelEntry::Id::kSearchCompanion);
+
+  side_panel_coordinator()->Close();
+  ClickNewTabUrlInMainPage(CreateUrl(kHost, kRelativeUrl2));
+
+  WaitForTabCount(2);
+  EXPECT_FALSE(side_panel_coordinator()->IsSidePanelEntryShowing(
+      SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion)));
 }
 
 class CompanionPageDisabledBrowserTest : public CompanionPageBrowserTest {
@@ -1913,13 +2119,23 @@ class SidePanelCompanion2BrowserEnabledTest : public CompanionPageBrowserTest {
 
     std::vector<base::test::FeatureRefAndParams> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
+    if (enable_feature_lens_standalone_) {
+      enabled_features.emplace_back(base::test::FeatureRefAndParams(
+          lens::features::kLensStandalone, /*params*/ {}));
+    } else {
+      disabled_features.emplace_back(lens::features::kLensStandalone);
+    }
 
     if (enable_feature_side_panel_companion_) {
       enabled_features.emplace_back(
           companion::features::internal::kSidePanelCompanion2, enabled_params);
       feature_list_.InitWithFeaturesAndParameters(enabled_features,
                                                   disabled_features);
-      EXPECT_TRUE(companion::IsCompanionFeatureEnabled());
+      if (enable_feature_lens_standalone_) {
+        EXPECT_TRUE(companion::IsCompanionFeatureEnabled());
+      } else {
+        EXPECT_FALSE(companion::IsCompanionFeatureEnabled());
+      }
     } else {
       disabled_features.emplace_back(
           companion::features::internal::kSidePanelCompanion);
@@ -1968,4 +2184,21 @@ IN_PROC_BROWSER_TEST_F(SidePanelCompanion2BrowserEnabledTest, FeatureEnabled) {
   EXPECT_EQ(side_panel_coordinator()->GetCurrentEntryId(),
             SidePanelEntry::Id::kSearchCompanion);
   EXPECT_EQ(1u, requests_received_on_server());
+}
+
+class LensStandaloneDisabledBrowserTest : public CompanionPageBrowserTest {
+ public:
+  LensStandaloneDisabledBrowserTest() : CompanionPageBrowserTest() {
+    enable_feature_lens_standalone_ = false;
+  }
+};
+
+// Verifies the behavior when Lens standalone feature is disabled but the side
+// panel Companion flag is enabled.
+IN_PROC_BROWSER_TEST_F(
+    LensStandaloneDisabledBrowserTest,
+    CompanionFeatureStatusWhenLensStandaloneFeatureDisabled) {
+  EXPECT_TRUE(base::FeatureList::IsEnabled(
+      companion::features::internal::kSidePanelCompanion));
+  EXPECT_FALSE(companion::IsCompanionFeatureEnabled());
 }

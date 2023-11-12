@@ -9,6 +9,10 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_style.h"
 
+// Vivaldi
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
+// End Vivaldi
+
 @class ToolbarButton;
 @class ToolbarButtonActionsHandler;
 @class ToolbarButtonVisibilityConfiguration;
@@ -66,8 +70,9 @@
 
 /// Returns the more button options based on the browsing state. In new tab page
 /// we show only the panels button. But, in webpage we show the ad and tracker
-/// blocker item as well as the share button.
-- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons;
+/// blocker item.
+- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons
+                             atbSettingType:(ATBSettingType)type;
 // End Vivaldi
 @end
 

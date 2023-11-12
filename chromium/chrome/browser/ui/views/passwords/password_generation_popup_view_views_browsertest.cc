@@ -48,6 +48,8 @@ class MockPasswordGenerationPopupController
   MOCK_METHOD(void, PasswordAccepted, (), (override));
   MOCK_METHOD(void, SetSelected, (), (override));
   MOCK_METHOD(void, SelectionCleared, (), (override));
+  MOCK_METHOD(void, EditPasswordClicked, (), (override));
+  MOCK_METHOD(void, EditPasswordSelected, (), (override));
   MOCK_METHOD(void, OnGooglePasswordManagerLinkClicked, (), (override));
   MOCK_METHOD(std::u16string, GetPrimaryAccountEmail, (), (override));
   MOCK_METHOD(GenerationUIState, state, (), (const override));
@@ -113,6 +115,15 @@ class PasswordGenerationPopupViewBrowsertest
     // If this update is not forced, the password selection state does not get
     // taken into account.
     view()->PasswordSelectionUpdated();
+  }
+
+ protected:
+  // autofill::PopupPixelTest:
+  PasswordGenerationPopupViewViews* CreateView(
+      MockPasswordGenerationPopupController& controller) override {
+    return new PasswordGenerationPopupViewViews(
+        controller.GetWeakPtr(), views::Widget::GetWidgetForNativeWindow(
+                                     browser()->window()->GetNativeWindow()));
   }
 
  private:

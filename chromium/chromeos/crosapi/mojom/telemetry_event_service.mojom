@@ -19,6 +19,7 @@
 
 module crosapi.mojom;
 
+import "chromeos/crosapi/mojom/probe_service.mojom";
 import "chromeos/crosapi/mojom/telemetry_extension_exception.mojom";
 import "chromeos/crosapi/mojom/telemetry_keyboard_event.mojom";
 import "chromeos/crosapi/mojom/nullable_primitives.mojom";
@@ -101,6 +102,27 @@ struct TelemetryUsbEventInfo {
   };
 
   State state@5;
+};
+
+// External display event info. This is emitted when an external display is
+// plugged in or plugged out.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable, RenamedFrom="crosapi.mojom.TelemetryHdmiEventInfo"]
+struct TelemetryExternalDisplayEventInfo {
+  [Stable, Extensible]
+  enum State {
+    // This is required for backwards compatibility, should not be used.
+    [Default] kUnmappedEnumField = 0,
+    // External display plugged in.
+    kAdd = 1,
+    // External display plugged out.
+    kRemove = 2,
+  };
+
+  State state@0;
+  // On external display event, also report information about the display.
+  [MinVersion=1] ProbeExternalDisplayInfo? display_info@1;
 };
 
 // SD card event info. This is emitted when a SD card is plugged in or plugged
@@ -253,9 +275,74 @@ struct TelemetryTouchpadConnectedEventInfo {
   array<TelemetryInputTouchButton> buttons@3;
 };
 
+// Emitted when new touch points are updated.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable]
+struct TelemetryTouchscreenTouchEventInfo {
+  // The touch points reported by the touchscreen.
+  array<TelemetryTouchPointInfo> touch_points@0;
+};
+
+// Emitted once the observer get connected to the touchscreen events. This will
+// be the first event from the touchscreen.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct TelemetryTouchscreenConnectedEventInfo {
+  // The maximum possible x position of touch points.
+  uint32? max_x@0;
+  // The maximum possible y position of touch points.
+  uint32? max_y@1;
+  // The maximum possible pressure of touch points, or 0 if pressure is not
+  // supported.
+  uint32? max_pressure@2;
+};
+
+// Stylus touch point info.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct TelemetryStylusTouchPointInfo {
+  // The x position in the cartesian XY plane. The value ranges from 0 to
+  // |max_x| as defined in TelemetryStylusConnectedEventInfo.
+  uint32? x@0;
+  // The y position in the cartesian XY plane. The value ranges from 0 to
+  // |max_y| as defined in TelemetryStylusConnectedEventInfo.
+  uint32? y@1;
+  // The pressure applied to the touch contact. The value ranges from 0 to
+  // |max_pressure| as defined in TelemetryStylusConnectedEventInfo.
+  uint32? pressure@2;
+};
+
+// Emitted when new touch point is updated.
+//
+// NextMinVersion: 1, NextIndex: 1
+[Stable]
+struct TelemetryStylusTouchEventInfo {
+  // The info of the stylus touch point. A null touch point means the stylus
+  // leaves the contact.
+  TelemetryStylusTouchPointInfo? touch_point@0;
+};
+
+// Emitted once the observer get connected to the stylus events. This will be
+// the first event from the stylus.
+//
+// NextMinVersion: 1, NextIndex: 3
+[Stable]
+struct TelemetryStylusConnectedEventInfo {
+  // The maximum possible x position of touch points.
+  uint32? max_x@0;
+  // The maximum possible y position of touch points.
+  uint32? max_y@1;
+  // The maximum possible pressure of touch points, or 0 if pressure is not
+  // supported.
+  uint32? max_pressure@2;
+};
+
 // Union of event info.
 //
-// NextMinVersion: 8, NextIndex: 11
+// NextMinVersion: 11, NextIndex: 16
 [Stable, Extensible]
 union TelemetryEventInfo {
   // The default value for forward compatibility. All the unknown type will be
@@ -283,11 +370,25 @@ union TelemetryEventInfo {
   // Touchpad Connected event info.
   [MinVersion=7] TelemetryTouchpadConnectedEventInfo
       touchpad_connected_event_info@10;
+  // External display event info.
+  [MinVersion=8] TelemetryExternalDisplayEventInfo
+      external_display_event_info@11;
+  // Stylus Touch event info.
+  [MinVersion=9] TelemetryStylusTouchEventInfo stylus_touch_event_info@12;
+  // Stylus connected event info.
+  [MinVersion=9] TelemetryStylusConnectedEventInfo
+      stylus_connected_event_info@13;
+  // Touchscreen Touch event info.
+  [MinVersion=10] TelemetryTouchscreenTouchEventInfo
+      touchscreen_touch_event_info@14;
+  // Touchscreen Connected event info.
+  [MinVersion=10] TelemetryTouchscreenConnectedEventInfo
+      touchscreen_connected_event_info@15;
 };
 
 // An enumeration of event categories.
 //
-// NextMinVersion: 8, NextIndex: 11
+// NextMinVersion: 11, NextIndex: 16
 [Stable, Extensible]
 enum TelemetryEventCategoryEnum {
   // This is required for backwards compatibility, should not be used.
@@ -302,6 +403,11 @@ enum TelemetryEventCategoryEnum {
   [MinVersion=7] kTouchpadButton = 8,
   [MinVersion=7] kTouchpadTouch = 9,
   [MinVersion=7] kTouchpadConnected = 10,
+  [MinVersion=8] kExternalDisplay = 11,
+  [MinVersion=9] kStylusTouch = 12,
+  [MinVersion=9] kStylusConnected = 13,
+  [MinVersion=10] kTouchscreenTouch = 14,
+  [MinVersion=10] kTouchscreenConnected = 15,
 };
 
 // Implemented by clients who desire events.

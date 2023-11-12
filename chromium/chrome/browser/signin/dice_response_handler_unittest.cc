@@ -15,6 +15,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "chrome/browser/signin/signin_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/account_reconcilor.h"
@@ -104,11 +105,15 @@ class DiceTestSigninClient : public TestSigninClient, public GaiaAuthConsumer {
 class FakeRegistrationTokenHelper : public RegistrationTokenHelper {
  public:
   FakeRegistrationTokenHelper()
-      : RegistrationTokenHelper(fake_unexportable_key_service_,
-                                "test_client_id",
-                                "test_auth_code",
-                                GURL("https://accounts.google.com/Register"),
-                                base::DoNothing()) {}
+      : RegistrationTokenHelper(
+            fake_unexportable_key_service_,
+            base::BindRepeating(
+                [](crypto::SignatureVerifier::SignatureAlgorithm,
+                   base::span<const uint8_t>,
+                   base::Time) -> absl::optional<std::string> {
+                  return absl::nullopt;
+                }),
+            base::DoNothing()) {}
 
   ~FakeRegistrationTokenHelper() override = default;
 
@@ -149,11 +154,16 @@ class DiceResponseHandlerTest : public testing::Test,
         signin_client_(&pref_service_),
         identity_test_env_(/*test_url_loader_factory=*/nullptr,
                            &pref_service_,
-                           signin::AccountConsistencyMethod::kDice,
                            &signin_client_),
         signin_error_controller_(
             SigninErrorController::AccountMode::PRIMARY_ACCOUNT,
             identity_test_env_.identity_manager()) {
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+    feature_list_.InitWithFeatures(
+        {switches::kEnableBoundSessionCredentials,
+         kEnableBoundSessionCredentialsOnDiceProfiles},
+        {});
+#endif
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     AboutSigninInternals::RegisterPrefs(pref_service_.registry());
     auto account_reconcilor_delegate =
@@ -256,8 +266,7 @@ class DiceResponseHandlerTest : public testing::Test,
   GoogleServiceAuthError auth_error_;
   std::string auth_error_email_;
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-  base::test::ScopedFeatureList feature_list_{
-      switches::kEnableBoundSessionCrendentials};
+  base::test::ScopedFeatureList feature_list_;
   StrictMock<
       base::MockCallback<DiceResponseHandler::RegistrationTokenHelperFactory>>
       mock_registration_token_helper_factory_;

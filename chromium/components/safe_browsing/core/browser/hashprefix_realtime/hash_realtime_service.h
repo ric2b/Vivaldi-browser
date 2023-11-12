@@ -14,9 +14,8 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/utils/backoff_operator.h"
-#include "components/safe_browsing/core/common/proto/safebrowsingv5_alpha1.pb.h"
+#include "components/safe_browsing/core/common/proto/safebrowsingv5.pb.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
-#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/oblivious_http_request.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -35,9 +34,6 @@ class SharedURLLoaderFactory;
 
 namespace safe_browsing {
 
-using HPRTLookupRequestCallback =
-    base::OnceCallback<void(std::unique_ptr<V5::SearchHashesRequest>)>;
-
 using HPRTLookupResponseCallback =
     base::OnceCallback<void(bool, absl::optional<SBThreatType>, SBThreatType)>;
 
@@ -53,13 +49,39 @@ class VerdictCacheManager;
 // order to anonymize the source of the requests.
 class HashRealTimeService : public KeyedService {
  public:
+  // Interface via which a client of this class can surface relevant events in
+  // WebUI. All methods must be called on the UI thread.
+  class WebUIDelegate {
+   public:
+    virtual ~WebUIDelegate() = default;
+
+    // Adds the new ping to the set of HPRT lookup pings. The ping consists of:
+    //  - |inner_request|: the contents of the encrypted request sent to Safe
+    //    Browsing through the relay.
+    //  - |ohttp_key|: the key used to encrypt the request.
+    //  - |relay_url_spec|: the URL of the relay used to forward the encrypted
+    //    request to Safe Browsing.
+    // Returns a token that can be used in |AddToHPRTLookupResponses| to
+    // correlate a ping and response. If the token is not populated, the
+    // response should not be logged.
+    virtual absl::optional<int> AddToHPRTLookupPings(
+        V5::SearchHashesRequest* inner_request,
+        std::string relay_url_spec,
+        std::string ohttp_key) = 0;
+
+    // Adds the new response to the set of HPRT lookup pings.
+    virtual void AddToHPRTLookupResponses(
+        int token,
+        V5::SearchHashesResponse* response) = 0;
+  };
   HashRealTimeService(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       base::RepeatingCallback<network::mojom::NetworkContext*()>
           get_network_context,
       VerdictCacheManager* cache_manager,
       OhttpKeyService* ohttp_key_service,
-      base::RepeatingCallback<bool()> get_is_enhanced_protection_enabled);
+      base::RepeatingCallback<bool()> get_is_enhanced_protection_enabled,
+      WebUIDelegate* webui_delegate);
 
   HashRealTimeService(const HashRealTimeService&) = delete;
   HashRealTimeService& operator=(const HashRealTimeService&) = delete;
@@ -169,11 +191,10 @@ class HashRealTimeService : public KeyedService {
   // Get a resource request with URL, load_flags, credentials mode, and method
   // set.
   std::unique_ptr<network::ResourceRequest> GetDirectFetchResourceRequest(
-      std::unique_ptr<V5::SearchHashesRequest> request) const;
+      V5::SearchHashesRequest* request) const;
 
   // Get the URL that will return a response containing full hashes.
-  std::string GetResourceUrl(
-      std::unique_ptr<V5::SearchHashesRequest> request) const;
+  std::string GetResourceUrl(V5::SearchHashesRequest* request) const;
 
   // Callback for getting the OHTTP key. Most parameters are used by
   // |OnURLLoaderComplete|, see the description above |OnURLLoaderComplete| for
@@ -203,6 +224,7 @@ class HashRealTimeService : public KeyedService {
       HPRTLookupResponseCallback response_callback,
       SBThreatType locally_cached_results_threat_type,
       std::string ohttp_key,
+      absl::optional<int> webui_delegate_token,
       const absl::optional<std::string>& response_body,
       int net_error,
       int response_code,
@@ -222,6 +244,7 @@ class HashRealTimeService : public KeyedService {
       scoped_refptr<base::SequencedTaskRunner> response_callback_task_runner,
       HPRTLookupResponseCallback response_callback,
       SBThreatType locally_cached_results_threat_type,
+      absl::optional<int> webui_delegate_token,
       std::unique_ptr<std::string> response_body);
 
   // Called when the response from the Safe Browsing V5 remote endpoint is
@@ -246,9 +269,8 @@ class HashRealTimeService : public KeyedService {
   //  - |response_body| is the unparsed response from the server.
   //  - |net_error| is the net error code from the server.
   //  - |response_code| is the HTTP status code from the server.
-  //  - |allow_retriable_errors| specifies whether certain types of errors can
-  //    be considered retriable, meaning they don't increment the backoff
-  //    counter.
+  //  - |webui_delegate_token| is used for matching HPRT lookup responses to
+  //    pings on chrome://safe-browsing.
   void OnURLLoaderComplete(
       const GURL& url,
       const std::vector<std::string>& hash_prefixes_in_request,
@@ -260,7 +282,7 @@ class HashRealTimeService : public KeyedService {
       std::unique_ptr<std::string> response_body,
       int net_error,
       int response_code,
-      bool allow_retriable_errors);
+      absl::optional<int> webui_delegate_token);
 
   // Determines the most severe threat type based on |result_full_hashes|, which
   // contains the merged caching and server response results. The |url| is
@@ -274,15 +296,16 @@ class HashRealTimeService : public KeyedService {
       // complete.
       bool log_threat_info_size);
 
-  // Returns a number representing the severity of the threat type. The lower
-  // the number, the more severe it is. Severity is used to narrow down to a
-  // single threat type to report in cases where there are multiple.
-  static int GetThreatSeverity(const V5::ThreatType& threat_type);
+  // Returns a number representing the severity of the full hash detail. The
+  // lower the number, the more severe it is. Severity is used to narrow down to
+  // a single threat type to report in cases where there are multiple full hash
+  // details.
+  static int GetThreatSeverity(const V5::FullHash::FullHashDetail& detail);
 
-  // Returns true if the |threat_type| is more severe than the
+  // Returns true if the |detail| is more severe than the
   // |baseline_severity|. Returns false if it's less severe or has equal
   // severity.
-  static bool IsThreatTypeMoreSevere(const V5::ThreatType& threat_type,
+  static bool IsHashDetailMoreSevere(const V5::FullHash::FullHashDetail& detail,
                                      int baseline_severity);
 
   // In addition to attempting to parse the |response_body| as described in the
@@ -293,21 +316,17 @@ class HashRealTimeService : public KeyedService {
       int net_error,
       int http_error,
       std::unique_ptr<std::string> response_body,
-      const std::vector<std::string>& requested_hash_prefixes,
-      bool allow_retriable_errors) const;
+      const std::vector<std::string>& requested_hash_prefixes) const;
 
   // Tries to parse the |response_body| into a |SearchHashesResponse|, and
   // returns either the response proto or an |OperationResult| with details on
   // why the parsing was unsuccessful. |requested_hash_prefixes| is used for a
   // sanitization call into |RemoveUnmatchedFullHashes|.
-  // |allow_retriable_errors| specifies whether certain types of errors can be
-  // considered retriable, meaning they don't increment the backoff counter.
   base::expected<std::unique_ptr<V5::SearchHashesResponse>, OperationResult>
   ParseResponse(int net_error,
                 int http_error,
                 std::unique_ptr<std::string> response_body,
-                const std::vector<std::string>& requested_hash_prefixes,
-                bool allow_retriable_errors) const;
+                const std::vector<std::string>& requested_hash_prefixes) const;
 
   // Removes any |FullHash| within the |response| whose hash prefix is not found
   // within |requested_hash_prefixes|. This is not expected to occur, but is
@@ -379,6 +398,11 @@ class HashRealTimeService : public KeyedService {
 
   // Pulls whether enhanced protection is currently enabled.
   base::RepeatingCallback<bool()> get_is_enhanced_protection_enabled_;
+
+  // May be null on certain platforms that don't support
+  // chrome://safe-browsing and in unit tests. If non-null, guaranteed to
+  // outlive this object by contract.
+  raw_ptr<WebUIDelegate> webui_delegate_;
 
   base::WeakPtrFactory<HashRealTimeService> weak_factory_{this};
 };

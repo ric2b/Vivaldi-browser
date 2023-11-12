@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/functional/bind.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -19,12 +21,20 @@ namespace net {
 
 namespace {
 
-const char kDeflate[] = "deflate";
-const char kGZip[] = "gzip";
-const char kXGZip[] = "x-gzip";
-const char kBrotli[] = "br";
+constexpr char kDeflate[] = "deflate";
+constexpr char kGZip[] = "gzip";
+constexpr char kXGZip[] = "x-gzip";
+constexpr char kBrotli[] = "br";
+constexpr char kZstd[] = "zstd";
 
-const size_t kBufferSize = 32 * 1024;
+BASE_FEATURE(kBufferSizeForFilterSourceStreamFeature,
+             "BufferSizeForFilterSourceStreamFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<int> kBufferSizeForFilterSourceStream(
+    &kBufferSizeForFilterSourceStreamFeature,
+    "BufferSizeForFilterSourceStream",
+    32 * 1024);
 
 }  // namespace
 
@@ -45,7 +55,8 @@ int FilterSourceStream::Read(IOBuffer* read_buffer,
 
   // Allocate a BlockBuffer during first Read().
   if (!input_buffer_) {
-    input_buffer_ = base::MakeRefCounted<IOBufferWithSize>(kBufferSize);
+    input_buffer_ = base::MakeRefCounted<IOBufferWithSize>(
+        kBufferSizeForFilterSourceStream.Get());
     // This is first Read(), start with reading data from |upstream_|.
     next_state_ = STATE_READ_DATA;
   } else {
@@ -76,18 +87,21 @@ bool FilterSourceStream::MayHaveMoreBytes() const {
 
 FilterSourceStream::SourceType FilterSourceStream::ParseEncodingType(
     const std::string& encoding) {
-  if (encoding.empty()) {
-    return TYPE_NONE;
-  } else if (base::EqualsCaseInsensitiveASCII(encoding, kBrotli)) {
-    return TYPE_BROTLI;
-  } else if (base::EqualsCaseInsensitiveASCII(encoding, kDeflate)) {
-    return TYPE_DEFLATE;
-  } else if (base::EqualsCaseInsensitiveASCII(encoding, kGZip) ||
-             base::EqualsCaseInsensitiveASCII(encoding, kXGZip)) {
-    return TYPE_GZIP;
-  } else {
+  std::string lower_encoding = base::ToLowerASCII(encoding);
+  static constexpr auto kEncodingMap =
+      base::MakeFixedFlatMapSorted<base::StringPiece, SourceType>({
+          {"", TYPE_NONE},
+          {kBrotli, TYPE_BROTLI},
+          {kDeflate, TYPE_DEFLATE},
+          {kGZip, TYPE_GZIP},
+          {kXGZip, TYPE_GZIP},
+          {kZstd, TYPE_ZSTD},
+      });
+  auto* encoding_type = kEncodingMap.find(lower_encoding);
+  if (encoding_type == kEncodingMap.end()) {
     return TYPE_UNKNOWN;
   }
+  return encoding_type->second;
 }
 
 int FilterSourceStream::DoLoop(int result) {
@@ -125,7 +139,8 @@ int FilterSourceStream::DoReadData() {
 
   next_state_ = STATE_READ_DATA_COMPLETE;
   // Use base::Unretained here is safe because |this| owns |upstream_|.
-  int rv = upstream_->Read(input_buffer_.get(), kBufferSize,
+  int rv = upstream_->Read(input_buffer_.get(),
+                           kBufferSizeForFilterSourceStream.Get(),
                            base::BindOnce(&FilterSourceStream::OnIOComplete,
                                           base::Unretained(this)));
 

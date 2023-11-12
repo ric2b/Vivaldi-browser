@@ -3,8 +3,8 @@
 # found in the LICENSE file.
 
 source_set("password_settings") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "password_bulk_move_handler.h",
     "password_export_handler.h",
     "password_settings_coordinator.h",
     "password_settings_coordinator.mm",
@@ -19,6 +19,7 @@ source_set("password_settings") {
     "//components/google/core/common",
     "//components/keyed_service/core",
     "//components/password_manager/core/browser",
+    "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/common",
     "//components/prefs",
     "//components/signin/public/identity_manager/objc",
@@ -31,10 +32,12 @@ source_set("password_settings") {
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/ui/util:util",
     "//ios/chrome/browser/signin:signin",
     "//ios/chrome/browser/sync:sync",
     "//ios/chrome/browser/ui/settings/elements:enterprise_info_popover_view_controller",
     "//ios/chrome/browser/ui/settings/password:common",
+    "//ios/chrome/browser/ui/settings/password:features",
     "//ios/chrome/browser/ui/settings/password:password_ui",
     "//ios/chrome/browser/ui/settings/password/passwords_in_other_apps",
     "//ios/chrome/browser/ui/settings/utils",
@@ -45,7 +48,6 @@ source_set("password_settings") {
 }
 
 source_set("password_settings_ui") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "password_settings_consumer.h",
     "password_settings_delegate.h",
@@ -70,7 +72,6 @@ source_set("password_settings_ui") {
 }
 
 source_set("password_settings_constants") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "password_settings_constants.h",
     "password_settings_constants.mm",
@@ -79,7 +80,6 @@ source_set("password_settings_constants") {
 }
 
 source_set("common") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "scoped_password_settings_reauth_module_override.h",
     "scoped_password_settings_reauth_module_override.mm",
@@ -91,13 +91,13 @@ source_set("common") {
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [ "password_settings_mediator_unittest.mm" ]
   deps = [
     ":password_settings",
     "//base/test:test_support",
     "//components/password_manager/core/browser:test_support",
+    "//components/password_manager/core/common:features",
     "//components/signin/public/identity_manager/objc",
     "//ios/chrome/browser/passwords:store_factory",
     "//ios/chrome/browser/shared/model/browser_state:test_support",

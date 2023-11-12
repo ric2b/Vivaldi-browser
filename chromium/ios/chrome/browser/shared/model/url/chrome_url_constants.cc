@@ -12,6 +12,7 @@
 #include "components/optimization_guide/optimization_guide_internals/webui/url_constants.h"
 #include "ios/components/webui/web_ui_url_constants.h"
 
+const char kChromeDinoGameURL[] = "chrome://dino/";
 const char kChromeUIChromeURLsURL[] = "chrome://chrome-urls/";
 const char kChromeUICookiesSettingsURL[] = "chrome://settings/coookies";
 const char kChromeUICreditsURL[] = "chrome://credits/";
@@ -59,6 +60,7 @@ const char kChromeUITermsHost[] = "terms";
 const char kChromeUITranslateInternalsHost[] = "translate-internals";
 const char kChromeUIURLKeyedMetricsHost[] = "ukm";
 const char kChromeUIUserActionsHost[] = "user-actions";
+const char kChromeUIUserDefaultsInternalsHost[] = "userdefaults-internals";
 const char kChromeUIVersionHost[] = "version";
 
 // Add hosts here to be included in chrome://chrome-urls (about:about).
@@ -147,3 +149,6 @@ const char kChromeUIAboutNewTabURL[] = "about://newtab/";
 
 const char kManagementLearnMoreURL[] =
     "https://support.google.com/chrome/?p=is_chrome_managed";
+
+const char kEnhancedSafeBrowsingLearnMoreURL[] =
+    "https://support.google.com/chrome?p=safe_browsing_preferences";

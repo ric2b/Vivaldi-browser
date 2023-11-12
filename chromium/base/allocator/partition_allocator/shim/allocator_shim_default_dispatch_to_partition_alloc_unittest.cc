@@ -175,31 +175,15 @@ TEST(PartitionAllocAsMalloc, Realloc) {
 // crbug.com/1141752
 TEST(PartitionAllocAsMalloc, Alignment) {
   EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(PartitionAllocMalloc::Allocator()) %
-                    alignof(partition_alloc::ThreadSafePartitionRoot));
+                    alignof(partition_alloc::PartitionRoot));
   // This works fine even if nullptr is returned.
   EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(
                     PartitionAllocMalloc::OriginalAllocator()) %
-                    alignof(partition_alloc::ThreadSafePartitionRoot));
+                    alignof(partition_alloc::PartitionRoot));
   EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(
                     PartitionAllocMalloc::AlignedAllocator()) %
-                    alignof(partition_alloc::ThreadSafePartitionRoot));
+                    alignof(partition_alloc::PartitionRoot));
 }
-
-// crbug.com/1297945
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_APPLE)
-TEST(PartitionAllocAsMalloc, DisableCrashOnOom) {
-  PartitionAllocSetCallNewHandlerOnMallocFailure(false);
-  // Smaller than the max size to avoid overflow checks with padding.
-  void* ptr =
-      PartitionMalloc(nullptr,
-                      std::numeric_limits<size_t>::max() -
-                          10 * partition_alloc::internal::base::GetPageSize(),
-                      nullptr);
-  // Should not crash.
-  EXPECT_FALSE(ptr);
-  PartitionAllocSetCallNewHandlerOnMallocFailure(true);
-}
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(IS_APPLE)
 
 }  // namespace allocator_shim::internal
 #endif  // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) &&

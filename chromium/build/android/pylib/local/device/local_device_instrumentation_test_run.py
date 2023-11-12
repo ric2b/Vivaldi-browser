@@ -17,8 +17,6 @@ import sys
 import tempfile
 import time
 
-from six.moves import range  # pylint: disable=redefined-builtin
-from six.moves import zip  # pylint: disable=redefined-builtin
 from devil import base_error
 from devil.android import apk_helper
 from devil.android import crash_handler
@@ -43,9 +41,11 @@ from pylib.local.device import local_device_test_run
 from pylib.output import remote_output_manager
 from pylib.symbols import stack_symbolizer
 from pylib.utils import chrome_proxy_utils
+from pylib.utils import code_coverage_utils
 from pylib.utils import gold_utils
 from pylib.utils import instrumentation_tracing
 from pylib.utils import shared_preference_utils
+from pylib.utils.device_dependencies import DevicePathComponentsFor
 from py_trace_event import trace_event
 from py_trace_event import trace_time
 from py_utils import contextlib_ext
@@ -88,6 +88,10 @@ MAX_BATCH_TEST_TIMEOUT = 30 * 60
 
 LOGCAT_FILTERS = ['*:e', 'chromium:v', 'cr_*:v', 'DEBUG:I',
                   'StrictMode:D', '%s:I' % _TAG]
+
+EXTRA_CLANG_COVERAGE_DEVICE_FILE = (
+    'org.chromium.base.test.BaseChromiumAndroidJUnitRunner.'
+    'ClangCoverageDeviceFile')
 
 EXTRA_SCREENSHOT_FILE = (
     'org.chromium.base.test.ScreenshotOnFailureStatement.ScreenshotFile')
@@ -194,26 +198,19 @@ class LocalDeviceInstrumentationTestRun(
     self._chrome_proxy = None
     self._context_managers = collections.defaultdict(list)
     self._flag_changers = {}
+    self._webview_flag_changers = {}
     self._render_tests_device_output_dir = None
     self._shared_prefs_to_restore = []
     self._skia_gold_session_manager = None
     self._skia_gold_work_dir = None
-    self._target_package = _GetTargetPackageName(test_instance.test_apk)
 
   #override
   def TestPackage(self):
     return self._test_instance.suite
 
-  def _GetDataStorageRootDirectory(self, device):
-    if self._test_instance.store_data_in_app_directory:
-      # TODO(rmhasan): Add check to makes sure api level > 27. Selinux
-      # policy on Oreo does not allow app to read files from app data dir
-      # that were not put there by the app.
-      return device.GetApplicationDataDirectory(self._target_package)
-    return device.GetExternalStoragePath()
-
   #override
   def SetUp(self):
+    target_package = _GetTargetPackageName(self._test_instance.test_apk)
 
     @local_device_environment.handle_shard_failures_with(
         self._env.DenylistDevice)
@@ -411,7 +408,7 @@ class LocalDeviceInstrumentationTestRun(
         cmd = ['am', 'set-debug-app', '--persistent']
         if self._test_instance.wait_for_java_debugger:
           cmd.append('-w')
-        cmd.append(self._target_package)
+        cmd.append(target_package)
         dev.RunShellCommand(cmd, check_return=True)
 
       @trace_event.traced
@@ -446,40 +443,55 @@ class LocalDeviceInstrumentationTestRun(
 
       @instrumentation_tracing.no_tracing
       def push_test_data(dev):
-        test_data_root_dir = posixpath.join(
-            self._GetDataStorageRootDirectory(dev), 'chromium_tests_root')
+        device_root = posixpath.join(dev.GetExternalStoragePath(),
+                                     'chromium_tests_root')
         host_device_tuples_substituted = [
-            (h,
-             local_device_test_run.SubstituteDeviceRoot(d, test_data_root_dir))
+            (h, local_device_test_run.SubstituteDeviceRoot(d, device_root))
             for h, d in host_device_tuples
         ]
         logging.info('Pushing data dependencies.')
         for h, d in host_device_tuples_substituted:
           logging.debug('  %r -> %r', h, d)
-
-        as_root = self._test_instance.store_data_in_app_directory
-        local_device_environment.place_nomedia_on_device(dev,
-                                                         test_data_root_dir,
-                                                         as_root=as_root)
+        local_device_environment.place_nomedia_on_device(dev, device_root)
         dev.PushChangedFiles(host_device_tuples_substituted,
-                             delete_device_stale=True,
-                             as_root=as_root)
-
+                             delete_device_stale=True)
         if not host_device_tuples_substituted:
-          dev.RunShellCommand(['rm', '-rf', test_data_root_dir],
-                              check_return=True,
-                              as_root=as_root)
-          dev.RunShellCommand(['mkdir', '-p', test_data_root_dir],
-                              check_return=True,
-                              as_root=as_root)
+          dev.RunShellCommand(['rm', '-rf', device_root], check_return=True)
+          dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
 
       @trace_event.traced
       def create_flag_changer(dev):
-        if self._test_instance.flags:
-          self._CreateFlagChangerIfNeeded(dev)
-          logging.debug('Attempting to set flags: %r',
-                        self._test_instance.flags)
-          self._flag_changers[str(dev)].AddFlags(self._test_instance.flags)
+        flags = self._test_instance.flags
+        webview_flags = self._test_instance.webview_flags
+        test_data_root_dir = posixpath.join(dev.GetExternalStoragePath(),
+                                            'chromium_tests_root')
+
+        def _get_variations_seed_path_arg(seed_path):
+          seed_path_components = DevicePathComponentsFor(seed_path)
+          test_seed_path = local_device_test_run.SubstituteDeviceRoot(
+              seed_path_components, test_data_root_dir)
+          return '--variations-test-seed-path={0}'.format(test_seed_path)
+
+        if self._test_instance.variations_test_seed_path:
+          flags.append(
+              _get_variations_seed_path_arg(
+                  self._test_instance.variations_test_seed_path))
+
+        if self._test_instance.webview_variations_test_seed_path:
+          webview_flags.append(
+              _get_variations_seed_path_arg(
+                  self._test_instance.webview_variations_test_seed_path))
+
+        if flags or webview_flags:
+          self._CreateFlagChangersIfNeeded(dev)
+
+        if flags:
+          logging.debug('Attempting to set flags: %r', flags)
+          self._flag_changers[str(dev)].AddFlags(flags)
+
+        if webview_flags:
+          logging.debug('Attempting to set WebView flags: %r', webview_flags)
+          self._webview_flag_changers[str(dev)].AddFlags(webview_flags)
 
         valgrind_tools.SetChromeTimeoutScale(
             dev, self._test_instance.timeout_scale)
@@ -538,7 +550,7 @@ class LocalDeviceInstrumentationTestRun(
     if self._test_instance.wait_for_java_debugger:
       logging.warning('*' * 80)
       logging.warning('Waiting for debugger to attach to process: %s',
-                      self._target_package)
+                      target_package)
       logging.warning('*' * 80)
 
   #override
@@ -560,6 +572,9 @@ class LocalDeviceInstrumentationTestRun(
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
         self._flag_changers[str(dev)].Restore()
+
+      if self._webview_flag_changers[str(dev)].GetCurrentFlags():
+        self._webview_flag_changers[str(dev)].Restore()
 
       # Remove package-specific configuration
       dev.RunShellCommand(['am', 'clear-debug-app'], check_return=True)
@@ -609,7 +624,10 @@ class LocalDeviceInstrumentationTestRun(
     ]
     dev.RunShellCommand(cmd, check_return=True)
 
-  def _CreateFlagChangerIfNeeded(self, device):
+  def _CreateFlagChangersIfNeeded(self, device):
+    self._webview_flag_changers.setdefault(
+        str(device), flag_changer.FlagChanger(device, 'webview-command-line'))
+
     if str(device) not in self._flag_changers:
       cmdline_file = 'test-cmdline-file'
       if self._test_instance.use_apk_under_test_flags_file:
@@ -684,6 +702,14 @@ class LocalDeviceInstrumentationTestRun(
             batch_name += '|cmd_line_remove:' + ','.join(
                 sorted(annotations['CommandLineFlags$Remove']['value']))
 
+        # WebView tests run in 2 process modes (single and multi). We must
+        # restart the process for each mode, so this means singleprocess tests
+        # and multiprocess tests must not be in the same batch.
+        webview_multiprocess_mode = test['method'].endswith(
+            base_test_result.MULTIPROCESS_SUFFIX)
+        if webview_multiprocess_mode:
+          batch_name += '|multiprocess_mode'
+
         batched_tests.setdefault(batch_name, []).append(test)
       else:
         other_tests.append(test)
@@ -749,15 +775,28 @@ class LocalDeviceInstrumentationTestRun(
                                   (test[0]['class'], test[0]['method'])
                                   if isinstance(test, list) else '%s_%s' %
                                   (test['class'], test['method']))
-      extras['coverage'] = 'true'
       coverage_directory = os.path.join(
           device.GetExternalStoragePath(), 'chrome', 'test', 'coverage')
       if not device.PathExists(coverage_directory):
         device.RunShellCommand(['mkdir', '-p', coverage_directory],
                                check_return=True)
-      coverage_device_file = os.path.join(coverage_directory, coverage_basename)
-      coverage_device_file += '.exec'
-      extras['coverageFile'] = coverage_device_file
+
+      # Setting up for jacoco coverage.
+      extras['coverage'] = 'true'
+      jacoco_coverage_device_file = os.path.join(coverage_directory,
+                                                 coverage_basename)
+      jacoco_coverage_device_file += '.exec'
+      extras['coverageFile'] = jacoco_coverage_device_file
+
+      # Setting up for clang coverage.
+      device_clang_profile_dir = code_coverage_utils.GetDeviceClangCoverageDir(
+          device)
+      # "%2m" is used to expand to 2 raw profiles at runtime. "%p" writes
+      # process ID.
+      # See https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
+      clang_profile_filename = '%s_%s.profraw' % (coverage_basename, '%2m_%p')
+      extras[EXTRA_CLANG_COVERAGE_DEVICE_FILE] = posixpath.join(
+          device_clang_profile_dir, clang_profile_filename)
 
     if self._test_instance.enable_breakpad_dump:
       # Use external storage directory so that the breakpad dump can be accessed
@@ -868,11 +907,8 @@ class LocalDeviceInstrumentationTestRun(
       flags_to_add.extend(self._chrome_proxy.GetFlags())
 
     if flags_to_add:
-      self._CreateFlagChangerIfNeeded(device)
+      self._CreateFlagChangersIfNeeded(device)
       self._flag_changers[str(device)].PushFlags(add=flags_to_add)
-
-    if self._test_instance.store_data_in_app_directory:
-      extras.update({'fetchTestDataFromAppDataDir': 'true'})
 
     time_ms = lambda: int(time.time() * 1e3)
     start_ms = time_ms()
@@ -899,7 +935,6 @@ class LocalDeviceInstrumentationTestRun(
       if self._env.trace_output:
         self._SaveTraceData(trace_device_file, device, test['class'])
 
-
       def restore_flags():
         if flags_to_add:
           self._flag_changers[str(device)].Restore()
@@ -914,14 +949,25 @@ class LocalDeviceInstrumentationTestRun(
           try:
             if not os.path.exists(self._test_instance.coverage_directory):
               os.makedirs(self._test_instance.coverage_directory)
+
+            # Handling Jacoco coverage data.
             # Retries add time to test execution.
-            if device.PathExists(coverage_device_file, retries=0):
-              device.PullFile(coverage_device_file,
+            if device.PathExists(jacoco_coverage_device_file, retries=0):
+              device.PullFile(jacoco_coverage_device_file,
                               self._test_instance.coverage_directory)
-              device.RemovePath(coverage_device_file, True)
+              device.RemovePath(jacoco_coverage_device_file, True)
             else:
-              logging.warning('Coverage file does not exist: %s',
-                              coverage_device_file)
+              logging.warning('Jacoco coverage file does not exist: %s',
+                              jacoco_coverage_device_file)
+
+            if device.PathExists(device_clang_profile_dir, retries=0):
+              code_coverage_utils.PullAndMaybeMergeClangCoverageFiles(
+                  device, device_clang_profile_dir,
+                  self._test_instance.coverage_directory, coverage_basename)
+            else:
+              logging.warning('Clang coverage data folder does not exist: %s',
+                              device_clang_profile_dir)
+
           except (OSError, base_error.BaseError) as e:
             logging.warning('Failed to handle coverage data after tests: %s', e)
 
@@ -1180,15 +1226,11 @@ class LocalDeviceInstrumentationTestRun(
       logging.info('Could not get tests from pickle: %s', e)
     logging.info('Getting tests by having %s list them.',
                  self._test_instance.junit4_runner_class)
-    # We need to use GetAppWritablePath instead of GetExternalStoragePath
-    # here because we will not have applied legacy storage workarounds on R+
-    # yet.
-    # TODO(rmhasan): Figure out how to create the temp file inside the test
-    # app's data directory. Currently when the temp file is created read
-    # permissions are only given to the app's user id. Therefore we can't
-    # pull the file from the device.
     def list_tests(d):
       def _run(dev):
+        # We need to use GetAppWritablePath instead of GetExternalStoragePath
+        # here because we will not have applied legacy storage workarounds on R+
+        # yet.
         with device_temp_file.DeviceTempFile(
             dev.adb, suffix='.json',
             dir=dev.GetAppWritablePath()) as dev_test_list_json:

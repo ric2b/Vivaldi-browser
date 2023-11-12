@@ -79,17 +79,20 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
 
  private:
   // AutofillPopupView:
-  void Show(AutoselectFirstSuggestion autoselect_first_suggestion) override;
+  bool Show(AutoselectFirstSuggestion autoselect_first_suggestion) override;
   void Hide() override;
+  bool OverlapsWithPictureInPictureWindow() const override;
   bool HandleKeyPressEvent(
       const content::NativeWebKeyboardEvent& event) override;
   void OnSuggestionsChanged() override;
   void AxAnnounce(const std::u16string& text) override;
   absl::optional<int32_t> GetAxUniqueId() override;
+  base::WeakPtr<AutofillPopupView> CreateSubPopupView(
+      base::WeakPtr<AutofillPopupController> controller) override;
 
   // AutofillPopupController:
   // Hidden: void OnSuggestionsChanged() override;
-  void AcceptSuggestion(int index) override;
+  void AcceptSuggestion(int index, base::TimeTicks event_time) override;
   void AcceptSuggestionWithoutThreshold(int index) override;
   int GetLineCount() const override;
   const autofill::Suggestion& GetSuggestionAt(int row) const override;
@@ -103,7 +106,13 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   bool RemoveSuggestion(int index) override;
   void SelectSuggestion(absl::optional<size_t> index) override;
   PopupType GetPopupType() const override;
-
+  AutofillSuggestionTriggerSource GetAutofillSuggestionTriggerSource()
+      const override;
+  bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
+  base::WeakPtr<AutofillPopupController> OpenSubPopup(
+      const gfx::RectF& anchor_bounds,
+      std::vector<Suggestion> suggestions) override;
+  void HideSubPopup() override;
   void Hide(PopupHidingReason reason) override;
   void ViewDestroyed() override;
   gfx::NativeView container_view() const override;

@@ -85,11 +85,34 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
     ui::PageTransition transitionType =
         ui::PageTransitionFromInt(url_sql.ColumnInt(4));
     int visit_count = url_sql.ColumnInt(5);
-
-    hosts.push_back(
+    bool has_chain_start = ui::PAGE_TRANSITION_CHAIN_START &
+                        ui::PageTransitionGetQualifier(transitionType);
+    bool has_chain_end = ui::PAGE_TRANSITION_CHAIN_END &
+                        ui::PageTransitionGetQualifier(transitionType);
+    bool is_redirect = ui::PageTransitionIsRedirect(transitionType) &&
+                        !(has_chain_start || has_chain_end);
+    if (!is_redirect) {
+      hosts.push_back(
         Visit(id, visit_time, url, title, transitionType, visit_count));
+    }
   }
-  return hosts;
+
+  Visit::VisitsList filteredHosts;
+  // VB-98940: Don't copy http items if their https equivalent is present in history.
+  std::copy_if(hosts.begin(), hosts.end(), std::back_inserter(filteredHosts),
+    [&](Visit curr) {
+      std::string curr_url_no_scheme = curr.url.GetContent();
+      if (curr.url.SchemeIs("http")) {
+        for (size_t i = 0; i < hosts.size(); i++) {
+          if (hosts[i].url.GetContent() == curr_url_no_scheme &&
+            curr.url.scheme() != hosts[i].url.scheme()) {
+              return false;
+          }
+        }
+      }
+      return true;
+  });
+  return filteredHosts;
 }
 
 }  // namespace history

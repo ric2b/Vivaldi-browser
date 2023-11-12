@@ -12,8 +12,8 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_policy_event.pb.h"
-#include "chrome/browser/chromeos/policy/dlp/dlp_reporting_manager_test_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/test/dlp_reporting_manager_test_helper.h"
 #include "components/account_id/account_id.h"
 #include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/util/status.h"
@@ -24,6 +24,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "components/user_manager/user_names.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -233,14 +234,10 @@ TEST_F(DlpReportingManagerTest, UserType) {
       AccountId::FromUserEmail("web-kiosk@example.com");
   const auto* web_kiosk_user =
       user_manager->AddWebKioskAppUser(web_kiosk_account_id);
-  AccountId guest_user_id = user_manager->GetGuestAccountId();
+  AccountId guest_user_id = user_manager::GuestAccountId();
   const auto* guest_user = user_manager->AddGuestUser();
   AccountId child_user_id = AccountId::FromUserEmail("child@example.com");
   const auto* child_user = user_manager->AddChildUser(child_user_id);
-  AccountId active_directory_user_id =
-      AccountId::AdFromUserEmailObjGuid("active@example.com", "guid");
-  const auto* active_directory_user =
-      user_manager->AddActiveDirectoryUser(active_directory_user_id);
 
   ReportEventAndCheckUser(user_manager, regular_account_id, regular_user,
                           DlpPolicyEvent_UserType_REGULAR, 0u);
@@ -257,10 +254,7 @@ TEST_F(DlpReportingManagerTest, UserType) {
   ReportEventAndCheckUser(user_manager, child_user_id, child_user,
                           DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 6u,
                           true);
-  ReportEventAndCheckUser(user_manager, active_directory_user_id,
-                          active_directory_user,
-                          DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE, 7u);
-  EXPECT_EQ(manager_.events_reported(), 8u);
+  EXPECT_EQ(manager_.events_reported(), 7u);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

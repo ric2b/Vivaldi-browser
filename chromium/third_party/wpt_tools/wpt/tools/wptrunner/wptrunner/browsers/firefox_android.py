@@ -69,7 +69,8 @@ def browser_kwargs(logger, test_type, run_info_data, config, **kwargs):
             "install_fonts": kwargs["install_fonts"],
             "tests_root": config.doc_root,
             "specialpowers_path": kwargs["specialpowers_path"],
-            "debug_test": kwargs["debug_test"]}
+            "debug_test": kwargs["debug_test"],
+            "env_extras": dict([x.split('=') for x in kwargs.get("env", [])])}
 
 
 def executor_kwargs(logger, test_type, test_environment, run_info_data,
@@ -98,8 +99,10 @@ def env_options():
             "supports_debugger": True}
 
 
-def get_environ(chaos_mode_flags):
+def get_environ(chaos_mode_flags, env_extras=None):
     env = {}
+    if env_extras is not None:
+        env.update(env_extras)
     env["MOZ_CRASHREPORTER"] = "1"
     env["MOZ_CRASHREPORTER_SHUTDOWN"] = "1"
     env["MOZ_DISABLE_NONLOCAL_CONNECTIONS"] = "1"
@@ -121,7 +124,6 @@ class ProfileCreator(FirefoxProfileCreator):
             "dom.disable_open_during_load": False,
             "places.history.enabled": False,
             "dom.send_after_paint_to_content": True,
-            "network.preload": True,
             "browser.tabs.remote.autostart": True,
         })
 
@@ -191,6 +193,7 @@ class FirefoxAndroidBrowser(Browser):
         self.marionette_port = None
         self.profile = None
         self.runner = None
+        self.env_extras = kwargs["env_extras"]
         self._settings = {}
 
     def settings(self, test):
@@ -226,7 +229,7 @@ class FirefoxAndroidBrowser(Browser):
                                           [cmd_arg("marionette"), "about:blank"],
                                           self.debug_info)
 
-        env = get_environ(self.chaos_mode_flags)
+        env = get_environ(self.chaos_mode_flags, self.env_extras)
 
         self.runner = FennecEmulatorRunner(app=self.package_name,
                                            profile=self.profile,

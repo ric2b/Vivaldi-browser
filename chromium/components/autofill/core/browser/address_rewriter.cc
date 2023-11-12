@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 #include "base/i18n/case_conversion.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
@@ -81,7 +81,10 @@ void CompileRulesFromData(const std::string& data_string,
 class Cache {
  public:
   // Return the singleton instance of the cache.
-  static Cache* GetInstance() { return base::Singleton<Cache>::get(); }
+  static Cache* GetInstance() {
+    static base::NoDestructor<Cache> instance;
+    return instance.get();
+  }
 
   Cache(const Cache&) = delete;
   Cache& operator=(const Cache&) = delete;
@@ -137,11 +140,20 @@ class Cache {
   // The cache of compiled rules, keyed by region.
   CompiledRuleCache data_;
 
-  friend struct base::DefaultSingletonTraits<Cache>;
+  friend class base::NoDestructor<Cache>;
 };
 
 }  // namespace
 
+// static
+std::u16string AddressRewriter::RewriteForCountryCode(
+    const std::u16string& country_code,
+    const std::u16string& normalized_text) {
+  AddressRewriter rewriter = AddressRewriter::ForCountryCode(country_code);
+  return rewriter.Rewrite(normalized_text);
+}
+
+// static
 AddressRewriter AddressRewriter::ForCountryCode(
     const std::u16string& country_code) {
   const std::string region =
@@ -153,6 +165,7 @@ AddressRewriter AddressRewriter::ForCountryCode(
   return rewriter;
 }
 
+// static
 AddressRewriter AddressRewriter::ForCustomRules(
     const std::string& custom_rules) {
   const CompiledRuleVector* rules =

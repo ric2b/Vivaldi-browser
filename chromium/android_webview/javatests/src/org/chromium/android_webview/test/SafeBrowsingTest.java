@@ -8,7 +8,6 @@ import static org.junit.Assert.assertNotEquals;
 
 import android.content.Context;
 import android.content.ContextWrapper;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
@@ -19,7 +18,6 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -53,7 +51,6 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.components.safe_browsing.SafetyNetApiHandler;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -79,8 +76,8 @@ public class SafeBrowsingTest {
          * sites are malicious
          */
         @Override
-        public AwBrowserContext createAwBrowserContextOnUiThread(InMemorySharedPreferences prefs) {
-            return new MockAwBrowserContext(prefs);
+        public AwBrowserContext createAwBrowserContextOnUiThread() {
+            return new MockAwBrowserContext();
         }
     };
 
@@ -195,9 +192,9 @@ public class SafeBrowsingTest {
      * A fake AwBrowserContext which loads the MockSafetyNetApiHandler instead of the real one.
      */
     private static class MockAwBrowserContext extends AwBrowserContext {
-        public MockAwBrowserContext(SharedPreferences sharedPreferences) {
-            super(sharedPreferences, 0, true);
-            SafeBrowsingApiBridge.setHandler(new MockSafetyNetApiHandler());
+        public MockAwBrowserContext() {
+            super(0);
+            SafeBrowsingApiBridge.setSafetyNetApiHandler(new MockSafetyNetApiHandler());
         }
     }
 
@@ -311,11 +308,6 @@ public class SafeBrowsingTest {
 
         // Some tests need to inject JavaScript.
         AwActivityTestRule.enableJavaScriptOnUiThread(mAwContents);
-    }
-
-    @After
-    public void tearDown() {
-        mTestServer.stopAndDestroyServer();
     }
 
     private int getPageColor() {

@@ -18,7 +18,12 @@ declare_args() {
   enable_check_raw_ptr_fields =
       build_with_chromium && !is_official_build &&
       ((is_linux && !is_castos) || (is_android && !is_cast_android) || is_mac ||
-       is_win || is_chromeos_lacros)
+       is_win || is_chromeos_lacros || is_chromeos_ash)
+
+  # TODO(crbug.com/1446146): Merge with enable_check_raw_ptr_fields once both
+  # checks are activated on the same set of platforms.
+  enable_check_raw_ref_fields =
+      build_with_chromium && !is_official_build && is_linux && !is_castos
 
   clang_base_path = default_clang_base_path
 
@@ -30,3 +35,7 @@ declare_args() {
   # creating a Chromium MLGO corpus in the ThinLTO case.
   lld_emit_indexes_and_imports = false
 }
+
+# We don't really need to collect a corpus for the host tools, just for the target.
+lld_emit_indexes_and_imports =
+    lld_emit_indexes_and_imports && is_a_target_toolchain

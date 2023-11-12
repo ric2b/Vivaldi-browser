@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,12 +9,12 @@
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/apps/app_service/app_registry_cache_waiter.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
-#include "chrome/browser/web_applications/test/app_registry_cache_waiter.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -49,8 +49,9 @@ class WebAppIconHealthChecksBrowserTest : public WebAppControllerBrowserTest {
   Profile* profile() { return browser()->profile(); }
 
   ScopedRegistryUpdate CreateUpdateScope() {
-    return ScopedRegistryUpdate(
-        &WebAppProvider::GetForTest(profile())->sync_bridge_unsafe());
+    return WebAppProvider::GetForTest(profile())
+        ->sync_bridge_unsafe()
+        .BeginUpdate();
   }
 
   void RunIconChecksWithMetricExpectations(
@@ -84,7 +85,8 @@ class WebAppIconHealthChecksBrowserTest : public WebAppControllerBrowserTest {
   AppId InstallWebAppAndAwaitAppService(const char* path) {
     AppId app_id =
         InstallWebAppFromPage(browser(), embedded_test_server()->GetURL(path));
-    AppReadinessWaiter(profile(), app_id, apps::Readiness::kReady).Await();
+    apps::AppReadinessWaiter(profile(), app_id, apps::Readiness::kReady)
+        .Await();
     return app_id;
   }
 };
@@ -103,7 +105,7 @@ IN_PROC_BROWSER_TEST_F(WebAppIconHealthChecksBrowserTest, EmptyAppName) {
     WebAppSyncBridge& sync_bridge =
         WebAppProvider::GetForTest(profile())->sync_bridge_unsafe();
     sync_bridge.set_disable_checks_for_testing(true);
-    ScopedRegistryUpdate update(&sync_bridge);
+    ScopedRegistryUpdate update = sync_bridge.BeginUpdate();
     WebApp* web_app = update->UpdateApp(app_id);
     web_app->SetName("");
   }

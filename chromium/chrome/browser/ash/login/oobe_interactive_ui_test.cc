@@ -22,13 +22,13 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/buildflag.h"
+#include "chrome/browser/apps/app_discovery_service/recommended_arc_apps/recommend_apps_fetcher.h"
+#include "chrome/browser/apps/app_discovery_service/recommended_arc_apps/recommend_apps_fetcher_delegate.h"
+#include "chrome/browser/apps/app_discovery_service/recommended_arc_apps/scoped_test_recommend_apps_fetcher_factory.h"
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
-#include "chrome/browser/ash/login/screens/recommend_apps/recommend_apps_fetcher.h"
-#include "chrome/browser/ash/login/screens/recommend_apps/recommend_apps_fetcher_delegate.h"
-#include "chrome/browser/ash/login/screens/recommend_apps/scoped_test_recommend_apps_fetcher_factory.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/embedded_test_server_setup_mixin.h"
 #include "chrome/browser/ash/login/test/enrollment_ui_mixin.h"
@@ -55,6 +55,7 @@
 #include "chrome/browser/ui/webui/ash/login/app_downloading_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/assistant_optin_flow_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/choobe_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/consumer_update_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/display_size_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_info_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
@@ -139,6 +140,13 @@ void HandleGaiaInfoScreen() {
 
   test::OobeJS().ClickOnPath({"gaia-info", "nextButton"});
   LOG(INFO) << "OobeInteractiveUITest: Exiting 'gaia-info' screen.";
+}
+
+void HandleConsumerUpdateScreen() {
+  OobeScreenWaiter(ConsumerUpdateScreenView::kScreenId).Wait();
+  LOG(INFO) << "OobeInteractiveUITest: Switched to 'consumer-update' screen.";
+
+  test::ExitConsumerUpdateScreenNoUpdate();
 }
 
 void WaitForGaiaSignInScreen() {
@@ -412,9 +420,10 @@ void HandleMarketingOptInScreen() {
   OobeScreenExitWaiter(MarketingOptInScreenView::kScreenId).Wait();
 }
 
-class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
+class FakeRecommendAppsFetcher : public apps::RecommendAppsFetcher {
  public:
-  explicit FakeRecommendAppsFetcher(RecommendAppsFetcherDelegate* delegate)
+  explicit FakeRecommendAppsFetcher(
+      apps::RecommendAppsFetcherDelegate* delegate)
       : delegate_(delegate) {}
   ~FakeRecommendAppsFetcher() override = default;
 
@@ -435,11 +444,11 @@ class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
   void Retry() override { NOTREACHED(); }
 
  private:
-  const raw_ptr<RecommendAppsFetcherDelegate, ExperimentalAsh> delegate_;
+  const raw_ptr<apps::RecommendAppsFetcherDelegate, ExperimentalAsh> delegate_;
 };
 
-std::unique_ptr<RecommendAppsFetcher> CreateRecommendAppsFetcher(
-    RecommendAppsFetcherDelegate* delegate) {
+std::unique_ptr<apps::RecommendAppsFetcher> CreateRecommendAppsFetcher(
+    apps::RecommendAppsFetcherDelegate* delegate) {
   return std::make_unique<FakeRecommendAppsFetcher>(delegate);
 }
 
@@ -507,7 +516,8 @@ class NativeWindowVisibilityBrowserMainExtraParts
   }
 
  private:
-  raw_ptr<NativeWindowVisibilityObserver, ExperimentalAsh> observer_;
+  raw_ptr<NativeWindowVisibilityObserver, DanglingUntriaged | ExperimentalAsh>
+      observer_;
 };
 
 class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
@@ -581,7 +591,7 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
 
     if (params_.arc_state != ArcState::kNotAvailable) {
       recommend_apps_fetcher_factory_ =
-          std::make_unique<ScopedTestRecommendAppsFetcherFactory>(
+          std::make_unique<apps::ScopedTestRecommendAppsFetcherFactory>(
               base::BindRepeating(&CreateRecommendAppsFetcher));
     }
   }
@@ -619,7 +629,7 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
   Parameters params_;
 
   base::test::ScopedFeatureList feature_list_;
-  std::unique_ptr<ScopedTestRecommendAppsFetcherFactory>
+  std::unique_ptr<apps::ScopedTestRecommendAppsFetcherFactory>
       recommend_apps_fetcher_factory_;
   std::unique_ptr<quick_unlock::TestApi> test_api_;
 };
@@ -697,7 +707,14 @@ void OobeInteractiveUITest::PerformSessionSignInSteps() {
   ForceBrandedBuild();
   if (GetFirstSigninScreen() == UserCreationView::kScreenId) {
     test::WaitForUserCreationScreen();
-    test::TapUserCreationNext();
+
+    if (features::IsOobeSoftwareUpdateEnabled()) {
+      test::TapForPersonalUseCrRadioButton();
+      test::TapUserCreationNext();
+      HandleConsumerUpdateScreen();
+    } else {
+      test::TapUserCreationNext();
+    }
 
     if (features::IsOobeGaiaInfoScreenEnabled()) {
       HandleGaiaInfoScreen();

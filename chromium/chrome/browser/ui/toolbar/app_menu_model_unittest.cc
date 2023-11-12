@@ -227,10 +227,7 @@ TEST_F(AppMenuModelTest, Basics) {
   // becomes visible. Note that profile migration is only enabled if Lacros is
   // the only browser.
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {ash::features::kLacrosSupport, ash::features::kLacrosPrimary,
-       ash::features::kLacrosOnly},
-      {});
+  feature_list.InitWithFeatures({ash::features::kLacrosOnly}, {});
 #endif
 
   FakeIconDelegate fake_delegate;
@@ -419,17 +416,25 @@ TEST_P(TestAppMenuModelCR2023MetricsTest, LogProfileMenuMetrics) {
   EXPECT_EQ(1, model.log_metrics_count_);
 }
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         TestAppMenuModelCR2023MetricsTest,
-                         testing::Values(IDC_MANAGE_GOOGLE_ACCOUNT,
-                                         IDC_CLOSE_PROFILE,
-                                         IDC_CUSTOMIZE_CHROME,
-                                         IDC_SHOW_SIGNIN_WHEN_PAUSED,
-                                         IDC_SHOW_SYNC_SETTINGS,
-                                         IDC_TURN_ON_SYNC,
-                                         IDC_OPEN_GUEST_PROFILE,
-                                         IDC_ADD_NEW_PROFILE,
-                                         IDC_MANAGE_CHROME_PROFILES));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    TestAppMenuModelCR2023MetricsTest,
+    testing::Values(
+        IDC_MANAGE_GOOGLE_ACCOUNT,
+        IDC_CLOSE_PROFILE,
+        IDC_CUSTOMIZE_CHROME,
+        IDC_SHOW_SIGNIN_WHEN_PAUSED,
+        IDC_SHOW_SYNC_SETTINGS,
+        IDC_TURN_ON_SYNC,
+        IDC_OPEN_GUEST_PROFILE,
+        IDC_ADD_NEW_PROFILE,
+        IDC_MANAGE_CHROME_PROFILES,
+        IDC_READING_LIST_MENU_ADD_TAB,
+        IDC_READING_LIST_MENU_SHOW_UI,
+        IDC_SHOW_PASSWORD_MANAGER,
+        IDC_SHOW_PAYMENT_METHODS,
+        IDC_SHOW_ADDRESSES,
+        IDC_SHOW_SEARCH_COMPANION, AppMenuModel::kMinOtherProfileCommandId));
 
 TEST_F(TestAppMenuModelCR2023, ProfileSyncOnTest) {
   signin::IdentityManager* identity_manager =

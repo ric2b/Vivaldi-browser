@@ -188,8 +188,13 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValue* ValueForAnimationTimingFunctionList(const CSSTimingData*);
   static CSSValue* ValueForAnimationTimelineList(const CSSAnimationData*);
 
-  static CSSValue* SingleValueForTimelineShorthand(const ScopedCSSName* name,
-                                                   TimelineAxis);
+  static CSSValue* ValueForTimelineInset(const TimelineInset&,
+                                         const ComputedStyle&);
+  static CSSValue* SingleValueForTimelineShorthand(
+      const ScopedCSSName* name,
+      TimelineAxis,
+      absl::optional<TimelineInset>,
+      const ComputedStyle&);
   static CSSValueList* ValuesForBorderRadiusCorner(const LengthSize&,
                                                    const ComputedStyle&);
   static CSSValue* ValueForBorderRadiusCorner(const LengthSize&,
@@ -233,7 +238,10 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValue* ResolvedTransform(const LayoutObject*, const ComputedStyle&);
   static CSSValue* CreateTransitionPropertyValue(
       const CSSTransitionData::TransitionProperty&);
+  static CSSValue* CreateTransitionBehaviorValue(
+      const CSSTransitionData::TransitionBehavior&);
   static CSSValue* ValueForTransitionProperty(const CSSTransitionData*);
+  static CSSValue* ValueForTransitionBehavior(const CSSTransitionData*);
   static CSSValue* ValueForContentData(const ComputedStyle&,
                                        bool allow_visited_style);
 

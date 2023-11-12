@@ -2,6 +2,9 @@
 
 #include "ui/views/video_pip_controller.h"
 
+#include "content/browser/media/media_web_contents_observer.h"
+#include "content/browser/picture_in_picture/video_picture_in_picture_window_controller_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/media_session_service.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
@@ -34,7 +37,8 @@ VideoPIPController::VideoPIPController(
       media_controller_observer_receiver_.BindNewPipeAndPassRemote());
 }
 
-VideoPIPController::~VideoPIPController() {}
+VideoPIPController::~VideoPIPController() {
+}
 
 void VideoPIPController::MediaSessionPositionChanged(
     const absl::optional<media_session::MediaPosition>& position) {
@@ -61,6 +65,7 @@ void VideoPIPController::MediaSessionActionsChanged(
 }
 
 void VideoPIPController::WebContentsDestroyed() {
+  content::WebContentsObserver::Observe(nullptr);
   delegate_ = nullptr;
 }
 
@@ -95,6 +100,35 @@ void VideoPIPController::Seek(int seconds) {
   } else if (SupportsAction(MediaSessionAction::kSeekBackward)) {
     base::TimeDelta delta = base::Seconds(seconds);
     media_controller_remote_->Seek(delta);
+  }
+}
+
+void VideoPIPController::SliderValueChanged(views::Slider* sender,
+                                            float value,
+                                            float old_value,
+                                            views::SliderChangeReason reason) {
+  SetVolume(value);
+}
+
+void VideoPIPController::SliderDragStarted(views::Slider* sender) {
+}
+void VideoPIPController::SliderDragEnded(views::Slider* sender) {
+}
+
+void VideoPIPController::SetVolume(float volume_multiplier) {
+  // Get the active session to control volume.
+  if (auto* pip_window_controller =
+          content::VideoPictureInPictureWindowControllerImpl::FromWebContents(
+              web_contents())) {
+    raw_ptr<content::PictureInPictureSession> pip_session =
+        pip_window_controller->active_session_for_vivaldi();
+    if (pip_session) {
+      content::WebContentsImpl* webcontentsimpl =
+          static_cast<content::WebContentsImpl*>(web_contents());
+      webcontentsimpl->media_web_contents_observer()
+          ->GetMediaPlayerRemote(*pip_session->player_id())
+          ->SetVolumeMultiplier(volume_multiplier);
+    }
   }
 }
 

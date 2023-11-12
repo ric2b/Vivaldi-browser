@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -248,7 +248,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
       // Do nothing if the tapped option was already the default.
       VivaldiATBSettingItem* selectedSettingItem =
-          base::mac::ObjCCastStrict<VivaldiATBSettingItem>(selectedItem);
+          base::apple::ObjCCastStrict<VivaldiATBSettingItem>(selectedItem);
       if (selectedSettingItem.accessoryType ==
           UITableViewCellAccessoryCheckmark) {
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -263,7 +263,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
              [model
               itemsInSectionWithIdentifier:SectionIdentifierGlobalSettings]) {
           VivaldiATBSettingItem* settingItem =
-              base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+              base::apple::ObjCCastStrict<VivaldiATBSettingItem>(item);
           if (settingItem.accessoryType == UITableViewCellAccessoryCheckmark) {
             settingItem.accessoryType = UITableViewCellAccessoryNone;
             UITableViewCell* cell =
@@ -274,7 +274,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       }
 
       VivaldiATBSettingItem* newSelectedCell =
-          base::mac::ObjCCastStrict<VivaldiATBSettingItem>
+          base::apple::ObjCCastStrict<VivaldiATBSettingItem>
               ([model itemAtIndexPath:indexPath]);
       newSelectedCell.accessoryType = UITableViewCellAccessoryCheckmark;
       UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
@@ -24,7 +25,8 @@
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
+#include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -69,16 +71,18 @@ base::Value::Dict CreateLogValue(const WebAppCommand& command,
 
 }  // namespace
 
-WebAppCommandManager::WebAppCommandManager(Profile* profile,
-                                           WebAppProvider* provider)
-    : profile_(profile),
-      provider_(provider),
-      url_loader_(std::make_unique<WebAppUrlLoader>()),
-      lock_manager_(std::make_unique<WebAppLockManager>(*provider_)) {}
+WebAppCommandManager::WebAppCommandManager(Profile* profile)
+    : profile_(profile) {}
 WebAppCommandManager::~WebAppCommandManager() {
   // Make sure that unittests & browsertests correctly shut down the manager.
   // This ensures that all tests also cover shutdown.
   DCHECK(is_in_shutdown_);
+}
+
+void WebAppCommandManager::SetProvider(base::PassKey<WebAppProvider>,
+                                       WebAppProvider& provider) {
+  provider_ = &provider;
+  lock_manager_.SetProvider(PassKey(), provider);
 }
 
 void WebAppCommandManager::Start() {
@@ -110,7 +114,7 @@ void WebAppCommandManager::ScheduleCommand(
   auto command_id = command->id();
   auto command_it = commands_.try_emplace(command_id, std::move(command)).first;
   command_it->second->RequestLock(
-      this, lock_manager_.get(),
+      this, &lock_manager_,
       base::BindOnce(&WebAppCommandManager::OnLockAcquired,
                      weak_ptr_factory_.GetWeakPtr(), command_id),
       location);
@@ -128,14 +132,13 @@ void WebAppCommandManager::OnLockAcquired(WebAppCommand::Id command_id,
   // NotifySyncSourceRemoved.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
-      base::BindOnce(&WebAppCommandManager::StartCommandOrPrepareForLoad,
+      base::BindOnce(&WebAppCommandManager::StartCommand,
                      weak_ptr_factory_.GetWeakPtr(), command_it->second.get(),
                      std::move(start_command)));
 }
 
-void WebAppCommandManager::StartCommandOrPrepareForLoad(
-    WebAppCommand* command,
-    base::OnceClosure start_command) {
+void WebAppCommandManager::StartCommand(WebAppCommand* command,
+                                        base::OnceClosure start_command) {
   if (is_in_shutdown_)
     return;
 #if DCHECK_IS_ON()
@@ -145,41 +148,6 @@ void WebAppCommandManager::StartCommandOrPrepareForLoad(
 #endif
   if (command->lock_description().IncludesSharedWebContents()) {
     CHECK(shared_web_contents_);
-    url_loader_->PrepareForLoad(
-        // web_contents is created by `WebAppLockManager` when lock is granted,
-        // this grabs the same web_contents.
-        shared_web_contents_.get(),
-        base::BindOnce(&WebAppCommandManager::OnAboutBlankLoadedForCommandStart,
-                       weak_ptr_factory_.GetWeakPtr(), command,
-                       std::move(start_command)));
-    return;
-  }
-  DVLOG(2) << "Starting command: " << CreateCommandMetadata(*command);
-  std::move(start_command).Run();
-}
-
-void WebAppCommandManager::OnAboutBlankLoadedForCommandStart(
-    WebAppCommand* command,
-    base::OnceClosure start_command,
-    WebAppUrlLoader::Result result) {
-  if (is_in_shutdown_) {
-    return;
-  }
-  DCHECK(shared_web_contents_);
-
-  // about:blank must always be loaded.
-  DCHECK_EQ(WebAppUrlLoader::Result::kUrlLoaded, result);
-  if (result != WebAppUrlLoader::Result::kUrlLoaded) {
-    base::Value::Dict url_loader_error;
-    url_loader_error.Set("WebAppUrlLoader::Result",
-                         ConvertUrlLoaderResultToString(result));
-    if (command->lock_description().app_ids().size() == 1) {
-      url_loader_error.Set("task.app_id_to_expect",
-                           *command->lock_description().app_ids().begin());
-    }
-    url_loader_error.Set("!stage", "OnWebContentsReady");
-    provider_->install_manager().TakeCommandErrorLog(
-        PassKey(), std::move(url_loader_error));
   }
   DVLOG(2) << "Starting command: " << CreateCommandMetadata(*command);
   std::move(start_command).Run();
@@ -258,11 +226,6 @@ void WebAppCommandManager::AwaitAllCommandsCompleteForTesting() {
   run_loop_for_testing_.reset();
 }
 
-void WebAppCommandManager::SetUrlLoaderForTesting(
-    std::unique_ptr<WebAppUrlLoader> url_loader) {
-  url_loader_ = std::move(url_loader);
-}
-
 void WebAppCommandManager::OnCommandComplete(
     WebAppCommand* running_command,
     CommandResult result,
@@ -275,7 +238,7 @@ void WebAppCommandManager::OnCommandComplete(
   commands_.erase(command_it);
 
   if (shared_web_contents_) {
-    bool lock_free = lock_manager_->IsSharedWebContentsLockFree();
+    bool lock_free = lock_manager_.IsSharedWebContentsLockFree();
     if (lock_free) {
       AddValueToLog(base::Value("Destroying the shared web contents."));
       shared_web_contents_.reset();
@@ -295,7 +258,9 @@ void WebAppCommandManager::AddValueToLog(base::Value value) {
   // production builds.
   DVLOG(1) << value.DebugString();
 #endif
-  static constexpr const int kMaxLogLength = 20;
+  static const size_t kMaxLogLength =
+      base::FeatureList::IsEnabled(features::kRecordWebAppDebugInfo) ? 1000
+                                                                     : 20;
   command_debug_log_.push_front(std::move(value));
   if (command_debug_log_.size() > kMaxLogLength)
     command_debug_log_.resize(kMaxLogLength);

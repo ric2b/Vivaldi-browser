@@ -12,6 +12,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chromeos/ash/components/nearby/presence/nearby_presence_service_impl.h"
 #include "chromeos/ash/components/nearby/presence/prefs/nearby_presence_prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -20,6 +21,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_context.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
 
@@ -45,11 +47,13 @@ NearbyPresenceService* NearbyPresenceServiceFactory::GetForBrowserContext(
 NearbyPresenceServiceFactory::NearbyPresenceServiceFactory()
     : ProfileKeyedServiceFactory(kServiceName) {
   DependsOn(ash::nearby::NearbyProcessManagerFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
 }
 
 NearbyPresenceServiceFactory::~NearbyPresenceServiceFactory() = default;
 
-KeyedService* NearbyPresenceServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+NearbyPresenceServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   if (!context) {
     return nullptr;
@@ -78,9 +82,11 @@ KeyedService* NearbyPresenceServiceFactory::BuildServiceInstanceFor(
   // TODO(b/276344576): add the NearbyPresence feature flag.
 
   VLOG(1) << __func__ << ": creating NearbyPresenceService.";
-  return new NearbyPresenceServiceImpl(
+  return std::make_unique<NearbyPresenceServiceImpl>(
       Profile::FromBrowserContext(context)->GetPrefs(),
-      ash::nearby::NearbyProcessManagerFactory::GetForProfile(profile));
+      ash::nearby::NearbyProcessManagerFactory::GetForProfile(profile),
+      IdentityManagerFactory::GetForProfile(profile),
+      profile->GetURLLoaderFactory());
 }
 
 void NearbyPresenceServiceFactory::RegisterProfilePrefs(

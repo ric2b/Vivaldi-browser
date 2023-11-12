@@ -3,18 +3,23 @@
 // found in the LICENSE file.
 package org.chromium.chrome.browser.tab;
 
+import static org.chromium.components.content_settings.PrefNames.DESKTOP_SITE_WINDOW_SETTING_ENABLED;
+
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.view.Display;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.BuildInfo;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -30,12 +35,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabUtils.LoadIfNeededCaller;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
-import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettingsConstants;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
-import org.chromium.components.browser_ui.site_settings.SiteSettingsFeatureList;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.content_settings.ContentSettingValues;
@@ -48,11 +50,14 @@ import org.chromium.components.messages.MessageBannerProperties;
 import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.components.messages.PrimaryActionClickBehavior;
+import org.chromium.components.prefs.PrefService;
 import org.chromium.components.profile_metrics.BrowserProfileType;
 import org.chromium.components.ukm.UkmRecorder;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.variations.SyntheticTrialAnnotationMode;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayAndroidManager;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -91,6 +96,7 @@ public class RequestDesktopUtils {
             "RequestDesktopSiteDefaultsEnabledCohort";
     private static final String GLOBAL_DEFAULTS_CONTROL_COHORT_NAME =
             "RequestDesktopSiteDefaultsControlCohort";
+    private static DisplayMetrics sDisplayMetrics;
 
     static final String PARAM_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES =
             "default_on_display_size_threshold_inches";
@@ -211,107 +217,23 @@ public class RequestDesktopUtils {
         // For incognito profile, keep the domain level setting to override the settings from normal
         // profile.
         if (!isIncognito && useDesktopUserAgent == rdsGlobalSetting) {
-            contentSettingValue = ContentSettingValues.DEFAULT;
+            if (ContentFeatureMap.isEnabled(
+                        ContentFeatureList.REQUEST_DESKTOP_SITE_WINDOW_SETTING)) {
+                // To support the window setting, keep the domain settings when the window setting
+                // is ON.
+                PrefService prefService = UserPrefs.get(profile);
+                if (!prefService.getBoolean(DESKTOP_SITE_WINDOW_SETTING_ENABLED)) {
+                    contentSettingValue = ContentSettingValues.DEFAULT;
+                }
+            } else {
+                contentSettingValue = ContentSettingValues.DEFAULT;
+            }
         }
 
         // Set or remove a domain level exception.
         WebsitePreferenceBridge.setContentSettingCustomScope(profile,
                 ContentSettingsType.REQUEST_DESKTOP_SITE, domainWildcardPattern,
                 /*secondaryPattern*/ SITE_WILDCARD, contentSettingValue);
-    }
-
-    /**
-     * Create a SharedPreferences string set of tab IDs of all tabs in the tab model to update the
-     * tab user agent once when desktop site domain level settings are downgraded to tab level
-     * settings.
-     * @param tabModelSelector The {@link TabModelSelector} that will provide information about
-     *         {@link Tab}s in all {@link TabModel}s.
-     */
-    public static void maybeDowngradeSiteSettings(TabModelSelector tabModelSelector) {
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
-        if (ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
-            // Remove the SharedPreferences keys if they exist when desktop site exceptions are
-            // re-enabled.
-            SharedPreferencesManager.getInstance().removeKey(
-                    ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET);
-            SharedPreferencesManager.getInstance().removeKey(
-                    ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED);
-            return;
-        }
-        if (!SiteSettingsFeatureList.isEnabled(
-                    SiteSettingsFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS_DOWNGRADE)) {
-            return;
-        }
-        // Restore tab level settings exactly once after downgrade.
-        if (sharedPreferencesManager.contains(
-                    ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET)) {
-            return;
-        }
-
-        var tabIds = new HashSet<String>();
-        for (var tabModel : tabModelSelector.getModels()) {
-            for (int index = 0; index < tabModel.getCount(); index++) {
-                var tab = tabModel.getTabAt(index);
-                tabIds.add(String.valueOf(tab.getId()));
-            }
-        }
-
-        sharedPreferencesManager.writeStringSet(
-                ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET, tabIds);
-        // Preserve the global setting value from prior to downgrade to eventually update the
-        // TabUserAgent for all current tabs with respect to this value.
-        sharedPreferencesManager.writeBoolean(
-                ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED,
-                WebsitePreferenceBridge.isCategoryEnabled(
-                        tabModelSelector.getCurrentModel().getProfile(),
-                        ContentSettingsType.REQUEST_DESKTOP_SITE));
-    }
-
-    /**
-     * Restore the tab level setting for a tab that was in use before desktop site domain level
-     * settings were downgraded. This method specifically updates the CriticalPersistedTabData user
-     * agent, but does not actually apply/change the user agent for the current web contents; it is
-     * expected of the caller to do so.
-     * @param tab The {@link Tab} whose tab level setting may be restored.
-     */
-    public static void maybeRestoreUserAgentOnSiteSettingsDowngrade(@NonNull Tab tab) {
-        if (!isDesktopSiteExceptionsDowngradeEnabledForTab(tab.getId())
-                || tab.getWebContents() == null) {
-            return;
-        }
-
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
-
-        // Get the user agent used by the tab from the last committed entry and update the tab level
-        // setting.
-        boolean usingDesktopUserAgent =
-                tab.getWebContents().getNavigationController().getUseDesktopUserAgent();
-        @TabUserAgent
-        int tabUserAgent = usingDesktopUserAgent ? TabUserAgent.DESKTOP : TabUserAgent.MOBILE;
-
-        // Retrieve the global setting from prior to downgrade, or use the current global setting.
-        boolean globalEnabled =
-                sharedPreferencesManager.contains(
-                        ChromePreferenceKeys
-                                .DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED)
-                ? sharedPreferencesManager.readBoolean(
-                        ChromePreferenceKeys
-                                .DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED,
-                        false)
-                : TabUtils.isDesktopSiteGlobalEnabled(
-                        Profile.fromWebContents(tab.getWebContents()));
-
-        if (globalEnabled != usingDesktopUserAgent) {
-            // Update the persisted TabUserAgent for a tab from DEFAULT if the user agent it last
-            // used is different from the global setting.
-            CriticalPersistedTabData.from(tab).setUserAgent(tabUserAgent);
-        }
-
-        // Remove the ID of the processed tab from the SharedPreferences string set so that its tab
-        // level setting is not processed again.
-        sharedPreferencesManager.removeFromStringSet(
-                ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET,
-                String.valueOf(tab.getId()));
     }
 
     /**
@@ -325,8 +247,7 @@ public class RequestDesktopUtils {
      */
     public static void maybeUpgradeTabLevelDesktopSiteSetting(
             Tab tab, Profile profile, @TabUserAgent int tabUserAgent, @Nullable GURL url) {
-        if (!ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
-                || url == null) {
+        if (url == null) {
             return;
         }
 
@@ -890,6 +811,56 @@ public class RequestDesktopUtils {
     }
 
     /**
+     * Determine whether RDS window setting should be applied.
+     * When returning 'true' the mobile user agent should be used for the current window size.
+     */
+    static boolean shouldApplyWindowSetting(Profile profile, GURL url, Context context) {
+        if (!ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_WINDOW_SETTING)) {
+            return false;
+        }
+        // Skip window setting on Automotive and revisit if / when they add split screen.
+        if (BuildInfo.getInstance().isAutomotive) {
+            return false;
+        }
+        PrefService prefService = UserPrefs.get(profile);
+        if (!prefService.getBoolean(DESKTOP_SITE_WINDOW_SETTING_ENABLED)) {
+            return false;
+        }
+        if (!TabUtils.isRequestDesktopSiteContentSettingsGlobal(profile, url)) {
+            return false;
+        }
+        // Try the window attributes width first.
+        // PCCT has its width stored in window attributes.
+        int widthPixels = -1;
+        Activity activity = ContextUtils.activityFromContext(context);
+        // activity might be null in integration tests.
+        if (activity != null && activity.getWindow() != null) {
+            widthPixels = activity.getWindow().getAttributes().width;
+        }
+        DisplayMetrics displayMetrics = RequestDesktopUtils.getDisplayMetricsFromContext(context);
+        // Use width from displayMetrics if the window attributes width is invalid.
+        if (widthPixels <= 0) {
+            widthPixels = displayMetrics.widthPixels;
+        }
+        return widthPixels / displayMetrics.density < DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
+    }
+
+    /**
+     * Retrieve the {@link DisplayMetrics} from {@link Context} for the current window.
+     * @param context The current {@link Context}.
+     * @return The {@link DisplayMetrics} for the current window.
+     */
+    private static DisplayMetrics getDisplayMetricsFromContext(Context context) {
+        if (sDisplayMetrics != null) {
+            return sDisplayMetrics;
+        }
+        Display display = DisplayAndroidManager.getDefaultDisplayForContext(context);
+        DisplayMetrics displayMetrics = new DisplayMetrics();
+        display.getMetrics(displayMetrics);
+        return displayMetrics;
+    }
+
+    /**
      * Updates the desktop site content setting on user request.
      * @param profile The current {@link Profile}.
      * @param requestDesktopSite Whether the user requested for desktop sites globally.
@@ -971,16 +942,9 @@ public class RequestDesktopUtils {
         }
     }
 
-    private static boolean isDesktopSiteExceptionsDowngradeEnabledForTab(int tabId) {
-        if (ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
-                || !SiteSettingsFeatureList.isEnabled(
-                        SiteSettingsFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS_DOWNGRADE)) {
-            return false;
-        }
-        return SharedPreferencesManager.getInstance()
-                .readStringSet(
-                        ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET)
-                .contains(String.valueOf(tabId));
+    @VisibleForTesting
+    static void setTestDisplayMetrics(DisplayMetrics displayMetrics) {
+        sDisplayMetrics = displayMetrics;
     }
 
     /**

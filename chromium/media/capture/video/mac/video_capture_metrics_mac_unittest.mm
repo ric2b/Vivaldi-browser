@@ -8,17 +8,13 @@
 #include <CoreMedia/CoreMedia.h>
 #import <Foundation/Foundation.h>
 
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "media/base/video_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace media {
 
@@ -34,7 +30,7 @@ TEST(VideoCaptureMetricsMacTest, NoMetricsLoggedIfNullRequestedCaptureFormat) {
 TEST(VideoCaptureMetricsMacTest, LogRequestedPixelFormat) {
   base::HistogramTester histogram_tester;
 
-  base::ScopedCFTypeRef<CMFormatDescriptionRef> requested_format;
+  base::apple::ScopedCFTypeRef<CMFormatDescriptionRef> requested_format;
   OSStatus status = CMVideoFormatDescriptionCreate(
       kCFAllocatorDefault,
       kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange /*NV12*/, 320, 180,
@@ -53,7 +49,7 @@ TEST(VideoCaptureMetricsMacTest, LogRequestedPixelFormat) {
 TEST(VideoCaptureMetricsMacTest, LogFirstFrameWhenAsRequested) {
   base::HistogramTester histogram_tester;
 
-  base::ScopedCFTypeRef<CMFormatDescriptionRef> requested_format;
+  base::apple::ScopedCFTypeRef<CMFormatDescriptionRef> requested_format;
   OSStatus status = CMVideoFormatDescriptionCreate(
       kCFAllocatorDefault,
       kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange /*NV12*/, 320, 180,
@@ -63,7 +59,7 @@ TEST(VideoCaptureMetricsMacTest, LogFirstFrameWhenAsRequested) {
   OCMStub([capture_format formatDescription]).andReturn(requested_format.get());
 
   // First frame equal.
-  base::ScopedCFTypeRef<CMSampleBufferRef> first_frame;
+  base::apple::ScopedCFTypeRef<CMSampleBufferRef> first_frame;
   status = CMSampleBufferCreate(kCFAllocatorDefault, nullptr, false, nullptr,
                                 nullptr, requested_format, 0, 0, nullptr, 0,
                                 nullptr, first_frame.InitializeInto());

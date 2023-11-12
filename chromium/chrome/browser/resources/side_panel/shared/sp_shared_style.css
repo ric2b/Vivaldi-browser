@@ -44,20 +44,18 @@
 :host-context([chrome-refresh-2023]) .sp-scroller::-webkit-scrollbar-thumb {
   background: var(--color-side-panel-scrollbar-thumb);
   background-clip: content-box;
-  border: solid 2px transparent;
+  border: solid 1.5px transparent;
   border-radius: 100px;
 }
 
-:host-context([chrome-refresh-2023]) .sp-card:has(.sp-scroller) {
-  padding-block-end: 0;
+:host-context([chrome-refresh-2023])
+    .sp-scroller-top-of-page::-webkit-scrollbar-track {
+  margin-block-start: var(--sp-body-padding);
 }
 
-:host-context([chrome-refresh-2023]) .sp-card .sp-scroller {
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
-  box-sizing: border-box;
-  margin-inline-end: calc(-1 * var(--sp-body-padding));
-  padding-block-end: var(--sp-card-block-padding);
+:host-context([chrome-refresh-2023])
+    .sp-scroller-bottom-of-page::-webkit-scrollbar-track {
+  margin-block-end: var(--sp-body-padding);
 }
 
 :host-context([chrome-refresh-2023]) .sp-scroller .sp-card,
@@ -140,14 +138,4 @@
   --scroll-border-color: var(--color-side-panel-dialog-divider);
   border-radius: 12px;
   box-shadow: var(--cr-elevation-3);
-}
-
-:host-context([chrome-refresh-2023]) cr-action-menu {
-  --cr-hairline: 1px solid var(--color-side-panel-menu-divider);
-  --cr-action-menu-disabled-item-color: var(--color-side-panel-menu-disabled);
-  --cr-action-menu-disabled-item-opacity: 1;
-  --cr-menu-background-color: var(--color-side-panel-menu-background);
-  --cr-menu-background-focus-color: var(--cr-hover-background-color);
-  --cr-menu-shadow: var(--cr-elevation-2);
-  --cr-primary-text-color: var(--color-side-panel-menu-foreground);
 }

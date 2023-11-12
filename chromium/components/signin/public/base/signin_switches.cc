@@ -20,18 +20,14 @@ BASE_FEATURE(kIdentityStatusConsistency,
 // expiration of credentials during testing.
 const char kClearTokenService[] = "clear-token-service";
 
-// Disables sending signin scoped device id to LSO with refresh token request.
-const char kDisableSigninScopedDeviceId[] = "disable-signin-scoped-device-id";
-
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 // Enable experimental binding session credentials to the device.
-BASE_FEATURE(kEnableBoundSessionCrendentials,
-             "EnableBoundSessionCrendentials",
+BASE_FEATURE(kEnableBoundSessionCredentials,
+             "EnableBoundSessionCredentials",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsBoundSessionCredentialsEnabled() {
-  return base::FeatureList::IsEnabled(
-      switches::kEnableBoundSessionCrendentials);
+  return base::FeatureList::IsEnabled(switches::kEnableBoundSessionCredentials);
 }
 #endif
 
@@ -64,5 +60,9 @@ BASE_FEATURE(kTangibleSync,
 #endif
 
 );
+
+BASE_FEATURE(kSearchEngineChoice,
+             "SearchEngineChoice",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace switches

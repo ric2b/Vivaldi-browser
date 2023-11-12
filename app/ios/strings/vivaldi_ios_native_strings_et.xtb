@@ -79,7 +79,6 @@ blokeeritud</translation>
 <translation id="3091563570137981919">Jälitajate ja reklaamide blokeerimine</translation>
 <translation id="3177673846235066154">server lükkas sisselogimiskatse tagasi.</translation>
 <translation id="3270894089048358271">Kas soovid Vivaldit oma vaikebrauseriks?</translation>
-<translation id="3270930591809084274">Süngitud kaardid</translation>
 <translation id="3335772982573114336">Uus märge</translation>
 <translation id="33451081266695216">server aeglustas ühendust.</translation>
 <translation id="3346386541263128307">Meiliaadressid peavad kattuma.</translation>
@@ -108,7 +107,6 @@ blokeeritud</translation>
 <translation id="3997823869212225788">Sisesta saadud 6-numbriline kood</translation>
 <translation id="4002066346123236978">Tiitel</translation>
 <translation id="4032606071208172574">(vaikimisi)</translation>
-<translation id="4048057312173843244">Teistest seadmetest süngitud kaardid ilmuksid siia. Sünkimisteenuse kasutamiseks logi sisse.</translation>
 <translation id="4073968054795398875">Sünkimisserveril on praegu probleeme. Varsti proovime uuesti...</translation>
 <translation id="4096707694175478403">Paneel</translation>
 <translation id="4141861385728508836">Põhjamaade (<ph name="ORIGIN" />)</translation>
@@ -280,7 +278,6 @@ blokeeritud</translation>
 <translation id="9043882097999887291">reklaami
 blokeeritud</translation>
 <translation id="9065203028668620118">Muuda</translation>
-<translation id="9078193189520575214">Muudatuste rakendamine...</translation>
 <translation id="9079251484401922158">Soome (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 element</translation>
 <translation id="9091665118798175641">Süngitakse vormide automaatse täitmise andmed</translation>

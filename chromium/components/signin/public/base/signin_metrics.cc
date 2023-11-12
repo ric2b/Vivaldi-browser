@@ -292,6 +292,8 @@ void RecordSigninAccountType(signin::ConsentLevel consent_level,
       base::UmaHistogramEnumeration("Signin.AccountType.SigninConsent",
                                     account_type);
       break;
+    // TODO(crbug.com/1462552): Remove kSync usage after phase 3 migration. See
+    // ConsentLevel::kSync documentation for more details.
     case signin::ConsentLevel::kSync:
       base::UmaHistogramEnumeration("Signin.AccountType.SyncConsent",
                                     account_type);
@@ -482,6 +484,14 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
       break;
+  }
+}
+
+void RecordSignoutUserAction(bool force_clear_data) {
+  if (force_clear_data) {
+    base::RecordAction(base::UserMetricsAction("Signin_SignoutClearData"));
+  } else {
+    base::RecordAction(base::UserMetricsAction("Signin_Signout"));
   }
 }
 

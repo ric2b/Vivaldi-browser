@@ -17,6 +17,10 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 
+namespace ui {
+class ColorProvider;
+}
+
 // Holds the basic logic for rendering tabs, including preferred sizes, paths,
 // etc.
 class TabStyle {
@@ -56,6 +60,13 @@ class TabStyle {
   enum class HideHoverStyle {
     kGradual,    // The hover should fade out.
     kImmediate,  // The hover should cut off, with no fade out.
+  };
+
+  // The states the tab can be in throughout its selection lifecycle.
+  enum class TabSelectionState {
+    kActive,
+    kSelected,
+    kInactive,
   };
 
   // If we want to draw vertical separators between tabs, these are the leading
@@ -102,8 +113,6 @@ class TabStyle {
   TabStyle& operator=(const TabStyle&) = delete;
   virtual ~TabStyle();
 
-  virtual int GetHeight() const = 0;
-
   // Returns the preferred width of a single Tab, assuming space is
   // available.
   virtual int GetStandardWidth() const = 0;
@@ -128,6 +137,9 @@ class TabStyle {
   // Gets the distance between the separator and tab, if any.
   virtual gfx::Insets GetSeparatorMargins() const = 0;
 
+  // Gets the radius of the rounded rect used to draw the separator.
+  virtual int GetSeparatorCornerRadius() const = 0;
+
   // Returns, for a tab of height |height|, how far the window top drag handle
   // can extend down into inactive tabs or the new tab button. This behavior
   // is not used in all cases.
@@ -142,6 +154,16 @@ class TabStyle {
 
   // Returns the radius of the outer corners of the tab shape.
   virtual int GetBottomCornerRadius() const = 0;
+
+  // Returns the background color of a tab with selection state `state`.
+  // `frame_active` is whether the tab's widget is painted as active or not.
+  // TODO(tbergquist): Non-Tab callers of this should probably be refactored to
+  // use their own color ids.
+  virtual SkColor GetTabBackgroundColor(
+      TabSelectionState state,
+      bool hovered,
+      bool frame_active,
+      const ui::ColorProvider& color_provider) const = 0;
 
   // Opacity of the active tab background painted over inactive selected tabs.
   virtual float GetSelectedTabOpacity() const = 0;

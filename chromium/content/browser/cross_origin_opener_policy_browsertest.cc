@@ -321,7 +321,7 @@ class CrossOriginOpenerPolicyBrowserTest
         base::BindRepeating(&ServeDifferentCoopOnSecondNavigation,
                             base::OwnedRef(navigation_counter))));
 
-    prerender_helper().SetUp(&https_server_);
+    prerender_helper().RegisterServerRequestMonitor(&https_server_);
 
     ASSERT_TRUE(https_server()->Start());
   }
@@ -380,7 +380,7 @@ class NoSharedArrayBufferByDefault : public CrossOriginOpenerPolicyBrowserTest {
 };
 
 // Same as CrossOriginOpenerPolicyBrowserTest, but enables COOP:
-// restrict-properties. See https://crbug.com/1221127.
+// restrict-properties.
 class CoopRestrictPropertiesBrowserTest
     : public CrossOriginOpenerPolicyBrowserTest {
  public:
@@ -3476,8 +3476,16 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_FALSE(current_si->GetSiteInfo().requires_origin_keyed_process());
 }
 
+// TODO(crbug.com/1467243): Disable flaky test in Linux.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_CrossOriginIsolatedSiteInstance_MainFrame \
+  DISABLED_CrossOriginIsolatedSiteInstance_MainFrame
+#else
+#define MAYBE_CrossOriginIsolatedSiteInstance_MainFrame \
+  CrossOriginIsolatedSiteInstance_MainFrame
+#endif
 IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
-                       CrossOriginIsolatedSiteInstance_MainFrame) {
+                       MAYBE_CrossOriginIsolatedSiteInstance_MainFrame) {
   GURL isolated_page(
       https_server()->GetURL("a.test",
                              "/set-header?"
@@ -4567,15 +4575,18 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
   int rph_id_3 = current_frame_host()->GetProcess()->GetID();
   EXPECT_EQ(rph_id_2, rph_id_3);
 
-  // This test is parameterized on whether the bfcache is enabled.  With
-  // bfcache, we force a BrowsingInstance swap at the very beginning when the
-  // navigation to `url_2` starts, so there's no need to create a new
-  // SiteInstance when we learn about COOP at response time, since the
+  // The original speculative RFH should always be destroyed.
+  //
+  // Subtle note: this happens even when bfcache is enabled. With bfcache,
+  // we force a BrowsingInstance swap at the very beginning when the navigation
+  // to `url_2` starts.  So when we learn about COOP at response time, the
   // candidate (speculative RFH's) SiteInstance is already in a fresh
-  // BrowsingInstance.  Therefore, with bfcache, the original speculative RFH
-  // will be the RFH that eventually commits.  Otherwise, the original
-  // speculative RFH should be destroyed and replaced by another RFH.
-  EXPECT_NE(IsBackForwardCacheEnabled(), speculative_rfh.IsDestroyed());
+  // BrowsingInstance. However, it cannot be reused, because COOP requires a
+  // BrowsingInstance with b.test as its common_coop_origin(), and the
+  // candidate SiteInstance's BrowsingInstance has no common_coop_origin(), so
+  // it cannot be reused, and we end up creating a new speculative RFH and
+  // destroying the original one.
+  EXPECT_TRUE(speculative_rfh.IsDestroyed());
 }
 
 // Ensure that same-site navigations that result in a COOP mismatch avoid an
@@ -6577,8 +6588,20 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesBrowserTest,
   EXPECT_TRUE(
       second_popup_si->IsCoopRelatedSiteInstance(initial_popup_si.get()));
 
+  TestNavigationManager nav_manager(popup_window, regular_page);
   popup_window->GetController().GoBack();
-  ASSERT_TRUE(WaitForLoadStop(popup_window));
+
+  // Check that the proper speculative SiteInstance was selected.
+  ASSERT_TRUE(nav_manager.WaitForRequestStart());
+  RenderFrameHostImpl* speculative_rfh = popup_window->GetPrimaryFrameTree()
+                                             .root()
+                                             ->render_manager()
+                                             ->speculative_frame_host();
+  ASSERT_TRUE(speculative_rfh);
+  EXPECT_EQ(initial_popup_si.get(), speculative_rfh->GetSiteInstance());
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+
+  // Check that the speculative SiteInstance was then committed.
   scoped_refptr<SiteInstanceImpl> back_si(
       popup_window->GetPrimaryMainFrame()->GetSiteInstance());
   EXPECT_EQ(initial_popup_si.get(), back_si.get());
@@ -7154,7 +7177,7 @@ class FrameNameChangedWaiter : public WebContentsObserver {
 
 // This test verifies that proxies usually created to support named targeting
 // are not created for cross-BrowsingInstance frames.
-// TODO(https://crbug.com/1370357): This test will likely need to change if we
+// TODO(https://crbug.com/1467184): This test will likely need to change if we
 // implement per-BrowsingInstance names. In that case, named targeting would be
 // possible using the per-BrowsingContextGroup names, and proxies should be
 // created.
@@ -8082,7 +8105,7 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesProxiesBrowserTest,
 
 // This test verifies that named targeting does not resolve across
 // BrowsingInstances.
-// TODO(https://crbug.com/1370357): Named targeting will evolve in the future,
+// TODO(https://crbug.com/1467184): Named targeting might evolve in the future,
 // when we're able to have per-BrowsingInstance names. For now, we're simply
 // blocking all named targeting.
 IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesBrowserTest,
@@ -9497,52 +9520,78 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest,
 }
 
 // Verify that activating a BackForwardCache entry in another browsing context
-// group in the same CoopRelatedGroup propagates the BrowsingContextGroupInfo
-// properly. This can only be approximated, because BFCache will not usually
-// kick in on pages with popups.
+// group propagates the BrowsingContextGroupInfo properly.
 IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest,
                        BackForwardCacheNavigation) {
-  GURL regular_page(https_server()->GetURL("a.test", "/title1.html"));
+  GURL regular_page_1(https_server()->GetURL("a.test", "/title1.html"));
+  GURL regular_page_2(https_server()->GetURL("b.test", "/title1.html"));
   GURL coop_rp_page(https_server()->GetURL(
-      "b.test",
+      "c.test",
       "/set-header"
       "?cross-origin-opener-policy: restrict-properties"));
-  GURL regular_page_2(https_server()->GetURL("c.test", "/title1.html"));
+  GURL coop_rp_page_with_fragment(coop_rp_page.spec() + "#fragment");
 
-  // Start on a first page, then navigate to a page in another browsing context
-  // group in the same CoopRelatedGroup, and finally back. The back navigation
-  // uses the BFCache if enabled.
-  ASSERT_TRUE(NavigateToURL(shell(), regular_page));
-  SiteInstanceImpl* initial_si = current_frame_host()->GetSiteInstance();
+  // Start on a first page, then navigate to a cross-origin page. If BFCache is
+  // enabled, we'll get a proactive swap and the page will be saved in the
+  // BFCache.
+  ASSERT_TRUE(NavigateToURL(shell(), regular_page_1));
+  RenderFrameHostImpl* initial_rfh = current_frame_host();
+  scoped_refptr<SiteInstanceImpl> initial_si =
+      current_frame_host()->GetSiteInstance();
   base::UnguessableToken initial_bi_token =
       initial_si->browsing_instance_token();
   base::UnguessableToken initial_coop_token =
       initial_si->coop_related_group_token();
 
-  ASSERT_TRUE(NavigateToURL(shell(), coop_rp_page));
-  web_contents()->GetController().GoBack();
-  ASSERT_TRUE(WaitForLoadStop(web_contents()));
+  ASSERT_TRUE(NavigateToURL(shell(), regular_page_2));
+  scoped_refptr<SiteInstanceImpl> second_si =
+      current_frame_host()->GetSiteInstance();
+  base::UnguessableToken second_bi_token = second_si->browsing_instance_token();
+  base::UnguessableToken second_coop_token =
+      second_si->coop_related_group_token();
+  if (IsBackForwardCacheEnabled()) {
+    ASSERT_FALSE(second_si->IsCoopRelatedSiteInstance(initial_si.get()));
+    EXPECT_NE(initial_bi_token, second_bi_token);
+    EXPECT_NE(initial_coop_token, second_coop_token);
+  }
 
-  // The back navigation should still have the original tokens.
-  SiteInstanceImpl* bfcache_si = current_frame_host()->GetSiteInstance();
-  EXPECT_EQ(bfcache_si->browsing_instance_token(), initial_bi_token);
-  EXPECT_EQ(bfcache_si->coop_related_group_token(), initial_coop_token);
-
-  // Now open a popup in the same browsing context group.
+  // Now open a popup in another browsing context group in the same
+  // CoopRelatedGroup.
   ShellAddedObserver shell_observer;
   ASSERT_TRUE(ExecJs(current_frame_host(),
-                     JsReplace("window.w = open($1);", regular_page_2)));
+                     JsReplace("window.w = open($1);", coop_rp_page)));
   WebContentsImpl* popup_window =
       static_cast<WebContentsImpl*>(shell_observer.GetShell()->web_contents());
-
   ASSERT_TRUE(WaitForLoadStop(popup_window));
   RenderFrameHostImpl* popup_rfh = popup_window->GetPrimaryMainFrame();
-  ASSERT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
-      popup_rfh->GetSiteInstance()));
+  SiteInstanceImpl* popup_si = popup_rfh->GetSiteInstance();
+  base::UnguessableToken popup_bi_token = popup_si->browsing_instance_token();
+  base::UnguessableToken popup_coop_token =
+      popup_si->coop_related_group_token();
+  ASSERT_FALSE(popup_si->IsRelatedSiteInstance(second_si.get()));
+  ASSERT_TRUE(popup_si->IsCoopRelatedSiteInstance(second_si.get()));
+  EXPECT_NE(popup_bi_token, second_bi_token);
+  EXPECT_EQ(popup_coop_token, second_coop_token);
+
+  // Now go back. If the BFCache is enabled, it will be used. In any case, we
+  // should be back to the original SiteInstance.
+  web_contents()->GetController().GoBack();
+  ASSERT_TRUE(WaitForLoadStop(web_contents()));
+  if (IsBackForwardCacheEnabled()) {
+    ASSERT_EQ(current_frame_host(), initial_rfh);
+  }
+  SiteInstanceImpl* back_si = current_frame_host()->GetSiteInstance();
+  EXPECT_EQ(back_si->browsing_instance_token(), initial_bi_token);
+  EXPECT_EQ(back_si->coop_related_group_token(), initial_coop_token);
+  EXPECT_NE(popup_bi_token, initial_bi_token);
+  EXPECT_NE(popup_coop_token, initial_coop_token);
+
+  // Ensure any BrowsingContextGroupInfo update has been propagated. Doing a
+  // same-document navigation works, because the interfaces are associated.
+  ASSERT_TRUE(NavigateToURL(popup_window, coop_rp_page_with_fragment));
 
   // If the BrowsingContextGroupInfo was properly propagated to the renderer
   // upon the BFCache navigation, access to the popup should be unrestricted.
-  EXPECT_TRUE(ExecJs(current_frame_host(), "window.w.blur()"));
   EXPECT_TRUE(ExecJs(popup_rfh, "opener.blur()"));
 }
 
@@ -9652,7 +9701,7 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest,
   // Because they are in different browsing context groups in different
   // CoopRelatedGroups, access to cross-origin properties should conservatively
   // NOT be restricted.
-  // TODO(https://crbug.com/1370351): This might change in the future, if we
+  // TODO(https://crbug.com/1464618): This might change in the future, if we
   // decide to impose restrictions on all accesses from different browsing
   // context groups.
   EXPECT_TRUE(ExecJs(current_frame_host(), "window.w.blur()"));
@@ -9811,6 +9860,62 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(true, EvalJs(popup_rfh, "opener.closed == false"));
 }
 
+// Regression test for https://crbug.com/1491282.  Ensure that when a
+// navigation to a COOP: RP page requires a new BrowsingInstance in a new
+// CoopRelatedGroup, a subsequent navigation that stays in the same
+// CoopRelatedGroup does not crash.  In this case, it is essential that when a
+// new non-COOP BrowsingInstance in a new CoopRelatedGroup is created at
+// request start time, that BrowsingInstance isn't incorrectly reused at
+// response started time, if the response came back with COOP: RP headers and
+// requires a BrowsingInstance with a different common_coop_origin().
+IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest,
+                       NewBrowsingInstanceFromBeginNavigationCannotBeReused) {
+  // Start on a WebUI page. The repro for https://crbug.com/1491282 required
+  // this, because the security swap from WebUI to normal pages requires a new
+  // BrowsingInstance (with no common_coop_origin) and a new CoopRelatedGroup
+  // at both request and response time. In contrast, navigating from a normal
+  // page to a COOP:RP page would pick a new BrowsingInstance (with a
+  // common_coop_origin) in the same CoopRelatedGroup at response time, because
+  // the kRelatedCoopSwap reason is chosen after checking for security swaps
+  // but before checking for proactive swaps. A new CoopRelatedGroup guarantees
+  // that ConvertToSiteInstance() will attempt to reuse the speculative
+  // RenderFrameHost's SiteInstance (the "candidate_instance") at response
+  // time, rather than getting a SiteInstance + BrowsingInstance in the same
+  // CoopRelatedGroup.
+  GURL webui_page("chrome://ukm");
+  ASSERT_TRUE(NavigateToURL(shell(), webui_page));
+  scoped_refptr<SiteInstanceImpl> webui_instance(
+      current_frame_host()->GetSiteInstance());
+
+  // Now, navigate to a COOP: restrict-properties page.  This will create a
+  // fresh BrowsingInstance at request start time, and evaluate whether it can
+  // stay in that BrowsingInstance after receiving the response.  In
+  // https://crbug.com/1491282, the BrowsingInstance from request start was
+  // incorrectly reused, resulting in not having a common_coop_origin() at the
+  // end of this navigation.  Ensure this is not the case.
+  GURL coop_rp_page(https_server()->GetURL(
+      "a.test",
+      "/set-header"
+      "?cross-origin-opener-policy: restrict-properties"));
+  ASSERT_TRUE(NavigateToURL(shell(), coop_rp_page));
+  scoped_refptr<SiteInstanceImpl> coop_rp_instance(
+      current_frame_host()->GetSiteInstance());
+  EXPECT_FALSE(
+      webui_instance->IsCoopRelatedSiteInstance(coop_rp_instance.get()));
+  EXPECT_TRUE(coop_rp_instance->GetCommonCoopOrigin().has_value());
+  EXPECT_EQ("a.test", coop_rp_instance->GetCommonCoopOrigin()->host());
+
+  // Ensure that we can navigate to a page without COOP: restrict-properties.
+  // This should swap BrowsingInstances but stay in the same CoopRelatedGroup,
+  // and this shouldn't crash.
+  GURL non_coop_rp_page(https_server()->GetURL("b.test", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), non_coop_rp_page));
+  SiteInstanceImpl* non_coop_instance(current_frame_host()->GetSiteInstance());
+  EXPECT_FALSE(non_coop_instance->GetCommonCoopOrigin().has_value());
+  EXPECT_FALSE(coop_rp_instance->IsRelatedSiteInstance(non_coop_instance));
+  EXPECT_TRUE(coop_rp_instance->IsCoopRelatedSiteInstance(non_coop_instance));
+}
+
 IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest, Prerender) {
   GURL regular_page(https_server()->GetURL("a.test", "/title1.html"));
   GURL coop_rp_page(https_server()->GetURL(
@@ -9900,25 +10005,12 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest, Prerender) {
   // because the interfaces are associated.
   ASSERT_TRUE(NavigateToURL(popup_window, regular_page_2_with_fragment));
 
-  // TODO(https://crbug.com/1455344, https://crbug.com/1456277):
-  // This hits multiple bugs. Current end behavior is:
-  // - Without BFCache, we end up with a page in another BrowsingInstance, with
-  //   proxies still around. No restriction is enforced in the renderer, because
-  //   the tokens for the CoopRelatedGroup do not match, but all browser
-  //   mitigated APIs will be blocked (postMessage, navigations).
-  // - With BFCache, we end up with a page that has the wrong tokens, so the
-  //   accesses are restricted on the renderer. On top of that, since they
-  //   belong to different CoopRelatedGroup, postMessage will be ignored by the
-  //   browser.
-  if (IsBackForwardCacheEnabled()) {
-    std::string post_bf_cache_openee_to_opener_access =
-        EvalJs(popup_rfh, "try { opener.blur() } catch (e) { e.toString(); }")
-            .ExtractString();
-    EXPECT_THAT(post_bf_cache_openee_to_opener_access,
-                ::testing::MatchesRegex(kCoopRpErrorMessageRegex));
-  } else {
-    EXPECT_TRUE(ExecJs(popup_rfh, "opener.blur()"));
-  }
+  // TODO(https://crbug.com/1455344): The current end behavior is that we end up
+  // with a page in another BrowsingInstance, with proxies still around. No
+  // restriction is enforced in the renderer, because the tokens for the
+  // CoopRelatedGroup do not match, but all browser mitigated APIs will be
+  // blocked (postMessage, navigations).
+  EXPECT_TRUE(ExecJs(popup_rfh, "opener.blur()"));
 }
 
 }  // namespace content

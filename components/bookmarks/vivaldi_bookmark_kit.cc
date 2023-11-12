@@ -3,6 +3,7 @@
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 #include <string>
+
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
@@ -124,6 +125,7 @@ struct VivaldiMetaNames {
   const std::string description = "Description";
   const std::string partner = "Partner";
   const std::string thumbnail = "Thumbnail";
+  const std::string theme_color = "ThemeColor";
 
   // values stored in the node
   const std::string true_value = "true";
@@ -248,6 +250,30 @@ const std::string& GetDescription(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().description);
 }
 
+SkColor GetThemeColor(const BookmarkNode* node) {
+  std::string theme_color_str = GetMetaString(node, GetMetaNames().theme_color);
+  if (theme_color_str.empty())
+    return SK_ColorTRANSPARENT;
+
+  SkColor theme_color;
+  if (!base::StringToUint(theme_color_str, &theme_color))
+    return SK_ColorTRANSPARENT;
+  return theme_color;
+}
+
+std::string GetThemeColorForCSS(const BookmarkNode* node) {
+  SkColor theme_color = GetThemeColor(node) ;
+  if (theme_color == SK_ColorTRANSPARENT)
+    return "";
+
+  std::vector<uint8_t> theme_rgb;
+  theme_rgb.push_back(SkColorGetR(theme_color));
+  theme_rgb.push_back(SkColorGetG(theme_color));
+  theme_rgb.push_back(SkColorGetB(theme_color));
+
+  return std::string("#") + base::HexEncode(theme_rgb);
+}
+
 const base::Uuid GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
   base::Uuid partner_id;
   const std::string& partner_string =
@@ -368,6 +394,13 @@ void SetNodeThumbnail(BookmarkModel* model,
       model, node, GetMetaNames().thumbnail, thumbnail);
 }
 
+void SetNodeThemeColor(BookmarkModel* model,
+                       const BookmarkNode* node,
+                       SkColor theme_color) {
+  model->SetNodeMetaInfo(node, GetMetaNames().theme_color,
+                         base::NumberToString(theme_color));
+}
+
 bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,
                        BookmarkWriteFunc write_func_att) {
@@ -381,7 +414,7 @@ bool WriteBookmarkData(const base::Value::Dict& value,
     return true;
 
   const std::string* nick_name = meta_info->FindString(GetMetaNames().nickname);
-  const std::string* description=
+  const std::string* description =
       meta_info->FindString(GetMetaNames().description);
   const std::string* speed_dial =
       meta_info->FindString(GetMetaNames().speeddial);
@@ -422,10 +455,10 @@ void ReadBookmarkAttributes(BookmarkAttributeReadFunc GetAttribute,
     }
   }
   if (description) {
-      if (GetAttribute.Run(kDescriptionAttrName, &value)) {
-        CodePagetoUTF16(value, description);
-        *description = base::UnescapeForHTML(*description);
-      }
+    if (GetAttribute.Run(kDescriptionAttrName, &value)) {
+      CodePagetoUTF16(value, description);
+      *description = base::UnescapeForHTML(*description);
+    }
   }
   if (is_speeddial_folder) {
     if (GetAttribute.Run(kSpeedDialAttrName, &value) &&

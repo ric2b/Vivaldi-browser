@@ -44,7 +44,6 @@ import org.chromium.chrome.browser.customtabs.CustomTabTabPersistencePolicy;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.DefaultBrowserProviderImpl;
 import org.chromium.chrome.browser.customtabs.ReparentingTaskProvider;
-import org.chromium.chrome.browser.customtabs.features.sessionrestore.SessionRestoreMessageController;
 import org.chromium.chrome.browser.customtabs.shadows.ShadowExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -70,9 +69,9 @@ import org.chromium.url.JUnitTestGURLs;
  * to the content layer of Custom Tabs code.
  */
 public class CustomTabActivityContentTestEnvironment extends TestWatcher {
-    public static final String INITIAL_URL = JUnitTestGURLs.INITIAL_URL;
-    public static final String SPECULATED_URL = JUnitTestGURLs.SPECULATED_URL;
-    public static final String OTHER_URL = JUnitTestGURLs.EXAMPLE_URL;
+    public static final String INITIAL_URL = JUnitTestGURLs.INITIAL_URL.getSpec();
+    public static final String SPECULATED_URL = "https://speculated.com";
+    public static final String OTHER_URL = JUnitTestGURLs.EXAMPLE_URL.getSpec();
 
     public final Intent mIntent = new Intent();
 
@@ -103,7 +102,6 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     @Mock public ChromeBrowserInitializer browserInitializer;
     @Mock public CustomTabIncognitoManager customTabIncognitoManager;
     @Mock public TabModelInitializer tabModelInitializer;
-    @Mock public SessionRestoreMessageController sessionRestoreMessageController;
     // clang-format on
     public AsyncTabParamsManager realAsyncTabParamsManager =
             AsyncTabParamsManagerFactory.createAsyncTabParamsManager();
@@ -176,7 +174,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
                 navigationEventObserver, tabProvider, reparentingTaskProvider,
                 () -> customTabIncognitoManager, () -> realAsyncTabParamsManager,
                 () -> activity.getSavedInstanceState(), activity.getWindowAndroid(),
-                tabModelInitializer, sessionRestoreMessageController);
+                tabModelInitializer);
     }
     // clang-format on
 
@@ -200,7 +198,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
                 () -> customTabObserver) {
             @Override
             public GURL getGurlForUrl(String url) {
-                return JUnitTestGURLs.getGURL(url);
+                return new GURL(url);
             }
         };
         return new CustomTabIntentHandler(
@@ -258,8 +256,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     public TabImpl prepareTab() {
         TabImpl tab = mock(TabImpl.class);
         when(tab.getView()).thenReturn(mock(View.class));
-        UserDataHost host = new UserDataHost();
-        when(tab.getUserDataHost()).thenReturn(host);
+        when(tab.getUserDataHost()).thenReturn(new UserDataHost());
         WebContents webContents = mock(WebContents.class);
         when(tab.getWebContents()).thenReturn(webContents);
         NavigationController navigationController = mock(NavigationController.class);

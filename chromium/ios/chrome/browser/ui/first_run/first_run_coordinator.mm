@@ -6,6 +6,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
 #import "base/time/time.h"
@@ -13,19 +14,22 @@
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ui/authentication/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/default_browser/default_browser_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
-#import "ios/chrome/browser/ui/first_run/history_sync/history_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/tangible_sync/tangible_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/screen/screen_provider.h"
 #import "ios/chrome/browser/ui/screen/screen_type.h"
+#import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/modal_page/modal_page_commands.h"
 #import "ios/ui/modal_page/modal_page_coordinator.h"
 #import "ios/ui/onboarding/vivaldi_onboarding_swift.h"
@@ -33,16 +37,12 @@
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-@interface FirstRunCoordinator () <FirstRunScreenDelegate>
+@interface FirstRunCoordinator () <FirstRunScreenDelegate,
+                                   HistorySyncCoordinatorDelegate>
 
 @property(nonatomic, strong) ScreenProvider* screenProvider;
 @property(nonatomic, strong) ChromeCoordinator* childCoordinator;
 @property(nonatomic, strong) UINavigationController* navigationController;
-@property(nonatomic, strong) NSDate* firstScreenStartTime;
 
 // YES if First Run was completed.
 @property(nonatomic, assign) BOOL completed;
@@ -86,10 +86,8 @@
 
 - (void)start {
   [self presentScreen:[self.screenProvider nextScreenType]];
-  __weak FirstRunCoordinator* weakSelf = self;
   void (^completion)(void) = ^{
     base::UmaHistogramEnumeration("FirstRun.Stage", first_run::kStart);
-    weakSelf.firstScreenStartTime = [NSDate now];
   };
 
   if (vivaldi::IsVivaldiRunning()) {
@@ -104,6 +102,11 @@
 }
 
 - (void)stop {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self dismissOnboarding];
+  } // End Vivaldi
+
   void (^completion)(void) = ^{
   };
   if (self.completed) {
@@ -132,18 +135,9 @@
 
   // Vivaldi
   _onboardingVC = nil;
+  _onboardingActionsBridge = nil;
   // End Vivaldi
 
-  // Usually, finishing presenting the first FRE screen signifies that the user
-  // has accepted Terms of Services. Therefore, we can use the time it takes the
-  // first screen to be visible as the time it takes a user to accept Terms of
-  // Services.
-  if (self.firstScreenStartTime) {
-    base::TimeDelta delta =
-        base::Time::Now() - base::Time::FromNSDate(self.firstScreenStartTime);
-    base::UmaHistogramTimes("FirstRun.TermsOfServicesPromoDisplayTime", delta);
-    self.firstScreenStartTime = nil;
-  }
   [self presentScreen:[self.screenProvider nextScreenType]];
 }
 
@@ -180,11 +174,15 @@
                                promoAction:signin_metrics::PromoAction::
                                                PROMO_ACTION_NO_SIGNIN_PROMO];
     case kHistorySync:
-      return [[HistorySyncScreenCoordinator alloc]
+      return [[HistorySyncCoordinator alloc]
           initWithBaseNavigationController:self.navigationController
                                    browser:self.browser
+                                  delegate:self
                                   firstRun:YES
-                                  delegate:self];
+                             showUserEmail:NO
+                                isOptional:YES
+                               accessPoint:signin_metrics::AccessPoint::
+                                               ACCESS_POINT_START_PAGE];
     case kTangibleSync:
       return [[TangibleSyncScreenCoordinator alloc]
           initWithBaseNavigationController:self.navigationController
@@ -196,6 +194,10 @@
           initWithBaseNavigationController:self.navigationController
                                    browser:self.browser
                                   delegate:self];
+    case kChoice:
+      return ios::provider::
+          CreateChoiceCoordinatorForFREWithNavigationController(
+              self.navigationController, self.browser, self);
     case kStepsCompleted:
       NOTREACHED() << "Reaches kStepsCompleted unexpectedly.";
       break;
@@ -208,17 +210,41 @@
   [self.delegate willFinishPresentingScreens];
 }
 
+#pragma mark - HistorySyncCoordinatorDelegate
+
+- (void)closeHistorySyncCoordinator:
+            (HistorySyncCoordinator*)historySyncCoordinator
+                     declinedByUser:(BOOL)declined {
+  CHECK_EQ(self.childCoordinator, historySyncCoordinator);
+  [self screenWillFinishPresenting];
+}
+
 #pragma mark: - VIVALDI
 - (void)presentOnboarding {
   self.onboardingActionsBridge = [[VivaldiOnboardingActionsBridge alloc] init];
   UIViewController *onboardingVC =
       [self.onboardingActionsBridge makeViewController];
   _onboardingVC = onboardingVC;
-  onboardingVC.modalPresentationStyle = UIModalPresentationFullScreen;
-  onboardingVC.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-  [self.baseViewController presentViewController:onboardingVC
-                                        animated:NO
-                                      completion:nil];
+
+  // Note: (prio@vivaldi.com) On iPads, modal presentation styles are treated
+  // as adaptive interfaces, which means they can be presented as floating
+  // cards that users can easily dismiss. And this dismisses onboarding views if
+  // user goes to Settings page for default browser settings or moves the app to
+  // background. This behavior is present in Chrome too.
+
+  // To prevent our onboarding view from being dismissed in
+  // such scenarios, we've chosen to add it as a child view controller to the
+  // baseViewController. This ensures the onboarding view is treated
+  // as part of the main view hierarchy rather than a dismissible modal. This
+  // also fixes the issues with start page being visible momentariliy after
+  // splash screen and before onboarding pages.
+  [onboardingVC
+      willMoveToParentViewController:self.baseViewController];
+  [self.baseViewController addChildViewController:onboardingVC];
+  [self.baseViewController.view addSubview:onboardingVC.view];
+  [onboardingVC
+      didMoveToParentViewController:self.baseViewController];
+  [onboardingVC.view fillSuperview];
 
   [self.onboardingActionsBridge observeTOSURLTapEvent:^(NSURL *url,
                                                         NSString *title) {
@@ -247,11 +273,26 @@
     [VivaldiTabSettingPrefs
       setDesktopTabsMode:isTabsOn
           inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+    [[NSNotificationCenter defaultCenter]
+      postNotificationName:vTabSettingsDidChange
+                    object:self];
   }];
 
   [self.onboardingActionsBridge observeOnboardingFinishedState:^{
     [self willFinishPresentingScreens];
   }];
+}
+
+- (void)dismissOnboarding {
+  if (_onboardingVC) {
+    [_onboardingVC willMoveToParentViewController:nil];
+    [_onboardingVC.view removeFromSuperview];
+    [_onboardingVC removeFromParentViewController];
+    [_onboardingVC didMoveToParentViewController:nil];
+
+    WriteFirstRunSentinel();
+    [self.delegate didFinishPresentingScreens];
+  }
 }
 
 #pragma mark - ModalPageCommands

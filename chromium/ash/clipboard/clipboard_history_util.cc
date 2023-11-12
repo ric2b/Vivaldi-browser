@@ -9,9 +9,11 @@
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/views/clipboard_history_view_constants.h"
 #include "ash/metrics/histogram_macros.h"
+#include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
@@ -22,8 +24,10 @@
 #include "chromeos/ui/base/file_icon_util.h"
 #include "ui/base/clipboard/clipboard_data.h"
 #include "ui/base/clipboard/custom_data_helper.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/events/ash/keyboard_capability.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -51,6 +55,9 @@ constexpr ui::ClipboardInternalFormat kPrioritizedFormats[] = {
     ui::ClipboardInternalFormat::kBookmark,
     ui::ClipboardInternalFormat::kWeb,
     ui::ClipboardInternalFormat::kCustom};
+
+// The clipboard history menu's width, in pixels.
+constexpr int kPreferredMenuWidth = 320;
 
 // Helper classes --------------------------------------------------------------
 
@@ -178,6 +185,29 @@ std::u16string GetFileSystemSources(const ui::ClipboardData& data) {
   return sources;
 }
 
+const gfx::VectorIcon& GetShortcutKeyIcon() {
+  if (!Shell::Get()->keyboard_capability()->HasLauncherButtonOnAnyKeyboard()) {
+    return kClipboardSearchIcon;
+  }
+
+  const auto* const assistant_state = AssistantState::Get();
+  const bool is_assistant_available =
+      assistant_state &&
+      assistant_state->allowed_state() ==
+          assistant::AssistantAllowedState::ALLOWED &&
+      assistant_state->settings_enabled().value_or(false);
+
+  return is_assistant_available ? kClipboardLauncherIcon
+                                : kClipboardLauncherNoAssistantIcon;
+}
+
+std::u16string GetShortcutKeyName() {
+  return l10n_util::GetStringUTF16(
+      Shell::Get()->keyboard_capability()->HasLauncherButtonOnAnyKeyboard()
+          ? IDS_ASH_SHORTCUT_MODIFIER_LAUNCHER
+          : IDS_ASH_SHORTCUT_MODIFIER_SEARCH);
+}
+
 bool IsSupported(const ui::ClipboardData& data) {
   const absl::optional<ui::ClipboardInternalFormat> format =
       CalculateMainFormat(data);
@@ -247,18 +277,19 @@ ui::ImageModel GetHtmlPreviewPlaceholder() {
   return *model;
 }
 
-std::vector<crosapi::mojom::ClipboardHistoryItemDescriptor>
-GetItemDescriptorsFrom(const std::list<ClipboardHistoryItem>& items) {
-  std::vector<crosapi::mojom::ClipboardHistoryItemDescriptor> item_descriptors;
-  for (const auto& item : items) {
-    item_descriptors.emplace_back(item.id(), item.display_format(),
-                                  item.display_text(), item.file_count());
-  }
-  return item_descriptors;
+crosapi::mojom::ClipboardHistoryItemDescriptor ItemToDescriptor(
+    const ClipboardHistoryItem& item) {
+  return crosapi::mojom::ClipboardHistoryItemDescriptor(
+      item.id(), item.display_format(), item.display_text(), item.file_count());
 }
 
 int GetPreferredItemViewWidth() {
-  return views::MenuConfig::instance().touchable_menu_min_width;
+  const auto& menu_config = views::MenuConfig::instance();
+  return chromeos::features::IsClipboardHistoryRefreshEnabled()
+             ? std::clamp(kPreferredMenuWidth,
+                          menu_config.touchable_menu_min_width,
+                          menu_config.touchable_menu_max_width)
+             : menu_config.touchable_menu_min_width;
 }
 
 }  // namespace ash::clipboard_history_util

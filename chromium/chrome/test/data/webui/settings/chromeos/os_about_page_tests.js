@@ -6,7 +6,7 @@ import 'chrome://os-settings/os_settings.js';
 import 'chrome://os-settings/lazy_load.js';
 
 import {CrPolicyIndicatorType} from '//resources/ash/common/cr_policy_indicator_behavior.js';
-import {AboutPageBrowserProxyImpl, BrowserChannel, DeviceNameBrowserProxyImpl, DeviceNameState, LifetimeBrowserProxyImpl, Router, routes, SetDeviceNameResult, UpdateStatus} from 'chrome://os-settings/os_settings.js';
+import {AboutPageBrowserProxyImpl, BrowserChannel, DeviceNameBrowserProxyImpl, DeviceNameState, LifetimeBrowserProxyImpl, Router, routes, SetDeviceNameResult, setUserActionRecorderForTesting, UpdateStatus, userActionRecorderMojom} from 'chrome://os-settings/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
 import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
@@ -14,6 +14,7 @@ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
+import {FakeUserActionRecorder} from './fake_user_action_recorder.js';
 import {TestAboutPageBrowserProxyChromeOS} from './test_about_page_browser_proxy_chromeos.js';
 import {TestDeviceNameBrowserProxy} from './test_device_name_browser_proxy.js';
 import {TestLifetimeBrowserProxy} from './test_os_lifetime_browser_proxy.js';
@@ -27,12 +28,18 @@ suite('AboutPageTest', function() {
   /** @type {?TestLifetimeBrowserProxy} */
   let lifetimeBrowserProxy = null;
 
+  /** @type {?userActionRecorderMojom.UserActionRecorderInterface} */
+  let userActionRecorder = null;
+
   const SPINNER_ICON_LIGHT_MODE =
       'chrome://resources/images/throbber_small.svg';
   const SPINNER_ICON_DARK_MODE =
       'chrome://resources/images/throbber_small_dark.svg';
 
   setup(function() {
+    userActionRecorder = new FakeUserActionRecorder();
+    setUserActionRecorderForTesting(userActionRecorder);
+
     lifetimeBrowserProxy = new TestLifetimeBrowserProxy();
     LifetimeBrowserProxyImpl.setInstance(lifetimeBrowserProxy);
 
@@ -45,15 +52,18 @@ suite('AboutPageTest', function() {
     page.remove();
     page = null;
     Router.getInstance().resetRouteForTesting();
+    setUserActionRecorderForTesting(null);
   });
 
   /**
    * @param {!UpdateStatus} status
    * @param {{
    *   progress: number|undefined,
-   *   message: string|undefined
-   *   rollback: bool|undefined
-   *   powerwash: bool|undefined
+   *   message: string|undefined,
+   *   rollback: bool|undefined,
+   *   powerwash: bool|undefined,
+   *   version: string|undefined,
+   *   size: string|undefined,
    * }} opt_options
    */
   function fireStatusChanged(status, opt_options) {
@@ -61,9 +71,11 @@ suite('AboutPageTest', function() {
     webUIListenerCallback('update-status-changed', {
       progress: options.progress === undefined ? 1 : options.progress,
       message: options.message,
-      status: status,
+      status,
       rollback: options.rollback,
       powerwash: options.powerwash,
+      version: options.version,
+      size: options.size,
     });
   }
 
@@ -72,7 +84,7 @@ suite('AboutPageTest', function() {
     aboutBrowserProxy.reset();
     lifetimeBrowserProxy.reset();
     PolymerTest.clearBody();
-    page = document.createElement('os-settings-about-page');
+    page = document.createElement('os-about-page');
     Router.getInstance().navigateTo(routes.ABOUT);
     document.body.appendChild(page);
     return Promise.all([
@@ -89,7 +101,7 @@ suite('AboutPageTest', function() {
   function navigateToSettingsPageWithId(id) {
     const params = new URLSearchParams();
     params.append('settingId', id);
-    Router.getInstance().navigateTo(routes.ABOUT_ABOUT, params);
+    Router.getInstance().navigateTo(routes.ABOUT, params);
 
     flush();
   }
@@ -246,6 +258,23 @@ suite('AboutPageTest', function() {
         page.i18n('aboutUpdateToRollbackVersionDisallowed').toString();
     assertEquals(expectedMessage, statusMessageEl.textContent);
   });
+
+  test(
+      'Warning dialog is shown when attempting to update over metered network',
+      async () => {
+        await initNewPage();
+
+        fireStatusChanged(
+            UpdateStatus.NEED_PERMISSION_TO_UPDATE,
+            {version: '9001.0.0', size: '9999'});
+        flush();
+
+        const warningDialog =
+            page.shadowRoot.querySelector('settings-update-warning-dialog');
+        assertTrue(!!warningDialog);
+        assertTrue(
+            warningDialog.$.dialog.open, 'Warning dialog should be open');
+      });
 
   test('NoInternet', function() {
     assertTrue(page.$.updateStatusMessage.hidden);
@@ -439,7 +468,7 @@ suite('AboutPageTest', function() {
 
     const params = new URLSearchParams();
     params.append('settingId', '1703');
-    Router.getInstance().navigateTo(routes.ABOUT_ABOUT, params);
+    Router.getInstance().navigateTo(routes.ABOUT, params);
 
     flush();
 
@@ -593,8 +622,11 @@ suite('AboutPageTest', function() {
       aboutPageEndOfLifeMessage: 'message',
     });
     await initNewPage();
-    assertTrue(!!page.$['detailed-build-info-trigger']);
-    page.$['detailed-build-info-trigger'].click();
+
+    const subpageTrigger =
+        page.shadowRoot.querySelector('#detailedBuildInfoTrigger');
+    assertTrue(!!subpageTrigger);
+    subpageTrigger.click();
     const buildInfoPage =
         page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
@@ -620,8 +652,10 @@ suite('AboutPageTest', function() {
       aboutPageEndOfLifeMessage: '',
     });
     await initNewPage();
-    assertTrue(!!page.$['detailed-build-info-trigger']);
-    page.$['detailed-build-info-trigger'].click();
+    let subpageTrigger =
+        page.shadowRoot.querySelector('#detailedBuildInfoTrigger');
+    assertTrue(!!subpageTrigger);
+    subpageTrigger.click();
     const buildInfoPage =
         page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
@@ -633,14 +667,42 @@ suite('AboutPageTest', function() {
       aboutPageEndOfLifeMessage: 'message',
     });
     await initNewPage();
-    assertTrue(!!page.$['detailed-build-info-trigger']);
-    page.$['detailed-build-info-trigger'].click();
+    subpageTrigger = page.shadowRoot.querySelector('#detailedBuildInfoTrigger');
+    assertTrue(!!subpageTrigger);
+    subpageTrigger.click();
     checkEndOfLifeSection();
   });
 
+  test(
+      'Detailed build info subpage trigger is focused when returning ' +
+          'from subpage',
+      async () => {
+        const triggerSelector = '#detailedBuildInfoTrigger';
+        const subpageTrigger = page.shadowRoot.querySelector(triggerSelector);
+        assertTrue(!!subpageTrigger);
+
+        // Sub-page trigger navigates to Detailed build info subpage
+        subpageTrigger.click();
+        assertEquals(
+            routes.ABOUT_DETAILED_BUILD_INFO,
+            Router.getInstance().currentRoute);
+
+        // Navigate back
+        const popStateEventPromise = eventToPromise('popstate', window);
+        Router.getInstance().navigateToPreviousRoute();
+        await popStateEventPromise;
+        await waitAfterNextRender(page);
+
+        assertEquals(
+            subpageTrigger, page.shadowRoot.activeElement,
+            `${triggerSelector} should be focused.`);
+      });
+
   function getBuildInfoPage() {
-    assertTrue(!!page.$['detailed-build-info-trigger']);
-    page.$['detailed-build-info-trigger'].click();
+    const subpageTrigger =
+        page.shadowRoot.querySelector('#detailedBuildInfoTrigger');
+    assertTrue(!!subpageTrigger);
+    subpageTrigger.click();
     const buildInfoPage =
         page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
@@ -1071,7 +1133,7 @@ suite('DetailedBuildInfoTest', function() {
 
     const params = new URLSearchParams();
     params.append('settingId', '1700');
-    Router.getInstance().navigateTo(routes.DETAILED_BUILD_INFO, params);
+    Router.getInstance().navigateTo(routes.ABOUT_DETAILED_BUILD_INFO, params);
 
     flush();
 
@@ -1124,7 +1186,7 @@ suite('DetailedBuildInfoTest', function() {
 
     const params = new URLSearchParams();
     params.append('settingId', '1708');
-    Router.getInstance().navigateTo(routes.DETAILED_BUILD_INFO, params);
+    Router.getInstance().navigateTo(routes.ABOUT_DETAILED_BUILD_INFO, params);
 
     flush();
 
@@ -1555,7 +1617,7 @@ suite('AboutPageTest_OfficialBuild', function() {
     browserProxy = new TestAboutPageBrowserProxyChromeOS();
     AboutPageBrowserProxyImpl.setInstanceForTesting(browserProxy);
     PolymerTest.clearBody();
-    page = document.createElement('os-settings-about-page');
+    page = document.createElement('os-about-page');
     document.body.appendChild(page);
   });
 
@@ -1578,7 +1640,7 @@ suite('AboutPageTest_OfficialBuild', function() {
 
     const params = new URLSearchParams();
     params.append('settingId', '1705');
-    Router.getInstance().navigateTo(routes.ABOUT_ABOUT, params);
+    Router.getInstance().navigateTo(routes.ABOUT, params);
 
     flush();
 
@@ -1597,7 +1659,7 @@ suite('AboutPageTest_OfficialBuild', function() {
 
     const params = new URLSearchParams();
     params.append('settingId', '1706');
-    Router.getInstance().navigateTo(routes.ABOUT_ABOUT, params);
+    Router.getInstance().navigateTo(routes.ABOUT, params);
 
     flush();
 

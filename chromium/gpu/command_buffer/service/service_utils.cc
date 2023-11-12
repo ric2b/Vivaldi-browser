@@ -32,8 +32,9 @@ namespace {
 bool GetUintFromSwitch(const base::CommandLine* command_line,
                        const base::StringPiece& switch_string,
                        uint32_t* value) {
-  if (!command_line->HasSwitch(switch_string))
+  if (!command_line->HasSwitch(switch_string)) {
     return false;
+  }
   std::string switch_value(command_line->GetSwitchValueASCII(switch_string));
   return base::StringToUint(switch_value, value);
 }
@@ -185,6 +186,18 @@ GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {
         command_line->GetSwitchValueASCII(switches::kDisableDawnFeatures), ",",
         base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
   }
+#ifdef DAWN_USE_BUILT_DXC
+  // Drive "use_dxc" with Finch feature flag, unless user forces option via
+  // command line.
+  if (!base::Contains(gpu_preferences.enabled_dawn_features_list, "use_dxc") &&
+      !base::Contains(gpu_preferences.disabled_dawn_features_list, "use_dxc")) {
+    if (base::FeatureList::IsEnabled(features::kWebGPUUseDXC)) {
+      gpu_preferences.enabled_dawn_features_list.push_back("use_dxc");
+    } else {
+      gpu_preferences.disabled_dawn_features_list.push_back("use_dxc");
+    }
+  }
+#endif
   gpu_preferences.gr_context_type = ParseGrContextType(command_line);
   gpu_preferences.use_vulkan = ParseVulkanImplementationName(command_line);
 
@@ -203,16 +216,22 @@ GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {
 }
 
 GrContextType ParseGrContextType(const base::CommandLine* command_line) {
-  if (base::FeatureList::IsEnabled(features::kSkiaGraphite)) {
+  if (base::FeatureList::IsEnabled(features::kSkiaGraphite) ||
+      command_line->HasSwitch(switches::kSkiaGraphiteBackend)) {
     [[maybe_unused]] auto value =
         command_line->GetSwitchValueASCII(switches::kSkiaGraphiteBackend);
 #if BUILDFLAG(SKIA_USE_DAWN)
-    if (value.empty() || value == switches::kSkiaGraphiteBackendDawn) {
+    if (value.empty() ||
+        base::StartsWith(value, switches::kSkiaGraphiteBackendDawn)) {
       return GrContextType::kGraphiteDawn;
     }
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 #if BUILDFLAG(SKIA_USE_METAL)
-    if (value == switches::kSkiaGraphiteBackendMetal) {
+    if (
+#if BUILDFLAG(IS_IOS)
+        value.empty() ||
+#endif  // BUILDFLAG(IS_IOS)
+        value == switches::kSkiaGraphiteBackendMetal) {
       return GrContextType::kGraphiteMetal;
     }
 #endif  // BUILDFLAG(SKIA_USE_METAL)
@@ -234,13 +253,6 @@ VulkanImplementationName ParseVulkanImplementationName(
   }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // LACROS doesn't support Vulkan right now, to avoid LACROS picking up Linux
-  // finch, kNone is returned for LACROS.
-  // TODO(https://crbug.com/1155622): When LACROS is separated from Linux finch
-  // config.
-  return VulkanImplementationName::kNone;
-#else
   if (command_line->HasSwitch(switches::kUseVulkan)) {
     auto value = command_line->GetSwitchValueASCII(switches::kUseVulkan);
     if (value.empty() || value == switches::kVulkanImplementationNameNative) {
@@ -262,7 +274,6 @@ VulkanImplementationName ParseVulkanImplementationName(
 
   // GrContext is not going to use Vulkan.
   return VulkanImplementationName::kNone;
-#endif
 }
 
 WebGPUAdapterName ParseWebGPUAdapterName(
@@ -316,6 +327,19 @@ WebGPUPowerPreference ParseWebGPUPowerPreference(
     }
   }
   return WebGPUPowerPreference::kNone;
+}
+
+bool MSAAIsSlow(const GpuDriverBugWorkarounds& workarounds) {
+  // Only query the kEnableMSAAOnNewIntelGPUs feature flag if the host device
+  // is affected by the experiment (i.e. is a new Intel GPU).
+  // This is to avoid activating the experiment on hosts that are irrelevant
+  // to the study in order to boost statistical power.
+  bool affected_by_experiment =
+      workarounds.msaa_is_slow && !workarounds.msaa_is_slow_2;
+
+  return affected_by_experiment ? !base::FeatureList::IsEnabled(
+                                      features::kEnableMSAAOnNewIntelGPUs)
+                                : workarounds.msaa_is_slow;
 }
 
 }  // namespace gles2

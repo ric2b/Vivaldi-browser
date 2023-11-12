@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_piece.h"
 #include "url/third_party/mozilla/url_parse.h"
 
@@ -64,7 +65,7 @@ class RulePatternMatcher {
   bool MatchesUrl(const UrlInfo& url) const;
 
  private:
-  const flat::RequestFilterRule& rule_;
+  const raw_ref<const flat::RequestFilterRule> rule_;
   base::StringPiece pattern_;
 };
 

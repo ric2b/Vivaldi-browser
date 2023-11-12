@@ -170,6 +170,8 @@ std::unique_ptr<views::Button> CreateButton(
     const gfx::VectorIcon& icon,
     int message_id) {
   auto button = views::CreateVectorImageButton(std::move(callback));
+
+  // TODO(b/297056011): Remove Jelly flag checks post-M120.
   views::SetImageFromVectorIconWithColorId(
       button.get(), icon,
       chromeos::features::IsJellyrollEnabled()
@@ -343,7 +345,12 @@ void EcheTray::ShowBubble() {
 
   bubble_->GetBubbleWidget()->Show();
   bubble_->GetBubbleWidget()->Activate();
+
   bubble_->bubble_view()->SetVisible(true);
+  // Since this tray already initialize the bubble before showing it in
+  // `LoadBubble()`, we need to call `NotifyTrayBubbleOpen()` here.
+  bubble_->bubble_view()->NotifyTrayBubbleOpen();
+
   SetIsActive(true);
   web_view_->GetInitiallyFocusedView()->RequestFocus();
 
@@ -386,11 +393,6 @@ void EcheTray::OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
 
 bool EcheTray::CacheBubbleViewForHide() const {
   return true;
-}
-
-void EcheTray::OnThemeChanged() {
-  TrayBackgroundView::OnThemeChanged();
-  RefreshHeaderView();
 }
 
 std::u16string EcheTray::GetAccessibleNameForBubble() {
@@ -643,6 +645,11 @@ void EcheTray::HideBubble() {
       event_interceptor_.get());
   SetIsActive(false);
   bubble_->bubble_view()->SetVisible(false);
+
+  // Since this tray just hide and do not destroy the bubble when closing, we
+  // need to call `NotifyTrayBubbleClosed()`.
+  bubble_->bubble_view()->NotifyTrayBubbleClosed();
+
   bubble_->GetBubbleWidget()->Deactivate();
   bubble_->GetBubbleWidget()->Hide();
   shelf()->UpdateAutoHideState();
@@ -701,24 +708,19 @@ void EcheTray::InitBubble(
     }
   }
   init_stream_timestamp_ = base::TimeTicks::Now();
-  TrayBubbleView::InitParams init_params;
-  init_params.delegate = GetWeakPtr();
+  TrayBubbleView::InitParams init_params = CreateInitParamsForTrayBubble(
+      /*tray=*/this, /*anchor_to_shelf_corner=*/true);
+
   // Note: The container id must be smaller than `kShellWindowId_ShelfContainer`
   // in order to let the notifications be shown on top of the eche window.
   init_params.parent_window = Shell::GetContainer(
       tray_container()->GetWidget()->GetNativeWindow()->GetRootWindow(),
       kShellWindowId_AlwaysOnTopContainer);
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = GetAnchor();
-  init_params.insets = GetTrayBubbleInsets(GetBubbleWindowContainer());
-  init_params.shelf_alignment = shelf()->alignment();
   const gfx::Size eche_size = CalculateSizeForEche();
   init_params.preferred_width = eche_size.width();
   init_params.close_on_deactivate = false;
-  init_params.translucent = true;
   init_params.reroute_event_handler = false;
-  init_params.corner_radius = kTrayItemCornerRadius;
-  init_params.anchor_to_shelf_corner = true;
+
   phone_name_ = phone_name;
 
   auto bubble_view = std::make_unique<TrayBubbleView>(init_params);
@@ -913,29 +915,14 @@ EcheIconLoadingIndicatorView* EcheTray::GetLoadingIndicator() {
   return phone_hub_tray->eche_loading_indicator();
 }
 
-void EcheTray::RefreshHeaderView() {
-  if (!header_view_ || !bubble_) {
-    return;
-  }
-
-  auto* bubble_view = bubble_->GetBubbleView();
-  bubble_view->RemoveChildView(header_view_);
-  header_view_ = bubble_view->AddChildViewAt(
-      CreateBubbleHeaderView(phone_name_), /* index= */ 0);
-
-  static_cast<views::BoxLayout*>(bubble_view->GetLayoutManager())
-      ->SetFlexForView(header_view_, 0, true);
-  static_cast<views::BoxLayout*>(bubble_view->GetLayoutManager())
-      ->set_inside_border_insets(kBubblePadding);
-}
-
 void EcheTray::UpdateEcheSizeAndBubbleBounds() {
   if (!bubble_ || !bubble_->GetBubbleView())
     return;
   gfx::Size eche_size = CalculateSizeForEche();
   bubble_->GetBubbleView()->SetPreferredWidth(eche_size.width());
   web_view_->SetPreferredSize(eche_size);
-  bubble_->GetBubbleView()->ChangeAnchorRect(GetAnchor());
+  bubble_->GetBubbleView()->ChangeAnchorRect(
+      shelf()->GetSystemTrayAnchorRect());
 }
 
 void EcheTray::OnDisplayConfigurationChanged() {
@@ -982,10 +969,6 @@ void EcheTray::OnStreamOrientationChanged(bool is_landscape) {
 
   is_landscape_ = is_landscape;
   UpdateEcheSizeAndBubbleBounds();
-}
-
-gfx::Rect EcheTray::GetAnchor() {
-  return shelf()->GetSystemTrayAnchorRect();
 }
 
 // TODO(b/234848974): Try to use View::AddAccelerator for the bubble view

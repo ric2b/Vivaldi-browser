@@ -171,44 +171,13 @@
         "type": "object",
         "description": "Identifies broadcast type. Only one property should be used.",
         "properties": {
-          "actionChanged": {
-            "description": "An action has changed. Message contains the new settings",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "command": {
-                "description": "Action name.",
-                "type": "string"
-              },
-              "shortcuts": {
-                "description": "Shortcuts for the action. If omitted there are no shortcuts.",
-                "optional": true,
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "gestures": {
-                "description": "Gestures for the action. If omitted there are no gestures.",
-                "optional": true,
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
+          "startDragging": {
+            "type": "boolean",
+            "optional": true
           },
-          "actionsRestored": {
-            "description": "Section has been reset",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "dummy": {
-                "description": "One arg must be present",
-                "optional": true,
-                "type": "string"
-              }
-            }
+          "endDragging": {
+            "type": "boolean",
+            "optional": true
           },
           "translate": {
             "type": "object",
@@ -585,10 +554,6 @@
           "chromiumVersion": {
             "type": "string",
             "description": "The Chromium version as a string."
-          },
-          "mailVersion": {
-            "type": "string",
-            "description": "The Vivaldi mail version as a string."
           }
         }
       },
@@ -787,6 +752,21 @@
         "returns": {
           "$ref": "UrlFragments",
           "description": "The URL split up in fragments."
+        }
+      },
+      {
+        "name": "urlToThumbnailText",
+        "type": "function",
+        "description": "Gets the text for a fallback speeddial thumbnail",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The URL to get the text from.",
+            "name": "url"
+          }
+        ],
+        "returns": {
+          "type": "string"
         }
       },
       {
@@ -2016,11 +1996,6 @@
         "type": "function",
         "description": "Fired when Chromium wants us to show a QR code for the given url.",
         "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer",
-            "description": "tab id to show QR code on."
-          },
           {
             "name": "url",
             "type": "string",

@@ -42,7 +42,7 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
   // on that to display to the user.
 
   content::WebContents* active_contents =
-      window_.browser()->tab_strip_model()->GetActiveWebContents();
+      window_->browser()->tab_strip_model()->GetActiveWebContents();
   if (active_contents) {
     auto* content_settings =
         content_settings::PageSpecificContentSettings::GetForFrame(
@@ -53,13 +53,13 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
       PageSpecificContentSettings::MicrophoneCameraState cam_state =
           content_settings->GetMicrophoneCameraState();
       bool microphoneAccessed =
-          (cam_state & PageSpecificContentSettings::MICROPHONE_ACCESSED) != 0;
+          cam_state.Has(PageSpecificContentSettings::kMicrophoneAccessed);
       bool cameraAccessed =
-          (cam_state & PageSpecificContentSettings::CAMERA_ACCESSED) != 0;
+          cam_state.Has(PageSpecificContentSettings::kCameraAccessed);
       bool microphoneBlocked =
-          (cam_state & PageSpecificContentSettings::MICROPHONE_BLOCKED) != 0;
+          cam_state.Has(PageSpecificContentSettings::kMicrophoneBlocked);
       bool cameraBlocked =
-          (cam_state & PageSpecificContentSettings::CAMERA_BLOCKED) != 0;
+          cam_state.Has(PageSpecificContentSettings::kCameraBlocked);
 
       if (microphoneAccessed || cameraAccessed || microphoneBlocked ||
           cameraBlocked) {

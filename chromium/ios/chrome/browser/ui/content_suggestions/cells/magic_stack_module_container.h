@@ -18,6 +18,7 @@ enum class ContentSuggestionsModuleType;
                                type:(ContentSuggestionsModuleType)type
                            delegate:
                                (id<MagicStackModuleContainerDelegate>)delegate;
+- (instancetype)initAsPlaceholder;
 - (instancetype)initWithFrame:(CGRect)frame NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
@@ -27,6 +28,9 @@ enum class ContentSuggestionsModuleType;
 
 // Returns the title string for the module `type`.
 + (NSString*)titleStringForModule:(ContentSuggestionsModuleType)type;
+
+// The type of this container.
+@property(nonatomic, assign, readonly) ContentSuggestionsModuleType type;
 
 @end
 

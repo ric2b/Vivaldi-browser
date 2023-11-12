@@ -20,7 +20,8 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_item_constants.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/startup/first_run_service.h"
+// TODO(crbug.com/1402145): Remove circular dependencies on //c/b/ui.
+#include "chrome/browser/ui/startup/first_run_service.h"  // nogncheck
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
@@ -150,20 +151,13 @@ void LacrosWebAppsController::UnpauseApp(const std::string& app_id) {
   publisher_helper().UnpauseApp(app_id);
 }
 
-void LacrosWebAppsController::LoadIcon(const std::string& app_id,
-                                       apps::IconKeyPtr icon_key,
-                                       apps::IconType icon_type,
-                                       int32_t size_hint_in_dip,
-                                       apps::LoadIconCallback callback) {
-  if (!icon_key) {
-    // On failure, we still run the callback, with an empty IconValue.
-    std::move(callback).Run(std::make_unique<apps::IconValue>());
-    return;
-  }
-
-  publisher_helper().LoadIcon(app_id, icon_type, size_hint_in_dip,
-                              static_cast<IconEffects>(icon_key->icon_effects),
-                              std::move(callback));
+void LacrosWebAppsController::DEPRECATED_LoadIcon(
+    const std::string& app_id,
+    apps::IconKeyPtr icon_key,
+    apps::IconType icon_type,
+    int32_t size_hint_in_dip,
+    apps::LoadIconCallback callback) {
+  NOTREACHED();
 }
 
 void LacrosWebAppsController::GetCompressedIcon(

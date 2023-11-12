@@ -60,7 +60,7 @@ class HTMLIFrameElement;
 class HTMLInputElement;
 class HTMLMediaElement;
 class HTMLSelectElement;
-class HTMLSelectMenuElement;
+class HTMLSelectListElement;
 class HTMLVideoElement;
 class HitTestLayerRectList;
 class HitTestLocation;
@@ -87,6 +87,7 @@ class StaticSelection;
 class Text;
 class TypeConversions;
 class UnionTypesTest;
+class HTMLImageElement;
 
 template <typename NodeType>
 class StaticNodeTypeList;
@@ -113,7 +114,11 @@ class Internals final : public ScriptWrappable {
 
   ScriptPromise getInitialResourcePriority(ScriptState*,
                                            const String& url,
-                                           Document*);
+                                           Document*,
+                                           bool new_load_only = false);
+  ScriptPromise getInitialResourcePriorityOfNewLoad(ScriptState*,
+                                                    const String& url,
+                                                    Document*);
   String getResourceHeader(const String& url, const String& header, Document*);
 
   bool doesWindowHaveUrlFragment(DOMWindow*);
@@ -466,7 +471,7 @@ class Internals final : public ScriptWrappable {
   int selectPopupItemStyleFontHeight(Node*, int);
   void resetTypeAheadSession(HTMLSelectElement*);
 
-  void resetSelectMenuTypeAheadSession(HTMLSelectMenuElement*);
+  void resetSelectListTypeAheadSession(HTMLSelectListElement*);
 
   StaticSelection* getDragCaret();
   StaticSelection* getSelectionInFlatTree(DOMWindow*, ExceptionState&);
@@ -637,6 +642,10 @@ class Internals final : public ScriptWrappable {
   void setBackForwardCacheRestorationBufferSize(unsigned int maxSize);
 
   InternalsUkmRecorder* initializeUKMRecorder();
+
+  // Returns scripts that created an image, as observed by
+  // the LCPScriptObserver Probe.
+  Vector<String> getCreatorScripts(HTMLImageElement* img);
 
  private:
   Document* ContextDocument() const;

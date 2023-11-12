@@ -24,10 +24,6 @@
 #import "net/http/http_response_headers.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 absl::optional<std::u16string> GetPageTitle(const web::NavigationItem& item) {
@@ -154,11 +150,16 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
 
   return history::HistoryAddPageArgs(
       url, last_committed_item->GetTimestamp(), GetContextID(),
-      last_committed_item->GetUniqueID(), referrer_url, redirects, transition,
-      hidden, history::SOURCE_BROWSED,
+      last_committed_item->GetUniqueID(), navigation_context->GetNavigationId(),
+      referrer_url, redirects, transition, hidden, history::SOURCE_BROWSED,
       /*did_replace_entry=*/false, consider_for_ntp_most_visited,
       navigation_context->IsSameDocument() ? GetPageTitle(*last_committed_item)
                                            : absl::nullopt,
+      // TODO(crbug.com/1475717): due to WebKit constraints, iOS does not
+      // support triple-key partitioning. Once supported, we need to populate
+      // `top_level_url` with the correct value. Until then, :visited history on
+      // iOS is unpartitioned.
+      /*top_level_url=*/absl::nullopt,
       /*opener=*/absl::nullopt,
       /*bookmark_id=*/absl::nullopt,
       /*context_annotations=*/std::move(context_annotations));

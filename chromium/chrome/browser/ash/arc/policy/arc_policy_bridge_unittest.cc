@@ -16,6 +16,7 @@
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_arc_session.h"
 #include "ash/components/arc/test/fake_policy_instance.h"
+#include "ash/constants/ash_switches.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -350,9 +351,10 @@ class ArcPolicyBridgeTestBase {
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   base::RunLoop run_loop_;
-  raw_ptr<TestingProfile, ExperimentalAsh> profile_;
+  raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh> profile_;
   std::unique_ptr<ArcBridgeService> bridge_service_;
-  raw_ptr<CertStoreService, ExperimentalAsh> cert_store_service_;  // Not owned.
+  raw_ptr<CertStoreService, DanglingUntriaged | ExperimentalAsh>
+      cert_store_service_;  // Not owned.
 
   std::unique_ptr<ArcSessionManager> arc_session_manager_;
   std::unique_ptr<ArcPolicyBridge> policy_bridge_;
@@ -778,6 +780,22 @@ TEST_F(ArcPolicyBridgeTest, ManualChildUserPoliciesSet) {
       base::StrCat({"{\"apkCacheEnabled\":true,\"guid\":\"", instance_guid(),
                     "\",", kMountPhysicalMediaDisabledPolicySetting, ",",
                     kSupervisedUserPlayStoreModePolicySetting, "}"}));
+}
+
+TEST_P(ArcPolicyBridgeAffiliatedTest, ForceEnableApkCacheTest) {
+  base::test::ScopedCommandLine command_line;
+  command_line.GetProcessCommandLine()->AppendSwitch(
+      ash::switches::kArcForceEnableApkCache);
+
+  const std::string expected_apk_cache_enabled_result(
+      "{\"apkCacheEnabled\":true,\"guid\":\"" + instance_guid() + "\"," +
+      kMountPhysicalMediaDisabledPolicySetting + "}");
+
+  // Cache should be enabled regardless of affiliation
+  GetPoliciesAndVerifyResultWithAffiliation(
+      /* expected_policy_json_affiliated */ expected_apk_cache_enabled_result,
+      /* expected_policy_json_not_affiliated */
+      expected_apk_cache_enabled_result);
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {

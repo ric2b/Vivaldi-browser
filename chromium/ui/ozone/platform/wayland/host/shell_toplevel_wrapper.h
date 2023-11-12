@@ -58,11 +58,17 @@ class ShellToplevelWrapper {
   // Returns true if `aura_toplevel_` version is equal or newer than `version`.
   virtual bool IsSupportedOnAuraToplevel(uint32_t version) const = 0;
 
+  // Sets whether the window can be maximized.
+  virtual void SetCanMaximize(bool can_maximize) = 0;
+
   // Sets a native window to maximized state.
   virtual void SetMaximized() = 0;
 
   // Unsets a native window from maximized state.
   virtual void UnSetMaximized() = 0;
+
+  // Sets whether the window can enter fullscreen.
+  virtual void SetCanFullscreen(bool can_fullscreen) = 0;
 
   // Sets a native window to fullscreen state.
   virtual void SetFullscreen() = 0;
@@ -77,6 +83,10 @@ class ShellToplevelWrapper {
   // Whether the shell supports top level immersive status. The deprecated
   // immersive status used to be set on the surface level.
   virtual bool SupportsTopLevelImmersiveStatus() const = 0;
+
+  // Sets the top inset (header) height which is reserved or occupied by the top
+  // window frame.
+  virtual void SetTopInset(int height) = 0;
 #endif
 
   // Sets a native window to minimized state.

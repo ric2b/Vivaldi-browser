@@ -42,7 +42,7 @@ BrowserCompositorIOS::BrowserCompositorIOS(
   // content (otherwise this solid color will be flashed during navigation).
   root_layer_->SetColor(SK_ColorRED);
   delegated_frame_host_ = std::make_unique<DelegatedFrameHost>(
-      frame_sink_id, this, true /* should_register_frame_sink_id */);
+      frame_sink_id, this, /*should_register_frame_sink_id=*/true);
 
   SetRenderWidgetHostIsHidden(render_widget_host_is_hidden);
 }
@@ -140,7 +140,7 @@ void BrowserCompositorIOS::UpdateSurfaceFromChild(
     }
     delegated_frame_host_->EmbedSurface(
         dfh_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
-        dfh_size_dip_, GetDeadlinePolicy(true /* is_resize */));
+        dfh_size_dip_, GetDeadlinePolicy(/*is_resize=*/true));
   }
   client_->OnBrowserCompositorSurfaceIdChanged();
 }
@@ -174,7 +174,7 @@ void BrowserCompositorIOS::SetRenderWidgetHostIsHidden(bool hidden) {
     // ParentLayerCompositor, since it returns early on a no-op state
     // transition.
     delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(), dfh_size_dip_,
-                                    {} /* record_tab_switch_time_request */);
+                                    /*record_tab_switch_time_request=*/{});
   }
 }
 
@@ -260,7 +260,7 @@ void BrowserCompositorIOS::TransitionToState(State new_state) {
   DCHECK_EQ(state_, new_state);
   delegated_frame_host_->AttachToCompositor(GetCompositor());
   delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(), dfh_size_dip_,
-                                  {} /* record_tab_switch_time_request */);
+                                  /*record_tab_switch_time_request=*/{});
 }
 
 void BrowserCompositorIOS::TakeFallbackContentFrom(
@@ -305,6 +305,15 @@ BrowserCompositorIOS::CollectSurfaceIdsForEviction() {
 
 bool BrowserCompositorIOS::ShouldShowStaleContentOnEviction() {
   return false;
+}
+
+void BrowserCompositorIOS::DidNavigateMainFramePreCommit() {
+  delegated_frame_host_->DidNavigateMainFramePreCommit();
+}
+
+void BrowserCompositorIOS::DidEnterBackForwardCache() {
+  dfh_local_surface_id_allocator_.GenerateId();
+  delegated_frame_host_->DidEnterBackForwardCache();
 }
 
 void BrowserCompositorIOS::DidNavigate() {
@@ -383,6 +392,11 @@ ui::Compositor* BrowserCompositorIOS::GetCompositor() const {
     return parent_ui_layer_->GetCompositor();
   }
   return compositor_.get();
+}
+
+void BrowserCompositorIOS::InvalidateSurfaceAllocationGroup() {
+  local_surface_id_allocator_.Invalidate(
+      /*also_invalidate_allocation_group=*/true);
 }
 
 cc::DeadlinePolicy BrowserCompositorIOS::GetDeadlinePolicy(

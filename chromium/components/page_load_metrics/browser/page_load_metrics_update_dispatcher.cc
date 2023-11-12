@@ -9,6 +9,7 @@
 #include <ostream>
 #include <utility>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -498,8 +499,17 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     if (subresource_load_metrics) {
       UpdateMainFrameSubresourceLoadMetrics(*subresource_load_metrics);
     }
+    UpdateSoftNavigationIntervalResponsivenessMetrics(*input_timing_delta);
+    UpdateSoftNavigationIntervalLayoutShift(*render_data);
     UpdateSoftNavigation(std::move(*soft_navigation_metrics));
   } else {
+    if (!render_frame_host->GetParentOrOuterDocument()) {
+      // TODO(crbug.com/1455048): `client_->IsPageMainFrame()` didn't return the
+      // correct status.
+      base::debug::DumpWithoutCrashing();
+      return;
+    }
+
     UpdateSubFrameMetadata(render_frame_host, std::move(new_metadata));
     UpdateSubFrameTiming(render_frame_host, std::move(new_timing));
     // This path is just for the AMP metrics.
@@ -646,6 +656,27 @@ void PageLoadMetricsUpdateDispatcher::UpdateSoftNavigation(
     const mojom::SoftNavigationMetrics& soft_navigation_metrics) {
   client_->OnSoftNavigationChanged(soft_navigation_metrics);
 }
+
+void PageLoadMetricsUpdateDispatcher::UpdateSoftNavigationIntervalLayoutShift(
+    const mojom::FrameRenderDataUpdate& render_data) {
+  soft_nav_interval_render_data_.layout_shift_score +=
+      render_data.layout_shift_delta;
+  soft_nav_interval_layout_shift_normalization_.AddNewLayoutShifts(
+      render_data.new_layout_shifts, base::TimeTicks::Now(),
+      soft_nav_interval_render_data_.layout_shift_score);
+}
+
+void PageLoadMetricsUpdateDispatcher::
+    UpdateSoftNavigationIntervalResponsivenessMetrics(
+        const mojom::InputTiming& input_timing_delta) {
+  if (input_timing_delta.num_interactions) {
+    soft_navigation_interval_responsiveness_metrics_normalization_
+        .AddNewUserInteractionLatencies(
+            input_timing_delta.num_interactions,
+            *(input_timing_delta.max_event_durations));
+  }
+}
+
 void PageLoadMetricsUpdateDispatcher::MaybeUpdateMainFrameIntersectionRect(
     content::RenderFrameHost* render_frame_host,
     const mojom::FrameMetadataPtr& frame_metadata) {

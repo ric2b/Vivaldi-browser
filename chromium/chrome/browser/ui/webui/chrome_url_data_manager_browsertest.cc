@@ -21,8 +21,8 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/enterprise/browser/controller/fake_browser_dm_token_storage.h"
 #include "components/history_clusters/core/features.h"
+#include "components/nacl/common/buildflags.h"
 #include "components/password_manager/core/common/password_manager_features.h"
-#include "components/search/ntp_features.h"
 #include "components/user_notes/user_notes_features.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
@@ -35,7 +35,9 @@
 #include "content/public/test/browser_test_utils.h"
 #include "media/base/media_switches.h"
 #include "printing/buildflags/buildflags.h"
+#include "third_party/abseil-cpp/absl/strings/ascii.h"
 #include "ui/accessibility/accessibility_features.h"
+#include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
@@ -112,7 +114,13 @@ class ChromeURLDataManagerTest : public InProcessBrowserTest {
 
 // Makes sure navigating to the new tab page results in a http status code
 // of 200.
-IN_PROC_BROWSER_TEST_F(ChromeURLDataManagerTest, 200) {
+// TODO(crbug.com/1473471) Test Failing on Mac11 tests
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_200 DISABLED_200
+#else
+#define MAYBE_200 200
+#endif
+IN_PROC_BROWSER_TEST_F(ChromeURLDataManagerTest, MAYBE_200) {
   NavigationObserver observer(
       browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
@@ -176,9 +184,7 @@ class ChromeURLDataManagerWebUITrustedTypesTest
     enabled_features.push_back(features::kChromeWhatsNewUI);
     enabled_features.push_back(history_clusters::kSidePanelJourneys);
     enabled_features.push_back(features::kSupportTool);
-    enabled_features.push_back(ntp_features::kCustomizeChromeSidePanel);
-    enabled_features.push_back(
-        password_manager::features::kPasswordManagerRedesign);
+    enabled_features.push_back(features::kCustomizeChromeSidePanel);
     enabled_features.push_back(features::kReadAnything);
     enabled_features.push_back(user_notes::kUserNotes);
 
@@ -239,7 +245,8 @@ class ChromeURLDataManagerWebUITrustedTypesTest
       const ::testing::TestParamInfo<const char*>& info) {
     std::string name(info.param);
     std::replace_if(
-        name.begin(), name.end(), [](char c) { return !std::isalnum(c); }, '_');
+        name.begin(), name.end(),
+        [](unsigned char c) { return !absl::ascii_isalnum(c); }, '_');
     return name;
   }
 
@@ -403,6 +410,9 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://account-migration-welcome",
     "chrome://add-supervision/",
     "chrome://app-disabled",
+    "chrome://camera-app/views/main.html",
+    "chrome://assistant-optin/",
+    "chrome://bluetooth-pairing",
     "chrome://certificate-manager/",
     // Crashes because message handler is not registered outside of the dialog
     // for confirm password change UI.
@@ -412,9 +422,11 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://crostini-installer",
     "chrome://crostini-upgrader",
     "chrome://cryptohome",
+    "chrome://diagnostics",
     "chrome://drive-internals",
     "chrome://emoji-picker",
     "chrome://family-link-user-internals",
+    "chrome://file-manager",
     "chrome://guest-os-installer",
     "chrome://help-app",
     "chrome://linux-proxy-config",
@@ -427,6 +439,7 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://office-fallback/",
     "chrome://os-feedback",
     "chrome-untrusted://os-feedback",
+    "chrome://os-settings",
     "chrome://parent-access",
     "chrome://password-change",
     "chrome://personalization",
@@ -434,6 +447,7 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://print-management",
     "chrome-untrusted://projector",
     "chrome://proximity-auth/proximity_auth.html",
+    "chrome://scanning",
     "chrome://set-time",
     "chrome://shimless-rma",
     "chrome://shortcut-customization",
@@ -463,11 +477,10 @@ static constexpr const char* const kChromeUrls[] = {
 #endif
 #if !BUILDFLAG(IS_MAC)
     "chrome://sandbox",
-// NaCl isn't supported on ARM64 Windows.
-#if !BUILDFLAG(IS_WIN) || !defined(ARCH_CPU_ARM64)
+#endif  // !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(ENABLE_NACL)
     "chrome://nacl",
 #endif
-#endif  // !BUILDFLAG(IS_MAC)
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS)
     // TODO(https://crbug.com/1219651): this test is flaky on mac.
     "chrome://bluetooth-internals",

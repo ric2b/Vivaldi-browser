@@ -5,8 +5,8 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_view_controller.h"
 
 #import "base/allocator/partition_allocator/partition_alloc.h"
+#import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -22,10 +22,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -81,9 +77,9 @@ const CGFloat kSymbolSize = 18;
 
   self.buttonNewTab = [[UIButton alloc] init];
   self.buttonNewTab.translatesAutoresizingMaskIntoConstraints = NO;
-  self.buttonNewTab.imageView.contentMode = UIViewContentModeCenter;
   UIImage* buttonNewTabImage =
       DefaultSymbolWithPointSize(kPlusSymbol, kSymbolSize);
+
   if (IsVivaldiRunning()) {
     buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
     buttonNewTabImage = [buttonNewTabImage
@@ -93,21 +89,38 @@ const CGFloat kSymbolSize = 18;
     [_buttonNewTab setImage:buttonNewTabImage
                    forState:UIControlStateNormal];
   } else {
-  [self.buttonNewTab setImage:buttonNewTabImage forState:UIControlStateNormal];
-  [self.buttonNewTab.imageView setTintColor:[UIColor colorNamed:kGrey500Color]];
-
-  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-  // iOS 15.
-  if (base::ios::IsRunningOnIOS15OrLater() &&
-      IsUIButtonConfigurationEnabled()) {
-    if (@available(iOS 15, *)) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-          0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
-      self.buttonNewTab.configuration = buttonConfiguration;
-    }
+  if (IsUIButtonConfigurationEnabled()) {
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+        0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
+    buttonConfiguration.image = buttonNewTabImage;
+    buttonConfiguration.baseForegroundColor =
+        [UIColor colorNamed:kGrey500Color];
+    self.buttonNewTab.configuration = buttonConfiguration;
+    self.buttonNewTab.configurationUpdateHandler = ^(UIButton* incomingButton) {
+      UIButtonConfiguration* updatedConfig = incomingButton.configuration;
+      switch (incomingButton.state) {
+        case UIControlStateHighlighted: {
+          updatedConfig.baseForegroundColor =
+              [UIColor colorNamed:kGrey900Color];
+          break;
+        }
+        case UIControlStateNormal:
+          updatedConfig.baseForegroundColor =
+              [UIColor colorNamed:kGrey500Color];
+          break;
+        default:
+          break;
+      }
+      incomingButton.configuration = updatedConfig;
+    };
   } else {
+    self.buttonNewTab.imageView.contentMode = UIViewContentModeCenter;
+    [self.buttonNewTab setImage:buttonNewTabImage
+                       forState:UIControlStateNormal];
+    [self.buttonNewTab.imageView
+        setTintColor:[UIColor colorNamed:kGrey500Color]];
     UIEdgeInsets imageInsets = UIEdgeInsetsMake(
         0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
     SetImageEdgeInsets(self.buttonNewTab, imageInsets);
@@ -152,7 +165,7 @@ const CGFloat kSymbolSize = 18;
     itemIndex = self.items.count - 1;
 
   TabSwitcherItem* item = self.items[itemIndex];
-  TabStripCell* cell = base::mac::ObjCCastStrict<TabStripCell>([collectionView
+  TabStripCell* cell = base::apple::ObjCCastStrict<TabStripCell>([collectionView
       dequeueReusableCellWithReuseIdentifier:kReuseIdentifier
                                 forIndexPath:indexPath]);
 

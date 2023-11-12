@@ -32,10 +32,17 @@ class TokenHandleUtil {
 
   ~TokenHandleUtil();
 
-  enum TokenHandleStatus { VALID, INVALID, UNKNOWN };
+  // Status of the token handle.
+  enum class Status { kValid, kInvalid, kUnknown };
 
+  // `account_id`: The account for which the token handle check was performed.
+  // `token`: The token which was checked. Empty if we could not find a token
+  // handle for `account_id`.
+  // `status`: Status of `token`.
   using TokenValidationCallback =
-      base::OnceCallback<void(const AccountId&, TokenHandleStatus)>;
+      base::OnceCallback<void(const AccountId& account_id,
+                              const std::string& token,
+                              const Status& status)>;
 
   // Returns true if UserManager has token handle associated with `account_id`.
   static bool HasToken(const AccountId& account_id);
@@ -48,7 +55,7 @@ class TokenHandleUtil {
   static bool ShouldObtainHandle(const AccountId& account_id);
 
   // Performs token handle check for `account_id`. Will call `callback` with
-  // corresponding result.
+  // corresponding result. See `TokenValidationCallback` for details.
   void CheckToken(
       const AccountId& account_id,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,

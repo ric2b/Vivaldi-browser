@@ -14,7 +14,7 @@
 #include "components/autofill/core/browser/test_utils/vote_uploads_test_matchers.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
-#include "components/password_manager/core/browser/form_parsing/form_parser.h"
+#include "components/password_manager/core/browser/form_parsing/form_data_parser.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/stub_form_saver.h"
@@ -74,6 +74,8 @@ void CheckPendingCredentials(const PasswordForm& expected,
   EXPECT_EQ(expected.username_element, actual.username_element);
   EXPECT_EQ(expected.password_element, actual.password_element);
   EXPECT_EQ(expected.blocked_by_user, actual.blocked_by_user);
+  EXPECT_EQ(expected.all_alternative_usernames,
+            actual.all_alternative_usernames);
   EXPECT_TRUE(
       autofill::FormData::DeepEqual(expected.form_data, actual.form_data));
 }
@@ -252,7 +254,7 @@ class PasswordSaveManagerImplTestBase : public testing::Test {
     saved_match_.username_element = u"field1";
     saved_match_.password_value = u"test1";
     saved_match_.password_element = u"field2";
-    saved_match_.is_public_suffix_match = false;
+    saved_match_.match_type = PasswordForm::MatchType::kExact;
     saved_match_.scheme = PasswordForm::Scheme::kHtml;
     saved_match_.in_store = PasswordForm::Store::kProfileStore;
 
@@ -260,7 +262,7 @@ class PasswordSaveManagerImplTestBase : public testing::Test {
     psl_saved_match_.url = psl_origin;
     psl_saved_match_.action = psl_action;
     psl_saved_match_.signon_realm = "https://myaccounts.google.com/";
-    psl_saved_match_.is_public_suffix_match = true;
+    psl_saved_match_.match_type = PasswordForm::MatchType::kPSL;
 
     parsed_observed_form_ = saved_match_;
     parsed_observed_form_.form_data = observed_form_;
@@ -316,6 +318,8 @@ class PasswordSaveManagerImplTestBase : public testing::Test {
   }
 
   void DestroySaveManagerAndMetricsRecorder() {
+    mock_account_form_saver_ = nullptr;
+    mock_profile_form_saver_ = nullptr;
     password_save_manager_impl_.reset();
     metrics_recorder_.reset();
   }
@@ -402,10 +406,8 @@ class PasswordSaveManagerImplTestBase : public testing::Test {
   // needs to outlive the latter.
   std::unique_ptr<FakeFormFetcher> fetcher_;
   std::unique_ptr<PasswordSaveManagerImpl> password_save_manager_impl_;
-  raw_ptr<NiceMock<MockFormSaver>, DanglingUntriaged> mock_account_form_saver_ =
-      nullptr;
-  raw_ptr<NiceMock<MockFormSaver>, DanglingUntriaged> mock_profile_form_saver_ =
-      nullptr;
+  raw_ptr<NiceMock<MockFormSaver>> mock_account_form_saver_ = nullptr;
+  raw_ptr<NiceMock<MockFormSaver>> mock_profile_form_saver_ = nullptr;
   NiceMock<MockAutofillDownloadManager> mock_autofill_download_manager_;
 };
 
@@ -438,7 +440,7 @@ TEST_P(PasswordSaveManagerImplTest, CreatePendingCredentialsEmptyStore) {
 
   const base::Time kNow = base::Time::Now();
   password_save_manager_impl()->CreatePendingCredentials(
-      Parse(submitted_form_), &observed_form_, submitted_form_,
+      parsed_submitted_form_, &observed_form_, submitted_form_,
       /*is_http_auth=*/false,
       /*is_credential_api_save=*/false);
 
@@ -453,12 +455,15 @@ TEST_P(PasswordSaveManagerImplTest, CreatePendingCredentialsEmptyStore) {
 TEST_P(PasswordSaveManagerImplTest, CreatePendingCredentialsNewCredentials) {
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
   password_save_manager_impl()->CreatePendingCredentials(
-      Parse(submitted_form_), &observed_form_, submitted_form_,
+      parsed_submitted_form_, &observed_form_, submitted_form_,
       /*is_http_auth=*/false,
       /*is_credential_api_save=*/false);
 
+  PasswordForm expected_credentials = parsed_submitted_form_;
+  expected_credentials.all_alternative_usernames.emplace_back(
+      AlternativeElement::Value(saved_match_.username_value));
   CheckPendingCredentials(
-      parsed_submitted_form_,
+      expected_credentials,
       password_save_manager_impl()->GetPendingCredentials());
 }
 
@@ -488,7 +493,7 @@ TEST_P(PasswordSaveManagerImplTest, CreatePendingCredentialsPSLMatchSaved) {
 
   saved_match_.url = GURL("https://m.accounts.google.com/auth");
   saved_match_.signon_realm = "https://m.accounts.google.com/";
-  saved_match_.is_public_suffix_match = true;
+  saved_match_.match_type = PasswordForm::MatchType::kPSL;
 
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
 
@@ -562,10 +567,43 @@ TEST_P(PasswordSaveManagerImplTest,
 
   PasswordForm expected = saved_match_;
   expected.password_value = u"verystrongpassword";
+  expected.all_alternative_usernames.emplace_back(
+      AlternativeElement::Value(another_saved_match.username_value));
+
   password_save_manager_impl()->CreatePendingCredentials(
       Parse(submitted_form), &observed_form_, submitted_form,
       /*is_http_auth=*/false,
       /*is_credential_api_save=*/false);
+
+  CheckPendingCredentials(
+      expected, password_save_manager_impl()->GetPendingCredentials());
+}
+
+// Tests creating pending credentials when there are multiple saved credentials,
+// ensuring that there are no duplicates in the alternative usernames vector.
+TEST_P(PasswordSaveManagerImplTest,
+       CreatePendingCredentialsMultipleSavedNoDuplicatedAlternatives) {
+  PasswordForm another_saved_match = saved_match_;
+  another_saved_match.username_value = u"last_name";
+  SetNonFederatedAndNotifyFetchCompleted({&saved_match_, &another_saved_match});
+
+  // Create submitted form, that has one of the previously saved usernames in
+  // it.
+  FormData submitted_form = observed_form_;
+  submitted_form.fields[0].value = another_saved_match.username_value;
+  submitted_form.fields[1].value = u"new_username";
+  submitted_form.fields[2].value = u"verystrongpassword";
+
+  PasswordForm parsed_form = Parse(submitted_form);
+  password_save_manager_impl()->CreatePendingCredentials(
+      parsed_form, &observed_form_, submitted_form,
+      /*is_http_auth=*/false,
+      /*is_credential_api_save=*/false);
+
+  // Only the match that wasn't present in the submitted form should be added.
+  PasswordForm expected = parsed_form;
+  expected.all_alternative_usernames.emplace_back(
+      AlternativeElement::Value(saved_match_.username_value));
 
   CheckPendingCredentials(
       expected, password_save_manager_impl()->GetPendingCredentials());
@@ -687,9 +725,8 @@ TEST_P(PasswordSaveManagerImplTest, SavePSLToAlreadySaved) {
       /*is_credential_api_save=*/false);
 
   EXPECT_TRUE(password_save_manager_impl()->IsNewLogin());
-  EXPECT_TRUE(password_save_manager_impl()
-                  ->GetPendingCredentials()
-                  .is_public_suffix_match);
+  EXPECT_EQ(PasswordForm::MatchType::kPSL,
+            password_save_manager_impl()->GetPendingCredentials().match_type);
 
   PasswordForm saved_form;
   std::vector<const PasswordForm*> best_matches;
@@ -1322,6 +1359,23 @@ TEST_P(PasswordSaveManagerImplTest, UsernameCorrectionVote) {
   password_save_manager_impl()->Save(&observed_form_, parsed_submitted_form);
 }
 
+TEST_P(PasswordSaveManagerImplTest, MarkSharedCredentialAsNotifiedUponSave) {
+  PasswordForm saved_shared_credentials = saved_match_;
+  saved_shared_credentials.type = PasswordForm::Type::kReceivedViaSharing;
+  saved_shared_credentials.sharing_notification_displayed = false;
+  SetNonFederatedAndNotifyFetchCompleted({&saved_shared_credentials});
+
+  password_save_manager_impl()->CreatePendingCredentials(
+      saved_shared_credentials, &observed_form_, submitted_form_,
+      /*is_http_auth=*/false,
+      /*is_credential_api_save=*/false);
+
+  EXPECT_CALL(
+      *mock_profile_form_saver(),
+      Update(Field(&PasswordForm::sharing_notification_displayed, true), _, _));
+  password_save_manager_impl()->Save(&observed_form_, saved_shared_credentials);
+}
+
 INSTANTIATE_TEST_SUITE_P(,
                          PasswordSaveManagerImplTest,
                          testing::Values(false, true));
@@ -1460,8 +1514,8 @@ TEST_F(MultiStorePasswordSaveManagerTest, UpdateInBothStores) {
   saved_match_in_account_store.in_store = PasswordForm::Store::kAccountStore;
   PasswordForm saved_match_in_profile_store(saved_match_in_account_store);
   saved_match_in_profile_store.in_store = PasswordForm::Store::kProfileStore;
-  autofill::GaiaIdHash user_id_hash =
-      autofill::GaiaIdHash::FromGaiaId("user@gmail.com");
+  signin::GaiaIdHash user_id_hash =
+      signin::GaiaIdHash::FromGaiaId("user@gmail.com");
   saved_match_in_profile_store.moving_blocked_for_list.push_back(user_id_hash);
 
   SetNonFederatedAndNotifyFetchCompleted(
@@ -1523,7 +1577,7 @@ TEST_F(MultiStorePasswordSaveManagerTest, AutomaticSaveInBothStores) {
       base::Time::Now() - base::Days(10);
   saved_match_in_profile_store.times_used_in_html_form = 10;
   saved_match_in_profile_store.moving_blocked_for_list.push_back(
-      autofill::GaiaIdHash::FromGaiaId("email@gmail.com"));
+      signin::GaiaIdHash::FromGaiaId("email@gmail.com"));
 
   PasswordForm saved_match_in_account_store(saved_match_in_profile_store);
   saved_match_in_account_store.in_store = PasswordForm::Store::kAccountStore;
@@ -1736,7 +1790,7 @@ TEST_F(MultiStorePasswordSaveManagerTest,
   PasswordForm saved_match_in_profile_store(saved_match_);
   saved_match_in_profile_store.in_store = PasswordForm::Store::kProfileStore;
   saved_match_in_profile_store.moving_blocked_for_list.push_back(
-      autofill::GaiaIdHash::FromGaiaId("user@gmail.com"));
+      signin::GaiaIdHash::FromGaiaId("user@gmail.com"));
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_in_profile_store});
 
   password_save_manager_impl()->CreatePendingCredentials(
@@ -1764,7 +1818,7 @@ TEST_F(MultiStorePasswordSaveManagerTest,
   PasswordForm saved_match_in_profile_store(saved_match_);
   saved_match_in_profile_store.in_store = PasswordForm::Store::kProfileStore;
   saved_match_in_profile_store.moving_blocked_for_list.push_back(
-      autofill::GaiaIdHash::FromGaiaId("user@gmail.com"));
+      signin::GaiaIdHash::FromGaiaId("user@gmail.com"));
   SetNonFederatedAndNotifyFetchCompleted({&saved_match_in_profile_store});
 
   password_save_manager_impl()->CreatePendingCredentials(
@@ -1929,10 +1983,10 @@ TEST_F(MultiStorePasswordSaveManagerTest,
 }
 
 TEST_F(MultiStorePasswordSaveManagerTest, BlockMovingWhenExistsInProfileStore) {
-  autofill::GaiaIdHash user1_id_hash =
-      autofill::GaiaIdHash::FromGaiaId("user1@gmail.com");
-  autofill::GaiaIdHash user2_id_hash =
-      autofill::GaiaIdHash::FromGaiaId("user2@gmail.com");
+  signin::GaiaIdHash user1_id_hash =
+      signin::GaiaIdHash::FromGaiaId("user1@gmail.com");
+  signin::GaiaIdHash user2_id_hash =
+      signin::GaiaIdHash::FromGaiaId("user2@gmail.com");
 
   PasswordForm profile_saved_match(saved_match_);
   profile_saved_match.username_value = parsed_submitted_form_.username_value;
@@ -1959,10 +2013,10 @@ TEST_F(MultiStorePasswordSaveManagerTest, BlockMovingWhenExistsInProfileStore) {
 }
 
 TEST_F(MultiStorePasswordSaveManagerTest, BlockMovingWhenExistsInBothStores) {
-  autofill::GaiaIdHash user1_id_hash =
-      autofill::GaiaIdHash::FromGaiaId("user1@gmail.com");
-  autofill::GaiaIdHash user2_id_hash =
-      autofill::GaiaIdHash::FromGaiaId("user2@gmail.com");
+  signin::GaiaIdHash user1_id_hash =
+      signin::GaiaIdHash::FromGaiaId("user1@gmail.com");
+  signin::GaiaIdHash user2_id_hash =
+      signin::GaiaIdHash::FromGaiaId("user2@gmail.com");
 
   PasswordForm account_saved_match(saved_match_);
   account_saved_match.username_value = parsed_submitted_form_.username_value;

@@ -9,10 +9,6 @@
 #import "base/functional/callback_helpers.h"
 #import "ios/chrome/browser/mailto_handler/mailto_handler_service.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace ios {
 namespace provider {
 namespace {
@@ -41,14 +37,11 @@ void TestMailtoHandlerService::DismissAllMailtoHandlerInterfaces() {
 
 void TestMailtoHandlerService::HandleMailtoURL(NSURL* url,
                                                base::OnceClosure completion) {
-  __block base::OnceClosure block_completion = std::move(completion);
-  [[UIApplication sharedApplication] openURL:url
-      options:@{}
-      completionHandler:^(BOOL success) {
-        if (block_completion) {
-          std::move(block_completion).Run();
-        }
-      }];
+  auto callback = base::IgnoreArgs<BOOL>(std::move(completion));
+  [[UIApplication sharedApplication]
+                openURL:url
+                options:@{}
+      completionHandler:base::CallbackToBlock(std::move(callback))];
 }
 
 }  // namespace

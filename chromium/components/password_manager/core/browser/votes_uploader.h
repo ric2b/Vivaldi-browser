@@ -38,6 +38,7 @@ using VoteTypeMap = std::map<autofill::FieldRendererId,
 
 // Contains information for sending a SINGLE_USERNAME vote.
 struct SingleUsernameVoteData {
+  SingleUsernameVoteData();
   SingleUsernameVoteData(
       autofill::FieldRendererId renderer_id,
       const std::u16string& username_value,
@@ -86,6 +87,25 @@ class VotesUploader {
     // in the submitted form. For example, via the text field in the Desktop
     // bubble.
     kChangedToUnknownValue,
+  };
+
+  // Whether two existing single username detection mechanisms (UFF and FPF)
+  // have data, overlapping or not. Used for UMA recording, must be in sync with
+  // SingleUsernameVoteDataAvailability in "tools/metrics/histograms/enums.xml".
+  enum class SingleUsernameVoteDataAvailability {
+    // No data available for both UFF and FPF voting.
+    kNone = 0,
+    // Data only available for single username voting.
+    kUsernameFirstOnly = 1,
+    // Data only available for forgot password voting.
+    kForgotPasswordOnly = 2,
+    // Data available for both UFF and FPF voting, but these votes are for
+    // different fields.
+    kBothNoOverlap = 3,
+    // Data available for both UFF and FPF voting, forgot password voting
+    // data contains data for UFF voting.
+    kBothWithOverlap = 4,
+    kMaxValue = kBothWithOverlap
   };
 
   VotesUploader(PasswordManagerClient* client,
@@ -147,23 +167,26 @@ class VotesUploader {
       autofill::FieldRendererId username_element_renderer_id,
       autofill::FormStructure* form_structure);
 
-  // Sends single a username vote if |single_username_vote_data_| is set.
-  // If |single_username_vote_data| is set, the vote sent is either
-  // SINGLE_USERNAME (if the user saved the credential with the username
-  // captured from |single_username_vote_data|) or NOT_USERNAME (if the user
-  // modified the username).
+  // Sends single username vote if |single_username_vote_data_| or
+  // |forgot_password_vote_data_| is set.
+  // The vote sent is either SINGLE_USERNAME (if the user saved the credential
+  // with the username cached in |single_username_vote_data|), or
+  // SINGLE_USERNAME_FORGOT_PASSWORD (if the user saved the credential
+  // with the username cached in |forgot_password_vote_data|), or NOT_USERNAME
+  // (if the saved username contradicts cached potential usernames).
   // TODO (crbug.com/959776): Have a single point in code that calls this
   // method.
-  void MaybeSendSingleUsernameVote();
+  void MaybeSendSingleUsernameVotes();
 
-// Not calculated on Android, because it's not possible to edit credentials in
-// prompts on Android.
-#if !BUILDFLAG(IS_ANDROID)
   // Calculate whether the username value was edited in a prompt based on
   // suggested and saved username values and whether it confirms or
-  // contradicts |single_username_vote_data_|.
+  // contradicts the data about potential single username.
   void CalculateUsernamePromptEditState(const std::u16string& saved_username);
-#endif  // !BUILDFLAG(IS_ANDROID)
+
+  // Cache the vote data for a form that is likely a forgot password form
+  // (a form, into which the user inputs their username to start the
+  // password recovery process).
+  void AddForgotPasswordVoteData(const SingleUsernameVoteData& vote_data);
 
   void set_generation_popup_was_shown(bool generation_popup_was_shown) {
     generation_popup_was_shown_ = generation_popup_was_shown;
@@ -207,15 +230,8 @@ class VotesUploader {
 
   void clear_single_username_vote_data() { single_username_vote_data_.reset(); }
 
-  void set_single_username_vote_data(
-      autofill::FieldRendererId renderer_id,
-      const std::u16string& username_candidate_value,
-      const FormPredictions& form_predictions,
-      const std::vector<const PasswordForm*>& stored_credentials,
-      bool password_form_had_username_field) {
-    single_username_vote_data_.emplace(renderer_id, username_candidate_value,
-                                       form_predictions, stored_credentials,
-                                       password_form_had_username_field);
+  void set_single_username_vote_data(const SingleUsernameVoteData& data) {
+    single_username_vote_data_ = data;
   }
 
   void set_suggested_username(const std::u16string& suggested_username) {
@@ -255,20 +271,17 @@ class VotesUploader {
       std::unique_ptr<autofill::FormStructure> form_to_upload,
       const autofill::ServerFieldTypeSet& available_field_types);
 
-  // Save a vote |field_type| for a field with |field_signature| from a form
-  // with |form_signature| to FieldInfoManager.
-  void SaveFieldVote(autofill::FormSignature form_signature,
-                     autofill::FieldSignature field_signature,
-                     autofill::ServerFieldType field_type);
-
-  // On username first flow votes are uploaded both for the single username form
-  // and for the single password form. This method sets the data needed to
-  // upload vote on the username form. The vote is based on the user interaction
-  // with the save prompt (i.e. whether the suggested value was actually saved).
+  // On username first and forgot password flows votes are uploaded both for the
+  // single username form and for the single password form. This method sets the
+  // data needed to upload vote on the username form. The vote is based on the
+  // user interaction with the save prompt (i.e. whether the suggested value was
+  // actually saved).
   bool SetSingleUsernameVoteOnUsernameForm(
       autofill::AutofillField* field,
+      const SingleUsernameVoteData& single_username,
       autofill::ServerFieldTypeSet* available_field_types,
-      autofill::FormSignature form_signature);
+      autofill::FormSignature form_signature,
+      bool is_forgot_password_vote);
 
   // On username first flow votes are uploaded both for the single username form
   // and for the single password form. This method sets the data needed to
@@ -276,10 +289,31 @@ class VotesUploader {
   // a username form that preceded the password form, and on the type of user
   // input it had (e.g. email-like, phone-like, arbitrary string).
   void SetSingleUsernameVoteOnPasswordForm(
+      const SingleUsernameVoteData& vote_data,
       autofill::FormStructure& form_structure);
 
+  // Calculates whether the |saved_username| (the value actually saved in the
+  // Password Manager) confirms or contradicts |potential_username| (Password
+  // Manager's guess based on preceding text fields that the user has interacted
+  // with).
+  autofill::AutofillUploadContents::SingleUsernamePromptEdit
+  CalculateUsernamePromptEdit(const std::u16string& saved_username,
+                              const std::u16string& potential_username);
+
+  // Attempts to send a vote for a single username form.
+  // `is_forgot_password_form` specifies whether the form is considered to be a
+  // part of a username first or a forgot password flow:
+  // 1) When it's true, SINGLE_USERNAME_FORGOT_PASSWORD & NOT_USERNAME can be
+  // sent.
+  // 2) When it's false, SINGLE_USERNAME & NOT_USERNAME votes can be sent.
+  // Returns true if the vote is sent.
+  bool MaybeSendSingleUsernameVote(
+      const SingleUsernameVoteData& single_username,
+      const FormPredictions& predictions,
+      bool is_forgot_password_vote);
+
   // The client which implements embedder-specific PasswordManager operations.
-  raw_ptr<PasswordManagerClient, DanglingUntriaged> client_;
+  raw_ptr<PasswordManagerClient> client_ = nullptr;
 
   // Whether generation popup was shown at least once.
   bool generation_popup_was_shown_ = false;
@@ -322,10 +356,23 @@ class VotesUploader {
   // observed form.
   std::map<autofill::FieldRendererId, std::u16string> initial_values_;
 
+  // The data for voting on potential single username form for the username
+  // first flow. Populated when the password form, that follows single username
+  // form, is submitted.
   absl::optional<SingleUsernameVoteData> single_username_vote_data_;
 
-  // The username that is suggested in a save/update prompt.
+  // The username that is suggested in a save/update prompt. The user might
+  // modify it in the prompt before saving.
   std::u16string suggested_username_;
+
+  // The data for voting on potential forgot password forms (forms, into
+  // which the user inputs their username to start the password recovery
+  // process). These forms do not contain password fields, so voting requires
+  // the same information as for single username forms for username first flow.
+  // Populated when the password reset form, that follows the forgot password
+  // form, is submitted.
+  std::map<autofill::FieldRendererId, SingleUsernameVoteData>
+      forgot_password_vote_data_;
 };
 
 }  // namespace password_manager

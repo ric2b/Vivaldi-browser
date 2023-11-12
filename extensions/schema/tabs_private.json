@@ -640,6 +640,11 @@
             "type": "boolean",
             "name": "afterGesture",
             "description": "True when the keyboard event completed a mouse or wheel gesture"
+          },
+          {
+            "type": "boolean",
+            "name": "autoRepeat",
+            "description": "True if the event is a result of automatic keyboard repeat."
           }
         ]
       },

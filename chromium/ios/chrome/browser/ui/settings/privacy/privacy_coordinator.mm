@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/settings/privacy/privacy_coordinator.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
@@ -20,10 +20,6 @@
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface PrivacyCoordinator () <
     ClearBrowsingDataCoordinatorDelegate,
@@ -86,6 +82,8 @@
 - (void)stop {
   [self.clearBrowsingDataCoordinator stop];
   self.clearBrowsingDataCoordinator = nil;
+  [self stopLockdownModeCoordinator];
+  [self stopSafeBrowsingCoordinator];
 
   self.viewController = nil;
 }
@@ -149,18 +147,30 @@
 - (void)privacySafeBrowsingCoordinatorDidRemove:
     (PrivacySafeBrowsingCoordinator*)coordinator {
   DCHECK_EQ(self.safeBrowsingCoordinator, coordinator);
-  [self.safeBrowsingCoordinator stop];
-  self.safeBrowsingCoordinator.delegate = nil;
-  self.safeBrowsingCoordinator = nil;
+  [self stopSafeBrowsingCoordinator];
 }
 
 #pragma mark - LockdownModeCoordinatorDelegate
 
 - (void)lockdownModeCoordinatorDidRemove:(LockdownModeCoordinator*)coordinator {
   DCHECK_EQ(self.lockdownModeCoordinator, coordinator);
+  [self stopLockdownModeCoordinator];
+}
+
+#pragma mark - Private
+
+- (void)stopLockdownModeCoordinator {
   [self.lockdownModeCoordinator stop];
   self.lockdownModeCoordinator.delegate = nil;
   self.lockdownModeCoordinator = nil;
+}
+
+#pragma mark - Private
+
+- (void)stopSafeBrowsingCoordinator {
+  [self.safeBrowsingCoordinator stop];
+  self.safeBrowsingCoordinator.delegate = nil;
+  self.safeBrowsingCoordinator = nil;
 }
 
 @end

@@ -1,8 +1,8 @@
 // Copyright (c) 2014 Vivaldi Technologies AS. All rights reserved
 
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_nsautorelease_pool.h"
 #include "base/files/file_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsautorelease_pool.h"
 #include "importer/viv_importer_utils.h"
 
 NSString* kOperaProfileDirectory = @"Opera";
@@ -10,7 +10,7 @@ NSString* kOperaMailDirectory = @"Opera/mail";
 NSString* kThunderbirdMailDirectory = @"Thunderbird";
 
 base::FilePath GetDirectory(NSString* directoryName) {
-  base::mac::ScopedNSAutoreleasePool pool;
+  base::apple::ScopedNSAutoreleasePool pool;
   NSArray* paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory,
                                                        NSUserDomainMask, YES);
   for (NSString* path in paths) {

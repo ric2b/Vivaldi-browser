@@ -92,8 +92,7 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
   }
   gfx::RectF drawable_content_rect = MathUtil::MapClippedRect(
       draw_transform(), gfx::RectF(surface_content_rect));
-  if (!filters.IsEmpty() && is_clipped()) {
-    // Filter could move pixels around, but still need to be clipped.
+  if (is_clipped()) {
     drawable_content_rect.Intersect(gfx::RectF(clip_rect()));
   }
 
@@ -462,6 +461,7 @@ void RenderSurfaceImpl::AppendQuads(DrawMode draw_mode,
                             mask_filter_info(), clip_rect, contents_opaque,
                             draw_properties_.draw_opacity, BlendMode(),
                             sorting_context_id);
+  shared_quad_state->is_fast_rounded_corner = is_fast_rounded_corner();
 
   if (layer_tree_impl_->debug_state().show_debug_borders.test(
           DebugBorderType::RENDERPASS)) {

@@ -8,9 +8,9 @@
 #include <memory>
 #include <string>
 
+#import "base/apple/foundation_util.h"
 #include "base/base_paths.h"
 #include "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #include "base/memory/free_deleter.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
@@ -21,22 +21,18 @@
 
 #include "app/vivaldi_version_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // Return an NSBundle* as the internal implementation of
 // chrome::OuterAppBundle(), which should be the only caller.
 NSBundle* OuterAppBundleInternal() {
   @autoreleasepool {
-    if (!base::mac::AmIBundled()) {
+    if (!base::apple::AmIBundled()) {
       // If unbundled (as in a test), there's no app bundle.
       return nil;
     }
 
-    if (!base::mac::IsBackgroundOnlyProcess()) {
+    if (!base::apple::IsBackgroundOnlyProcess()) {
       // Shortcut: in the browser process, just return the main app bundle.
       return NSBundle.mainBundle;
     }
@@ -61,7 +57,9 @@ char* ProductDirNameForBundle(NSBundle* chrome_bundle) {
     product_dir_name = [product_dir_name_ns fileSystemRepresentation];
 
     if (!product_dir_name) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+      product_dir_name = "Google/Chrome for Testing";
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
       product_dir_name = "Google/Chrome";
 #else
       // NOTE(tomas@vivaldi.com): Vivaldi only sets CrProductDirName for
@@ -119,7 +117,7 @@ bool GetDefaultUserDataDirectory(base::FilePath* result) {
 }
 
 bool GetUserDocumentsDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSDocumentDirectory, result);
+  return base::apple::GetUserDirectory(NSDocumentDirectory, result);
 }
 
 void GetUserCacheDirectory(const base::FilePath& profile_dir,
@@ -146,19 +144,19 @@ void GetUserCacheDirectory(const base::FilePath& profile_dir,
 }
 
 bool GetUserDownloadsDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSDownloadsDirectory, result);
+  return base::apple::GetUserDirectory(NSDownloadsDirectory, result);
 }
 
 bool GetUserMusicDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSMusicDirectory, result);
+  return base::apple::GetUserDirectory(NSMusicDirectory, result);
 }
 
 bool GetUserPicturesDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSPicturesDirectory, result);
+  return base::apple::GetUserDirectory(NSPicturesDirectory, result);
 }
 
 bool GetUserVideosDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSMoviesDirectory, result);
+  return base::apple::GetUserDirectory(NSMoviesDirectory, result);
 }
 
 base::FilePath GetFrameworkBundlePath() {
@@ -180,7 +178,7 @@ base::FilePath GetFrameworkBundlePath() {
   path = path.DirName().DirName();
   DCHECK_EQ(path.BaseName().value(), "Contents");
 
-  if (base::mac::IsBackgroundOnlyProcess()) {
+  if (base::apple::IsBackgroundOnlyProcess()) {
     // |path| is Chromium.app/Contents/Frameworks/Chromium Framework.framework/
     // Versions/X/Helpers/Chromium Helper.app/Contents. Go up three times to
     // the versioned framework directory.
@@ -218,11 +216,11 @@ base::FilePath GetFrameworkBundlePath() {
 }
 
 bool GetLocalLibraryDirectory(base::FilePath* result) {
-  return base::mac::GetLocalDirectory(NSLibraryDirectory, result);
+  return base::apple::GetLocalDirectory(NSLibraryDirectory, result);
 }
 
 bool GetGlobalApplicationSupportDirectory(base::FilePath* result) {
-  return base::mac::GetLocalDirectory(NSApplicationSupportDirectory, result);
+  return base::apple::GetLocalDirectory(NSApplicationSupportDirectory, result);
 }
 
 NSBundle* OuterAppBundle() {

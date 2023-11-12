@@ -24,6 +24,8 @@ export interface TabDiscardExceptionCurrentSitesListElement {
   };
 }
 
+type Site = string;
+
 type Constructor<T> = new (...args: any[]) => T;
 const TabDiscardExceptionCurrentSitesListElementBase =
     ListPropertyUpdateMixin(CrScrollableMixin(PrefsMixin(PolymerElement))) as
@@ -44,12 +46,28 @@ export class TabDiscardExceptionCurrentSitesListElement extends
     return {
       currentSites_: {type: Array, value: []},
 
-      selectedSites_: {type: Array, value: []},
+      selectedSites_: {
+        type: Array,
+        value() {
+          return new Set();
+        },
+      },
 
       submitDisabled: {
         type: Boolean,
-        computed: 'computeSubmitDisabled_(selectedSites_.length)',
         notify: true,
+      },
+
+      updateIntervalMS_: {
+        type: Number,
+        value: 1000,
+      },
+
+      // whether the current sites list is visible according to its parent
+      visible: {
+        type: Boolean,
+        value: true,
+        observer: 'onVisibilityChanged_',
       },
     };
   }
@@ -59,37 +77,103 @@ export class TabDiscardExceptionCurrentSitesListElement extends
   private metricsProxy_: PerformanceMetricsProxy =
       PerformanceMetricsProxyImpl.getInstance();
 
-  private currentSites_: string[];
-  private selectedSites_: string[];
+  private currentSites_: Site[];
+  private selectedSites_: Set<Site>;
   private submitDisabled: boolean;
+  private updateIntervalMS_: number;
+  visible: boolean;
+
+  private onVisibilityChangedListener_: () => void;
+  private updateIntervalID_: number|undefined = undefined;
 
   override async connectedCallback() {
     super.connectedCallback();
 
-    const currentRules = await this.browserProxy_.getCurrentOpenSites();
-    const existingRules =
-        new Set(this.getPref(TAB_DISCARD_EXCEPTIONS_PREF).value);
-    this.updateList(
-        'currentSites_', x => x,
-        currentRules.filter(rule => !existingRules.has(rule)));
-    if (this.currentSites_.length) {
-      this.updateScrollableContents();
-    }
+    await this.updateCurrentSites_();
     this.dispatchEvent(new CustomEvent('sites-populated', {
       detail: {length: this.currentSites_.length},
     }));
+
+    this.onVisibilityChanged_();
+    this.onVisibilityChangedListener_ = this.onVisibilityChanged_.bind(this);
+    document.addEventListener(
+        'visibilitychange', this.onVisibilityChangedListener_);
+  }
+
+  override disconnectedCallback() {
+    document.removeEventListener(
+        'visibilitychange', this.onVisibilityChangedListener_);
+    this.stopUpdatingCurrentSites_();
+  }
+
+  private onVisibilityChanged_() {
+    if (this.visible && document.visibilityState === 'visible') {
+      this.startUpdatingCurrentSites_();
+    } else {
+      this.stopUpdatingCurrentSites_();
+    }
+  }
+
+  private startUpdatingCurrentSites_() {
+    this.updateCurrentSites_().then(() => {
+      if (this.updateIntervalID_ === undefined) {
+        this.updateIntervalID_ = setInterval(
+            this.updateCurrentSites_.bind(this), this.updateIntervalMS_);
+      }
+    });
+  }
+
+  private stopUpdatingCurrentSites_() {
+    if (this.updateIntervalID_ !== undefined) {
+      clearInterval(this.updateIntervalID_);
+      this.updateIntervalID_ = undefined;
+    }
+  }
+
+  setUpdateIntervalForTesting(updateIntervalMS: number) {
+    this.updateIntervalMS_ = updateIntervalMS;
+    this.stopUpdatingCurrentSites_();
+    this.startUpdatingCurrentSites_();
+  }
+
+  getIsUpdatingForTesting() {
+    return this.updateIntervalID_ !== undefined;
+  }
+
+  private async updateCurrentSites_() {
+    const existingSites =
+        new Set(this.getPref(TAB_DISCARD_EXCEPTIONS_PREF).value);
+    const currentSites = (await this.browserProxy_.getCurrentOpenSites())
+                             .filter(rule => !existingSites.has(rule));
+
+    // Remove sites from selected set that are no longer in the list.
+    this.selectedSites_ =
+        new Set(currentSites.filter(this.isSelectedSite_.bind(this)));
+    this.computeSubmitDisabled_();
+
+    this.updateList('currentSites_', x => x, currentSites);
+    if (this.currentSites_.length) {
+      this.updateScrollableContents();
+    }
   }
 
   private computeSubmitDisabled_() {
-    return !this.selectedSites_.length;
+    this.submitDisabled = !this.selectedSites_.size;
   }
 
-  private onToggleSelection_(e: {model: {index: number}}) {
-    this.$.list.toggleSelectionForIndex(e.model.index);
+  // Called to recalculate checked status of entries when the site changes due
+  // to list updates.
+  private isSelectedSite_(site: Site) {
+    return this.selectedSites_.has(site);
   }
 
-  private getAriaRowindex_(index: number): number {
-    return index + 1;
+  private onToggleSelection_(e: {model: {item: Site}, detail: boolean}) {
+    if (e.detail) {
+      this.selectedSites_.add(e.model.item);
+    } else {
+      this.selectedSites_.delete(e.model.item);
+    }
+    this.computeSubmitDisabled_();
   }
 
   submit() {

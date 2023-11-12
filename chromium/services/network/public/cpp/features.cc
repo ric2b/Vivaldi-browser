@@ -110,6 +110,10 @@ BASE_FEATURE(kMaskedDomainList,
              "MaskedDomainList",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+const base::FeatureParam<std::string> kMaskedDomainListExperimentalVersion{
+    &kMaskedDomainList, /*name=*/"MaskedDomainListExperimentalVersion",
+    /*default_value=*/""};
+
 // If this feature is enabled, the mDNS responder service responds to queries
 // for TXT records associated with
 // "Generated-Names._mdns_name_generator._udp.local" with a list of generated
@@ -118,12 +122,29 @@ BASE_FEATURE(kMdnsResponderGeneratedNameListing,
              "MdnsResponderGeneratedNameListing",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, resource requests will be evaluated against the Network
+// Service's block list. The block list is populated by the MaskedDomainList, so
+// "MaskedDomainList" will need to also be enabled for the block list to have
+// any contents.
+BASE_FEATURE(kEnableNetworkServiceResourceBlockList,
+             "EnableNetworkServiceResourceBlockList",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables ORB blocked responses being treated as errors (according to the spec)
 // rather than the current, CORB-style handling of injecting an empty response.
+// This exempts fetches initiated by scripts. (Technically, fetches with an
+// empty destination.)
 // This is ORB v0.2.
 // Implementing ORB in Chromium is tracked in https://crbug.com/1178928
 BASE_FEATURE(kOpaqueResponseBlockingV02,
              "OpaqueResponseBlockingV02",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Treat ORB blocked responses to script-initiated fetches as errors too.
+// Complements ORB v0.2, which exempts script-initiated fetches.
+// Implementing ORB in Chromium is tracked in https://crbug.com/1178928
+BASE_FEATURE(kOpaqueResponseBlockingErrorsForAllFetches,
+             "OpaqueResponseBlockingErrorsForAllFetches",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables preprocessing the Attribution API's trigger registration ping
@@ -145,11 +166,11 @@ BASE_FEATURE(kAttributionReportingCrossAppWeb,
 // (See https://github.com/WICG/trust-token-api.)
 BASE_FEATURE(kPrivateStateTokens,
              "PrivateStateTokens",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Secondary flag used by the FLEDGE ads experiment in the interim before
 // PSTs are fully rolled out to stable.
-BASE_FEATURE(kFledgePst, "TrustTokens", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFledgePst, "TrustTokens", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Determines which Trust Tokens operations require the TrustTokens origin trial
 // active in order to be used. This is runtime-configurable so that the Trust
@@ -196,49 +217,89 @@ BASE_FEATURE(kGetCookiesStringUma,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
+
+BASE_FEATURE(kDefaultDataPipeAllocationSizeFeature,
+             "DefaultDataPipeAllocationSizeFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLargerDataPipeAllocationSizeFeature,
+             "LargerDataPipeAllocationSizeFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNetAdapterMaxBufSizeFeature,
+             "NetAdapterMaxBufSizeFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMaxNumConsumedBytesInTaskFeature,
+             "MaxNumConsumedBytesInTaskFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // The default Mojo ring buffer size, used to send the content body.
-static constexpr uint32_t kDefaultDataPipeAllocationSize = 512 * 1024;
+constexpr base::FeatureParam<int> kDefaultDataPipeAllocationSize(
+    &kDefaultDataPipeAllocationSizeFeature,
+    "DefaultDataPipeAllocationSize",
+    512 * 1024);
+
 // The larger ring buffer size, used primarily for network::URLLoader loads.
 // This value was optimized via Finch: see crbug.com/1041006.
-static constexpr uint32_t kLargerDataPipeAllocationSize = 2 * 1024 * 1024;
+constexpr base::FeatureParam<int> kLargerDataPipeAllocationSize(
+    &kLargerDataPipeAllocationSizeFeature,
+    "LargerDataPipeAllocationSize",
+    2 * 1024 * 1024);
+
+// The max buffer size of NetToMojoPendingBuffer. This buffer size should be
+// smaller than the mojo ring buffer size.
+constexpr base::FeatureParam<int> kNetAdapterMaxBufSize(
+    &kNetAdapterMaxBufSizeFeature,
+    "NetAdapterMaxBufSize",
+    64 * 1024);
 
 // The maximal number of bytes consumed in a loading task. When there are more
 // bytes in the data pipe, they will be consumed in following tasks. Setting too
 // small of a number will generate many tasks but setting a too large of a
 // number will lead to thread janks. This value was optimized via Finch:
 // see crbug.com/1041006.
-static constexpr uint32_t kMaxNumConsumedBytesInTask = 1024 * 1024;
+constexpr base::FeatureParam<int> kMaxNumConsumedBytesInTask(
+    &kMaxNumConsumedBytesInTaskFeature,
+    "MaxNumConsumedBytesInTask",
+    1024 * 1024);
 
-// The smallest buffer size must be larger than the maximum MIME sniffing
-// chunk size. This is assumed several places in content/browser/loader.
-static_assert(kDefaultDataPipeAllocationSize < kLargerDataPipeAllocationSize);
-static_assert(kDefaultDataPipeAllocationSize >= net::kMaxBytesToSniff,
-              "Smallest data pipe size must be at least as large as a "
-              "MIME-type sniffing buffer.");
 }  // namespace
 
 // static
 uint32_t GetDataPipeDefaultAllocationSize(DataPipeAllocationSize option) {
+  // The smallest buffer size must be larger than the maximum MIME sniffing
+  // chunk size. This is assumed several places in content/browser/loader.
+  CHECK_LE(kDefaultDataPipeAllocationSize.Get(),
+           kLargerDataPipeAllocationSize.Get());
+  CHECK_GE(kDefaultDataPipeAllocationSize.Get(), net::kMaxBytesToSniff)
+      << "Smallest data pipe size must be at least as large as a "
+         "MIME-type sniffing buffer.";
+
 #if BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/1306998): ChromeOS experiences a much higher OOM crash
   // rate if the larger data pipe size is used.
-  return kDefaultDataPipeAllocationSize;
+  return kDefaultDataPipeAllocationSize.Get();
 #else
   // For low-memory devices, always use the (smaller) default buffer size.
   if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-    return kDefaultDataPipeAllocationSize;
+    return kDefaultDataPipeAllocationSize.Get();
   switch (option) {
     case DataPipeAllocationSize::kDefaultSizeOnly:
-      return kDefaultDataPipeAllocationSize;
+      return kDefaultDataPipeAllocationSize.Get();
     case DataPipeAllocationSize::kLargerSizeIfPossible:
-      return kLargerDataPipeAllocationSize;
+      return kLargerDataPipeAllocationSize.Get();
   }
 #endif
 }
 
+uint32_t GetNetAdapterMaxBufSize() {
+  return kNetAdapterMaxBufSize.Get();
+}
+
 // static
 uint32_t GetLoaderChunkSize() {
-  return kMaxNumConsumedBytesInTask;
+  return kMaxNumConsumedBytesInTask.Get();
 }
 
 // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
@@ -293,11 +354,6 @@ BASE_FEATURE(kReduceAcceptLanguageOriginTrial,
              "ReduceAcceptLanguageOriginTrial",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Disable ResourceScheduler.
-BASE_FEATURE(kDisableResourceScheduler,
-             "DisableResourceScheduler",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Reduce PNA preflight response waiting time to 200ms.
 // See: https://wicg.github.io/private-network-access/#cors-preflight
 BASE_FEATURE(kPrivateNetworkAccessPreflightShortTimeout,
@@ -319,9 +375,20 @@ BASE_FEATURE(kPrivateNetworkAccessPermissionPrompt,
 // Enables out-of-process system DNS resolution so getaddrinfo() never runs in
 // the network service sandbox. System DNS resolution will instead be brokered
 // out over Mojo, likely to run in the browser process.
+//
+// This is only necessary on Linux desktop and Android where system DNS
+// resolution cannot always run in a sandboxed network process. The Mac and
+// Windows sandboxing systems allow us to specify system DNS resolution as an
+// allowed action, and ChromeOS uses a simple, known system DNS configuration
+// that can be adequately sandboxed.
 BASE_FEATURE(kOutOfProcessSystemDnsResolution,
              "OutOfProcessSystemDnsResolution",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_LINUX)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 BASE_FEATURE(kAccessControlAllowMethodsInCORSPreflightSpecConformant,
              "AccessControlAllowMethodsInCORSPreflightSpecConformant",
@@ -331,12 +398,41 @@ BASE_FEATURE(kPrefetchNoVarySearch,
              "PrefetchNoVarySearch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kLessChattyNetworkService,
-             "LessChattyNetworkService",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kNetworkServiceEmptyOutOfProcess,
              "NetworkServiceEmptyOutOfProcess",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+// Enables the backend of the compression dictionary transport feature.
+// When this feature is enabled, the following will happen:
+//   * The network service loads the metadata database.
+//   * If there is a matching dictionary for a sending request, it adds the
+//     `sec-available-dictionary` header.
+//   * And if the `content-encoding` header of the response is `sbr`, it
+//     decompresses the response body using the dictionary.
+BASE_FEATURE(kCompressionDictionaryTransportBackend,
+             "CompressionDictionaryTransportBackend",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When both this feature and the kCompressionDictionaryTransportBackend feature
+// are enabled, the following will happen:
+//   * A <link rel=dictionary> HTML tag and a `Link: rel=dictionary` HTTP header
+//     will trigger dictionary download.
+//   * HTMLLinkElement.relList.supports('dictionary') will return true.
+//   * The network service may register a HTTP response as a dictionary if the
+//     response header contains a `use-as-dictionary` header.
+// This feature can be enabled by an Origin Trial token in Blink. To propagate
+// the enabled state to the network service, Blink sets the
+// `shared_dictionary_writer_enabled` flag in resource requests.
+BASE_FEATURE(kCompressionDictionaryTransport,
+             "CompressionDictionaryTransport",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kVisibilityAwareResourceScheduler,
+             "VisibilityAwareResourceScheduler",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSharedZstd, "SharedZstd", base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace network::features

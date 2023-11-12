@@ -19,9 +19,9 @@
 #import "ui/base/page_transition_types.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace {
 
@@ -93,8 +93,15 @@ void SearchEngineTabHelper::OnFaviconUpdated(
   TemplateURLService* url_service =
       ios::TemplateURLServiceFactory::GetForBrowserState(browser_state);
   const GURL potential_search_url = driver->GetActiveURL();
+
+  // Note: (prio@vivaldi.com) - This favicon updating could lead to having no
+  // favicons for the search engine. We will rely on the bundled favicons
+  // for the time being until we figure out the reason.
+  if (!vivaldi::IsVivaldiRunning()) {
   if (url_service && url_service->loaded() && potential_search_url.is_valid())
     url_service->UpdateProviderFavicons(potential_search_url, icon_url);
+  }  // End Vivaldi
+
 }
 
 // When the page is loaded, checks if `searchable_url_` has a value generated
@@ -122,6 +129,11 @@ void SearchEngineTabHelper::SetSearchableUrl(GURL searchable_url) {
 // https://cs.chromium.org/chromium/src/chrome/browser/ui/search_engines/search_engine_tab_helper.cc
 void SearchEngineTabHelper::AddTemplateURLByOSDD(const GURL& page_url,
                                                  const GURL& osdd_url) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }  // End Vivaldi
+
   // Checks to see if we should generate a keyword based on the OSDD, and if
   // necessary uses TemplateURLFetcher to download the OSDD and create a
   // keyword.
@@ -176,6 +188,11 @@ void SearchEngineTabHelper::AddTemplateURLByOSDD(const GURL& page_url,
 // https://cs.chromium.org/chromium/src/chrome/browser/ui/search_engines/search_engine_tab_helper.cc
 void SearchEngineTabHelper::AddTemplateURLBySearchableURL(
     const GURL& searchable_url) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }  // End Vivaldi
+
   if (!searchable_url.is_valid()) {
     return;
   }

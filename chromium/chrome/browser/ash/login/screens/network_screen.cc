@@ -27,6 +27,7 @@ constexpr base::TimeDelta kConnectionTimeout = base::Seconds(40);
 
 constexpr char kUserActionBackButtonClicked[] = "back";
 constexpr char kUserActionContinueButtonClicked[] = "continue";
+constexpr char kUserActionQuickStartButtonClicked[] = "activateQuickStart";
 
 }  // namespace
 
@@ -37,6 +38,8 @@ std::string NetworkScreen::GetResultString(Result result) {
       return "Connected";
     case Result::BACK:
       return "Back";
+    case Result::QUICK_START:
+      return "QuickStart";
     case Result::NOT_APPLICABLE:
       return BaseScreen::kNotApplicable;
   }
@@ -64,16 +67,31 @@ void NetworkScreen::ShowImpl() {
   Refresh();
   if (view_)
     view_->Show();
+
+  // QuickStart should not be enabled for Demo mode or OS Install flows
+  if (features::IsOobeQuickStartEnabled() &&
+      !DemoSetupController::IsOobeDemoSetupFlowInProgress() &&
+      !switches::IsOsInstallAllowed()) {
+    // Determine the QuickStart button visibility
+    WizardController::default_controller()
+        ->quick_start_controller()
+        ->IsSupported(
+            base::BindOnce(&NetworkScreen::SetQuickStartButtonVisibility,
+                           weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void NetworkScreen::HideImpl() {
   connection_timer_.Stop();
+
   UnsubscribeNetworkNotification();
 }
 
 void NetworkScreen::OnUserAction(const base::Value::List& args) {
   const std::string& action_id = args[0].GetString();
-  if (action_id == kUserActionContinueButtonClicked) {
+  if (action_id == kUserActionQuickStartButtonClicked) {
+    OnQuickStartButtonClicked();
+  } else if (action_id == kUserActionContinueButtonClicked) {
     OnContinueButtonClicked();
   } else if (action_id == kUserActionBackButtonClicked) {
     OnBackButtonClicked();
@@ -87,6 +105,7 @@ bool NetworkScreen::HandleAccelerator(LoginAcceleratorAction action) {
     context()->enrollment_triggered_early = true;
     return true;
   }
+
   return false;
 }
 
@@ -206,9 +225,19 @@ void NetworkScreen::OnContinueButtonClicked() {
   WaitForConnection(network_id_);
 }
 
+void NetworkScreen::OnQuickStartButtonClicked() {
+  CHECK(context()->quick_start_enabled);
+  exit_callback_.Run(Result::QUICK_START);
+}
+
+void NetworkScreen::SetQuickStartButtonVisibility(bool visible) {
+  if (visible && view_) {
+    view_->SetQuickStartEnabled();
+  }
+}
+
 bool NetworkScreen::UpdateStatusIfConnectedToEthernet() {
-  if (!features::IsOobeNetworkScreenSkipEnabled() ||
-      switches::IsOOBENetworkScreenSkippingDisabledForTesting()) {
+  if (switches::IsOOBENetworkScreenSkippingDisabledForTesting()) {
     return false;
   }
 

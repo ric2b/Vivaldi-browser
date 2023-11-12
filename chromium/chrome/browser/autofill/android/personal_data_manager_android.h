@@ -10,7 +10,6 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
-#include "components/autofill/core/browser/geo/subkey_requester.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 
@@ -33,12 +32,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       const base::android::JavaRef<jobject>& jcard,
       JNIEnv* env,
       CreditCard* card);
-  static base::android::ScopedJavaLocalRef<jobject> CreateJavaProfileFromNative(
-      JNIEnv* env,
-      const AutofillProfile& profile);
-  static AutofillProfile CreateNativeProfileFromJava(
-      const base::android::JavaParamRef<jobject>& jprofile,
-      JNIEnv* env);
 
   // Returns true if personal data manager has loaded the initial data.
   jboolean IsDataLoaded(
@@ -87,14 +80,15 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   base::android::ScopedJavaLocalRef<jstring> SetProfile(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile);
-
+      const base::android::JavaParamRef<jobject>& jprofile,
+      const base::android::JavaParamRef<jstring>& jguid);
   // Adds or modifies a profile like SetProfile interface if |jprofile| is
   // local. Otherwise it creates a local copy of it.
   base::android::ScopedJavaLocalRef<jstring> SetProfileToLocal(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile);
+      const base::android::JavaParamRef<jobject>& jprofile,
+      const base::android::JavaParamRef<jstring>& jguid);
 
   // Gets the labels for all known profiles. These labels are useful for
   // distinguishing the profiles from one another.
@@ -237,17 +231,16 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid);
 
-  // Sets the use count and use date of the profile associated to the |jguid|.
-  // Both |count| and |date| should be non-negative. |date| represents an
-  // absolute point in coordinated universal time (UTC) represented as
-  // microseconds since the Windows epoch. For more details see the comment
-  // header in time.h.
+  // Sets the use count and number of days since last use of the profile
+  // associated to the `jguid`. Both `count` and `days_since_last_used` should
+  // be non-negative. `days_since_last_used` represents the numbers of days
+  // since the profile was last used.
   void SetProfileUseStatsForTesting(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid,
       jint count,
-      jint date);
+      jint days_since_last_used);
 
   // Returns the use count of the profile associated to the |jguid|.
   jint GetProfileUseCountForTesting(
@@ -272,17 +265,16 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid);
 
-  // Sets the use count and use date of the credit card associated to the
-  // |jguid|. Both |count| and |date| should be non-negative. |date| represents
-  // an absolute point in coordinated universal time (UTC) represented as
-  // microseconds since the Windows epoch. For more details see the comment
-  // header in time.h.
+  // Sets the use count and number of days since last use of the credit card
+  // associated to the`jguid`. Both `count` and `days_since_last_used` should be
+  // non-negative. `days_since_last_used` represents the numbers of days since
+  // the card was last used.
   void SetCreditCardUseStatsForTesting(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jstring>& jguid,
       jint count,
-      jint date);
+      jint days_since_last_used);
 
   // Returns the use count of the credit card associated to the |jguid|.
   jint GetCreditCardUseCountForTesting(
@@ -306,40 +298,18 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj);
 
+  // Calculates a point in time `days` days ago from the current
+  // time. Returns the result as an absolute point in coordinated universal time
+  // (UTC) represented as microseconds since the Windows epoch.
+  jlong GetDateNDaysAgoForTesting(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      jint days);
+
   // Clears server profiles and cards, to be used in tests only.
   void ClearServerDataForTesting(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj);
-
-  // These functions help address normalization.
-  // --------------------
-
-  // Starts loading the address validation rules for the specified
-  // |region_code|.
-  void LoadRulesForAddressNormalization(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jstring>& region_code);
-
-  // Starts loading the rules for the specified |region_code| for the further
-  // subkey request.
-  void LoadRulesForSubKeys(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jstring>& region_code);
-
-  // Normalizes the address of the |jprofile| synchronously if the region rules
-  // have finished loading. Otherwise sets up the task to start the address
-  // normalization when the rules have finished loading. Also defines a time
-  // limit for the normalization, in which case the the |jdelegate| will be
-  // notified. If the rules are loaded before the timeout, |jdelegate| will
-  // receive the normalized profile.
-  void StartAddressNormalization(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jobject>& jprofile,
-      jint jtimeout_seconds,
-      const base::android::JavaParamRef<jobject>& jdelegate);
 
   // Checks whether the Autofill PersonalDataManager has profiles.
   jboolean HasProfiles(JNIEnv* env);
@@ -350,20 +320,11 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   // Checks whether FIDO authentication is available.
   jboolean IsFidoAuthenticationAvailable(JNIEnv* env);
 
-  // Gets the subkeys for the region with |jregion_code| code, if the
-  // |jregion_code| rules have finished loading. Otherwise, sets up a task to
-  // get the subkeys, when the rules are loaded.
-  void StartRegionSubKeysRequest(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jstring>& jregion_code,
-      jint jtimeout_seconds,
-      const base::android::JavaParamRef<jobject>& jdelegate);
-
-  // Cancels the pending subkey request task.
-  void CancelPendingGetSubKeys(JNIEnv* env);
-
   void SetSyncServiceForTesting(JNIEnv* env);
+
+  // Get Java AutofillImageFetcher.
+  base::android::ScopedJavaLocalRef<jobject> GetOrCreateJavaImageFetcher(
+      JNIEnv* env);
 
  private:
   ~PersonalDataManagerAndroid() override;
@@ -408,9 +369,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
 
   // Pointer to the PersonalDataManager for the main profile.
   raw_ptr<PersonalDataManager> personal_data_manager_;
-
-  // Used for subkey request.
-  SubKeyRequester subkey_requester_;
 };
 
 }  // namespace autofill

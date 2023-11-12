@@ -10,10 +10,6 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // Serialization keys
 NSString* const kFaviconImageKey = @"faviconImage";
@@ -114,8 +110,9 @@ NSString* const kFaviconDefaultImageKey = @"faviconDefaultImage";
 }
 
 - (void)encodeWithCoder:(NSCoder*)aCoder {
-  [aCoder encodeObject:UIImagePNGRepresentation(_faviconImage)
-                forKey:kFaviconImageKey];
+  [aCoder
+      encodeObject:_faviconImage ? UIImagePNGRepresentation(_faviconImage) : nil
+            forKey:kFaviconImageKey];
   [aCoder encodeObject:_monogramString forKey:kFaviconMonogramKey];
   [aCoder encodeObject:_textColor forKey:kFaviconTextColorKey];
   [aCoder encodeObject:_backgroundColor forKey:kFaviconBackgroundColorKey];

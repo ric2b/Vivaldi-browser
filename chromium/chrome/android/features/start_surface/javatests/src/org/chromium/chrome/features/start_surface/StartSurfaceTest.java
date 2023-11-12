@@ -34,12 +34,13 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceTestUtils.g
 import static org.chromium.chrome.features.start_surface.StartSurfaceTestUtils.sClassParamsForStartSurfaceTest;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 import static org.chromium.ui.test.util.ViewUtils.waitForStableView;
-import static org.chromium.ui.test.util.ViewUtils.waitForView;
 
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.View;
 import android.widget.TextView;
 
 import androidx.test.filters.LargeTest;
@@ -98,10 +99,12 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.test.util.RenderProcessHostUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.ui.test.util.ViewUtils;
 
 import java.io.IOException;
 import java.util.List;
@@ -115,7 +118,8 @@ import java.util.List;
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @Restriction(
         {UiRestriction.RESTRICTION_TYPE_PHONE, Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-@EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+@EnableFeatures(
+        {ChromeFeatureList.START_SURFACE_ANDROID + "<Study", ChromeFeatureList.EMPTY_STATES})
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group"})
 @DoNotBatch(reason = "This test suite tests startup behaviors.")
@@ -211,23 +215,15 @@ public class StartSurfaceTest {
 
         StartSurfaceTestUtils.clickMoreTabs(cta);
         StartSurfaceTestUtils.waitForTabSwitcherVisible(cta);
-        waitForView(allOf(withParent(withId(TabUiTestHelper.getTabSwitcherParentId(cta))),
-                withId(R.id.tab_list_view)));
+        ViewUtils.waitForVisibleView(
+                allOf(withParent(withId(TabUiTestHelper.getTabSwitcherParentId(cta))),
+                        withId(R.id.tab_list_view)));
 
-        // When the start surface refactoring is enabled, tapping the back button on Tab switcher
-        // will show the last tab.
-        if (TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(
-                    mActivityTestRule.getActivity())) {
-            StartSurfaceTestUtils.pressBack(mActivityTestRule);
-            // Verifies that the last tab is opening.
-            LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
-        } else {
-            StartSurfaceTestUtils.pressBack(mActivityTestRule);
-            onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
+        StartSurfaceTestUtils.pressBack(mActivityTestRule);
+        onViewWaiting(allOf(withId(R.id.primary_tasks_surface_view), isDisplayed()));
 
-            StartSurfaceTestUtils.clickFirstTabInCarousel();
-            LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
-        }
+        StartSurfaceTestUtils.clickFirstTabInCarousel();
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
     }
 
     @Test
@@ -283,31 +279,7 @@ public class StartSurfaceTest {
     Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS + "/hide_switch_when_no_incognito_tabs/false"})
     @EnableFeatures(ChromeFeatureList.START_SURFACE_REFACTOR)
     public void testShow_SingleAsHomepage_NoIncognitoSwitch_RefactorEnabled() {
-        if (!mImmediateReturn) {
-            StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
-        }
-
-        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        StartSurfaceTestUtils.waitForStartSurfaceVisible(
-                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
-
-        onViewWaiting(withId(R.id.primary_tasks_surface_view));
-        onViewWaiting(withId(R.id.search_box_text));
-        onViewWaiting(withId(R.id.mv_tiles_container)).check(matches(isDisplayed()));
-        onViewWaiting(withId(R.id.tab_switcher_title)).check(matches(isDisplayed()));
-        onViewWaiting(withId(R.id.tab_switcher_module_container)).check(matches(isDisplayed()));
-        onView(withId(R.id.tasks_surface_body)).check(matches(isDisplayed()));
-
-        // TODO(crbug.com/1076274): fix toolbar to make incognito switch part of the view.
-        onView(withId(R.id.incognito_toggle_tabs)).check(matches(withEffectiveVisibility(GONE)));
-
-        StartSurfaceTestUtils.clickMoreTabs(cta);
-        StartSurfaceTestUtils.waitForTabSwitcherVisible(cta);
-        onView(withId(R.id.incognito_toggle_tabs)).check(matches(withEffectiveVisibility(VISIBLE)));
-
-        // Verifies that the tab switcher is hidden.
-        StartSurfaceTestUtils.pressBack(mActivityTestRule);
-        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
+        testShow_SingleAsHomepage_NoIncognitoSwitch();
     }
 
     @Test
@@ -353,20 +325,11 @@ public class StartSurfaceTest {
             return;
         }
 
-        // When the start surface refactoring is enabled, tapping the back button on Tab switcher
-        // will show the last tab.
-        if (TabUiTestHelper.getIsStartSurfaceRefactorEnabledFromUIThread(
-                    mActivityTestRule.getActivity())) {
-            StartSurfaceTestUtils.pressBack(mActivityTestRule);
-            // Verifies that the last tab is opening.
-            LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
-        } else {
-            StartSurfaceTestUtils.pressBack(mActivityTestRule);
-            onViewWaiting(withId(R.id.primary_tasks_surface_view));
+        StartSurfaceTestUtils.pressBack(mActivityTestRule);
+        onViewWaiting(withId(R.id.primary_tasks_surface_view));
 
-            onViewWaiting(withId(R.id.single_tab_view)).perform(click());
-            LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
-        }
+        onViewWaiting(withId(R.id.single_tab_view)).perform(click());
+        LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
     }
 
     @Test
@@ -530,7 +493,6 @@ public class StartSurfaceTest {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
 
     @EnableFeatures({ChromeFeatureList.START_SURFACE_RETURN_TIME + "<Study",
-            ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
             ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     @CommandLineFlags.Add({START_SURFACE_TEST_BASE_PARAMS
                     + "open_ntp_instead_of_start/false/open_start_as_homepage/true",
@@ -548,7 +510,6 @@ public class StartSurfaceTest {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     // clang-format off
     @EnableFeatures({ChromeFeatureList.START_SURFACE_RETURN_TIME + "<Study",
-        ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
         ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS,
         // Disable feed placeholder animation because it causes waitForDeferredStartup() to time
@@ -667,6 +628,7 @@ public class StartSurfaceTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1471244")
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
     public void testShow_SingleAsHomepage_BottomSheet_WithBottomSheetGtsSupport() {
@@ -717,6 +679,7 @@ public class StartSurfaceTest {
     @MediumTest
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1470714")
     public void testShow_SingleAsHomepage_ResetScrollPosition() {
         if (!mImmediateReturn) {
             StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
@@ -750,6 +713,7 @@ public class StartSurfaceTest {
     @Feature({"StartSurface"})
     @EnableFeatures(ChromeFeatureList.START_SURFACE_REFACTOR)
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1470714")
     public void testShow_SingleAsHomepage_DoNotResetScrollPositionFromBack() {
         assumeTrue(mImmediateReturn);
 
@@ -805,7 +769,7 @@ public class StartSurfaceTest {
         Tab tab = cta.getActivityTab();
         StartSurfaceTestUtils.pressHomePageButton(cta);
 
-        waitForView(withId(R.id.primary_tasks_surface_view));
+        ViewUtils.waitForVisibleView(withId(R.id.primary_tasks_surface_view));
         StartSurfaceTestUtils.waitForStartSurfaceVisible(cta);
         Assert.assertEquals(TabLaunchType.FROM_START_SURFACE, tab.getLaunchType());
         TestThreadUtils.runOnUiThreadBlocking(
@@ -876,7 +840,7 @@ public class StartSurfaceTest {
     @Test
     @SmallTest
     @Feature({"StartSurface"})
-    @EnableFeatures({ChromeFeatureList.IDENTITY_STATUS_CONSISTENCY})
+    @EnableFeatures(ChromeFeatureList.IDENTITY_STATUS_CONSISTENCY)
     public void testRecordHistogramProfileButtonClick_StartSurface() {
         Assume.assumeTrue(mImmediateReturn);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -982,6 +946,7 @@ public class StartSurfaceTest {
     @Feature({"StartSurface"})
     @EnableFeatures({ChromeFeatureList.SPARE_TAB, ChromeFeatureList.START_SURFACE_SPARE_TAB})
     @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1470714")
     public void test_UsesSpareTabForNavigationFromSearchBox() {
         if (!mImmediateReturn) return;
 
@@ -1099,5 +1064,91 @@ public class StartSurfaceTest {
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(HISTOGRAM_SPARE_TAB_FINAL_STATUS,
                         WarmupManager.SpareTabFinalStatus.TAB_DESTROYED));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH + "<Study"})
+    @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    public void testStartSurfaceBackgroundColorAfterPolish() {
+        if (!mImmediateReturn || mUseInstantStart) return;
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
+
+        onViewWaiting(withId(R.id.primary_tasks_surface_view));
+        onViewWaiting(withId(R.id.tab_switcher_toolbar));
+        onViewWaiting(withId(R.id.search_box_text)).check(matches(isDisplayed()));
+        onViewWaiting(withId(R.id.mv_tiles_container)).check(matches(isDisplayed()));
+        onViewWaiting(withId(R.id.tab_switcher_title)).check(matches(isDisplayed()));
+        onViewWaiting(withId(R.id.tab_switcher_module_container)).check(matches(isDisplayed()));
+        onViewWaiting(withId(R.id.tasks_surface_body));
+
+        View startSurfaceView =
+                cta.findViewById(org.chromium.chrome.test.R.id.primary_tasks_surface_view);
+        assertEquals("The background color for start surface is wrong.",
+                ChromeColors.getSurfaceColor(cta,
+                        org.chromium.chrome.test.R.dimen.home_surface_background_color_elevation),
+                ((ColorDrawable) startSurfaceView.getBackground()).getColor());
+        View startSurfaceViewHeader =
+                cta.findViewById(org.chromium.chrome.test.R.id.task_surface_header);
+        assertEquals("The background color for start surface is wrong.",
+                ChromeColors.getSurfaceColor(cta,
+                        org.chromium.chrome.test.R.dimen.home_surface_background_color_elevation),
+                ((ColorDrawable) startSurfaceViewHeader.getBackground()).getColor());
+        View startSurfaceToolbar =
+                cta.findViewById(org.chromium.chrome.test.R.id.tab_switcher_toolbar);
+        assertEquals("The background color for start surface toolbar is wrong.",
+                ChromeColors.getSurfaceColor(cta,
+                        org.chromium.chrome.test.R.dimen.home_surface_background_color_elevation),
+                ((ColorDrawable) startSurfaceToolbar.getBackground()).getColor());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    @DisableFeatures({ChromeFeatureList.SURFACE_POLISH, ChromeFeatureList.START_SURFACE_REFACTOR})
+    public void testStatusBarColor_RefactorDisabled_SurfacePolishDisabled() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        final int expectedDefaultStandardColor = ChromeColors.getDefaultThemeColor(cta, false);
+        testStatusBarColorImpl(expectedDefaultStandardColor, expectedDefaultStandardColor);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @CommandLineFlags.Add({START_SURFACE_TEST_SINGLE_ENABLED_PARAMS})
+    @DisableFeatures(ChromeFeatureList.START_SURFACE_REFACTOR)
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH})
+    public void testStatusBarColor_RefactorDisabled_SurfacePolishEnabled() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        final int expectedPolishedStandardColor =
+                ChromeColors.getSurfaceColor(cta, R.dimen.home_surface_background_color_elevation);
+        final int expectedDefaultStandardColor = ChromeColors.getDefaultThemeColor(cta, false);
+        testStatusBarColorImpl(expectedPolishedStandardColor, expectedDefaultStandardColor);
+    }
+
+    private void testStatusBarColorImpl(
+            int expectedStartSurfaceColor, int expectedTabSwitcherColor) {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        if (!mImmediateReturn) {
+            StartSurfaceTestUtils.pressHomePageButton(mActivityTestRule.getActivity());
+        }
+
+        StartSurfaceTestUtils.waitForStartSurfaceVisible(
+                mLayoutChangedCallbackHelper, mCurrentlyActiveLayout, cta);
+
+        onViewWaiting(withId(R.id.primary_tasks_surface_view));
+        StartSurfaceTestUtils.waitForStatusBarColor(cta, expectedStartSurfaceColor);
+
+        StartSurfaceTestUtils.clickTabSwitcherButton(cta);
+        StartSurfaceTestUtils.waitForTabSwitcherVisible(cta);
+        StartSurfaceTestUtils.waitForStatusBarColor(cta, expectedTabSwitcherColor);
+
+        StartSurfaceTestUtils.pressBack(mActivityTestRule);
+        onViewWaiting(withId(R.id.primary_tasks_surface_view));
+        StartSurfaceTestUtils.waitForStatusBarColor(cta, expectedStartSurfaceColor);
     }
 }

@@ -6,8 +6,8 @@
 
 #include <string>
 
-#include "base/allocator/partition_allocator/pointers/raw_ptr.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
@@ -66,7 +66,7 @@ TEST_F(SaveUpdateAddressProfileBubbleControllerImplTest,
       Run(AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted,
           profile));
   controller()->OnUserDecision(
-      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted);
+      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted, profile);
 }
 
 TEST_F(SaveUpdateAddressProfileBubbleControllerImplTest,
@@ -83,7 +83,7 @@ TEST_F(SaveUpdateAddressProfileBubbleControllerImplTest,
       Run(AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined,
           testing::_));
   controller()->OnUserDecision(
-      AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined);
+      AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined, profile);
 }
 
 // This is testing that closing all tabs (which effectively destroys the web
@@ -113,10 +113,11 @@ TEST_F(SaveUpdateAddressProfileBubbleControllerImplTest,
               Run(AutofillClient::SaveAddressProfileOfferUserDecision::kIgnored,
                   testing::_));
   // Close controller tab.
-  EXPECT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
+  int previous_tab_count = browser()->tab_strip_model()->count();
+  browser()->tab_strip_model()->CloseWebContentsAt(
       tab_strip_model->GetIndexOfWebContents(controller_web_contents),
-      TabCloseTypes::CLOSE_USER_GESTURE));
-  EXPECT_EQ(1, tab_strip_model->count());
+      TabCloseTypes::CLOSE_USER_GESTURE);
+  EXPECT_EQ(previous_tab_count - 1, browser()->tab_strip_model()->count());
 }
 
 // This is testing that when the SaveAddressProfilePromptOptions has the

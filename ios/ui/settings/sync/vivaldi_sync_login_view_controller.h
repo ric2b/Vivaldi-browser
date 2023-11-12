@@ -9,6 +9,7 @@
 
 @class VivaldiSyncLoginViewController;
 
+@protocol ModalPageCommands;
 @protocol VivaldiSyncLoginViewControllerDelegate
 
 // Called when the view controller is removed from its parent.
@@ -30,7 +31,10 @@
 
 // Initializes the view controller, configured with |style|. The default
 // ChromeTableViewStyler will be used.
-- (instancetype)initWithStyle:(UITableViewStyle)style NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithModalPageHandler:(id<ModalPageCommands>)modalPageHandler
+                                   style:(UITableViewStyle)style
+    NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;

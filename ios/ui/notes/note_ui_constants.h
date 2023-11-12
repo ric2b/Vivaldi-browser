@@ -78,8 +78,12 @@ extern NSString* const kToolsMenuAddToNotes;
 #endif
 
 #pragma mark - ICONS
+// Image name for the note icon.
+extern NSString* vNotesIcon;
 // Image name for the note folder icon.
 extern NSString* vNotesFolderIcon;
+// Image name for trash folder icon
+extern NSString* vNotesTrashFolderIcon;
 // Image name for the folder selection chevron.
 extern NSString* vNoteFolderSelectionChevron;
 // Image name for the folder selection checkmark.

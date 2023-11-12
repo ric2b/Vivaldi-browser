@@ -21,8 +21,8 @@ constexpr char kDebugButton[] = "invokeDebuggerButton";
 constexpr char kDebugOverlay[] = "debuggerOverlay";
 constexpr char kScreensPanel[] = "DebuggerPanelScreens";
 
-constexpr int kOobeScreensCount = 48;
-constexpr int kLoginScreensCount = 45;
+constexpr int kOobeScreensCount = 50;
+constexpr int kLoginScreensCount = 46;
 constexpr int kOsInstallScreensCount = 2;
 
 std::string ElementsInPanel(const std::string& panel) {
@@ -36,7 +36,8 @@ class DebugOverlayTest : public OobeBaseTest {
   DebugOverlayTest() {
     feature_list_.InitWithFeatures(
         {features::kOobeChoobe, features::kOobeTouchpadScroll,
-         features::kOobeDisplaySize, features::kOobeGaiaInfoScreen},
+         features::kOobeDisplaySize, features::kOobeGaiaInfoScreen,
+         features::kOobeSoftwareUpdate},
         {});
   }
 

@@ -1,0 +1,16 @@
+// Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+#ifndef IOS_UI_SETTINGS_SYNC_MANAGER_VIVALDI_ACCOUNT_SIMPLIFIED_STATE_H_
+#define IOS_UI_SETTINGS_SYNC_MANAGER_VIVALDI_ACCOUNT_SIMPLIFIED_STATE_H_
+
+// Enum for the vivaldi account auth simplified states.
+typedef NS_ENUM(NSUInteger, VivaldiAccountSimplifiedState) {
+  LOGGED_OUT = 0,
+  LOGGING_IN,
+  LOGGED_IN,
+  CREDENTIALS_MISSING,
+  LOGIN_FAILED,
+  NOT_ACTIVATED
+};
+
+#endif  // IOS_UI_SETTINGS_SYNC_MANAGER_VIVALDI_ACCOUNT_SIMPLIFIED_STATE_H_

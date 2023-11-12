@@ -27,7 +27,8 @@ namespace {
 // Internal structure that owns buffer, surface and subsurface instances.
 // This is owned by the host window as an owned property.
 struct Holder {
-  raw_ptr<exo::Surface, ExperimentalAsh> root_surface = nullptr;
+  raw_ptr<exo::Surface, DanglingUntriaged | ExperimentalAsh> root_surface =
+      nullptr;
   std::vector<std::tuple<std::unique_ptr<exo::Buffer>,
                          std::unique_ptr<exo::Surface>,
                          std::unique_ptr<exo::SubSurface>>>
@@ -246,6 +247,13 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetAsMenu() {
   return SetAsPopup();
 }
 
+ShellSurfaceBuilder& ShellSurfaceBuilder::SetClientSubmitsInPixelCoordinates(
+    bool enabled) {
+  DCHECK(!built_);
+  client_submits_surfaces_in_pixel_coordinates_ = enabled;
+  return *this;
+}
+
 ShellSurfaceBuilder& ShellSurfaceBuilder::SetWindowState(
     chromeos::WindowStateType window_state) {
   DCHECK(!built_);
@@ -332,6 +340,10 @@ std::unique_ptr<ShellSurface> ShellSurfaceBuilder::BuildShellSurface() {
     shell_surface->SetPopup();
   if (menu_)
     shell_surface->SetMenu();
+  if (client_submits_surfaces_in_pixel_coordinates_.has_value()) {
+    shell_surface->set_client_submits_surfaces_in_pixel_coordinates(
+        client_submits_surfaces_in_pixel_coordinates_.value());
+  }
 
   if (window_state_.has_value()) {
     switch (window_state_.value()) {
@@ -368,8 +380,8 @@ ShellSurfaceBuilder::BuildClientControlledShellSurface() {
   auto holder = std::make_unique<Holder>();
   holder->AddRootSurface(root_buffer_size_, root_buffer_format_);
   auto shell_surface = Display().CreateOrGetClientControlledShellSurface(
-      holder->root_surface, GetContainer(), GetDefaultDeviceScaleFactor(),
-      default_scale_cancellation_, supports_floated_state_);
+      holder->root_surface, GetContainer(), default_scale_cancellation_,
+      supports_floated_state_);
   shell_surface->host_window()->SetProperty(kBuilderResourceHolderKey,
                                             std::move(holder));
 

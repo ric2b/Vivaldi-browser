@@ -139,7 +139,8 @@ class CONTENT_EXPORT WebContentsDelegate {
   // OpenURL() for these cases which does it for you).
 
   // Returns the WebContents the URL is opened in, or nullptr if the URL wasn't
-  // opened immediately.
+  // opened immediately. Note that the URL might be opened in another context
+  // when a nullptr is returned.
   virtual WebContents* OpenURLFromTab(WebContents* source,
                                       const OpenURLParams& params);
 
@@ -419,15 +420,15 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source);
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_APPLE)
   // Called when color chooser should open. Returns the opened color chooser.
   // Returns nullptr if we failed to open the color chooser. The color chooser
-  // is only supported/required for Android.
+  // is supported/required for Android or iOS.
   virtual std::unique_ptr<ColorChooser> OpenColorChooser(
       WebContents* web_contents,
       SkColor color,
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions);
-#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
+#endif
 
   // Called when an eye dropper should open. Returns the eye dropper window.
   // The eye dropper is responsible for calling listener->ColorSelected() or
@@ -768,6 +769,17 @@ class CONTENT_EXPORT WebContentsDelegate {
   // It's used to prevent drag and drop between privileged and non-privileged
   // WebContents.
   virtual bool IsPrivileged();
+
+  // Initiates previewing the given `url` within the given `web_contents`.
+  virtual void InitiatePreview(WebContents& web_contents, const GURL& url) {}
+
+  // CloseWatcher web API support. If the currently focused frame has a
+  // CloseWatcher registered in JavaScript, the CloseWatcher should receive the
+  // next "close" operation, based on what the OS convention for closing is.
+  // This function is called when the focused frame changes or a CloseWatcher
+  // is registered/unregistered to update whether the CloseWatcher should
+  // intercept.
+  virtual void DidChangeCloseSignalInterceptStatus() {}
 
   // Vivaldi
   void SetDownloadInformation(const content::DownloadInformation& info);

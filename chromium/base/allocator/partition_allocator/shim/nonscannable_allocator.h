@@ -40,11 +40,11 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) NonScannableAllocatorImpl final {
       delete;
 
   void* Alloc(size_t size);
-  static void Free(void*);
+  void Free(void*);
 
   // Returns PartitionRoot corresponding to the allocator, or nullptr if the
   // allocator is not enabled.
-  partition_alloc::ThreadSafePartitionRoot* root() {
+  partition_alloc::PartitionRoot* root() {
 #if BUILDFLAG(USE_STARSCAN)
     if (!allocator_.get()) {
       return nullptr;

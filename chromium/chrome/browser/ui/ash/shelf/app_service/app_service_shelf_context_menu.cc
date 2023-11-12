@@ -37,7 +37,7 @@
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/views/crostini/crostini_app_restart_dialog.h"
-#include "chrome/browser/ui/webui/settings/ash/app_management/app_management_uma.h"
+#include "chrome/browser/ui/webui/ash/settings/app_management/app_management_uma.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/app_constants/constants.h"
 #include "components/services/app_service/public/cpp/app_types.h"
@@ -517,7 +517,7 @@ void AppServiceShelfContextMenu::ShowAppInfo() {
   // registered. This is short term workaround to keep the relative
   // compatibility for Lacros Primary. We should figure out what should be shown
   // by this.
-  controller()->DoShowAppInfoFlow(controller()->profile(), item().id.app_id);
+  controller()->DoShowAppInfoFlow(item().id.app_id);
 }
 
 void AppServiceShelfContextMenu::SetLaunchType(int command_id) {

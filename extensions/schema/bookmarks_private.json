@@ -71,6 +71,10 @@
             "type": "boolean",
             "description": "Boolean variable, stating if a folder is a speeddial folder"
           },
+          "themeColor": {
+            "type": "string",
+            "description": "The theme color from the website, to use as the background of the speed dials thumbnail, if no other thumbnail is available"
+          },
           "bookmarkbar": {
             "type": "boolean",
             "description": "Boolean variable, stating if a folder is a bookmark bar folder"
@@ -99,43 +103,6 @@
             "optional": true,
             "items": { "$ref": "BookmarkTreeNode" },
             "description": "An ordered list of children of this node."
-          }
-        }
-      },
-      {
-        "id": "MetaInfo",
-        "type": "object",
-        "description": "Meta for the bookmark",
-        "properties": {
-          "nickname": {
-            "type": "string",
-            "description": "The nickname for the node. Vivaldi extended property"
-          },
-          "description": {
-            "type": "string",
-            "description": "The description text for the node. Vivaldi extended property"
-          },
-          "partner": {
-            "type": "string",
-            "description": "Partner id for the node. Vivaldi extended property"
-          },
-          "speeddial": {
-            "type": "boolean",
-            "description": "Boolean variable, stating if a folder is a speeddial folder"
-          },
-          "bookmarkbar": {
-            "type": "boolean",
-            "description": "Boolean variable, stating if a folder is a bookmark bar folder"
-          },
-          "dateAdded": {
-            "type": "number",
-            "optional": true,
-            "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
-          },
-          "dateGroupModified": {
-            "type": "number",
-            "optional": true,
-            "description": "When the contents of this folder last changed, in milliseconds since the epoch."
           }
         }
       }
@@ -219,21 +186,16 @@
         }
       },
       {
-        "name": "import",
-        "type": "function",
-        "description": "Imports bookmarks from a Chrome html bookmark file",
-        "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "optional": true,
-          "parameters": []
-        }
-      },
-      {
         "name": "export",
         "type": "function",
         "description": "Exports bookmarks to a Chrome html bookmark file",
-        "parameters": [],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "The file selector will be modal to this window."
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "optional": true,
@@ -291,6 +253,10 @@
               },
               "bookmarkbar": {
                 "type": "boolean",
+                "optional": true
+              },
+              "themeColor": {
+                "type": "string",
                 "optional": true
               }
             }

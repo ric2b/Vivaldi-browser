@@ -93,7 +93,7 @@ void CreateFakeWebApps(
   for (int i = 0; i < n; ++i) {
     std::string start_url =
         "https://www.example" + base::NumberToString(i) + ".com";
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
+    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
     web_app_info->start_url = GURL(start_url);
     web_app_info->scope = GURL(start_url);
     apps::FileHandler handler;
@@ -411,8 +411,7 @@ IN_PROC_BROWSER_TEST_F(FileHandlerDialogBrowserTest, OpenFileTaskFromDialog) {
 
 // Check QuickOffice was observed by the dialog as it should always be shown.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  ASSERT_TRUE(file_manager::file_tasks::IsExtensionInstalled(
-      profile(), extension_misc::kQuickOfficeComponentExtensionId));
+  ASSERT_TRUE(file_manager::file_tasks::IsQuickOfficeInstalled(profile()));
   ASSERT_GE(PositionInList(observed_app_ids,
                            extension_misc::kQuickOfficeComponentExtensionId),
             0);
@@ -918,10 +917,10 @@ IN_PROC_BROWSER_TEST_F(FixUpFlowBrowserTest,
   }
 
   // Click through the Upload Page.
-  while (
-      !content::ExecJs(web_contents,
-                       "document.querySelector('cloud-upload').$('upload-page')"
-                       ".querySelector('.action-button').click()")) {
+  while (!content::ExecJs(
+      web_contents,
+      "document.querySelector('cloud-upload').$('complete-page')"
+      ".querySelector('.action-button').click()")) {
   }
 
   // Check that the Office PWA has been made the default for doc and xlsx files.
@@ -987,10 +986,10 @@ IN_PROC_BROWSER_TEST_F(FixUpFlowBrowserTest,
   }
 
   // Click through the Upload Page.
-  while (
-      !content::ExecJs(web_contents,
-                       "document.querySelector('cloud-upload').$('upload-page')"
-                       ".querySelector('.action-button').click()")) {
+  while (!content::ExecJs(
+      web_contents,
+      "document.querySelector('cloud-upload').$('complete-page')"
+      ".querySelector('.action-button').click()")) {
   }
 
   // Check that the default task for doc files is still Drive, and not OneDrive,

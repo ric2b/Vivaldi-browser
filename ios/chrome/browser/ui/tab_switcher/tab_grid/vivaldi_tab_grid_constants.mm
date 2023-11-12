@@ -23,6 +23,14 @@ NSString* const vTabGridEmptyStateTitleTextColor =
     @"grid_empty_state_title_text_color";
 NSString* const vTabGridEmptyStateBodyTextColor =
     @"grid_empty_state_body_text_color";
+NSString* const vTabGridEmptyStateLoginButtonBGColor =
+    @"grid_empty_state_login_button_bg_color";
+
+// Assets for the empty state
+NSString* vTabGridEmptyStateRegularTabsImage = @"tab_grid_regular_tabs_empty";
+NSString* vTabGridEmptyStatePrivateTabsImage = @"tab_grid_incognito_tabs_empty";
+NSString* vTabGridEmptyStateSyncedTabsImage = @"tab_grid_remote_tabs_empty";
+NSString* vTabGridEmptyStateClosedTabsImage = @"tab_grid_closed_tabs_empty";
 
 // Colors for grid cell item
 NSString* const vTabGridSelectedColor =
@@ -61,3 +69,8 @@ const CGFloat vTabGridSectionPaddingiPadLandscape = 64.0;
 
 // Section header height for recent and sync tabs.
 const CGFloat vSectionHeaderHeight = 24;
+
+// Button corner radius for login button in empty state
+const CGFloat vRecentTabsEmptyStateLoginButtonCornerRadius = 8.0;
+// Button height for login button in empty state
+const CGFloat vRecentTabsEmptyStateLoginButtonHeight = 52.0;

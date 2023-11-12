@@ -19,7 +19,7 @@ about:version template page
 </if>
     <link rel="stylesheet" href="chrome://version/about_version.css">
 <if expr="is_android or is_ios">
-    <link rel="stylesheet" href="chrome://version/about_version_mobile.css">
+    <link rel="stylesheet" href="about_version_mobile.css">
 </if>
 
     <script type ="module" src="about_version.js"></script>
@@ -65,9 +65,9 @@ about:version template page
 </if>
               <span>$i18n{version_modifier}</span>
               <span>$i18n{version_processor_variation}</span>
-<if expr="is_win">
+ <if expr="is_win">
               <span>$i18n{update_cohort_name}</span>
-</if>
+ </if>
             </span>
             <button id="copy-to-clipboard" aria-label="$i18n{copy_label}">
               <div id="copy-to-clipboard-icon"></div>
@@ -83,15 +83,37 @@ about:version template page
         <tr>
           <td class="label">$i18n{os_name}</td>
           <td class="version" id="os_type">
-            <span>$i18n{os_type}</span>
+            <span id="copy-os-content">
+              <span>$i18n{os_type}</span>
 <if expr="is_android">
-            <span>$i18n{os_version}</span>
+              <span>$i18n{os_version}</span>
 </if>
 <if expr="is_win or is_macosx">
-            <span id="os_version"></span>
+              <span id="os_version"></span>
 </if>
+            </span>
           </td>
         </tr>
+<if expr="is_android">
+        <tr>
+          <td class="label">APK versionCode</td>
+          <td class="version">$i18n{version_code}</td>
+        </tr>
+        <tr>
+          <td class="label">APK targetSdkVersion</td>
+          <td class="version">$i18n{target_sdk_version}</td>
+        </tr>
+         <tr>
+          <td class="label">isAtLeastU/targetsAtLeastU</td>
+          <td class="version">$i18n{targets_u}</td>
+        </tr>
+        <tr>
+          <td class="label">$i18n{gms_name}</td>
+          <td class="version" id="gms_version">
+            <span>$i18n{gms_version}</span>
+          </td>
+        </tr>
+</if>
 <if expr="not is_ios">
         <tr><td class="label">JavaScript</td>
           <td class="version" id="js_engine">
@@ -123,6 +145,9 @@ about:version template page
         <tr id="variations-seed"></tr>
         <tr id="sanitizer"></tr>
       </table>
+    </div>
+
+    <div id="messages" role="alert" aria-live="polite" aria-relevant="additions">
     </div>
   </body>
 </html>

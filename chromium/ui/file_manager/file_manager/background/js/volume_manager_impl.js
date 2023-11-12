@@ -11,7 +11,7 @@ import {util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
-import {removeVolume} from '../../state/actions/volumes.js';
+import {removeVolume} from '../../state/ducks/volumes.js';
 import {getStore} from '../../state/store.js';
 
 import {EntryLocationImpl} from './entry_location_impl.js';
@@ -47,8 +47,6 @@ export class VolumeManagerImpl extends EventTarget {
     this.driveConnectionState_ = {
       type: chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE,
       reason: chrome.fileManagerPrivate.DriveOfflineReason.NO_SERVICE,
-      hasCellularNetworkAccess: false,
-      canPinHostedFiles: false,
     };
 
     chrome.fileManagerPrivate.onDriveConnectionStatusChanged.addListener(
@@ -652,5 +650,10 @@ export class VolumeManagerImpl extends EventTarget {
   /** @override */
   isDisabled(volume) {
     return false;
+  }
+
+  /** @override */
+  isAllowedVolume(volumeInfo) {
+    return true;
   }
 }

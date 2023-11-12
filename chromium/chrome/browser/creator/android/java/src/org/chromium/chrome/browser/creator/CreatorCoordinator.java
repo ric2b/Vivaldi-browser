@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,7 @@ import org.chromium.chrome.browser.feed.FeedListContentManager;
 import org.chromium.chrome.browser.feed.FeedListContentManager.FeedContent;
 import org.chromium.chrome.browser.feed.FeedStream;
 import org.chromium.chrome.browser.feed.FeedStreamViewResizer;
+import org.chromium.chrome.browser.feed.FeedSurfaceRendererBridge;
 import org.chromium.chrome.browser.feed.FeedSurfaceScopeDependencyProviderImpl;
 import org.chromium.chrome.browser.feed.FeedSurfaceTracker;
 import org.chromium.chrome.browser.feed.NativeViewListRenderer;
@@ -252,7 +253,8 @@ public class CreatorCoordinator
                 /* FeedContentFirstLoadWatcher */ this,
                 /* streamsMediator */ new StreamsMediatorImpl(),
                 new SingleWebFeedParameters(
-                        mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY), mEntryPoint));
+                        mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY), mEntryPoint),
+                new FeedSurfaceRendererBridge.Factory() {});
 
         if (mEntryPoint == SingleWebFeedEntryPoint.MENU) {
             mStream.addOnContentChangedListener(new ContentChangedListener());
@@ -544,7 +546,6 @@ public class CreatorCoordinator
         if (mSheetObserver != null) mBottomSheetController.removeObserver(mSheetObserver);
     }
 
-    @VisibleForTesting
     void setStreamForTest(Stream stream) {
         mStream = stream;
     }

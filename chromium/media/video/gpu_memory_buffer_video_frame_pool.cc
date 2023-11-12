@@ -17,7 +17,6 @@
 #include "base/bits.h"
 #include "base/command_line.h"
 #include "base/containers/circular_deque.h"
-#include "base/containers/stack_container.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
@@ -50,7 +49,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
-#include "ui/gfx/mac/io_surface.h"
+#include "media/base/mac/video_frame_mac.h"
 #endif
 
 namespace media {
@@ -1194,6 +1193,10 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
     // Shared image uses iosurface as native resource which is compatible to
     // WebGPU always.
     is_webgpu_compatible = (gpu_memory_buffer != nullptr);
+    if (is_webgpu_compatible) {
+      is_webgpu_compatible &= media::IOSurfaceIsWebGPUCompatible(
+          gpu_memory_buffer->CloneHandle().io_surface.get());
+    }
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)

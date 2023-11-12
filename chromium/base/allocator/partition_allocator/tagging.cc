@@ -37,6 +37,7 @@
 #define PR_MTE_TCF_MASK (3UL << PR_MTE_TCF_SHIFT)
 #define PR_MTE_TAG_SHIFT 3
 #define PR_MTE_TAG_MASK (0xffffUL << PR_MTE_TAG_SHIFT)
+#define HWCAP2_MTE (1 << 18)
 #endif
 #endif
 
@@ -245,5 +246,31 @@ TagViolationReportingMode GetMemoryTaggingModeForCurrentThread() {
 }
 
 }  // namespace internal
+
+#if PA_CONFIG(HAS_MEMORY_TAGGING) && BUILDFLAG(IS_ANDROID)
+bool PermissiveMte::enabled_ = false;
+
+// static
+void PermissiveMte::SetEnabled(bool enabled) {
+  PermissiveMte::enabled_ = enabled;
+}
+
+// static
+bool PermissiveMte::HandleCrash(int signo,
+                                siginfo_t* siginfo,
+                                ucontext_t* context) {
+  if (siginfo->si_signo == SIGSEGV &&
+      (siginfo->si_code == SEGV_MTESERR || siginfo->si_code == SEGV_MTEAERR) &&
+      PermissiveMte::enabled_) {
+    // In MTE permissive mode, do not crash the process. Instead, disable MTE
+    // and let the failing instruction be retried. The second time should
+    // succeed (except if there is another non-MTE fault).
+    internal::ChangeMemoryTaggingModeForAllThreadsPerProcess(
+        partition_alloc::TagViolationReportingMode::kDisabled);
+    return true;
+  }
+  return false;
+}
+#endif  // PA_CONFIG(HAS_MEMORY_TAGGING) && BUILDFLAG(IS_ANDROID)
 
 }  // namespace partition_alloc

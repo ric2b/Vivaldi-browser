@@ -32,14 +32,16 @@ import logging
 import optparse
 import re
 import traceback
+from typing import List, Optional
 
 from blinkpy.common import exit_codes
 from blinkpy.common.host import Host
 from blinkpy.common.system.log_utils import configure_logging
 from blinkpy.web_tests.models.test_expectations import (TestExpectations,
                                                         ParseError)
-from blinkpy.web_tests.models.typ_types import ResultType
+from blinkpy.web_tests.models.typ_types import Expectation, ResultType
 from blinkpy.web_tests.port.android import ANDROID_DISABLED_TESTS
+from blinkpy.web_tests.port.base import Port
 from blinkpy.web_tests.port.factory import platform_options
 
 _log = logging.getLogger(__name__)
@@ -130,7 +132,7 @@ def _check_directory_glob(host, port, path, expectations):
         if not exp.test or exp.is_glob:
             continue
 
-        test_name, _ = port.split_webdriver_test_name(exp.test)
+        test_name = exp.test
         index = test_name.find('?')
         if index != -1:
             test_name = test_name[:index]
@@ -283,6 +285,38 @@ def _check_skip_in_test_expectations(host, path, expectations):
     return failures
 
 
+def _check_no_wpt_lines(host: Host, port: Port, path: str,
+                        expectations: List[Expectation]):
+    """Check that TestExpectations only contain legacy web tests.
+
+    After the switch to wptrunner, this check informs users that metadata files
+    are now the source of truth about WPT expectations.
+    """
+    failures = []
+    for exp in expectations:
+        test_path = _file_path_for_wpt(port, exp.test)
+        if test_path:
+            error = (
+                f'{host.filesystem.basename(path)}:{exp.lineno}: '
+                'TestExpectations no longer set WPT expectations. '
+                f"Create or update a metadata file '{test_path}.ini' instead.")
+            failures.append(error)
+    return failures
+
+
+def _file_path_for_wpt(port: Port, test: str) -> Optional[str]:
+    base_test = port.lookup_virtual_test_base(test) or test
+    for wpt_dir in Port.WPT_DIRS:
+        if base_test.startswith(wpt_dir):
+            manifest = port.wpt_manifest(wpt_dir)
+            prefix = wpt_dir + '/'
+            file_path_from_root = manifest.file_path_for_test_url(
+                base_test[len(prefix):])
+            if file_path_from_root:
+                return prefix + file_path_from_root
+    return None
+
+
 def _check_expectations(host, port, path, test_expectations, options,
                         all_test_expectations):
     # Check for original expectation lines (from get_updated_lines) instead of
@@ -298,6 +332,17 @@ def _check_expectations(host, port, path, test_expectations, options,
     failures.extend(
         _check_stable_webexposed_not_disabled(host, path, expectations))
     failures.extend(_check_skip_in_test_expectations(host, path, expectations))
+    # TODO(crbug.com/1474771): Enable this rule by default after the switch.
+    if host.project_config.switched_to_wptrunner:
+        ban_wpt_failures = _check_no_wpt_lines(host, port, path, expectations)
+        failures.extend(ban_wpt_failures)
+        if ban_wpt_failures:
+            _log.warning(
+                'TestExpectation lines should not be used anymore for WPT. '
+                'Please see this doc for the new way to set WPT expectations '
+                'in `.ini` files: '
+                'https://chromium.googlesource.com/chromium/src/+/HEAD'
+                '/docs/testing/web_platform_tests_wptrunner.md#Expectations')
     # TODO(crbug.com/1080691): Change this to failures once
     # wpt_expectations_updater is fixed.
     warnings.extend(
@@ -397,18 +442,18 @@ def check_virtual_test_suites(host, options):
     return failures
 
 
-def check_smoke_tests(host, options):
+def check_test_lists(host, options):
     port = host.port_factory.get(options=options)
-    path = host.filesystem.join(port.web_tests_dir(), 'SmokeTests')
-    smoke_tests_files = host.filesystem.listdir(path)
+    path = host.filesystem.join(port.web_tests_dir(), 'TestLists')
+    test_lists_files = host.filesystem.listdir(path)
     failures = []
-    for smoke_tests_file in smoke_tests_files:
-        smoke_tests = host.filesystem.read_text_file(
-            host.filesystem.join(port.web_tests_dir(), 'SmokeTests',
-                                 smoke_tests_file))
+    for test_lists_file in test_lists_files:
+        test_lists = host.filesystem.read_text_file(
+            host.filesystem.join(port.web_tests_dir(), 'TestLists',
+                                 test_lists_file))
         line_number = 0
         parsed_lines = {}
-        for line in smoke_tests.split('\n'):
+        for line in test_lists.split('\n'):
             line_number += 1
             line = line.split('#')[0].strip()
             if not line:
@@ -416,10 +461,10 @@ def check_smoke_tests(host, options):
             if line in parsed_lines:
                 failures.append(
                     '%s:%d duplicate with line %d: %s' %
-                    (smoke_tests_file, line_number, parsed_lines[line], line))
+                    (test_lists_file, line_number, parsed_lines[line], line))
             elif not port.test_exists(line):
                 failures.append('%s:%d Test does not exist: %s' %
-                                (smoke_tests_file, line_number, line))
+                                (test_lists_file, line_number, line))
             parsed_lines[line] = line_number
 
     return failures
@@ -433,7 +478,7 @@ def run_checks(host, options):
     failures += f
     warnings += w
     failures.extend(check_virtual_test_suites(host, options))
-    failures.extend(check_smoke_tests(host, options))
+    failures.extend(check_test_lists(host, options))
 
     if options.json:
         with open(options.json, 'w') as f:
@@ -491,8 +536,9 @@ def main(argv, stderr, host=None):
         host.executive.error_output_limit = None
     else:
         # PRESUBMIT.py relies on our output, so don't include timestamps.
-        configure_logging(
-            logging_level=logging.INFO, stream=stderr, include_time=False)
+        configure_logging(logging_level=logging.WARNING,
+                          stream=stderr,
+                          include_time=False)
 
     try:
         exit_status = run_checks(host, options)

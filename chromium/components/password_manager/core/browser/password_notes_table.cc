@@ -9,18 +9,29 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
 #include "components/password_manager/core/browser/sql_table_builder.h"
 #include "sql/database.h"
 #include "sql/statement.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+#if BUILDFLAG(IS_IOS)
+#import <Security/Security.h>
+#endif  // BUILDFLAG(IS_IOS)
+
 namespace password_manager {
 namespace {
+
+#if BUILDFLAG(IS_IOS)
+using metrics_util::PasswordNotesMigrationToOSCrypt;
+using metrics_util::RecordPasswordNotesMigrationToOSCryptStatus;
+#endif
 
 // Helper function to return a password notes map from the SQL statement.
 std::map<FormPrimaryKey, std::vector<PasswordNote>> StatementToPasswordNotes(
@@ -35,6 +46,7 @@ std::map<FormPrimaryKey, std::vector<PasswordNote>> StatementToPasswordNotes(
         LoginDatabase::ENCRYPTION_RESULT_SUCCESS) {
       continue;
     }
+
     base::Time date_created = base::Time::FromDeltaSinceWindowsEpoch(
         base::Microseconds(s->ColumnInt64(3)));
     bool hide_by_default = s->ColumnBool(4);
@@ -53,6 +65,72 @@ const char PasswordNotesTable::kTableName[] = "password_notes";
 
 void PasswordNotesTable::Init(sql::Database* db) {
   db_ = db;
+}
+
+bool PasswordNotesTable::MigrateTable(int current_version,
+                                      bool is_account_store) {
+  CHECK(db_);
+  CHECK(db_->DoesTableExist(kTableName));
+
+#if BUILDFLAG(IS_IOS)
+  if (current_version < 40) {
+    RecordPasswordNotesMigrationToOSCryptStatus(
+        is_account_store, PasswordNotesMigrationToOSCrypt::kStarted);
+    // In version 39 passwords encryption on iOS was migrated to OSCrypt.
+    // In version 40 password notes encryption on iOS is migrated as well.
+    sql::Statement get_notes_statement(
+        db_->GetUniqueStatement("SELECT id, value FROM password_notes"));
+    // Update each note value with the new BLOB.
+    while (get_notes_statement.Step()) {
+      int id = get_notes_statement.ColumnInt(0);
+      std::string keychain_identifier;
+      get_notes_statement.ColumnBlobAsString(1, &keychain_identifier);
+      if (keychain_identifier.empty()) {
+        continue;
+      }
+
+      // First get decrypted note value using old method.
+      std::u16string plaintext_note;
+      OSStatus retrieval_status =
+          GetTextFromKeychainIdentifier(keychain_identifier, &plaintext_note);
+      if (retrieval_status != errSecSuccess) {
+        base::UmaHistogramSparse(
+            base::StrCat({"PasswordManager.PasswordNotesMigrationToOSCrypt.",
+                          is_account_store ? "AccountStore" : "ProfileStore",
+                          ".KeychainRetrievalError"}),
+            static_cast<int>(retrieval_status));
+        RecordPasswordNotesMigrationToOSCryptStatus(
+            is_account_store,
+            PasswordNotesMigrationToOSCrypt::kFailedToDecryptFromKeychain);
+        return false;
+      }
+
+      // Encrypt note using OSCrypt.
+      std::string encrypted_note;
+      if (LoginDatabase::EncryptedString(plaintext_note, &encrypted_note) !=
+          LoginDatabase::ENCRYPTION_RESULT_SUCCESS) {
+        RecordPasswordNotesMigrationToOSCryptStatus(
+            is_account_store,
+            PasswordNotesMigrationToOSCrypt::kFailedToEncrypt);
+        return false;
+      }
+
+      // Updated note in the database.
+      sql::Statement password_note_update(db_->GetUniqueStatement(
+          "UPDATE password_notes SET value = ? WHERE id = ?"));
+      password_note_update.BindBlob(0, encrypted_note);
+      password_note_update.BindInt(1, id);
+      if (!password_note_update.Run()) {
+        RecordPasswordNotesMigrationToOSCryptStatus(
+            is_account_store, PasswordNotesMigrationToOSCrypt::kFailedToUpdate);
+        return false;
+      }
+    }
+    RecordPasswordNotesMigrationToOSCryptStatus(
+        is_account_store, PasswordNotesMigrationToOSCrypt::kSuccess);
+  }
+#endif
+  return true;
 }
 
 bool PasswordNotesTable::InsertOrReplace(FormPrimaryKey parent_id,

@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Ayarları bərpa edin</translation>
 <translation id="4478664379124702289">&amp;Keçidi belə saxlayın...</translation>
 <translation id="4520385623207007473">İstifadə olunan kukilər</translation>
+<translation id="456449593072900590">Çıxışda silinsin</translation>
 <translation id="4580596421317071374">Şifrələr bu cihazda, <ph name="GOOGLE_PASSWORD_MANAGER" />-də saxalanılır.</translation>
 <translation id="4593021220803146968">&amp;İrəli, <ph name="URL" /> keçmək</translation>
 <translation id="4595560905247879544">Tətbiqlər və qoşmalar yalnız menecer (<ph name="CUSTODIAN_NAME" />) dəyişə bilər .</translation>
@@ -235,6 +236,7 @@
 <translation id="4839303808932127586">Video'nu belə &amp;saxlayın...</translation>
 <translation id="4840096453115567876">İstənilən halda Gizli rejimdən çıxılsın?</translation>
 <translation id="488785315393301722">Təfərrüatları göstərmək</translation>
+<translation id="4895799941222633551">Qısayol &amp;yaradın...</translation>
 <translation id="4912643508233590958">Boşdayanmada oyanmaq</translation>
 <translation id="49265687513387605">Ekranın yayımı baş tutmadı.  Ekran paylaşımına icazə verdiyinizi yoxlayın.</translation>
 <translation id="4927753642311223124">Burada heç nə yoxdur, keçin.</translation>
@@ -272,12 +274,12 @@
 <translation id="5370819323174483825">&amp;Yeniləmək</translation>
 <translation id="5390743329570580756">Göndər</translation>
 <translation id="5398572795982417028">Səhifənin ölçüsü icazə verilən <ph name="MAXIMUM_PAGE" /> limitini aşır</translation>
+<translation id="5423753908060469325">Qısayol &amp;yaradın...</translation>
 <translation id="5425042808445046667">Yüklənməni davam etdirmək</translation>
 <translation id="5427459444770871191">Saat ə&amp;qrəbi istiqamətinə döndərin</translation>
 <translation id="5431318178759467895">Rəng</translation>
 <translation id="5485102783864353244">Tətbiq əlavə edin</translation>
 <translation id="5486561344817861625">Veb-bələdçini yenidən başladılan kimi göstərmək</translation>
-<translation id="5487521232677179737">Verilənləri silmək</translation>
 <translation id="5509693895992845810">&amp;Belə saxlayın...</translation>
 <translation id="5521078259930077036">Bu, gözlədiyiniz ana səhifədir?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -303,7 +305,6 @@
 <translation id="583281660410589416">Naməlum</translation>
 <translation id="5851868085455377790">Nəşriyyatçı</translation>
 <translation id="5860491529813859533">İşə salmaq</translation>
-<translation id="5867841422488265304">Veb ünvanını və ya axtarış sorğusunu daxil edin</translation>
 <translation id="5910363049092958439">Şəkili belə &amp;saxlayın...</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -373,12 +374,12 @@
 <translation id="7070484045139057854">Bu, saytın məlumatlarını oxuya və dəyişə bilər</translation>
 <translation id="708060913198414444">Audio ünvanını k&amp;opyalamaq</translation>
 <translation id="7121728544325372695">Ağıllı köçürmələr</translation>
+<translation id="7144856456372460176"><ph name="APP" /> &amp;quraşdırın...</translation>
 <translation id="7175353351958621980">Buradan yükləndi:</translation>
 <translation id="7186088072322679094">Alətlər panelində saxlayın</translation>
 <translation id="7287143125007575591">İcazə verilmədi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Yazan zaman orfoqrafiyanı yoxlamaq</translation>
-<translation id="73786666777299047">Chrome əlavələr mağazanı açın</translation>
 <translation id="7385854874724088939">Çap zamanı xəta baş verdi. Printerinizi yoxlayın və yenidən cəhd edin.</translation>
 <translation id="7412226954991670867">GPU Yaddaşı</translation>
 <translation id="7421925624202799674">&amp;Səhifənin koduna baxmaq</translation>
@@ -439,6 +440,7 @@ Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq 
 <translation id="8382913212082956454">&amp;E-mail ünvanını kopyalayın</translation>
 <translation id="8434480141477525001">NaCl xəta sazlama portu</translation>
 <translation id="8449008133205184768">Yerləşdirin və üsluba uyğun açın</translation>
+<translation id="8477178913400731244">Verilənləri silin</translation>
 <translation id="8477384620836102176">&amp;Ümumi</translation>
 <translation id="8496717697661868878">Bu qoşmanı başlatmaq</translation>
 <translation id="8512476990829870887">Əməliyyatın sonu</translation>

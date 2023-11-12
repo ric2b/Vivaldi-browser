@@ -7,6 +7,8 @@
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
@@ -14,12 +16,16 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/common/pref_names.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -383,4 +389,48 @@ blink::mojom::DisplayMode VivaldiUIWebContentsDelegate::GetDisplayMode(
     const content::WebContents* source) {
   return window_->IsFullscreen() ? blink::mojom::DisplayMode::kFullscreen
                         : blink::mojom::DisplayMode::kBrowser;
+}
+
+void VivaldiUIWebContentsDelegate::AddNewContents(
+    content::WebContents* source,
+    std::unique_ptr<content::WebContents> new_contents,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& window_features,
+    bool user_gesture,
+    bool* was_blocked) {
+  if (g_browser_process->IsShuttingDown()) {
+    return;
+  }
+
+  Profile* profile =
+      Profile::FromBrowserContext(new_contents->GetBrowserContext());
+
+  Browser* target_browser = chrome::FindTabbedBrowser(profile, false);
+  bool browser_created = false;
+  if (!target_browser) {
+    Browser::CreateParams params(Browser::TYPE_NORMAL, profile, true);
+    target_browser = Browser::Create(params);
+    browser_created = true;
+  }
+
+  NavigateParams params(profile, target_url, ui::PAGE_TRANSITION_LINK);
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  params.disposition = disposition;
+  params.window_features = window_features;
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  params.user_gesture = user_gesture;
+  Navigate(&params);
+
+  content::NavigationController::LoadURLParams load_url_params(target_url);
+  params.navigated_or_inserted_contents->GetController().LoadURLWithParams(
+      load_url_params);
+
+  // Close the browser if Navigate created a new one. Note that if we created a
+  // new browser-window when the last window with the same profile had been
+  // closed a restored session-window will be created in addition to the one
+  // here.
+  if (browser_created && (target_browser != params.browser)) {
+    target_browser->window()->Close();
+  }
 }

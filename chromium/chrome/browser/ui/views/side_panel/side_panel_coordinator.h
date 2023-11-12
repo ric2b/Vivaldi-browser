@@ -9,6 +9,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation_traits.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -17,7 +18,6 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_registry_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_util.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_view_state_observer.h"
-#include "extensions/common/extension_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/view_observer.h"
 
@@ -123,7 +123,7 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
             absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
                 absl::nullopt);
 
-  views::View* GetContentView() const;
+  views::View* GetContentContainerView() const;
 
   // Returns the corresponding entry for `entry_key` or a nullptr if this key is
   // not registered in the currently observed registries. This looks through the
@@ -166,10 +166,6 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // Returns the last active entry or the default entry if no last active
   // entry exists.
   absl::optional<SidePanelEntry::Key> GetLastActiveEntryKey() const;
-
-  // Returns the last active global entry or the default entry if no last active
-  // global entry exists.
-  absl::optional<SidePanelEntry::Key> GetLastActiveGlobalEntryKey() const;
 
   // Returns the currently selected id in the combobox, if one is shown.
   absl::optional<SidePanelEntry::Key> GetSelectedKey() const;
@@ -235,9 +231,8 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // to delays for loading content. This is used for metrics.
   base::TimeTicks opened_timestamp_;
 
-  const raw_ptr<BrowserView, DanglingUntriaged> browser_view_;
+  const raw_ptr<BrowserView, AcrossTasksDanglingUntriaged> browser_view_;
   raw_ptr<SidePanelRegistry> global_registry_;
-  absl::optional<SidePanelEntry::Key> last_active_global_entry_key_;
 
   // current_entry_ tracks the entry that currently has its view hosted by the
   // side panel. It is necessary as current_entry_ may belong to a contextual
@@ -252,15 +247,16 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // Used to update SidePanelEntry options in the `header_combobox_` based on
   // their availability in the observed side panel registries.
   std::unique_ptr<SidePanelComboboxModel> combobox_model_;
-  raw_ptr<views::Combobox, DanglingUntriaged> header_combobox_ = nullptr;
+  raw_ptr<views::Combobox, AcrossTasksDanglingUntriaged> header_combobox_ =
+      nullptr;
 
   // Used to update the visibility of the 'Open in New Tab' header button.
-  raw_ptr<views::ImageButton, DanglingUntriaged>
+  raw_ptr<views::ImageButton, AcrossTasksDanglingUntriaged>
       header_open_in_new_tab_button_ = nullptr;
 
   // Used to update the visibility of the pin header button.
-  raw_ptr<views::ToggleImageButton, DanglingUntriaged> header_pin_button_ =
-      nullptr;
+  raw_ptr<views::ToggleImageButton, AcrossTasksDanglingUntriaged>
+      header_pin_button_ = nullptr;
 
   base::ObserverList<SidePanelViewStateObserver> view_state_observers_;
 
@@ -271,5 +267,26 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
                                      SidePanelRegistryObserver>
       registry_observations_{this};
 };
+
+namespace base {
+
+// Since SidePanelCoordinator defines custom method names to add and remove
+// observers, we need define a new trait customization to use
+// `base::ScopedObservation` and `base::ScopedMultiSourceObservation`.
+// See `base/scoped_observation_traits.h` for more details.
+template <>
+struct ScopedObservationTraits<SidePanelCoordinator,
+                               SidePanelViewStateObserver> {
+  static void AddObserver(SidePanelCoordinator* source,
+                          SidePanelViewStateObserver* observer) {
+    source->AddSidePanelViewStateObserver(observer);
+  }
+  static void RemoveObserver(SidePanelCoordinator* source,
+                             SidePanelViewStateObserver* observer) {
+    source->RemoveSidePanelViewStateObserver(observer);
+  }
+};
+
+}  // namespace base
 
 #endif  // CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_COORDINATOR_H_

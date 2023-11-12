@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/ui/reading_list/reading_list_table_view_controller.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -14,6 +14,7 @@
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
+#import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -42,17 +43,12 @@
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/strings/grit/ui_strings.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/panel/panel_constants.h"
-// End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-// Vivaldi
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
@@ -210,7 +206,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 - (void)willBeDismissed {
   [self.dataSource dataSinkWillBeDismissed];
-  self.markConfirmationSheet = nil;
+  [self dismissMarkConfirmationSheet];
 }
 
 + (NSString*)accessibilityIdentifier {
@@ -249,6 +245,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   // we need to refresh the empty view margin after the layout is done, to apply
   // the correct top margin value according to the promo view's height.
   [self updateEmptyViewTopMargin];
+  [IntentDonationHelper donateIntent:INTENT_OPEN_READING_LIST];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -502,7 +499,8 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     return;
   }
 
-  TableViewItem* tableViewItem = base::mac::ObjCCastStrict<TableViewItem>(item);
+  TableViewItem* tableViewItem =
+      base::apple::ObjCCastStrict<TableViewItem>(item);
   if ([model hasItem:tableViewItem
           inSectionWithIdentifier:kSectionIdentifierUnread]) {
     [self markItemsAtIndexPaths:@[ [model indexPathForItem:tableViewItem] ]
@@ -518,7 +516,8 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     return;
   }
 
-  TableViewItem* tableViewItem = base::mac::ObjCCastStrict<TableViewItem>(item);
+  TableViewItem* tableViewItem =
+      base::apple::ObjCCastStrict<TableViewItem>(item);
   if ([model hasItem:tableViewItem
           inSectionWithIdentifier:kSectionIdentifierRead]) {
     [self markItemsAtIndexPaths:@[ [model indexPathForItem:tableViewItem] ]
@@ -528,7 +527,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 - (void)deleteItem:(id<ReadingListListItem>)item {
   TableViewItem<ReadingListListItem>* tableViewItem =
-      base::mac::ObjCCastStrict<TableViewItem<ReadingListListItem>>(item);
+      base::apple::ObjCCastStrict<TableViewItem<ReadingListListItem>>(item);
   if ([self.tableViewModel hasItem:tableViewItem]) {
     NSIndexPath* indexPath =
         [self.tableViewModel indexPathForItem:tableViewItem];
@@ -615,7 +614,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                 action:^{
                   [weakSelf markItemsAtIndexPaths:selectedIndexPaths
                                    withReadStatus:YES];
-                  weakSelf.markConfirmationSheet = nil;
+                  [weakSelf dismissMarkConfirmationSheet];
                 }
                  style:UIAlertActionStyleDefault];
   NSString* markAsUnreadTitle =
@@ -625,7 +624,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                 action:^{
                   [weakSelf markItemsAtIndexPaths:selectedIndexPaths
                                    withReadStatus:NO];
-                  weakSelf.markConfirmationSheet = nil;
+                  [weakSelf dismissMarkConfirmationSheet];
                 }
                  style:UIAlertActionStyleDefault];
   [self.markConfirmationSheet start];
@@ -641,7 +640,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                 action:^{
                   [weakSelf markItemsInSection:kSectionIdentifierUnread
                                 withReadStatus:YES];
-                  weakSelf.markConfirmationSheet = nil;
+                  [weakSelf dismissMarkConfirmationSheet];
                 }
                  style:UIAlertActionStyleDefault];
   NSString* markAsUnreadTitle = l10n_util::GetNSStringWithFixup(
@@ -651,7 +650,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                 action:^{
                   [weakSelf markItemsInSection:kSectionIdentifierRead
                                 withReadStatus:NO];
-                  weakSelf.markConfirmationSheet = nil;
+                  [weakSelf dismissMarkConfirmationSheet];
                 }
                  style:UIAlertActionStyleDefault];
   [self.markConfirmationSheet start];
@@ -680,9 +679,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
       markButtonConfirmationWithBaseViewController:self
                                            browser:_browser];
 
+  __weak ReadingListTableViewController* weakSelf = self;
   [self.markConfirmationSheet
       addItemWithTitle:l10n_util::GetNSStringWithFixup(IDS_CANCEL)
-                action:nil
+                action:^{
+                  [weakSelf dismissMarkConfirmationSheet];
+                }
                  style:UIAlertActionStyleCancel];
 }
 
@@ -727,7 +729,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
       [self.tableViewModel indexPathForItemType:kItemTypeSignInPromo
                               sectionIdentifier:kSectionIdentifierSignInPromo];
   TableViewSigninPromoItem* signInPromoItem =
-      base::mac::ObjCCast<TableViewSigninPromoItem>(
+      base::apple::ObjCCast<TableViewSigninPromoItem>(
           [self.tableViewModel itemAtIndexPath:indexPath]);
   if (!signInPromoItem) {
     return;
@@ -828,7 +830,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 // Returns `item` cast as a TableViewItem.
 - (TableViewItem<ReadingListListItem>*)tableItemForReadingListItem:
     (id<ReadingListListItem>)item {
-  return base::mac::ObjCCastStrict<TableViewItem<ReadingListListItem>>(item);
+  return base::apple::ObjCCastStrict<TableViewItem<ReadingListListItem>>(item);
 }
 
 // Applies `updater` to the items in `section`. The updates are done in reverse
@@ -1229,6 +1231,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   }
   NOTREACHED();
   return 0;
+}
+
+- (void)dismissMarkConfirmationSheet {
+  [_markConfirmationSheet stop];
+  _markConfirmationSheet = nil;
 }
 
 #pragma mark Vivaldi

@@ -62,6 +62,7 @@ component("ui_data_pack") {
   public_deps = [
     "//base",
     "//build:chromeos_buildflags",
+    "//third_party/abseil-cpp:absl",
   ]
 
   deps = [
@@ -193,6 +194,8 @@ component("base") {
     "models/tree_model.h",
     "models/tree_node_iterator.h",
     "models/tree_node_model.h",
+    "moving_max.cc",
+    "moving_max.h",
     "nine_image_painter_factory.cc",
     "nine_image_painter_factory.h",
     "page_transition_types.cc",
@@ -315,6 +318,8 @@ component("base") {
       "cocoa/command_dispatcher.mm",
       "cocoa/constrained_window/constrained_window_animation.h",
       "cocoa/constrained_window/constrained_window_animation.mm",
+      "cocoa/cursor_accessibility_scale_factor_observer.h",
+      "cocoa/cursor_accessibility_scale_factor_observer.mm",
       "cocoa/cursor_utils.h",
       "cocoa/cursor_utils.mm",
       "cocoa/defaults_utils.h",
@@ -473,10 +478,6 @@ component("base") {
     "//build/config/compiler:wexit_time_destructors",
   ]
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-
   defines = [ "IS_UI_BASE_IMPL" ]
 
   if (enable_pseudolocales) {
@@ -620,11 +621,12 @@ component("base") {
     frameworks = [
       "Accelerate.framework",
       "AppKit.framework",
-      "QuartzCore.framework",
       "AudioUnit.framework",
+      "AVFAudio.framework",
       "Carbon.framework",
       "CoreVideo.framework",
       "Foundation.framework",
+      "QuartzCore.framework",
     ]
   }
 
@@ -660,7 +662,6 @@ component("base") {
 
 if (is_ios) {
   source_set("l10n_util_ios") {
-    configs += [ "//build/config/compiler:enable_arc" ]
     sources = [
       "l10n/l10n_util_ios.h",
       "l10n/l10n_util_ios.mm",
@@ -762,28 +763,6 @@ if (use_blink) {
   }
 }
 
-if (is_mac) {
-  # TODO(https://crbug.com/1280317): Merge back into the `test_support` target
-  # once all .mm files are ARCed.
-  source_set("test_support_arc") {
-    testonly = true
-    sources = [
-      "test/cocoa_helper.h",
-      "test/cocoa_helper.mm",
-      "test/view_tree_validator.h",
-      "test/view_tree_validator.mm",
-    ]
-    configs += [ "//build/config/compiler:enable_arc" ]
-    deps = [
-      "//base:base",
-      "//base/test:test_config",
-      "//base/test:test_support",
-      "//testing/gtest",
-      "//ui/display",
-    ]
-  }
-}
-
 static_library("test_support") {
   testonly = true
   sources = [
@@ -799,20 +778,19 @@ static_library("test_support") {
     "interaction/interactive_test.h",
     "interaction/interactive_test_internal.cc",
     "interaction/interactive_test_internal.h",
+    "interaction/state_observer.h",
     "resource/mock_resource_bundle_delegate.cc",
     "resource/mock_resource_bundle_delegate.h",
     "test/idle_test_utils.cc",
     "test/idle_test_utils.h",
   ]
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-
   if (is_mac) {
     sources += [
       "interaction/interaction_test_util_mac.h",
       "interaction/interaction_test_util_mac.mm",
+      "test/cocoa_helper.h",
+      "test/cocoa_helper.mm",
       "test/menu_test_observer.h",
       "test/menu_test_observer.mm",
       "test/ns_ax_tree_validator.h",
@@ -826,6 +804,8 @@ static_library("test_support") {
       "test/scoped_preferred_scroller_style_mac.h",
       "test/scoped_preferred_scroller_style_mac.mm",
       "test/ui_controls_mac.mm",
+      "test/view_tree_validator.h",
+      "test/view_tree_validator.mm",
       "test/windowed_nsnotification_observer.h",
       "test/windowed_nsnotification_observer.mm",
     ]
@@ -884,10 +864,6 @@ static_library("test_support") {
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
-
-  if (is_mac) {
-    public_deps += [ ":test_support_arc" ]
-  }
 
   if (is_ios) {
     deps -= [
@@ -956,7 +932,10 @@ if (is_android) {
 
 bundle_data("ui_base_unittests_bundle_data") {
   testonly = true
-  sources = [ "test/data/data_pack_unittest/truncated-header.pak" ]
+  sources = [
+    "//testing/buildbot/filters/ios.ui_base_unittests.filter",
+    "test/data/data_pack_unittest/truncated-header.pak",
+  ]
   outputs = [ "{{bundle_resources_dir}}/" +
               "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }
@@ -1012,24 +991,6 @@ source_set("run_all_unittests") {
   ]
 }
 
-if (is_apple) {
-  # TODO(https://crbug.com/1280317): Merge back into ui_base_unittests once all
-  # .mm files are ARCed.
-  source_set("ui_base_unittests_arc") {
-    testonly = true
-    if (is_mac) {
-      sources = [ "interaction/element_tracker_mac_unittest.mm" ]
-    }
-    configs += [ "//build/config/compiler:enable_arc" ]
-    deps = [
-      ":base",
-      "//base/test:test_support",
-      "//testing/gmock",
-      "//testing/gtest",
-    ]
-  }
-}
-
 test("ui_base_unittests") {
   use_xvfb = use_xvfb_in_this_config
 
@@ -1049,6 +1010,7 @@ test("ui_base_unittests") {
     "models/simple_combobox_model_unittest.cc",
     "models/simple_menu_model_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
+    "moving_max_unittest.cc",
     "pointer/touch_ui_controller_unittest.cc",
     "prediction/empty_filter_unittests.cc",
     "prediction/input_filter_unittest_helpers.cc",
@@ -1117,10 +1079,6 @@ test("ui_base_unittests") {
     sources += [ "user_activity/user_activity_detector_unittest.cc" ]
   }
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-
   if (is_mac) {
     sources += [
       "accelerators/platform_accelerator_cocoa_unittest.mm",
@@ -1134,10 +1092,10 @@ test("ui_base_unittests") {
       "cocoa/nsmenuitem_additions_unittest.mm",
       "cocoa/touch_bar_util_unittest.mm",
       "cocoa/tracking_area_unittest.mm",
+      "interaction/element_tracker_mac_unittest.mm",
       "l10n/l10n_util_mac_unittest.mm",
       "test/view_tree_validator_unittest.mm",
     ]
-    deps += [ ":ui_base_unittests_arc" ]
   }
 
   if (is_chromeos_lacros) {
@@ -1220,6 +1178,7 @@ test("ui_base_unittests") {
         "ime/ash/typing_session_manager_unittest.cc",
       ]
       deps += [
+        "//ash/constants",
         "//build:branding_buildflags",
         "//ui/base/ime/ash",
         "//ui/base/ime/ash:typing_session_manager",

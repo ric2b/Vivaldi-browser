@@ -14,6 +14,7 @@
 #import <MaterialComponents/MaterialSnackbar.h>
 
 #import "base/check.h"
+#import "base/containers/contains.h"
 #import "base/containers/flat_map.h"
 #import "base/hash/hash.h"
 #import "base/i18n/string_compare.h"
@@ -32,14 +33,16 @@
 #import "components/query_parser/query_parser.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
+#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "third_party/skia/include/core/SkColor.h"
@@ -52,10 +55,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using bookmarks::BookmarkNode;
 
@@ -194,26 +193,15 @@ bookmarks::BookmarkModel* GetBookmarkModelForNode(
                                                        : profile_model;
 }
 
-bool AreAllAvailableBookmarkModelsLoaded(
-    bookmarks::BookmarkModel* profile_model,
-    bookmarks::BookmarkModel* account_model) {
-  DCHECK(profile_model);
-  if (!base::FeatureList::IsEnabled(
-          bookmarks::kEnableBookmarksAccountStorage)) {
-    return profile_model->loaded();
-  }
-  DCHECK(account_model);
-  return profile_model->loaded() && account_model->loaded();
-}
-
 bool IsAccountBookmarkStorageOptedIn(syncer::SyncService* sync_service) {
-  if (!base::FeatureList::IsEnabled(
-          bookmarks::kEnableBookmarksAccountStorage)) {
+  if (!base::FeatureList::IsEnabled(syncer::kEnableBookmarksAccountStorage)) {
     return false;
   }
   if (sync_service->GetAccountInfo().IsEmpty()) {
     return false;
   }
+  // TODO(crbug.com/1462552): Remove this after UNO phase 3. See
+  // ConsentLevel::kSync documentation for more details.
   if (sync_service->HasSyncConsent()) {
     return false;
   }
@@ -233,7 +221,7 @@ void DeleteBookmarks(const std::set<const BookmarkNode*>& bookmarks,
     DeleteBookmarks(bookmarks, model, node->children()[i - 1].get());
   }
 
-  if (bookmarks.find(node) != bookmarks.end()) {
+  if (base::Contains(bookmarks, node)) {
     model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser);
   }
 }
@@ -283,6 +271,7 @@ bool CreateOrUpdateBookmark(const BookmarkNode* node,
   bookmarks::BookmarkModel* folder_model =
       GetBookmarkModelForNode(folder, local_or_syncable_model, account_model);
   if (!node) {  // Create a new bookmark.
+    RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts);
     base::RecordAction(base::UserMetricsAction("BookmarkAdded"));
     node = folder_model->AddNewURL(folder, folder->children().size(),
                                    titleString, url);
@@ -360,6 +349,7 @@ MDCSnackbarMessage* CreateBookmarkAtPositionWithUndoToast(
       [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
   [wrapper startGroupingActions];
 
+  RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts);
   base::RecordAction(base::UserMetricsAction("BookmarkAdded"));
   bookmarks::BookmarkModel* folder_model =
       GetBookmarkModelForNode(folder, local_or_syncable_model, account_model);
@@ -443,7 +433,7 @@ MDCSnackbarMessage* DeleteBookmarksWithUndoToast(
   [wrapper resetUndoManagerChanged];
 
   NSString* text = nil;
-  if (base::FeatureList::IsEnabled(bookmarks::kEnableBookmarksAccountStorage)) {
+  if (base::FeatureList::IsEnabled(syncer::kEnableBookmarksAccountStorage)) {
     text = base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
         IDS_IOS_BOOKMARK_DELETED_BOOKMARKS, node_count));
   } else if (node_count == 1) {

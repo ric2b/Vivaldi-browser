@@ -103,7 +103,8 @@ class StatisticsRecorderTest : public testing::TestWithParam<bool> {
     // Note: We can't clear |top_| in the locked block, because the
     // StatisticsRecorder destructor expects that the lock isn't already held.
     {
-      const absl::MutexLock auto_lock(StatisticsRecorder::lock_.Pointer());
+      const StatisticsRecorder::SrAutoWriterLock auto_lock(
+          StatisticsRecorder::GetLock());
       statistics_recorder_.reset(StatisticsRecorder::top_);
     }
     statistics_recorder_.reset();
@@ -111,7 +112,8 @@ class StatisticsRecorderTest : public testing::TestWithParam<bool> {
   }
 
   bool HasGlobalRecorder() {
-    const absl::ReaderMutexLock auto_lock(StatisticsRecorder::lock_.Pointer());
+    const StatisticsRecorder::SrAutoReaderLock auto_lock(
+        StatisticsRecorder::GetLock());
     return StatisticsRecorder::top_ != nullptr;
   }
 
@@ -782,7 +784,7 @@ class TestHistogramProvider : public StatisticsRecorder::HistogramProvider {
   TestHistogramProvider(const TestHistogramProvider&) = delete;
   TestHistogramProvider& operator=(const TestHistogramProvider&) = delete;
 
-  void MergeHistogramDeltas() override {
+  void MergeHistogramDeltas(bool async, OnceClosure done_callback) override {
     PersistentHistogramAllocator::Iterator hist_iter(allocator_.get());
     while (true) {
       std::unique_ptr<base::HistogramBase> histogram = hist_iter.GetNext();
@@ -790,6 +792,7 @@ class TestHistogramProvider : public StatisticsRecorder::HistogramProvider {
         break;
       allocator_->MergeHistogramDeltaToStatisticsRecorder(histogram.get());
     }
+    std::move(done_callback).Run();
   }
 
  private:
@@ -824,7 +827,7 @@ TEST_P(StatisticsRecorderTest, ImportHistogramsTest) {
   ASSERT_FALSE(StatisticsRecorder::FindHistogram(histogram->histogram_name()));
 
   // Now test that it merges.
-  StatisticsRecorder::ImportProvidedHistograms();
+  StatisticsRecorder::ImportProvidedHistogramsSync();
   HistogramBase* found =
       StatisticsRecorder::FindHistogram(histogram->histogram_name());
   ASSERT_TRUE(found);
@@ -836,7 +839,7 @@ TEST_P(StatisticsRecorderTest, ImportHistogramsTest) {
   // Finally, verify that updates can also be merged.
   histogram->Add(3);
   histogram->Add(5);
-  StatisticsRecorder::ImportProvidedHistograms();
+  StatisticsRecorder::ImportProvidedHistogramsSync();
   snapshot = found->SnapshotSamples();
   EXPECT_EQ(3, snapshot->TotalCount());
   EXPECT_EQ(2, snapshot->GetCount(3));

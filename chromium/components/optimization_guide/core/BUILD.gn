@@ -10,6 +10,7 @@ if (is_android) {
 import("//build/buildflag_header.gni")
 import("//components/optimization_guide/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/mediapipe/features.gni")
 import("//third_party/tflite/features.gni")
 
 static_library("bloomfilter") {
@@ -55,6 +56,7 @@ static_library("model_executor") {
       "base_model_executor_helpers.h",
       "bert_model_executor.cc",
       "bert_model_executor.h",
+      "model_execution_timeout_watchdog.cc",
       "model_execution_timeout_watchdog.h",
       "page_visibility_model_executor.cc",
       "page_visibility_model_executor.h",
@@ -64,14 +66,24 @@ static_library("model_executor") {
     ]
   }
 
+  if (build_with_mediapipe_lib) {
+    assert(build_with_tflite_lib)
+
+    sources += [
+      "mediapipe_text_model_executor.cc",
+      "mediapipe_text_model_executor.h",
+    ]
+  }
+
   public_deps = [
     "//components/optimization_guide:machine_learning_tflite_buildflags",
+    "//components/optimization_guide/proto:optimization_guide_proto",
     "//third_party/re2",
   ]
+
   deps = [
     ":features",
     "//base",
-    "//components/optimization_guide/proto:optimization_guide_proto",
     "//net",
     "//url",
   ]
@@ -86,6 +98,12 @@ static_library("model_executor") {
       "//third_party/tflite_support:tflite_support_proto",
     ]
     deps += [ ":machine_learning" ]
+  }
+
+  if (build_with_mediapipe_lib) {
+    assert(build_with_tflite_lib)
+
+    public_deps += [ "//third_party/mediapipe" ]
   }
 }
 
@@ -142,6 +160,8 @@ static_library("features") {
 
 static_library("core") {
   sources = [
+    "access_token_helper.cc",
+    "access_token_helper.h",
     "command_line_top_host_provider.cc",
     "command_line_top_host_provider.h",
     "hint_cache.cc",
@@ -160,11 +180,11 @@ static_library("core") {
     "memory_hint.cc",
     "memory_hint.h",
     "model_handler.h",
-    "new_optimization_guide_decider.h",
     "noisy_metrics_recorder.cc",
     "noisy_metrics_recorder.h",
     "optimization_filter.cc",
     "optimization_filter.h",
+    "optimization_guide_decider.h",
     "optimization_guide_decision.h",
     "optimization_guide_enums.h",
     "optimization_guide_logger.cc",
@@ -232,6 +252,7 @@ static_library("core") {
     "//components/leveldb_proto",
     "//components/optimization_guide:machine_learning_tflite_buildflags",
     "//components/optimization_guide/core:interfaces",
+    "//components/optimization_guide/proto:optimization_guide_proto",
     "//third_party/re2",
   ]
   if (build_with_tflite_lib) {
@@ -249,9 +270,8 @@ static_library("core") {
   deps = [
     ":bloomfilter",
     "//base",
-    "//components/optimization_guide/core:interfaces",
-    "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/prefs",
+    "//components/signin/public/identity_manager:identity_manager",
     "//components/unified_consent",
     "//components/variations",
     "//components/variations/net",
@@ -277,6 +297,8 @@ static_library("prediction") {
     "prediction_model_download_manager.cc",
     "prediction_model_download_manager.h",
     "prediction_model_download_observer.h",
+    "prediction_model_fetch_timer.cc",
+    "prediction_model_fetch_timer.h",
     "prediction_model_override.cc",
     "prediction_model_override.h",
     "prediction_model_store.cc",
@@ -317,8 +339,8 @@ static_library("test_support") {
     "test_model_handler.h",
     "test_model_info_builder.cc",
     "test_model_info_builder.h",
-    "test_new_optimization_guide_decider.cc",
-    "test_new_optimization_guide_decider.h",
+    "test_optimization_guide_decider.cc",
+    "test_optimization_guide_decider.h",
     "test_optimization_guide_model_provider.cc",
     "test_optimization_guide_model_provider.h",
   ]
@@ -395,6 +417,7 @@ source_set("unit_tests") {
     "page_content_annotation_job_unittest.cc",
     "prediction_manager_unittest.cc",
     "prediction_model_download_manager_unittest.cc",
+    "prediction_model_fetch_timer_unittest.cc",
     "prediction_model_fetcher_unittest.cc",
     "prediction_model_store_unittest.cc",
     "push_notification_manager_unittest.cc",
@@ -408,6 +431,7 @@ source_set("unit_tests") {
       "page_content_annotation_job_executor_unittest.cc",
       "page_visibility_model_handler_unittest.cc",
       "text_embedding_model_executor_unittest.cc",
+      "text_embedding_model_handler_unittest.cc",
       "tflite_model_executor_unittest.cc",
     ]
     if (build_with_internal_optimization_guide) {
@@ -416,6 +440,12 @@ source_set("unit_tests") {
         "page_entities_model_handler_impl_unittest.cc",
       ]
     }
+  }
+
+  if (build_with_mediapipe_lib) {
+    assert(build_with_tflite_lib)
+
+    sources += [ "mediapipe_text_model_executor_unittest.cc" ]
   }
 
   deps = [
@@ -433,6 +463,7 @@ source_set("unit_tests") {
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/prefs:test_support",
     "//components/services/unzip:in_process",
+    "//components/signin/public/identity_manager:test_support",
     "//components/sync_preferences:test_support",
     "//components/ukm:test_support",
     "//components/unified_consent",
@@ -457,6 +488,12 @@ source_set("unit_tests") {
       "//third_party/tflite_support",
       "//third_party/tflite_support:tflite_support_proto",
     ]
+  }
+
+  if (build_with_mediapipe_lib) {
+    assert(build_with_tflite_lib)
+
+    deps += [ "//third_party/mediapipe" ]
   }
 }
 

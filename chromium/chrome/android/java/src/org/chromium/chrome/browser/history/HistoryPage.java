@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.history;
 import android.app.Activity;
 import android.net.Uri;
 
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersConstants;
@@ -45,7 +43,8 @@ public class HistoryPage extends BasicNativePage {
         assert uri.getHost().equals(UrlConstants.HISTORY_HOST);
 
         boolean showHistoryClustersImmediately =
-                uri.getPath().contains(HistoryClustersConstants.JOURNEYS_PATH);
+                uri.getPath().contains(HistoryClustersConstants.JOURNEYS_PATH)
+                || uri.getPath().contains(HistoryClustersConstants.GROUPS_PATH);
         String historyClustersQuery =
                 uri.getQueryParameter(HistoryClustersConstants.HISTORY_CLUSTERS_QUERY_KEY);
 
@@ -74,7 +73,6 @@ public class HistoryPage extends BasicNativePage {
         super.destroy();
     }
 
-    @VisibleForTesting
     public HistoryManager getHistoryManagerForTesting() {
         return mHistoryManager;
     }

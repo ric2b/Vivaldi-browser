@@ -19,10 +19,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Test fixture for TranslateInfobarBannerOverlayMediator.
 class TranslateInfobarBannerOverlayMediatorTest : public PlatformTest {
  public:
@@ -64,4 +60,28 @@ TEST_F(TranslateInfobarBannerOverlayMediatorTest, SetUpConsumer) {
   EXPECT_NSEQ(CustomSymbolTemplateWithPointSize(kTranslateSymbol,
                                                 kInfobarSymbolPointSize),
               consumer.iconImage);
+}
+
+// Ensures that calling the -bannerInfobarButtonWasPressed: after the infobar
+// has been removed does not cause a crash. This could happen if the infobar is
+// removed before the banner has finished appearing.
+TEST_F(TranslateInfobarBannerOverlayMediatorTest,
+       BannerInfobarButtonWasPressedAfterRemoval) {
+  std::unique_ptr<InfoBarIOS> infobar = std::make_unique<InfoBarIOS>(
+      InfobarType::kInfobarTypeTranslate,
+      delegate_factory_.CreateFakeTranslateInfoBarDelegate("fr", "en"));
+
+  // Package the infobar into an OverlayRequest, then create a mediator that
+  // uses this request in order to set up a fake consumer.
+  std::unique_ptr<OverlayRequest> request =
+      OverlayRequest::CreateWithConfig<DefaultInfobarOverlayRequestConfig>(
+          infobar.get(), InfobarOverlayType::kBanner);
+  TranslateInfobarBannerOverlayMediator* mediator =
+      [[TranslateInfobarBannerOverlayMediator alloc]
+          initWithRequest:request.get()];
+
+  // Removes the infobar.
+  infobar = nullptr;
+
+  [mediator bannerInfobarButtonWasPressed:nil];
 }

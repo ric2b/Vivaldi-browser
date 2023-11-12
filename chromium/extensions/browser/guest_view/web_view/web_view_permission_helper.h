@@ -62,9 +62,9 @@ class WebViewPermissionHelper {
                         bool allowed_by_default);
 
   static WebViewPermissionHelper* FromRenderFrameHost(
-      content::RenderFrameHost* rfh);
+      content::RenderFrameHost* render_frame_host);
   static WebViewPermissionHelper* FromRenderFrameHostId(
-      const content::GlobalRenderFrameHostId& rfh_id);
+      const content::GlobalRenderFrameHostId& render_frame_host_id);
 
   void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
                                const std::string& protocol,

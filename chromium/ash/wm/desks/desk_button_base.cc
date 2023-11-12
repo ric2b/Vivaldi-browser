@@ -56,20 +56,23 @@ DeskButtonBase::DeskButtonBase(const std::u16string& text,
   views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
                                                 kFocusRingRadius);
   views::FocusRing* focus_ring = views::FocusRing::Get(this);
+  focus_ring->SetOutsetFocusRingDisabled(true);
   focus_ring->SetColorId(ui::kColorAshFocusRing);
-  focus_ring->SetHasFocusPredicate(
-      base::BindRepeating([](const views::View* view) {
-        const auto* v = views::AsViewClass<DeskButtonBase>(view);
-        CHECK(v);
-        return v->IsViewHighlighted();
-      }));
+  if (bar_view_->type() == DeskBarViewBase::Type::kOverview) {
+    focus_ring->SetHasFocusPredicate(
+        base::BindRepeating([](const views::View* view) {
+          const auto* v = views::AsViewClass<DeskButtonBase>(view);
+          CHECK(v);
+          return v->is_focused();
+        }));
+  }
 }
 
 DeskButtonBase::~DeskButtonBase() = default;
 
 void DeskButtonBase::OnFocus() {
-  if (bar_view_->overview_grid()) {
-    UpdateOverviewHighlightForFocusAndSpokenFeedback(this);
+  if (bar_view_->type() == DeskBarViewBase::Type::kOverview) {
+    MoveFocusToView(this);
   }
 
   UpdateFocusState();
@@ -104,15 +107,15 @@ views::View* DeskButtonBase::GetView() {
   return this;
 }
 
-void DeskButtonBase::MaybeActivateHighlightedView() {
+void DeskButtonBase::MaybeActivateFocusedView() {
   pressed_callback_.Run();
 }
 
-void DeskButtonBase::MaybeCloseHighlightedView(bool primary_action) {}
+void DeskButtonBase::MaybeCloseFocusedView(bool primary_action) {}
 
-void DeskButtonBase::MaybeSwapHighlightedView(bool right) {}
+void DeskButtonBase::MaybeSwapFocusedView(bool right) {}
 
-void DeskButtonBase::OnViewHighlighted() {
+void DeskButtonBase::OnFocusableViewFocused() {
   UpdateFocusState();
 
   views::View* view = this;
@@ -125,7 +128,7 @@ void DeskButtonBase::OnViewHighlighted() {
   }
 }
 
-void DeskButtonBase::OnViewUnhighlighted() {
+void DeskButtonBase::OnFocusableViewBlurred() {
   UpdateFocusState();
 }
 

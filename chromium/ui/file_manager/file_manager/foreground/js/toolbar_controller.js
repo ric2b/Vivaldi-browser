@@ -8,7 +8,7 @@ import {queryRequiredElement, queryRequiredExactlyOne} from '../../common/js/dom
 import {str, strf, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FileOperationManager} from '../../externs/background/file_operation_manager.js';
-import {CurrentDirectory, State} from '../../externs/ts/state.js';
+import {State} from '../../externs/ts/state.js';
 import {Store} from '../../externs/ts/store.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
 import {getStore} from '../../state/store.js';
@@ -144,13 +144,6 @@ export class ToolbarController {
      */
     this.cloudButtonIcon_ = queryRequiredElement(
         '#cloud-button > xf-icon[slot="prefix-icon"]', this.toolbar_);
-
-    /**
-     * @private {!HTMLElement}
-     * @const
-     */
-    this.cloudOfflineFolderIndicator_ =
-        queryRequiredElement('#offline-folder-indicator', this.toolbar_);
 
     /**
      * @private {!Command}
@@ -516,7 +509,7 @@ export class ToolbarController {
   /** @private */
   updatePinnedToggle_() {
     this.pinnedToggleWrapper_.hidden = this.togglePinnedCommand_.hidden;
-    if (util.isJellyEnabled()) {
+    if (util.isCrosComponentsEnabled()) {
       this.pinnedToggleJelly_.selected = this.togglePinnedCommand_.checked;
       this.pinnedToggleJelly_.disabled = this.togglePinnedCommand_.disabled;
     } else {
@@ -531,7 +524,7 @@ export class ToolbarController {
 
     // Optimistally update the command's properties so we get notified if they
     // change back.
-    this.togglePinnedCommand_.checked = util.isJellyEnabled() ?
+    this.togglePinnedCommand_.checked = util.isCrosComponentsEnabled() ?
         this.pinnedToggleJelly_.selected :
         this.pinnedToggle_.checked;
   }
@@ -562,6 +555,8 @@ export class ToolbarController {
   updateBulkPinning_(state) {
     const bulkPinningPref = state.preferences?.driveFsBulkPinningEnabled;
     const bulkPinning = state.bulkPinning;
+    const isNetworkMetered = state.drive?.connectionType ===
+        chrome.fileManagerPrivate.DriveConnectionStateType.METERED;
     // If the bulk pinning preference is enabled, the user should not be able to
     // toggle items offline.
     if (this.bulkPinningPref_ !== bulkPinningPref) {
@@ -572,72 +567,67 @@ export class ToolbarController {
     if (!util.canBulkPinningCloudPanelShow(
             bulkPinning?.stage, bulkPinningPref)) {
       this.cloudButton_.hidden = true;
-      this.cloudOfflineFolderIndicator_.hidden = true;
       return;
     }
-    this.updateBulkPinningFolderIndicator_(
-        state.currentDirectory, bulkPinning?.stage);
-    this.updateBulkPinningIcon_(bulkPinning);
+    this.updateBulkPinningIcon_(bulkPinning, isNetworkMetered);
     this.cloudButton_.hidden = false;
-  }
-
-  /**
-   * Updates the icon that appears beside the breadcrumbs when a user is within
-   * their My drive.
-   * @param {CurrentDirectory|undefined} currentDirectory
-   * @param {chrome.fileManagerPrivate.BulkPinStage|undefined} stage
-   * @private
-   */
-  updateBulkPinningFolderIndicator_(currentDirectory, stage) {
-    if (currentDirectory?.rootType === VolumeManagerCommon.RootType.DRIVE &&
-        (stage === chrome.fileManagerPrivate.BulkPinStage.SYNCING ||
-         stage === chrome.fileManagerPrivate.BulkPinStage.PAUSED_OFFLINE ||
-         stage ===
-             chrome.fileManagerPrivate.BulkPinStage.PAUSED_BATTERY_SAVER)) {
-      this.cloudOfflineFolderIndicator_.hidden = false;
-      return;
-    }
-    this.cloudOfflineFolderIndicator_.hidden = true;
   }
 
   /**
    * Encapsulates the logic to update the bulk pinning cloud icon and the sub
    * icons that indicate the current stage it is in.
    * @param {chrome.fileManagerPrivate.BulkPinProgress|undefined} progress
+   * @param {boolean} isNetworkMetered
    */
-  updateBulkPinningIcon_(progress) {
+  updateBulkPinningIcon_(progress, isNetworkMetered) {
+    if (isNetworkMetered) {
+      this.cloudButton_.ariaLabel = str('BULK_PINNING_BUTTON_LABEL_PAUSED');
+      this.cloudButtonIcon_.setAttribute('type', constants.ICON_TYPES.CLOUD);
+      this.cloudStatusIcon_.setAttribute(
+          'type', constants.ICON_TYPES.CLOUD_PAUSED);
+      this.cloudStatusIcon_.removeAttribute('size');
+      return;
+    }
+
     switch (progress?.stage) {
       case chrome.fileManagerPrivate.BulkPinStage.SYNCING:
         this.cloudButtonIcon_.setAttribute('type', constants.ICON_TYPES.CLOUD);
         if (progress.bytesToPin === 0 ||
             progress.pinnedBytes / progress.bytesToPin === 1) {
+          this.cloudButton_.ariaLabel = str('BULK_PINNING_FILE_SYNC_ON');
           this.cloudStatusIcon_.setAttribute(
-              'type', constants.ICON_TYPES.CLOUD_DONE);
+              'type', constants.ICON_TYPES.BLANK);
         } else {
+          this.cloudButton_.ariaLabel =
+              str('BULK_PINNING_BUTTON_LABEL_SYNCING');
           this.cloudStatusIcon_.setAttribute(
               'type', constants.ICON_TYPES.CLOUD_SYNC);
         }
         break;
       case chrome.fileManagerPrivate.BulkPinStage.NOT_ENOUGH_SPACE:
+        this.cloudButton_.ariaLabel = str('BULK_PINNING_BUTTON_LABEL_ISSUE');
         this.cloudButtonIcon_.setAttribute('type', constants.ICON_TYPES.CLOUD);
         this.cloudStatusIcon_.setAttribute(
             'type', constants.ICON_TYPES.CLOUD_ERROR);
         break;
       case chrome.fileManagerPrivate.BulkPinStage.PAUSED_OFFLINE:
+        this.cloudButton_.ariaLabel = str('BULK_PINNING_BUTTON_LABEL_OFFLINE');
         this.cloudButtonIcon_.setAttribute(
             'type', constants.ICON_TYPES.BULK_PINNING_OFFLINE);
         this.cloudStatusIcon_.removeAttribute('type');
         this.cloudStatusIcon_.removeAttribute('size');
         break;
       case chrome.fileManagerPrivate.BulkPinStage.PAUSED_BATTERY_SAVER:
+        this.cloudButton_.ariaLabel = str('BULK_PINNING_BUTTON_LABEL_PAUSED');
         this.cloudButtonIcon_.setAttribute(
             'type', constants.ICON_TYPES.BULK_PINNING_BATTERY_SAVER);
         this.cloudStatusIcon_.removeAttribute('type');
         this.cloudStatusIcon_.removeAttribute('size');
         break;
       default:
+        this.cloudButton_.ariaLabel = str('BULK_PINNING_FILE_SYNC_ON');
         this.cloudButtonIcon_.setAttribute('type', constants.ICON_TYPES.CLOUD);
-        this.cloudStatusIcon_.removeAttribute('type');
+        this.cloudStatusIcon_.setAttribute('type', constants.ICON_TYPES.BLANK);
         this.cloudStatusIcon_.removeAttribute('size');
         break;
     }

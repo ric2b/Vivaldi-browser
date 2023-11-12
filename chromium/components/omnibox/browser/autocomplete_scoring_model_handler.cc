@@ -68,7 +68,10 @@ AutocompleteScoringModelHandler::AutocompleteScoringModelHandler(
           /*model_inference_timeout=*/absl::nullopt,
           optimization_target,
           model_metadata) {
-  // Keep the model in memory.
+  // Store the model in memory as soon as it is available and keep it loaded for
+  // the whole browser session since model inference is latency sensitive and it
+  // cannot wait for the model to be loaded from disk.
+  SetShouldPreloadModel(true);
   SetShouldUnloadModelOnComplete(false);
 }
 
@@ -263,6 +266,18 @@ AutocompleteScoringModelHandler::ExtractInputFromScoringSignals(
                 kSecondsInDay;
         }
         break;
+      case optimization_guide::proto::
+          SCORING_SIGNAL_TYPE_MATCHES_TITLE_OR_HOST_OR_SHORTCUT_TEXT: {
+        bool matches_title_or_host_or_shortcut_text = false;
+        matches_title_or_host_or_shortcut_text |=
+            (scoring_signals.total_host_match_length() > 0);
+        matches_title_or_host_or_shortcut_text |=
+            (scoring_signals.total_title_match_length() > 0);
+        matches_title_or_host_or_shortcut_text |=
+            (scoring_signals.shortcut_visit_count() > 0);
+
+        val = static_cast<float>(matches_title_or_host_or_shortcut_text);
+      } break;
       case optimization_guide::proto::SCORING_SIGNAL_TYPE_UNKNOWN:
       default:
         // Reached when the metadata is updated to have a new signal that

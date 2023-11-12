@@ -20,6 +20,10 @@ colorset("grid_empty_state_body_text_color") {
   sources = [ "grid_empty_state_body_text_color.colorset/Contents.json" ]
 }
 
+colorset("grid_empty_state_login_button_bg_color") {
+  sources = [ "grid_empty_state_login_button_bg_color.colorset/Contents.json" ]
+}
+
 colorset("page_control_background_color") {
   sources = [ "page_control_background_color.colorset/Contents.json" ]
 }

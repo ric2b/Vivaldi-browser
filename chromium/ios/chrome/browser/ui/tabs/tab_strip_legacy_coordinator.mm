@@ -16,10 +16,6 @@
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @protocol TabStripContaining;
 
 @interface TabStripLegacyCoordinator ()
@@ -65,15 +61,6 @@
 
 - (void)tabStripSizeDidChange {
   [self.tabStripController tabStripSizeDidChange];
-}
-
-- (void)setPanGestureHandler:
-    (ViewRevealingVerticalPanHandler*)panGestureHandler {
-  self.tabStripController.panGestureHandler = panGestureHandler;
-}
-
-- (id<ViewRevealingAnimatee>)animatee {
-  return self.tabStripController.animatee;
 }
 
 #pragma mark - ChromeCoordinator

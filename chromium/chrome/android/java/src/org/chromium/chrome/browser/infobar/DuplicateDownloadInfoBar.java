@@ -10,7 +10,6 @@ import android.view.View;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadOpenSource;
 import org.chromium.chrome.browser.download.DownloadUtils;
@@ -19,9 +18,6 @@ import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.components.infobars.ConfirmInfoBar;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarLayout;
-
-// Vivaldi
-import org.chromium.build.BuildConfig;
 
 /**
  * An infobar to ask whether to proceed downloading a file that already exists locally or is still
@@ -72,30 +68,14 @@ public class DuplicateDownloadInfoBar extends ConfirmInfoBar {
                         @Override
                         public void onClick(View view) {
                             DownloadUtils.openPageUrl(context, mPageUrl);
-                            recordLinkClicked(true);
                         }
                     }));
         } else {
-            DuplicateDownloadClickableSpan span =
-                    new DuplicateDownloadClickableSpan(context, mFilePath,
-                            ()
-                                    -> this.recordLinkClicked(false),
-                            mOTRProfileID, DownloadOpenSource.INFO_BAR);
+            DuplicateDownloadClickableSpan span = new DuplicateDownloadClickableSpan(
+                    context, mFilePath, () -> {}, mOTRProfileID, DownloadOpenSource.INFO_BAR);
             layout.setMessage(DownloadUtils.getDownloadMessageText(context,
                     context.getString(R.string.duplicate_download_infobar_text), mFilePath,
                     false /*addSizeStringIfAvailable*/, 0 /*totalBytes*/, span));
         }
-    }
-
-    /**
-     * Records the link clicked histogram.
-     * @param isOfflinePage Whether this is an offline page download.
-     */
-    private void recordLinkClicked(boolean isOfflinePage) {
-        if (BuildConfig.IS_VIVALDI) return;
-        RecordHistogram.recordEnumeratedHistogram(isOfflinePage
-                        ? "Download.DuplicateInfobarEvent.OfflinePage"
-                        : "Download.DuplicateInfobarEvent.Download",
-                DuplicateDownloadInfobarEvent.LINK_CLICKED, DuplicateDownloadInfobarEvent.COUNT);
     }
 }

@@ -12,6 +12,4 @@ source_set("context_menu") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

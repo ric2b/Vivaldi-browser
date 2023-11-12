@@ -10,8 +10,8 @@
 
 #include <VideoToolbox/VideoToolbox.h>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/containers/queue.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -61,8 +61,8 @@ class VivVideoDecoder : public VideoDecoder {
 
   // VideoToolbox
   VTDecompressionOutputCallbackRecord callback_;
-  base::ScopedCFTypeRef<CMFormatDescriptionRef> format_;
-  base::ScopedCFTypeRef<VTDecompressionSessionRef> session_;
+  base::apple::ScopedCFTypeRef<CMFormatDescriptionRef> format_;
+  base::apple::ScopedCFTypeRef<VTDecompressionSessionRef> session_;
 
   //
   // H264 parsing
@@ -142,7 +142,7 @@ class VivVideoDecoder : public VideoDecoder {
     gfx::Size image_size;
 
     // Decoded image, if decoding was successful.
-    base::ScopedCFTypeRef<CVImageBufferRef> image;
+    base::apple::ScopedCFTypeRef<CVImageBufferRef> image;
   };
 
   struct Task {

@@ -20,10 +20,6 @@
 #include "remoting/host/host_window.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface DisconnectWindowController ()
 - (BOOL)isRToL;
 - (void)hide;
@@ -36,14 +32,11 @@ const int kMaximumConnectedNameWidthInPixels = 600;
 namespace {
 
 bool IsDarkMode() {
-  if (@available(macOS 10.14, *)) {
-    NSAppearanceName appearance =
-        [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
-          NSAppearanceNameAqua, NSAppearanceNameDarkAqua
-        ]];
-    return [appearance isEqual:NSAppearanceNameDarkAqua];
-  }
-  return false;
+  NSAppearanceName appearance =
+      [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
+        NSAppearanceNameAqua, NSAppearanceNameDarkAqua
+      ]];
+  return [appearance isEqual:NSAppearanceNameDarkAqua];
 }
 
 }  // namespace

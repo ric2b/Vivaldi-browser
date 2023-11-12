@@ -13,6 +13,7 @@
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/process_iterator.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
@@ -22,7 +23,6 @@
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_builder.h"
 #include "chrome/updater/linux/systemd_util.h"
-#include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/update_service.h"
@@ -30,7 +30,7 @@
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/linux_util.h"
 #include "chrome/updater/util/posix_util.h"
-#include "chrome/updater/util/unittest_util.h"
+#include "chrome/updater/util/unit_test_util.h"
 #include "chrome/updater/util/util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -67,19 +67,14 @@ absl::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope) {
   return path->Append(GetExecutableRelativePath());
 }
 
-bool WaitForUpdaterExit(UpdaterScope scope) {
+bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
+  const std::set<base::FilePath::StringType> process_names =
+      GetTestProcessNames();
   return WaitFor(
-      base::BindRepeating(
-          [](UpdaterScope scope) {
-            return !base::NamedProcessIterator(
-                        GetExecutableRelativePath().MaybeAsASCII(), nullptr)
-                        .NextProcessEntry() &&
-                   !base::NamedProcessIterator(kLauncherName, nullptr)
-                        .NextProcessEntry();
-          },
-          scope),
-      base::BindLambdaForTesting(
-          [] { VLOG(0) << "Still waiting for updater to exit..."; }));
+      [&process_names]() {
+        return base::ranges::none_of(process_names, IsProcessRunning);
+      },
+      [] { VLOG(0) << "Still waiting for updater to exit..."; });
 }
 
 void Uninstall(UpdaterScope scope) {
@@ -148,7 +143,7 @@ void EnterTestMode(const GURL& update_url,
                   .SetDeviceManagementURL(device_management_url.spec())
                   .SetUseCUP(false)
                   .SetInitialDelay(base::Milliseconds(100))
-                  .SetServerKeepAliveTime(base::Seconds(1))
+                  .SetServerKeepAliveTime(base::Seconds(2))
                   .SetCrxVerifierFormat(crx_file::VerifierFormat::CRX3)
                   .SetOverinstallTimeout(TestTimeouts::action_timeout())
                   .SetIdleCheckPeriod(idle_timeout)
@@ -209,18 +204,10 @@ void ExpectLegacyUpdaterMigrated(UpdaterScope scope) {
   // No legacy migration for Linux.
 }
 
-void InstallApp(UpdaterScope scope, const std::string& app_id) {
-  scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
-  RegistrationRequest registration;
-  registration.app_id = app_id;
-  registration.version = base::Version("0.1");
-  base::RunLoop loop;
-  update_service->RegisterApp(registration,
-                              base::BindLambdaForTesting([&loop](int result) {
-                                EXPECT_EQ(result, 0);
-                                loop.Quit();
-                              }));
-  loop.Run();
+void InstallApp(UpdaterScope scope,
+                const std::string& app_id,
+                const base::Version& version) {
+  RegisterApp(scope, app_id, version);
 }
 
 void UninstallApp(UpdaterScope scope, const std::string& app_id) {
@@ -232,6 +219,10 @@ void UninstallApp(UpdaterScope scope, const std::string& app_id) {
 base::CommandLine MakeElevated(base::CommandLine command_line) {
   command_line.PrependWrapper("/usr/bin/sudo");
   return command_line;
+}
+
+void SetPlatformPolicies(const base::Value::Dict& values) {
+  // TODO(crbug.com/1464354): implement.
 }
 
 }  // namespace updater::test

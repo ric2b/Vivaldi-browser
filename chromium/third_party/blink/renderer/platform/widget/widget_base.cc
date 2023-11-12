@@ -198,7 +198,8 @@ void WidgetBase::InitializeCompositing(
     const display::ScreenInfo& screen_info = screen_infos.current();
     default_settings = GenerateLayerTreeSettings(
         compositing_thread_scheduler, is_embedded_, is_for_scalable_page_,
-        screen_info.rect.size(), screen_info.device_scale_factor);
+        WebTestMode(), screen_info.rect.size(),
+        screen_info.device_scale_factor);
     settings = &default_settings.value();
   }
   screen_infos_ = screen_infos;
@@ -498,6 +499,13 @@ void WidgetBase::RequestSuccessfulPresentationTimeForNextFrame(
   if (is_hidden_)
     return;
 
+  if (visible_time_request->show_reason_unfolding) {
+    LayerTreeHost()->RequestSuccessfulPresentationTimeForNextFrame(
+        tab_switch_time_recorder_.GetCallbackForNextFrameAfterUnfold(
+            visible_time_request->event_start_time));
+    return;
+  }
+
   // Tab was shown while widget was already painting, eg. due to being
   // captured.
   LayerTreeHost()->RequestSuccessfulPresentationTimeForNextFrame(
@@ -638,7 +646,11 @@ void WidgetBase::RequestNewLayerTreeFrameSink(
   // state changes.
   const cc::LayerTreeSettings& settings = LayerTreeHost()->GetSettings();
   if (settings.disable_frame_rate_limit ||
-      settings.enable_variable_refresh_rate) {
+      settings.enable_variable_refresh_rate ||
+      (for_web_tests && ThreadScheduler::CompositorThreadScheduler())) {
+    params->use_begin_frame_presentation_feedback =
+        base::FeatureList::IsEnabled(
+            features::kUseBeginFramePresentationFeedback);
     params->synthetic_begin_frame_source = CreateSyntheticBeginFrameSource();
   }
 
@@ -780,10 +792,9 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
 
   auto context_provider =
       base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
-          gpu_channel_host, gpu_memory_buffer_manager, kGpuStreamIdDefault,
-          kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle, GURL(url),
-          automatic_flushes, support_locking, support_grcontext, limits,
-          attributes,
+          gpu_channel_host, kGpuStreamIdDefault, kGpuStreamPriorityDefault,
+          gpu::kNullSurfaceHandle, GURL(url), automatic_flushes,
+          support_locking, support_grcontext, limits, attributes,
           viz::command_buffer_metrics::ContextType::RENDER_COMPOSITOR);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -1222,10 +1233,17 @@ void WidgetBase::UpdateCompositionInfo(bool immediate_request) {
   composition_character_bounds_ = character_bounds;
   composition_range_ = range;
 
+  absl::optional<Vector<gfx::Rect>> line_bounds;
+  FrameWidget* frame_widget = client_->FrameWidget();
+  if (base::FeatureList::IsEnabled(features::kReportVisibleLineBounds) &&
+      frame_widget) {
+    line_bounds = frame_widget->GetVisibleLineBoundsOnScreen();
+  }
+
   if (mojom::blink::WidgetInputHandlerHost* host =
           widget_input_handler_manager_->GetWidgetInputHandlerHost()) {
-    host->ImeCompositionRangeChanged(composition_range_,
-                                     composition_character_bounds_);
+    host->ImeCompositionRangeChanged(
+        composition_range_, composition_character_bounds_, line_bounds);
   }
 }
 

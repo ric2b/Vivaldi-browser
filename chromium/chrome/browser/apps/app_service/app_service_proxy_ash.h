@@ -20,6 +20,7 @@
 #include "chrome/browser/apps/app_service/app_icon/app_icon_writer.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_base.h"
 #include "chrome/browser/apps/app_service/launch_result_type.h"
+#include "chrome/browser/apps/app_service/package_id.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
 #include "chrome/browser/apps/app_service/publisher_host.h"
 #include "chrome/browser/apps/app_service/subscriber_crosapi.h"
@@ -52,10 +53,12 @@ class AppPlatformMetricsService;
 class InstanceRegistryUpdater;
 class BrowserAppInstanceRegistry;
 class BrowserAppInstanceTracker;
+class PackageId;
 class PromiseAppRegistryCache;
 class PromiseAppService;
 class ShortcutPublisher;
 class ShortcutRegistryCache;
+class StandaloneBrowserApps;
 class UninstallDialog;
 
 struct PromiseApp;
@@ -89,6 +92,8 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
 
   apps::BrowserAppInstanceTracker* BrowserAppInstanceTracker();
   apps::BrowserAppInstanceRegistry* BrowserAppInstanceRegistry();
+
+  apps::StandaloneBrowserApps* StandaloneBrowserApps();
 
   // Registers `crosapi_subscriber_`.
   void RegisterCrosApiSubScriber(SubscriberCrosapi* subscriber);
@@ -156,19 +161,34 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   // Add or update a promise app in the Promise App Registry Cache.
   void OnPromiseApp(PromiseAppPtr delta);
 
+  // Retrieves the icon for a promise app and applies any specified effects.
+  void LoadPromiseIcon(const PackageId& package_id,
+                       int32_t size_hint_in_dip,
+                       IconEffects icon_effects,
+                       apps::LoadIconCallback callback);
+
   // Registers `publisher` with the App Service as exclusively publishing
   // shortcut to app type `app_type`. `publisher` must have a lifetime equal to
   // or longer than this object.
   void RegisterShortcutPublisher(AppType app_type,
                                  ShortcutPublisher* publisher);
 
-  // Update the shortcut with `delta`, which represents some state change of
-  // a shortcut.
-  void UpdateShortcut(ShortcutPtr delta);
-
   // Get pointer to the Shortcut Registry Cache which holds all shortcuts.
   // May return a nullptr if this cache doesn't exist.
   apps::ShortcutRegistryCache* ShortcutRegistryCache();
+
+  // Launches shortcut with `id` in it's parent app. `display_id` contains the
+  // id of the display from which the shortcut will be launched.
+  // display::kInvalidDisplayId means that the default display for new windows
+  // will be used. See `display::Screen` for details.
+  void LaunchShortcut(const ShortcutId& id, int64_t display_id);
+
+  // Removes the shortcut for the given `id`. If `parent_window` is specified,
+  // the remove dialog will be created as a modal dialog anchored at
+  // `parent_window`. Otherwise, the browser window will be used as the anchor.
+  void RemoveShortcut(const ShortcutId& id,
+                      UninstallSource uninstall_source,
+                      gfx::NativeWindow parent_window);
 
  private:
   // For access to Initialize.
@@ -302,6 +322,7 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
                        int32_t size_in_dip,
                        IconEffects icon_effects,
                        IconType icon_type,
+                       int default_icon_resource_id,
                        LoadIconCallback callback,
                        bool install_success);
 
@@ -316,6 +337,8 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
       const apps::IntentPtr& intent,
       const apps::IntentFilterPtr& filter,
       const apps::AppUpdate& update) override;
+
+  ShortcutPublisher* GetShortcutPublisher(AppType app_type);
 
   raw_ptr<SubscriberCrosapi, ExperimentalAsh> crosapi_subscriber_ = nullptr;
 
@@ -364,6 +387,10 @@ class AppServiceProxyAsh : public AppServiceProxyBase,
   base::ScopedObservation<apps::InstanceRegistry,
                           apps::InstanceRegistry::Observer>
       instance_registry_observer_{this};
+
+  base::ScopedObservation<apps::AppRegistryCache,
+                          apps::AppRegistryCache::Observer>
+      app_registry_cache_observer_{this};
 
   // A list to record outstanding launch callbacks. When the first member
   // returns true, the second member should be run and the pair can be removed

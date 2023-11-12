@@ -17,10 +17,6 @@
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace autofill {
 class CreditCard;
 }  // namespace autofill
@@ -68,13 +64,12 @@ class CreditCard;
   if (!mainFrame) {
     return;
   }
-  autofill::BrowserAutofillManager* autofillManager =
+  autofill::BrowserAutofillManager& autofillManager =
       autofill::AutofillDriverIOS::FromWebStateAndWebFrame(webState, mainFrame)
-          ->autofill_manager();
-  DCHECK(autofillManager);
+          ->GetAutofillManager();
   _fullCardRequester =
       std::make_unique<FullCardRequester>(viewController, self.browserState);
-  _fullCardRequester->GetFullCard(card, autofillManager,
+  _fullCardRequester->GetFullCard(card, &autofillManager,
                                   _cardAssistant->GetWeakPtr());
   // TODO(crbug.com/845472): closing CVC requester doesn't restore icon bar
   // above keyboard.

@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <string>
 
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,6 +15,7 @@
 #include "base/time/time.h"
 #include "content/browser/media/session/media_session_player_observer.h"
 #include "content/browser/media/session/mock_media_session_service_impl.h"
+#include "content/public/test/test_media_session_client.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/media_content_type.h"
@@ -32,6 +34,14 @@ using ::testing::NiceMock;
 using media_session::mojom::MediaAudioVideoState;
 using media_session::mojom::MediaSessionAction;
 using media_session::mojom::MediaSessionImageType;
+
+namespace {
+std::u16string hidden_metadata_placeholder_title = u"placeholder_title";
+std::u16string hidden_metadata_placeholder_source_title =
+    u"placeholder_source_title";
+std::u16string hidden_metadata_placeholder_artist = u"placeholder_artist";
+std::u16string hidden_metadata_placeholder_album = u"placeholder_album";
+}  // namespace
 
 namespace content {
 
@@ -61,7 +71,6 @@ class MockMediaSessionPlayerObserver : public MediaSessionPlayerObserver {
   MOCK_METHOD2(OnSetVolumeMultiplier,
                void(int player_id, double volume_multiplier));
   MOCK_METHOD1(OnEnterPictureInPicture, void(int player_id));
-  MOCK_METHOD1(OnExitPictureInPicture, void(int player_id));
   MOCK_METHOD2(OnSetAudioSinkId,
                void(int player_id, const std::string& raw_device_id));
   MOCK_METHOD2(OnSetMute, void(int player_id, bool mute));
@@ -121,6 +130,9 @@ class MediaSessionImplServiceRoutingTest
     : public RenderViewHostImplTestHarness {
  public:
   MediaSessionImplServiceRoutingTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kMediaSessionEnterPictureInPicture);
+
     actions_.insert(MediaSessionAction::kPlay);
     actions_.insert(MediaSessionAction::kPause);
     actions_.insert(MediaSessionAction::kStop);
@@ -143,6 +155,8 @@ class MediaSessionImplServiceRoutingTest
     empty_metadata_.source_title = u"example.com";
 
     GetMediaSession()->SetShouldThrottleDurationUpdateForTest(false);
+
+    SetupMediaSessionClient();
   }
 
   void TearDown() override {
@@ -152,6 +166,13 @@ class MediaSessionImplServiceRoutingTest
   }
 
  protected:
+  void SetupMediaSessionClient() {
+    client_.SetTitlePlaceholder(hidden_metadata_placeholder_title);
+    client_.SetSourceTitlePlaceholder(hidden_metadata_placeholder_source_title);
+    client_.SetArtistPlaceholder(hidden_metadata_placeholder_artist);
+    client_.SetAlbumPlaceholder(hidden_metadata_placeholder_album);
+  }
+
   void CreateServiceForFrame(TestRenderFrameHost* frame) {
     services_[frame] =
         std::make_unique<NiceMock<MockMediaSessionServiceImpl>>(frame);
@@ -170,7 +191,7 @@ class MediaSessionImplServiceRoutingTest
   void StartPlayerForFrame(TestRenderFrameHost* frame,
                            MediaAudioVideoState audio_video_state =
                                MediaAudioVideoState::kAudioOnly) {
-    StartPlayerForFrame(frame, media::MediaContentType::Persistent,
+    StartPlayerForFrame(frame, media::MediaContentType::kPersistent,
                         audio_video_state);
   }
 
@@ -237,17 +258,21 @@ class MediaSessionImplServiceRoutingTest
                              std::unique_ptr<MockMediaSessionPlayerObserver>>;
   PlayerMap players_;
 
+  TestMediaSessionClient client_;
+
  private:
   media_session::MediaMetadata empty_metadata_;
 
   std::set<MediaSessionAction> actions_;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(MediaSessionImplServiceRoutingTest, NoFrameProducesAudio) {
   CreateServiceForFrame(main_frame_);
   CreateServiceForFrame(sub_frame_);
 
-  ASSERT_EQ(nullptr, ComputeServiceForRouting());
+  ASSERT_EQ(services_[main_frame_].get(), ComputeServiceForRouting());
 }
 
 TEST_F(MediaSessionImplServiceRoutingTest,
@@ -391,7 +416,7 @@ TEST_F(MediaSessionImplServiceRoutingTest,
   expected_metadata.album = u"album";
   expected_metadata.source_title = GetSourceTitleForNonEmptyMetadata();
 
-  CreateServiceForFrame(main_frame_);
+  CreateServiceForFrame(sub_frame_);
 
   {
     blink::mojom::SpecMediaMetadataPtr spec_metadata(
@@ -400,10 +425,10 @@ TEST_F(MediaSessionImplServiceRoutingTest,
     spec_metadata->artist = u"artist";
     spec_metadata->album = u"album";
 
-    services_[main_frame_]->SetMetadata(std::move(spec_metadata));
+    services_[sub_frame_]->SetMetadata(std::move(spec_metadata));
   }
 
-  services_[main_frame_]->EnableAction(MediaSessionAction::kSeekForward);
+  services_[sub_frame_]->EnableAction(MediaSessionAction::kSeekForward);
 
   {
     media_session::test::MockMediaSessionMojoObserver observer(
@@ -417,7 +442,7 @@ TEST_F(MediaSessionImplServiceRoutingTest,
     media_session::test::MockMediaSessionMojoObserver observer(
         *GetMediaSession());
 
-    StartPlayerForFrame(main_frame_);
+    StartPlayerForFrame(sub_frame_);
 
     observer.WaitForExpectedMetadata(expected_metadata);
     observer.WaitForExpectedActions(
@@ -427,6 +452,49 @@ TEST_F(MediaSessionImplServiceRoutingTest,
 
 TEST_F(MediaSessionImplServiceRoutingTest,
        NotifyActionsAndMetadataChangeWhenTurningUncontrollable) {
+  media_session::MediaMetadata expected_metadata;
+  expected_metadata.title = u"title";
+  expected_metadata.artist = u"artist";
+  expected_metadata.album = u"album";
+  expected_metadata.source_title = GetSourceTitleForNonEmptyMetadata();
+
+  CreateServiceForFrame(sub_frame_);
+
+  {
+    blink::mojom::SpecMediaMetadataPtr spec_metadata(
+        blink::mojom::SpecMediaMetadata::New());
+    spec_metadata->title = u"title";
+    spec_metadata->artist = u"artist";
+    spec_metadata->album = u"album";
+
+    services_[sub_frame_]->SetMetadata(std::move(spec_metadata));
+  }
+
+  StartPlayerForFrame(sub_frame_);
+
+  {
+    media_session::test::MockMediaSessionMojoObserver observer(
+        *GetMediaSession());
+
+    observer.WaitForExpectedActions(default_actions());
+    observer.WaitForExpectedMetadata(expected_metadata);
+  }
+
+  {
+    media_session::test::MockMediaSessionMojoObserver observer(
+        *GetMediaSession());
+
+    ClearPlayersForFrame(sub_frame_);
+
+    observer.WaitForEmptyActions();
+    observer.WaitForExpectedMetadata(empty_metadata());
+  }
+}
+
+TEST_F(MediaSessionImplServiceRoutingTest,
+       NotifyActionsAndMetadataChangeWhenUncontrollableForMainFrame) {
+  // When no frames have playback and the main frame has a service, observers
+  // should be notified of actions and metadata on the main frame's service.
   media_session::MediaMetadata expected_metadata;
   expected_metadata.title = u"title";
   expected_metadata.artist = u"artist";
@@ -445,24 +513,14 @@ TEST_F(MediaSessionImplServiceRoutingTest,
     services_[main_frame_]->SetMetadata(std::move(spec_metadata));
   }
 
-  StartPlayerForFrame(main_frame_);
+  services_[main_frame_]->EnableAction(MediaSessionAction::kSeekForward);
 
   {
     media_session::test::MockMediaSessionMojoObserver observer(
         *GetMediaSession());
 
-    observer.WaitForExpectedActions(default_actions());
     observer.WaitForExpectedMetadata(expected_metadata);
-  }
-
-  {
-    media_session::test::MockMediaSessionMojoObserver observer(
-        *GetMediaSession());
-
-    ClearPlayersForFrame(main_frame_);
-
-    observer.WaitForEmptyActions();
-    observer.WaitForExpectedMetadata(empty_metadata());
+    observer.WaitForExpectedActions({MediaSessionAction::kSeekForward});
   }
 }
 
@@ -512,7 +570,6 @@ TEST_F(MediaSessionImplServiceRoutingTest,
 
 TEST_F(MediaSessionImplServiceRoutingTest,
        TestReceivingPauseActionWhenNoServiceRouted) {
-  CreateServiceForFrame(main_frame_);
   CreateServiceForFrame(sub_frame_);
 
   EXPECT_EQ(nullptr, ComputeServiceForRouting());
@@ -707,6 +764,68 @@ TEST_F(MediaSessionImplServiceRoutingTest,
   }
 }
 
+// We hide the media metadata from CrOS' media controls by replacing the
+// metadata in the MediaSessionImpl with some placeholder metadata. These
+// changes are gated to only affect ChromeOS, hence why the testing for this is
+// also ChromeOS only.
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(MediaSessionImplServiceRoutingTest, HideMediaMetadataInCrOS) {
+  client_.SetShouldHideMetadata(true);
+
+  media_session::MediaMetadata expected_metadata;
+  expected_metadata.title = hidden_metadata_placeholder_title;
+  expected_metadata.artist = hidden_metadata_placeholder_artist;
+  expected_metadata.album = hidden_metadata_placeholder_album;
+  expected_metadata.source_title = hidden_metadata_placeholder_source_title;
+
+  CreateServiceForFrame(main_frame_);
+  StartPlayerForFrame(main_frame_);
+
+  {
+    media_session::test::MockMediaSessionMojoObserver observer(
+        *GetMediaSession());
+
+    blink::mojom::SpecMediaMetadataPtr spec_metadata(
+        blink::mojom::SpecMediaMetadata::New());
+    spec_metadata->title = u"title";
+    spec_metadata->artist = u"artist";
+    spec_metadata->album = u"album";
+
+    services_[main_frame_]->SetMetadata(std::move(spec_metadata));
+
+    observer.WaitForExpectedMetadata(expected_metadata);
+  }
+}
+#else  // !BUILDFLAG(IS_CHROMEOS)
+TEST_F(MediaSessionImplServiceRoutingTest, DontHideMediaMetadataInNonCrOS) {
+  client_.SetShouldHideMetadata(true);
+
+  media_session::MediaMetadata expected_metadata;
+  expected_metadata.title = u"title";
+  expected_metadata.artist = u"artist";
+  expected_metadata.album = u"album";
+  expected_metadata.source_title = GetSourceTitleForNonEmptyMetadata();
+
+  CreateServiceForFrame(main_frame_);
+  StartPlayerForFrame(main_frame_);
+
+  {
+    media_session::test::MockMediaSessionMojoObserver observer(
+        *GetMediaSession());
+
+    blink::mojom::SpecMediaMetadataPtr spec_metadata(
+        blink::mojom::SpecMediaMetadata::New());
+    spec_metadata->title = u"title";
+    spec_metadata->artist = u"artist";
+    spec_metadata->album = u"album";
+
+    services_[main_frame_]->SetMetadata(std::move(spec_metadata));
+
+    observer.WaitForExpectedMetadata(expected_metadata);
+  }
+}
+#endif
+
 TEST_F(MediaSessionImplServiceRoutingTest,
        NotifyObserverMetadataEmptyWhenControllable) {
   CreateServiceForFrame(main_frame_);
@@ -779,7 +898,7 @@ TEST_F(MediaSessionImplServiceRoutingTest, DefaultActionsAlwaysSupported) {
 TEST_F(MediaSessionImplServiceRoutingTest,
        DefaultActionsRemovedIfUncontrollable) {
   CreateServiceForFrame(main_frame_);
-  StartPlayerForFrame(main_frame_, media::MediaContentType::OneShot);
+  StartPlayerForFrame(main_frame_, media::MediaContentType::kOneShot);
 
   {
     media_session::test::MockMediaSessionMojoObserver observer(
@@ -936,9 +1055,8 @@ TEST_F(MediaSessionImplServiceRoutingTest,
         *GetMediaSession());
     ClearPlayersForFrame(main_frame_);
 
-    std::vector<media_session::MediaImage> empty_images;
     observer.WaitForExpectedImagesOfType(MediaSessionImageType::kArtwork,
-                                         empty_images);
+                                         expected_images);
   }
 }
 
@@ -1254,7 +1372,7 @@ TEST_F(MediaSessionImplServiceRoutingFencedFrameTest, NoFrameProducesAudio) {
   CreateServiceForFrame(main_frame_);
   CreateServiceForFrame(fenced_frame_);
 
-  ASSERT_EQ(nullptr, ComputeServiceForRouting());
+  ASSERT_EQ(services_[main_frame_].get(), ComputeServiceForRouting());
 }
 
 TEST_F(MediaSessionImplServiceRoutingFencedFrameTest,

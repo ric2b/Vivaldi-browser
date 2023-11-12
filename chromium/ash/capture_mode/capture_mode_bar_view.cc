@@ -69,6 +69,10 @@ void CaptureModeBarView::AddedToWidget() {
   auto* parent = layer()->parent();
   parent->Add(shadow_->GetLayer());
   parent->StackAtBottom(shadow_->GetLayer());
+
+  // Make the shadow observe the color provider source change to update the
+  // colors.
+  shadow_->ObserveColorProviderSource(GetWidget());
 }
 
 void CaptureModeBarView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -132,8 +136,11 @@ void CaptureModeBarView::AppendCommonElements() {
 }
 
 void CaptureModeBarView::OnSettingsButtonPressed(const ui::Event& event) {
-  CaptureModeController::Get()->capture_mode_session()->SetSettingsMenuShown(
-      !settings_button_->toggled(), /*by_key_event=*/event.IsKeyEvent());
+  CaptureModeSession* session = static_cast<CaptureModeSession*>(
+      CaptureModeController::Get()->capture_mode_session());
+  CHECK_EQ(session->session_type(), SessionType::kReal);
+  session->SetSettingsMenuShown(!settings_button_->toggled(),
+                                /*by_key_event=*/event.IsKeyEvent());
 }
 
 void CaptureModeBarView::OnCloseButtonPressed() {

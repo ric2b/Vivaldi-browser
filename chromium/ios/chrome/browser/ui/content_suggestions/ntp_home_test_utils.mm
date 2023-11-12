@@ -6,8 +6,8 @@
 
 #import <string>
 
+#import "base/apple/foundation_util.h"
 #import "base/functional/callback.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
@@ -17,10 +17,6 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/testing/earl_grey/earl_grey_app.h"
 #import "ios/web/common/uikit_ui_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -44,8 +40,9 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibilityID,
 
 // Returns the SetUpListView, if present.
 SetUpListView* GetSetUpListView() {
-  return base::mac::ObjCCast<SetUpListView>(SubviewWithAccessibilityIdentifier(
-      set_up_list::kAccessibilityID, GetAnyKeyWindow()));
+  return base::apple::ObjCCast<SetUpListView>(
+      SubviewWithAccessibilityIdentifier(set_up_list::kAccessibilityID,
+                                         GetAnyKeyWindow()));
 }
 
 }  // namespace
@@ -53,13 +50,13 @@ SetUpListView* GetSetUpListView() {
 namespace ntp_home {
 
 UICollectionView* CollectionView() {
-  return base::mac::ObjCCast<UICollectionView>(
+  return base::apple::ObjCCast<UICollectionView>(
       SubviewWithAccessibilityIdentifier(kNTPCollectionViewIdentifier,
                                          GetAnyKeyWindow()));
 }
 
 UICollectionView* ContentSuggestionsCollectionView() {
-  return base::mac::ObjCCast<UICollectionView>(
+  return base::apple::ObjCCast<UICollectionView>(
       SubviewWithAccessibilityIdentifier(
           kContentSuggestionsCollectionIdentifier, GetAnyKeyWindow()));
 }
@@ -70,13 +67,13 @@ UIView* FakeOmnibox() {
 }
 
 UILabel* DiscoverHeaderLabel() {
-  return base::mac::ObjCCast<UILabel>(SubviewWithAccessibilityIdentifier(
+  return base::apple::ObjCCast<UILabel>(SubviewWithAccessibilityIdentifier(
       DiscoverHeaderTitleAccessibilityID(), GetAnyKeyWindow()));
 }
 
 SetUpListItemView* SetUpListItemViewWithAccessibilityId(
     NSString* accessibility_id) {
-  return base::mac::ObjCCast<SetUpListItemView>(
+  return base::apple::ObjCCast<SetUpListItemView>(
       SubviewWithAccessibilityIdentifier(accessibility_id, GetSetUpListView()));
 }
 

@@ -3,11 +3,8 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
-#import "base/metrics/field_trial_params.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#import "base/metrics/field_trial_params.h"
 
 BASE_FEATURE(kStartSurface, "StartSurface", base::FEATURE_ENABLED_BY_DEFAULT);
 

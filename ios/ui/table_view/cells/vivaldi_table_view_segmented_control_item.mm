@@ -2,7 +2,7 @@
 
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -27,7 +27,7 @@ const CGFloat kPadding = 9.0;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewSegmentedControlCell* cell =
-      base::mac::ObjCCastStrict<VivaldiTableViewSegmentedControlCell>(tableCell);
+      base::apple::ObjCCastStrict<VivaldiTableViewSegmentedControlCell>(tableCell);
   [cell setSelectionStyle:UITableViewCellSelectionStyleNone];
 
   [cell initWithLabels:self.labels];

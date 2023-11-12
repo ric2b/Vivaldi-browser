@@ -38,7 +38,6 @@ import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
-import org.chromium.ui.util.AccessibilityUtil;
 
 /**
  * Root component for the HistoryClusters UI component, which displays lists of related history
@@ -83,8 +82,7 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
     HistoryClustersCoordinator(@NonNull Profile profile, @NonNull Activity activity,
             TemplateUrlService templateUrlService, HistoryClustersDelegate historyClustersDelegate,
             HistoryClustersMetricsLogger metricsLogger,
-            SelectionDelegate<ClusterVisit> selectionDelegate, AccessibilityUtil accessibilityUtil,
-            SnackbarManager snackbarManager) {
+            SelectionDelegate<ClusterVisit> selectionDelegate, SnackbarManager snackbarManager) {
         mActivity = activity;
         mDelegate = historyClustersDelegate;
         mModelList = new ModelList();
@@ -99,7 +97,7 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
         mMediator = new HistoryClustersMediator(HistoryClustersBridge.getForProfile(profile),
                 new LargeIconBridge(profile), mActivity, mActivity.getResources(), mModelList,
                 mToolbarModel, mDelegate, System::currentTimeMillis, templateUrlService,
-                mSelectionDelegate, mMetricsLogger, accessibilityUtil, (message) -> {
+                mSelectionDelegate, mMetricsLogger, (message) -> {
                     if (mRecyclerView == null) return;
                     mRecyclerView.announceForAccessibility(message);
                 }, new Handler());
@@ -116,10 +114,10 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
      */
     public HistoryClustersCoordinator(@NonNull Profile profile, @NonNull Activity activity,
             TemplateUrlService templateUrlService, HistoryClustersDelegate historyClustersDelegate,
-            AccessibilityUtil accessibilityUtil, SnackbarManager snackbarManager) {
+            SnackbarManager snackbarManager) {
         this(profile, activity, templateUrlService, historyClustersDelegate,
                 new HistoryClustersMetricsLogger(templateUrlService), new SelectionDelegate<>(),
-                accessibilityUtil, snackbarManager);
+                snackbarManager);
     }
 
     public void destroy() {
@@ -218,16 +216,18 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
         mToolbar = (HistoryClustersToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.history_clusters_toolbar, mSelectionDelegate, R.string.menu_history,
                 R.id.normal_menu_group, R.id.selection_mode_menu_group, this, true);
-        mToolbar.initializeSearchView(
-                mMediator, R.string.history_clusters_search_your_journeys, R.id.search_menu_id);
+        int searchStringId = mDelegate.isRenameEnabled()
+                ? R.string.history_manager_search
+                : R.string.history_clusters_search_your_journeys;
+        mToolbar.initializeSearchView(mMediator, searchStringId, R.id.search_menu_id);
         mSelectableListLayout.configureWideDisplayStyle();
         mToolbar.setSearchEnabled(true);
         if (!mDelegate.isSeparateActivity()) {
             mToolbar.getMenu().removeItem(R.id.close_menu_id);
         }
 
-        if (!mDelegate.areTabGroupsEnabled()) {
-            mToolbar.getMenu().removeItem(R.id.selection_mode_open_in_tab_group);
+        if (mDelegate.isRenameEnabled()) {
+            mToolbar.getMenu().removeItem(R.id.optout_menu_id);
         }
 
         mToolbar.setInfoMenuItem(R.id.info_menu_id);
@@ -357,7 +357,6 @@ public class HistoryClustersCoordinator extends RecyclerView.OnScrollListener
         return mRecyclerView;
     }
 
-    @VisibleForTesting
     public SelectableListToolbar getToolbarForTesting() {
         return mToolbar;
     }

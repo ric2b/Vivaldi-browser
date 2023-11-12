@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_generator_delegate.h"
+#import "ios/chrome/browser/snapshots/snapshot_id.h"
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "ios/web/public/web_client.h"
@@ -24,10 +25,6 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/gfx/geometry/rect_f.h"
 #import "ui/gfx/image/image.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -71,16 +68,16 @@ BOOL ViewHierarchyContainsWebView(UIView* view) {
   std::unique_ptr<web::WebStateObserver> _webStateObserver;
 
   // The unique ID for WebState's snapshot.
-  __strong NSString* _snapshotID;
+  SnapshotID _snapshotID;
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState
-                      snapshotID:(NSString*)snapshotID {
+                      snapshotID:(SnapshotID)snapshotID {
   if ((self = [super init])) {
     DCHECK(webState);
-    DCHECK(snapshotID.length > 0);
+    DCHECK(snapshotID.valid());
     _webState = webState;
-    _snapshotID = [snapshotID copy];
+    _snapshotID = snapshotID;
 
     _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
     _webState->AddObserver(_webStateObserver.get());
@@ -226,46 +223,59 @@ BOOL ViewHierarchyContainsWebView(UIView* view) {
   // differ from the input size due to rounding.
   const CGFloat kScale =
       std::max<CGFloat>(1.0, [_snapshotCache snapshotScaleForDevice]);
-  UIGraphicsBeginImageContextWithOptions(frameInBaseView.size, YES, kScale);
-  CGContext* context = UIGraphicsGetCurrentContext();
-  // This shifts the origin of the context to be the origin of the snapshot
-  // frame.
-  CGContextTranslateCTM(context, -frameInBaseView.origin.x,
-                        -frameInBaseView.origin.y);
-  BOOL snapshotSuccess = YES;
+  UIGraphicsImageRendererFormat* format =
+      [UIGraphicsImageRendererFormat preferredFormat];
+  format.scale = kScale;
+  format.opaque = YES;
 
-  if (baseView.window && ViewHierarchyContainsWebView(baseView)) {
-    // `-renderInContext:` is the preferred way to render a snapshot, but it's
-    // buggy for WKWebView, which is used for some WebUI pages such as
-    // "No internet" or "Site can't be reached". If a WKWebView-containing
-    // hierarchy must be snapshotted, the UIView `-drawViewHierarchyInRect:`
-    // method is used instead.
-    // `drawViewHierarchyInRect:` has undefined behavior when the view is not
-    // in the visible view hierarchy. In practice, when this method is called
-    // on a view that is part of view controller containment and not in the view
-    // hierarchy, an UIViewControllerHierarchyInconsistency exception will be
-    // thrown.
-    // TODO(crbug.com/636188): `-drawViewHierarchyInRect:afterScreenUpdates:` is
-    // buggy causing GPU glitches, screen redraws during animations, broken
-    // pinch to dismiss on tablet, etc.
-    snapshotSuccess = [baseView drawViewHierarchyInRect:baseView.bounds
-                                     afterScreenUpdates:YES];
-  } else {
-    // Render the view's layer via `-renderInContext:`.
-    // To mitigate against crashes like crbug.com/1429512, ensure that
-    // the layer's position is valid. If not, mark the snapshotting as failed.
-    CALayer* layer = baseView.layer;
-    CGPoint pos = layer.position;
-    if (isnan(pos.x) || isnan(pos.y)) {
-      snapshotSuccess = NO;
-    } else {
-      [layer renderInContext:context];
-    }
+  UIGraphicsImageRenderer* renderer =
+      [[UIGraphicsImageRenderer alloc] initWithSize:frameInBaseView.size
+                                             format:format];
+
+  __block BOOL snapshotSuccess = YES;
+  UIImage* image =
+      [renderer imageWithActions:^(UIGraphicsImageRendererContext* UIContext) {
+        CGContextRef context = UIContext.CGContext;
+        // This shifts the origin of the context to be the origin of the
+        // snapshot frame.
+        CGContextTranslateCTM(context, -frameInBaseView.origin.x,
+                              -frameInBaseView.origin.y);
+
+        if (baseView.window && ViewHierarchyContainsWebView(baseView)) {
+          // `-renderInContext:` is the preferred way to render a snapshot, but
+          // it's buggy for WKWebView, which is used for some WebUI pages such
+          // as "No internet" or "Site can't be reached". If a
+          // WKWebView-containing hierarchy must be snapshotted, the UIView
+          // `-drawViewHierarchyInRect:` method is used instead.
+          // `drawViewHierarchyInRect:` has undefined behavior when the view is
+          // not in the visible view hierarchy. In practice, when this method is
+          // called on a view that is part of view controller containment and
+          // not in the view hierarchy, an
+          // UIViewControllerHierarchyInconsistency exception will be thrown.
+          // TODO(crbug.com/636188):
+          // `-drawViewHierarchyInRect:afterScreenUpdates:` is buggy causing GPU
+          // glitches, screen redraws during animations, broken pinch to dismiss
+          // on tablet, etc.
+          snapshotSuccess = [baseView drawViewHierarchyInRect:baseView.bounds
+                                           afterScreenUpdates:YES];
+        } else {
+          // Render the view's layer via `-renderInContext:`.
+          // To mitigate against crashes like crbug.com/1429512, ensure that
+          // the layer's position is valid. If not, mark the snapshotting as
+          // failed.
+          CALayer* layer = baseView.layer;
+          CGPoint pos = layer.position;
+          if (isnan(pos.x) || isnan(pos.y)) {
+            snapshotSuccess = NO;
+          } else {
+            [layer renderInContext:context];
+          }
+        }
+      }];
+
+  if (!snapshotSuccess) {
+    image = nil;
   }
-  UIImage* image = nil;
-  if (snapshotSuccess)
-    image = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
 
   // Defaults to UIViewTintAdjustmentModeAutomatic if there is no delegate.
   baseView.tintAdjustmentMode =
@@ -291,21 +301,33 @@ BOOL ViewHierarchyContainsWebView(UIView* view) {
     return baseImage;
   const CGFloat kScale =
       std::max<CGFloat>(1.0, [_snapshotCache snapshotScaleForDevice]);
-  UIGraphicsBeginImageContextWithOptions(frameInWindow.size, YES, kScale);
-  CGContext* context = UIGraphicsGetCurrentContext();
-  // The base image is already a cropped snapshot so it is drawn at the origin
-  // of the new image.
-  [baseImage drawAtPoint:CGPointZero];
-  // This shifts the origin of the context so that future drawings can be in
-  // window coordinates. For example, suppose that the desired snapshot area is
-  // at (0, 99) in the window coordinate space. Drawing at (0, 99) will appear
-  // as (0, 0) in the resulting image.
-  CGContextTranslateCTM(context, -frameInWindow.origin.x,
-                        -frameInWindow.origin.y);
-  [self drawOverlays:overlays context:context];
-  UIImage* snapshot = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
-  return snapshot;
+
+  UIGraphicsImageRendererFormat* format =
+      [UIGraphicsImageRendererFormat preferredFormat];
+  format.scale = kScale;
+  format.opaque = YES;
+
+  UIGraphicsImageRenderer* renderer =
+      [[UIGraphicsImageRenderer alloc] initWithSize:frameInWindow.size
+                                             format:format];
+
+  return
+      [renderer imageWithActions:^(UIGraphicsImageRendererContext* UIContext) {
+        CGContextRef context = UIContext.CGContext;
+
+        // The base image is already a cropped snapshot so it is drawn at the
+        // origin of the new image.
+        [baseImage drawInRect:(CGRect){.origin = CGPointZero,
+                                       .size = frameInWindow.size}];
+
+        // This shifts the origin of the context so that future drawings can be
+        // in window coordinates. For example, suppose that the desired snapshot
+        // area is at (0, 99) in the window coordinate space. Drawing at (0, 99)
+        // will appear as (0, 0) in the resulting image.
+        CGContextTranslateCTM(context, -frameInWindow.origin.x,
+                              -frameInWindow.origin.y);
+        [self drawOverlays:overlays context:context];
+      }];
 }
 
 // Updates the snapshot cache with `snapshot`.

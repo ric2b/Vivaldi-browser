@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/shared/ui/util/terms_util.h"
 
 #import "base/apple/bundle_locations.h"
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
@@ -13,9 +13,9 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace {
 // English is the default locale for the Terms of Service.
@@ -37,6 +37,10 @@ std::string FindFileInResource(const std::string& base_name,
                      withExtension:base::SysUTF8ToNSString(ext)] != nil;
   return exists ? resource_file + "." + ext : std::string();
 }
+
+// Vivaldi
+std::string vivaldiTosFilePath = "terms/EULA.html";
+// End Vivaldi
 
 }  // namespace
 
@@ -91,6 +95,10 @@ std::string GetLocalizedFileName(const std::string& base_name,
 }
 
 std::string GetTermsOfServicePath() {
+
+  if (vivaldi::IsVivaldiRunning())
+    return vivaldiTosFilePath; // End Vivaldi
+
   const std::string& locale = GetApplicationContext()->GetApplicationLocale();
   return GetLocalizedFileName(kChromeTosFilePrefix, locale, kHtmlFileExtension);
 }

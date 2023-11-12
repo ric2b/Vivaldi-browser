@@ -14,6 +14,10 @@ namespace content {
 class BrowserContext;
 }
 
+namespace views {
+class Widget;
+}
+
 class KeyedService;
 
 class MockPrivacySandboxService : public PrivacySandboxService {
@@ -25,9 +29,14 @@ class MockPrivacySandboxService : public PrivacySandboxService {
               PromptActionOccurred,
               (PrivacySandboxService::PromptAction),
               (override));
-  MOCK_METHOD(void, PromptOpenedForBrowser, (Browser*), (override));
+#if !BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD(void,
+              PromptOpenedForBrowser,
+              (Browser*, views::Widget*),
+              (override));
   MOCK_METHOD(void, PromptClosedForBrowser, (Browser*), (override));
   MOCK_METHOD(bool, IsPromptOpenForBrowser, (Browser*), (override));
+#endif  // !BUILDFLAG(IS_ANDROID)
   // Mock this method to enable opening the settings page in tests.
   MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (override));
   MOCK_METHOD(bool, IsRestrictedNoticeEnabled, (), (override));
@@ -52,6 +61,31 @@ class MockPrivacySandboxService : public PrivacySandboxService {
               (const net::SchemefulSite& site),
               (override, const));
   MOCK_METHOD(bool, IsFirstPartySetsDataAccessManaged, (), (override, const));
+  MOCK_METHOD(void,
+              GetFledgeJoiningEtldPlusOneForDisplay,
+              (base::OnceCallback<void(std::vector<std::string>)>),
+              (override));
+  MOCK_METHOD(std::vector<std::string>,
+              GetBlockedFledgeJoiningTopFramesForDisplay,
+              (),
+              (const override));
+  MOCK_METHOD(void,
+              SetFledgeJoiningAllowed,
+              ((const std::string&), bool),
+              (const override));
+  MOCK_METHOD(std::vector<privacy_sandbox::CanonicalTopic>,
+              GetCurrentTopTopics,
+              (),
+              (const override));
+  MOCK_METHOD(std::vector<privacy_sandbox::CanonicalTopic>,
+              GetBlockedTopics,
+              (),
+              (const override));
+  MOCK_METHOD(void,
+              SetTopicAllowed,
+              (privacy_sandbox::CanonicalTopic, bool),
+              (override));
+  MOCK_METHOD(void, TopicsToggleChanged, (bool), (const override));
 };
 
 std::unique_ptr<KeyedService> BuildMockPrivacySandboxService(

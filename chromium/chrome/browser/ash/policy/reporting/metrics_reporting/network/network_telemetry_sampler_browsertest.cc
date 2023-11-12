@@ -10,7 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
-#include "base/test/repeating_test_future.h"
+#include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/test/cryptohome_mixin.h"
@@ -159,9 +159,9 @@ class NetworkTelemetrySamplerBrowserTest
         /*notify_changed=*/true);
     base::RunLoop().RunUntilIdle();
 
-    base::Value::Dict ip_config_properties;
-    ip_config_properties.Set(shill::kAddressProperty, kIpAddress);
-    ip_config_properties.Set(shill::kGatewayProperty, kGateway);
+    auto ip_config_properties = base::Value::Dict()
+                                    .Set(shill::kAddressProperty, kIpAddress)
+                                    .Set(shill::kGatewayProperty, kGateway);
     network_handler_test_helper_->ip_config_test()->AddIPConfig(
         kIPConfigPath, std::move(ip_config_properties));
 
@@ -208,10 +208,11 @@ class NetworkTelemetrySamplerBrowserTest
 
   void SetReportNetworkStatusPolicy(bool enabled) {
     bool network_status_enabled;
-    base::test::RepeatingTestFuture<void> test_future;
+    base::test::TestFuture<void> test_future;
     base::CallbackListSubscription subscription =
         ::ash::CrosSettings::Get()->AddSettingsObserver(
-            ::ash::kReportDeviceNetworkStatus, test_future.GetCallback());
+            ::ash::kReportDeviceNetworkStatus,
+            test_future.GetRepeatingCallback());
     device_reporting()->set_report_network_status(enabled);
     policy_helper_.RefreshDevicePolicy();
 
@@ -223,11 +224,11 @@ class NetworkTelemetrySamplerBrowserTest
 
   void SetReportNetworkTelemetryCollectionRateMs(int64_t rate) {
     int collection_rate;
-    base::test::RepeatingTestFuture<void> test_future;
+    base::test::TestFuture<void> test_future;
     base::CallbackListSubscription subscription =
         ::ash::CrosSettings::Get()->AddSettingsObserver(
             ::ash::kReportDeviceNetworkTelemetryCollectionRateMs,
-            test_future.GetCallback());
+            test_future.GetRepeatingCallback());
     device_reporting()->set_report_network_telemetry_collection_rate_ms(rate);
     policy_helper_.RefreshDevicePolicy();
 
@@ -275,6 +276,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTelemetrySamplerBrowserTest, Default) {
     const auto [priority, record] = missive_observer.GetNextEnqueuedRecord();
 
     EXPECT_THAT(priority, Eq(Priority::MANUAL_BATCH));
+    ASSERT_TRUE(record.has_source_info());
+    EXPECT_THAT(record.source_info().source(), Eq(SourceInfo::ASH));
     ASSERT_TRUE(record_data.ParseFromString(record.data()));
     VerifyNetworkTelemetryData(record_data);
     ASSERT_FALSE(missive_observer.HasNewEnqueuedRecords());
@@ -288,6 +291,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTelemetrySamplerBrowserTest, Default) {
     const auto [priority, record] = missive_observer.GetNextEnqueuedRecord();
 
     EXPECT_THAT(priority, Eq(Priority::MANUAL_BATCH));
+    ASSERT_TRUE(record.has_source_info());
+    EXPECT_THAT(record.source_info().source(), Eq(SourceInfo::ASH));
     ASSERT_TRUE(record_data.ParseFromString(record.data()));
     VerifyNetworkTelemetryData(record_data);
     ASSERT_FALSE(missive_observer.HasNewEnqueuedRecords());
@@ -318,6 +323,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTelemetrySamplerBrowserTest, Default) {
     const auto [priority, record] = missive_observer.GetNextEnqueuedRecord();
 
     EXPECT_THAT(priority, Eq(Priority::MANUAL_BATCH));
+    ASSERT_TRUE(record.has_source_info());
+    EXPECT_THAT(record.source_info().source(), Eq(SourceInfo::ASH));
     ASSERT_TRUE(record_data.ParseFromString(record.data()));
     VerifyNetworkTelemetryData(record_data);
     ASSERT_FALSE(missive_observer.HasNewEnqueuedRecords());
@@ -339,6 +346,8 @@ IN_PROC_BROWSER_TEST_F(NetworkTelemetrySamplerBrowserTest, Default) {
     const auto [priority, record] = missive_observer.GetNextEnqueuedRecord();
 
     EXPECT_THAT(priority, Eq(Priority::MANUAL_BATCH));
+    ASSERT_TRUE(record.has_source_info());
+    EXPECT_THAT(record.source_info().source(), Eq(SourceInfo::ASH));
     ASSERT_TRUE(record_data.ParseFromString(record.data()));
     VerifyNetworkTelemetryData(record_data);
     ASSERT_FALSE(missive_observer.HasNewEnqueuedRecords());

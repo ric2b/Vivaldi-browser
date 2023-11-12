@@ -319,7 +319,13 @@ VideoOverlayWindowViews::VideoOverlayWindowViews(
           base::BindRepeating(
               &VideoOverlayWindowViews::UpdateControlsVisibility,
               base::Unretained(this),
-              false /* is_visible */)) {
+              false /* is_visible */)),
+      enable_controls_after_move_timer_(
+          FROM_HERE,
+          VideoOverlayWindowViews::kControlHideDelayAfterMove,
+          base::BindRepeating(
+              &VideoOverlayWindowViews::ReEnableControlsAfterMove,
+              base::Unretained(this))) {
   display::Screen::GetScreen()->AddObserver(this);
 }
 
@@ -439,8 +445,15 @@ gfx::Size VideoOverlayWindowViews::GetMaximumSize() const {
 
 void VideoOverlayWindowViews::OnNativeWidgetMove() {
   // Hide the controls when the window is moving. The controls will reappear
-  // when the user interacts with the window again.
-  UpdateControlsVisibility(false);
+  // when the user interacts with the window again. Only called once, at the
+  // start of movement because we do not want to clobber updates from other
+  // requesters.
+  if (!is_moving_) {
+    UpdateControlsVisibility(false);
+  }
+
+  is_moving_ = true;
+  enable_controls_after_move_timer_.Reset();
 
   // Update the maximum size of the widget in case we have moved to another
   // window.
@@ -585,6 +598,15 @@ void VideoOverlayWindowViews::RecordButtonPressed(
                             window_control);
 }
 
+void VideoOverlayWindowViews::ReEnableControlsAfterMove() {
+  is_moving_ = false;
+
+  if (queued_controls_visibility_status_) {
+    UpdateControlsVisibility(*queued_controls_visibility_status_);
+  }
+  queued_controls_visibility_status_.reset();
+}
+
 void VideoOverlayWindowViews::ForceControlsVisibleForTesting(bool visible) {
   force_controls_visible_ = visible;
   UpdateControlsVisibility(visible);
@@ -595,6 +617,11 @@ bool VideoOverlayWindowViews::AreControlsVisible() const {
 }
 
 void VideoOverlayWindowViews::UpdateControlsVisibility(bool is_visible) {
+  if (is_moving_) {
+    queued_controls_visibility_status_ = is_visible;
+    return;
+  }
+
   GetControlsContainerView()->SetVisible(
       force_controls_visible_.value_or(is_visible));
 }
@@ -966,8 +993,7 @@ void VideoOverlayWindowViews::OnRootViewReady() {
   view_holder_.clear();
 
 #if defined(VIVALDI_BUILD)
-  CreateVivaldiVideoControls();
-  CreateVivaldiVideoObserver();
+  InitVivaldiControls();
 #endif  // defined(VIVALDI_BUILD)
 
   // Don't show the controls until the mouse hovers over the window.
@@ -1082,10 +1108,6 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
                             kSecondaryControlSize.height() -
                             kSecondaryControlBottomMargin;
 
-#if defined(VIVALDI_BUILD)
-  UpdateVivaldiControlsBounds(primary_control_y, kControlMargin);
-#endif  // defines(VIVALDI_BUILD)
-
   switch (visible_controls_views.size()) {
     case 0:
       DCHECK(back_to_tab_label_button_);
@@ -1185,6 +1207,10 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
   hang_up_button_->SetVisible(show_hang_up_button_);
   previous_slide_controls_view_->SetVisible(show_previous_slide_button_);
   next_slide_controls_view_->SetVisible(show_next_slide_button_);
+
+#if defined(VIVALDI_BUILD)
+  UpdateVivaldiControlsBounds(primary_control_y, kControlMargin);
+#endif  // defines(VIVALDI_BUILD)
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

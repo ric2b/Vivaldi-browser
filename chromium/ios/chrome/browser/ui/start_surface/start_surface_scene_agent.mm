@@ -27,10 +27,6 @@
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // Name of histogram to record the number of excess NTP tabs that are removed.
 const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
@@ -170,12 +166,11 @@ const char kExcessNTPTabsRemoved[] = "IOS.NTP.ExcessRemovedTabCount";
   // Create a new NTP since there is no existing one.
   TabInsertionBrowserAgent* insertion_agent =
       TabInsertionBrowserAgent::FromBrowser(browser);
-  web::NavigationManager::WebLoadParams params((GURL(kChromeUINewTabURL)));
-  insertion_agent->InsertWebState(
-      params, nullptr, /*opened_by_dom=*/false,
-      TabInsertion::kPositionAutomatically, /*in_background=*/false,
-      /*inherit_opener=*/false, /*should_show_start_surface=*/true,
-      /*should_skip_new_tab_animation=*/false);
+  web::NavigationManager::WebLoadParams web_load_params(
+      (GURL(kChromeUINewTabURL)));
+  TabInsertion::Params tab_insertion_params;
+  tab_insertion_params.should_show_start_surface = true;
+  insertion_agent->InsertWebState(web_load_params, tab_insertion_params);
 }
 
 // Removes duplicate NTP tabs in `browser`'s WebStateList.

@@ -10,8 +10,10 @@
 
 #include "ash/ash_export.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 
@@ -52,11 +54,12 @@ class ASH_EXPORT TimeOfDay {
   TimeOfDay& SetLocalTimeConverter(
       const LocalTimeConverter* local_time_converter);
 
-  // Converts to an actual point in time today. If this fail for some reason,
-  // base::Time() will be returned.
-  base::Time ToTimeToday() const;
+  // Converts to an actual point in time today. If this fails for some reason,
+  // `absl::nullopt` will be returned. Otherwise, always returns a valid
+  // non-null timestamp.
+  absl::optional<base::Time> ToTimeToday() const;
 
-  // Converts to a string in the format "3:07 PM".
+  // Converts to a string in the format "3:07 PM". Only for debugging use.
   std::string ToString() const;
 
  private:
@@ -69,12 +72,14 @@ class ASH_EXPORT TimeOfDay {
   int offset_minutes_from_zero_hour_;
 
   // Optional Used in tests to override the time of "Now".
-  const base::Clock* clock_ = nullptr;  // Not owned.
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #constexpr-ctor-field-initializer
+  RAW_PTR_EXCLUSION const base::Clock* clock_ = nullptr;  // Not owned.
 
   // May be null, in which case `GetLocalTimeConverter()` returns the default
   // implementation.
-  base::raw_ptr<const LocalTimeConverter, ExperimentalAsh>
-      local_time_converter_ = nullptr;
+  raw_ptr<const LocalTimeConverter, ExperimentalAsh> local_time_converter_ =
+      nullptr;
 };
 
 ASH_EXPORT std::ostream& operator<<(std::ostream& os,

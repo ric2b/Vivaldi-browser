@@ -6,7 +6,7 @@
 
 #import "base/feature_list.h"
 #import "components/breadcrumbs/core/breadcrumbs_status.h"
-#import "ios/chrome/browser/app_launcher/app_launcher_browser_agent.h"
+#import "ios/chrome/browser/app_launcher/model/app_launcher_browser_agent.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_browser_agent.h"
 #import "ios/chrome/browser/device_sharing/device_sharing_browser_agent.h"
 #import "ios/chrome/browser/follow/follow_browser_agent.h"
@@ -44,9 +44,9 @@
 #import "ios/chrome/browser/web_state_list/web_usage_enabler/web_usage_enabler_browser_agent.h"
 #import "ios/public/provider/chrome/browser/app_utils/app_utils_api.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// To get access to UseSessionSerializationOptimizations().
+// TODO(crbug.com/1383087): remove once the feature is fully launched.
+#import "ios/web/common/features.h"
 
 void AttachBrowserAgents(Browser* browser) {
   if (breadcrumbs::IsEnabled()) {
@@ -105,8 +105,10 @@ void AttachBrowserAgents(Browser* browser) {
   UrlLoadingBrowserAgent::CreateForBrowser(browser);
 
   // SessionRestorartionAgent requires WebUsageEnablerBrowserAgent.
-  SessionRestorationBrowserAgent::CreateForBrowser(
-      browser, [SessionServiceIOS sharedService], IsPinnedTabsEnabled());
+  if (!web::features::UseSessionSerializationOptimizations()) {
+    SessionRestorationBrowserAgent::CreateForBrowser(
+        browser, [SessionServiceIOS sharedService], IsPinnedTabsEnabled());
+  }
 
   // TabUsageRecorderBrowserAgent and WebStateListMetricsBrowserAgent observe
   // the SessionRestorationBrowserAgent, so they should be created after the the

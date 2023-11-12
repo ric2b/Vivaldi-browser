@@ -23,6 +23,7 @@ export enum CloudPanelType {
   OFFLINE = 'offline',
   BATTERY_SAVER = 'battery_saver',
   NOT_ENOUGH_SPACE = 'not_enough_space',
+  METERED_NETWORK = 'metered_network',
 }
 
 /**
@@ -202,10 +203,9 @@ export class XfCloudPanel extends XfBase {
           </div>
         </div>
         <div class="static" id="progress-finished">
-          <xf-icon type="${
-        constants.ICON_TYPES.BULK_PINNING_DONE}" size="large"></xf-icon>
+          <xf-icon type="${constants.ICON_TYPES.CLOUD}" size="large"></xf-icon>
           <div class="status-description">
-            ${str('DRIVE_ALL_FILES_SYNCED')}
+            ${str('BULK_PINNING_FILE_SYNC_ON')}
           </div>
         </div>
         <div class="static" id="progress-offline">
@@ -228,6 +228,12 @@ export class XfCloudPanel extends XfBase {
         constants.ICON_TYPES.ERROR_BANNER}" size="large"></xf-icon>
           <div class="status-description">
             ${str('DRIVE_BULK_PINNING_NOT_ENOUGH_SPACE')}
+          </div>
+        </div>
+        <div class="static" id="progress-metered-network">
+          <xf-icon type="${constants.ICON_TYPES.CLOUD}" size="large"></xf-icon>
+          <div class="status-description">
+            ${str('DRIVE_BULK_PINNING_METERED_NETWORK')}
           </div>
         </div>
         <div class="divider"></div>
@@ -253,7 +259,6 @@ function getCSS() {
 
     :host(:not([items][percentage])) #progress-state,
     :host([percentage="100"]) #progress-state,
-    :host([percentage="0"]) #progress-state,
     :host([type]) #progress-state {
       display: none;
     }
@@ -263,7 +268,7 @@ function getCSS() {
       display: none;
     }
 
-    :host(:not([items][percentage="0"])) #progress-preparing,
+    :host([percentage][items]) #progress-preparing,
     :host([type]) #progress-preparing {
       display: none;
     }
@@ -277,6 +282,10 @@ function getCSS() {
     }
 
     :host(:not([type="not_enough_space"])) #progress-not-enough-space {
+      display: none;
+    }
+
+    :host(:not([type="metered_network"])) #progress-metered-network {
       display: none;
     }
 

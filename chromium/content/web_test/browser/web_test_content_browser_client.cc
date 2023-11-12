@@ -52,6 +52,7 @@
 #include "content/web_test/browser/web_test_browser_main_parts.h"
 #include "content/web_test/browser/web_test_control_host.h"
 #include "content/web_test/browser/web_test_cookie_manager.h"
+#include "content/web_test/browser/web_test_fedcm_manager.h"
 #include "content/web_test/browser/web_test_origin_trial_throttle.h"
 #include "content/web_test/browser/web_test_permission_manager.h"
 #include "content/web_test/browser/web_test_storage_access_manager.h"
@@ -365,6 +366,12 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
       base::BindRepeating(&WebTestContentBrowserClient::BindWebTestControlHost,
                           base::Unretained(this),
                           render_process_host->GetID()));
+
+  registry->AddInterface(
+      base::BindRepeating(
+          &WebTestContentBrowserClient::BindNonAssociatedWebTestControlHost,
+          base::Unretained(this)),
+      ui_task_runner);
 }
 
 void WebTestContentBrowserClient::BindPermissionAutomation(
@@ -408,7 +415,7 @@ void WebTestContentBrowserClient::AppendExtraCommandLineSwitches(
   ShellContentBrowserClient::AppendExtraCommandLineSwitches(command_line,
                                                             child_process_id);
 
-  static const char* kForwardSwitches[] = {
+  static const char* const kForwardSwitches[] = {
       // Switches from web_test_switches.h that are used in the renderer.
       switches::kEnableAccelerated2DCanvas,
       switches::kEnableFontAntialiasing,
@@ -417,7 +424,7 @@ void WebTestContentBrowserClient::AppendExtraCommandLineSwitches(
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
-                                 kForwardSwitches, std::size(kForwardSwitches));
+                                 kForwardSwitches);
 }
 
 std::unique_ptr<BrowserMainParts>
@@ -537,6 +544,9 @@ void WebTestContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
   map->Add<blink::test::mojom::CookieManagerAutomation>(base::BindRepeating(
       &WebTestContentBrowserClient::BindCookieManagerAutomation,
       base::Unretained(this)));
+  map->Add<blink::test::mojom::FederatedAuthRequestAutomation>(
+      base::BindRepeating(&WebTestContentBrowserClient::BindFedCmAutomation,
+                          base::Unretained(this)));
 }
 
 bool WebTestContentBrowserClient::CanAcceptUntrustedExchangesIfNeeded() {
@@ -587,6 +597,14 @@ void WebTestContentBrowserClient::BindCookieManagerAutomation(
                                ->GetCookieManagerForBrowserProcess(),
                            render_frame_host->GetLastCommittedURL()),
                        std::move(receiver));
+}
+
+void WebTestContentBrowserClient::BindFedCmAutomation(
+    RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::test::mojom::FederatedAuthRequestAutomation>
+        receiver) {
+  fedcm_managers_.Add(std::make_unique<WebTestFedCmManager>(render_frame_host),
+                      std::move(receiver));
 }
 
 std::unique_ptr<LoginDelegate> WebTestContentBrowserClient::CreateLoginDelegate(
@@ -643,6 +661,14 @@ void WebTestContentBrowserClient::BindWebTestControlHost(
   if (WebTestControlHost::Get())
     WebTestControlHost::Get()->BindWebTestControlHostForRenderer(
         render_process_id, std::move(receiver));
+}
+
+void WebTestContentBrowserClient::BindNonAssociatedWebTestControlHost(
+    mojo::PendingReceiver<mojom::NonAssociatedWebTestControlHost> receiver) {
+  if (WebTestControlHost::Get()) {
+    WebTestControlHost::Get()->BindNonAssociatedWebTestControlHost(
+        std::move(receiver));
+  }
 }
 
 #if BUILDFLAG(IS_WIN)

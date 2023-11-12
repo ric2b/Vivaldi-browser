@@ -15,6 +15,7 @@
 @protocol LocationBarAnimatee;
 @protocol OmniboxPopupPresenterDelegate;
 @protocol OmniboxFocusDelegate;
+@protocol ToolbarOmniboxConsumer;
 
 // Vivaldi
 @protocol SharingPositioner;
@@ -59,6 +60,9 @@
 
 // Target to forward omnibox-related scribble events to.
 - (UIResponder<UITextInput>*)omniboxScribbleForwardingTarget;
+
+// Returns the toolbar omnibox consumer.
+- (id<ToolbarOmniboxConsumer>)toolbarOmniboxConsumer;
 
 // Vivaldi
 // Positioner for activity services attached to the location bar i.e. share page

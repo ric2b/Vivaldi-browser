@@ -3,6 +3,7 @@
 #include "ios/sync/note_sync_service_factory.h"
 
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #include "ios/sync/file_store_factory.h"
@@ -37,7 +38,8 @@ std::unique_ptr<KeyedService> NoteSyncServiceFactory::BuildServiceInstanceFor(
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(context);
   auto note_sync_service = std::make_unique<sync_notes::NoteSyncService>(
-      SyncedFileStoreFactory::GetForBrowserState(browser_state), false);
+      SyncedFileStoreFactory::GetForBrowserState(browser_state),
+      syncer::WipeModelUponSyncDisabledBehavior::kNever);
   return note_sync_service;
 }
 

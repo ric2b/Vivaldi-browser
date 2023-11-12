@@ -6,29 +6,35 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_CONSTANTS_H_
 
 #include <stddef.h>
-
+#include <stdint.h>
+#include <initializer_list>
 #include <iosfwd>
 #include <string>
 
+#include "base/containers/enum_set.h"
 #include "base/functional/callback_forward.h"
-#include "components/webapps/browser/installable/installable_metrics.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-forward.h"
+
+namespace webapps {
+enum class WebappUninstallSource;
+}
 
 namespace web_app {
 
 // Installations of Web Apps have different sources of management. Apps can be
 // installed by different management systems - for example an app can be both
-// installed by the user and by policy. Keeping track of the which installation
+// installed by the user and by policy. Keeping track of which installation
 // managers have installed a web app allows for them to be installed by multiple
-// at the same time, and uninstalls from one manager doesn't affect another -
-// the app will stay installed as long as at least one management source has it
-// installed.
+// managers at the same time, and uninstalls from one manager doesn't affect
+// another - the app will stay installed as long as at least one management
+// source has it installed.
 //
 // This enum is also used to rank installation sources, so the ordering matters.
 // This enum should be zero based: values are used as index in a bitset.
 // We don't use this enum values in prefs or metrics: enumerators can be
-// reordered. This enum is not strongly typed enum class: it supports implicit
+// reordered. This enum is not a strongly typed enum class: it supports implicit
 // conversion to int and <> comparison operators.
 namespace WebAppManagement {
 enum Type {
@@ -50,7 +56,7 @@ enum Type {
   // AndroidSmsAppSetupControllerImpl, which is a potential conflict in the
   // future.
   // TODO(dmurph): Add a new source here so that the
-  // AndroidSmsAppSetupControllerImpl has it's own source, and migrate those
+  // AndroidSmsAppSetupControllerImpl has its own source, and migrate those
   // installations to have the new source.
   // https://crbug.com/1314055
   kDefault,
@@ -59,6 +65,10 @@ enum Type {
 
 std::ostream& operator<<(std::ostream& os, WebAppManagement::Type type);
 }  // namespace WebAppManagement
+
+using WebAppManagementTypes = base::EnumSet<WebAppManagement::Type,
+                                            WebAppManagement::kMinValue,
+                                            WebAppManagement::kMaxValue>;
 
 // Type of OS hook.
 //
@@ -187,6 +197,8 @@ enum class RunOnOsLoginMode {
   kMaxValue = kMinimized,
 };
 
+std::ostream& operator<<(std::ostream& os, RunOnOsLoginMode mode);
+
 // Command line parameter representing RunOnOsLoginMode::kWindowed.
 extern const char kRunOnOsLoginModeWindowed[];
 
@@ -294,6 +306,24 @@ using ResultCallback = base::OnceCallback<void(Result)>;
 // Convert the uninstall source to string for easy printing.
 std::string ConvertUninstallSourceToStringType(
     const webapps::WebappUninstallSource& uninstall_source);
+
+// Management types that can be uninstalled by the user.
+constexpr WebAppManagementTypes kUserUninstallableSources = {
+    WebAppManagement::kDefault,
+    WebAppManagement::kSync,
+    WebAppManagement::kWebAppStore,
+    WebAppManagement::kSubApp,
+    WebAppManagement::kOem,
+    WebAppManagement::kCommandLine,
+    WebAppManagement::kOneDriveIntegration,
+};
+
+// Management types that resulted from a user web app install.
+constexpr WebAppManagementTypes kUserDrivenInstallSources = {
+    WebAppManagement::kSync,
+    WebAppManagement::kWebAppStore,
+    WebAppManagement::kOneDriveIntegration,
+};
 
 }  // namespace web_app
 

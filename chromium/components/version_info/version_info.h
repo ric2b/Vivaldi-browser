@@ -33,7 +33,7 @@ constexpr base::StringPiece GetProductName() {
 }
 
 // Returns the version number, e.g. "6.0.490.1".
-constexpr std::string GetVersionNumber() {
+constexpr base::StringPiece GetVersionNumber() {
   return CHROME_PRODUCT_VERSION;
 }
 

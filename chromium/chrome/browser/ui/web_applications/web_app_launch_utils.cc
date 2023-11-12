@@ -319,7 +319,8 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
 
   if (web_app->launch_handler()
           .value_or(LaunchHandler{})
-          .TargetsExistingClients()) {
+          .TargetsExistingClients() ||
+      registrar.IsPreventCloseEnabled(web_app->app_id())) {
     if (Browser* browser =
             AppBrowserController::FindForWebApp(*profile, app_id)) {
       // TODO(crbug.com/1385226): Use apps::AppServiceProxy::LaunchAppWithUrl()
@@ -352,6 +353,11 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
     browser_params.is_vivaldi = false;
 
     browser = Browser::Create(browser_params);
+
+    // If the current url isn't in scope, then set the initial url on the
+    // AppBrowserController so that the 'x' button still shows up.
+    CHECK(browser->app_controller());
+    browser->app_controller()->MaybeSetInitialUrlOnReparentTab();
   }
 
   bool as_pinned_home_tab =
@@ -444,6 +450,7 @@ Browser* CreateWebApplicationWindow(Profile* profile,
                                     bool omit_from_session_restore,
                                     bool can_resize,
                                     bool can_maximize,
+                                    bool can_fullscreen,
                                     const gfx::Rect initial_bounds) {
   std::string app_name = GenerateApplicationNameFromAppId(app_id);
   Browser::CreateParams browser_params =
@@ -461,6 +468,7 @@ Browser* CreateWebApplicationWindow(Profile* profile,
   browser_params.omit_from_session_restore = omit_from_session_restore;
   browser_params.can_resize = can_resize;
   browser_params.can_maximize = can_maximize;
+  browser_params.can_fullscreen = can_fullscreen;
   Browser* browser = Browser::Create(browser_params);
   MaybeAddPinnedHomeTab(browser, app_id);
   return browser;

@@ -15,7 +15,6 @@
 #include "ash/public/cpp/test/mock_projector_client.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/message_center/message_center.h"
@@ -30,7 +29,6 @@ class FilePath;
 
 namespace gfx {
 class Image;
-class Point;
 }  // namespace gfx
 
 namespace ui::test {
@@ -50,6 +48,7 @@ class PillButton;
 class IconButton;
 class CaptureModeController;
 class CaptureModeBarView;
+class TabSliderButton;
 
 // Fake camera info used for testing.
 constexpr char kDefaultCameraDeviceId[] = "/dev/videoX";
@@ -67,14 +66,6 @@ void ClickOnView(const views::View* view,
 
 // Waits until the recording is in progress.
 void WaitForRecordingToStart();
-
-// Moves the mouse and updates the cursor's display manually to imitate what a
-// real mouse move event does in shell.
-// TODO(crbug.com/990589): Unit tests should be able to simulate mouse input
-// without having to call |CursorManager::SetDisplay|.
-void MoveMouseToAndUpdateCursorDisplay(
-    const gfx::Point& point,
-    ui::test::EventGenerator* event_generator);
 
 // Starts recording immediately without the 3-seconds count down.
 void StartVideoRecordingImmediately();
@@ -154,11 +145,11 @@ void PressAndReleaseKeyOnVK(ui::test::EventGenerator* event_generator,
 gfx::Image ReadAndDecodeImageFile(const base::FilePath& image_path);
 
 // Gets the buttons inside the capture bar view.
-IconButton* GetImageToggleButton();
-IconButton* GetVideoToggleButton();
-IconButton* GetFullscreenToggleButton();
-IconButton* GetRegionToggleButton();
-IconButton* GetWindowToggleButton();
+TabSliderButton* GetImageToggleButton();
+TabSliderButton* GetVideoToggleButton();
+TabSliderButton* GetFullscreenToggleButton();
+TabSliderButton* GetRegionToggleButton();
+TabSliderButton* GetWindowToggleButton();
 PillButton* GetStartRecordingButton();
 IconButton* GetSettingsButton();
 IconButton* GetCloseButton();
@@ -206,7 +197,6 @@ class ProjectorCaptureModeIntegrationHelper {
   void StartProjectorModeSession();
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   MockProjectorClient projector_client_;
 };
 

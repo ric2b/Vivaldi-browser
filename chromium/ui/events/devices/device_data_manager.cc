@@ -11,6 +11,7 @@
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/events/devices/input_device.h"
 #include "ui/events/devices/input_device_event_observer.h"
 #include "ui/events/devices/keyboard_device.h"
 #include "ui/events/devices/touch_device_transform.h"
@@ -160,6 +161,11 @@ const std::vector<TouchpadDevice>& DeviceDataManager::GetTouchpadDevices()
   return touchpad_devices_;
 }
 
+const std::vector<InputDevice>& DeviceDataManager::GetGraphicsTabletDevices()
+    const {
+  return graphics_tablet_devices_;
+}
+
 const std::vector<InputDevice>& DeviceDataManager::GetUncategorizedDevices()
     const {
   return uncategorized_devices_;
@@ -229,6 +235,16 @@ void DeviceDataManager::OnTouchpadDevicesUpdated(
   NotifyObserversTouchpadDeviceConfigurationChanged();
 }
 
+void DeviceDataManager::OnGraphicsTabletDevicesUpdated(
+    const std::vector<InputDevice>& devices) {
+  if (base::ranges::equal(devices, graphics_tablet_devices_,
+                          InputDeviceEquals)) {
+    return;
+  }
+  graphics_tablet_devices_ = devices;
+  NotifyObserversGraphicsTabletDeviceConfigurationChanged();
+}
+
 void DeviceDataManager::OnUncategorizedDevicesUpdated(
     const std::vector<InputDevice>& devices) {
   if (base::ranges::equal(devices, uncategorized_devices_, InputDeviceEquals)) {
@@ -264,6 +280,10 @@ NOTIFY_OBSERVERS(
 NOTIFY_OBSERVERS(
     NotifyObserversTouchpadDeviceConfigurationChanged(),
     OnInputDeviceConfigurationChanged(InputDeviceEventObserver::kTouchpad))
+
+NOTIFY_OBSERVERS(NotifyObserversGraphicsTabletDeviceConfigurationChanged(),
+                 OnInputDeviceConfigurationChanged(
+                     InputDeviceEventObserver::kGraphicsTablet))
 
 NOTIFY_OBSERVERS(
     NotifyObserversUncategorizedDeviceConfigurationChanged(),

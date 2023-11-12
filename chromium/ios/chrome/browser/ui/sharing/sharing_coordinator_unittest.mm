@@ -14,8 +14,8 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/test/bookmark_test_helpers.h"
-#import "ios/chrome/browser/bookmarks/bookmark_ios_unit_test_support.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_ios_unit_test_support.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -46,10 +46,6 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
@@ -162,6 +158,7 @@ TEST_F(SharingCoordinatorTest, Start_ShareCurrentPage) {
   [activityHandler activityServiceDidEndPresenting];
 
   [vc_partial_mock verify];
+  [coordinator stop];
 }
 
 // Tests that the coordinator handles the QRGenerationCommands protocol.
@@ -191,6 +188,7 @@ TEST_F(SharingCoordinatorTest, GenerateQRCode) {
   [handler hideQRCode];
 
   [vc_partial_mock verify];
+  [coordinator stop];
 }
 
 // Tests that the start method shares the given URL and ends up presenting
@@ -222,4 +220,10 @@ TEST_F(SharingCoordinatorTest, Start_ShareURL) {
   [coordinator start];
 
   [vc_partial_mock verify];
+
+  // Make sure share sheet finishes it's init (which means calling
+  // canPerformWithActivityItems and reading prefs) before the
+  // WebTaskEnvironment is shut down.
+  base::RunLoop().RunUntilIdle();
+  [coordinator stop];
 }

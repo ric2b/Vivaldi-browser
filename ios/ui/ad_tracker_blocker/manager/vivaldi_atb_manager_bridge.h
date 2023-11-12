@@ -33,7 +33,8 @@ class VivaldiATBManagerBridge : public RuleService::Observer,
 
  private:
     void OnRuleServiceStateLoaded(RuleService* rule_service) override;
-    void OnIosRulesApplied(RuleGroup group) override;
+    void OnStartApplyingIosRules(RuleGroup group) override;
+    void OnDoneApplyingIosRules(RuleGroup group) override;
     void OnRulesSourceUpdated(const RuleSource& rule_source) override;
     void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;
     void OnExceptionListStateChanged(RuleGroup group) override;

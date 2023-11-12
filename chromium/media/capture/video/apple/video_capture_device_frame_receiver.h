@@ -9,10 +9,6 @@
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video_capture_types.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace media {
 
 class CAPTURE_EXPORT VideoCaptureDeviceAVFoundationFrameReceiver {
@@ -27,7 +23,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceAVFoundationFrameReceiver {
                             const gfx::ColorSpace color_space,
                             int aspect_numerator,
                             int aspect_denominator,
-                            base::TimeDelta timestamp) = 0;
+                            base::TimeDelta timestamp,
+                            int rotation) = 0;
 
   // Called to deliver GpuMemoryBuffer-wrapped captured video frames. This
   // function may be called from any thread, including those controlled by

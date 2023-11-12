@@ -60,6 +60,8 @@ void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
       {"dateColumn", IDS_PRINT_MANAGEMENT_DATE_COLUMN},
       {"statusColumn", IDS_PRINT_MANAGEMENT_STATUS_COLUMN},
       {"printJobTitle", IDS_PRINT_MANAGEMENT_TITLE},
+      {"clearAllHistoryDialogTitle",
+       IDS_PRINT_MANAGEMENT_CLEAR_ALL_HISTORY_DIALOG_TITLE},
       {"clearAllHistoryLabel",
        IDS_PRINT_MANAGEMENT_CLEAR_ALL_HISTORY_BUTTON_TEXT},
       {"clearHistoryConfirmationText",
@@ -123,9 +125,7 @@ void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
       {"emptyStatePrinterSettingsMessage",
        IDS_PRINT_MANAGEMENT_EMPTY_STATE_PRINTER_SETTINGS_MESSAGE},
       {"managePrintersButtonLabel",
-       IDS_PRINT_MANAGEMENT_EMPTY_STATE_MANAGE_PRINTERS_LABEL},
-      {"headerManagePrintersButtonLabel",
-       IDS_PRINT_MANAGEMENT_HEADER_MANAGE_PRINTERS_LABEL}};
+       IDS_PRINT_MANAGEMENT_EMPTY_STATE_MANAGE_PRINTERS_LABEL}};
 
   html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->UseStringsJs();
@@ -169,6 +169,13 @@ void PrintManagementUI::BindInterface(
         chromeos::printing::printing_manager::mojom::PrintingMetadataProvider>
         receiver) {
   bind_pending_receiver_callback_.Run(std::move(receiver));
+}
+
+void PrintManagementUI::BindInterface(
+    mojo::PendingReceiver<
+        chromeos::printing::printing_manager::mojom::PrintManagementHandler>
+        receiver) {
+  print_management_handler_->BindInterface(std::move(receiver));
 }
 
 void PrintManagementUI::BindInterface(

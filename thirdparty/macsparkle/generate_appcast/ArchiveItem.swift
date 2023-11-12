@@ -16,7 +16,9 @@ struct UpdateBranch: Hashable {
 class DeltaUpdate {
     let fromVersion: String
     let archivePath: URL
+#if GENERATE_APPCAST_BUILD_LEGACY_DSA_SUPPORT
     var dsaSignature: String?
+#endif
     var edSignature: String?
     let sparkleExecutableFileSize: Int?
     let sparkleLocales: String?
@@ -75,10 +77,13 @@ class ArchiveItem: CustomStringConvertible {
     let archiveFileAttributes: [FileAttributeKey: Any]
     var deltas: [DeltaUpdate]
 
+#if GENERATE_APPCAST_BUILD_LEGACY_DSA_SUPPORT
     var dsaSignature: String?
+#endif
     var edSignature: String?
     var downloadUrlPrefix: URL?
     var releaseNotesURLPrefix: URL?
+    var signingError: Error?
 
     init(version: String, shortVersion: String?, feedURL: URL?, minimumSystemVersion: String?, frameworkVersion: String?, sparkleExecutableFileSize: Int?, sparkleLocales: String?, publicEdKey: String?, supportsDSA: Bool, appPath: URL, archivePath: URL) throws {
         self.version = version
@@ -141,7 +146,11 @@ class ArchiveItem: CustomStringConvertible {
             }
             let shortVersion = infoPlist["CFBundleShortVersionString"] as? String
             let publicEdKey = infoPlist[SUPublicEDKeyKey] as? String
+#if GENERATE_APPCAST_BUILD_LEGACY_DSA_SUPPORT
             let supportsDSA = infoPlist[SUPublicDSAKeyKey] != nil || infoPlist[SUPublicDSAKeyFileKey] != nil
+#else
+            let supportsDSA = false
+#endif
 
             var feedURL: URL?
             if let feedURLStr = infoPlist["SUFeedURL"] as? String {
@@ -287,37 +296,50 @@ class ArchiveItem: CustomStringConvertible {
         if basename.pathExtension == "tar" { // tar.gz
             basename = basename.deletingPathExtension()
         }
-        let releaseNotes = basename.appendingPathExtension("html")
-        if !FileManager.default.fileExists(atPath: releaseNotes.path) {
-            return nil
+        
+        let htmlReleaseNotes = basename.appendingPathExtension("html")
+        if FileManager.default.fileExists(atPath: htmlReleaseNotes.path) {
+            return htmlReleaseNotes
         }
-        return releaseNotes
+        
+        let plainTextReleaseNotes = basename.appendingPathExtension("txt")
+        if FileManager.default.fileExists(atPath: plainTextReleaseNotes.path) {
+            return plainTextReleaseNotes
+        }
+        
+        return nil
     }
 
-    private func getReleaseNotesAsHTMLFragment(_ path: URL, _ maxCDATAThreshold: Int) -> String?  {
-        if let html = try? String(contentsOf: path) {
-            if html.utf8.count <= maxCDATAThreshold &&
-                !html.localizedCaseInsensitiveContains("<!DOCTYPE") &&
-                !html.localizedCaseInsensitiveContains("<body") {
-                return html
-            }
+    private func getReleaseNotesAsFragment(_ path: URL, _ embedReleaseNotesAlways: Bool) -> (content: String, format: String)?  {
+        guard let content = try? String(contentsOf: path) else {
+            return nil
         }
-        return nil
+        
+        let format = (path.pathExtension.caseInsensitiveCompare("txt") == .orderedSame) ? "plain-text" : "html"
+        
+        if embedReleaseNotesAlways {
+            return (content, format)
+        } else if path.pathExtension.caseInsensitiveCompare("html") == .orderedSame && !content.localizedCaseInsensitiveContains("<!DOCTYPE") && !content.localizedCaseInsensitiveContains("<body")  {
+            // HTML fragments should always be embedded
+            return (content, format)
+        } else {
+            return nil
+        }
     }
     
-    func releaseNotesHTML(maxCDATAThreshold: Int) -> String? {
+    func releaseNotesContent(embedReleaseNotesAlways: Bool) -> (content: String, format: String)? {
         if let path = self.releaseNotesPath {
-            return self.getReleaseNotesAsHTMLFragment(path, maxCDATAThreshold)
+            return self.getReleaseNotesAsFragment(path, embedReleaseNotesAlways)
         }
         return nil
     }
     
-    func releaseNotesURL(maxCDATAThreshold: Int) -> URL? {
+    func releaseNotesURL(embedReleaseNotesAlways: Bool) -> URL? {
         guard let path = self.releaseNotesPath else {
             return nil
         }
         // The file is already used as inline description
-        if self.getReleaseNotesAsHTMLFragment(path, maxCDATAThreshold) != nil {
+        if self.getReleaseNotesAsFragment(path, embedReleaseNotesAlways) != nil {
             return nil
         }
         return self.releaseNoteURL(for: path.lastPathComponent)
@@ -344,10 +366,23 @@ class ArchiveItem: CustomStringConvertible {
         }
         var localizedReleaseNotes = [(String, URL)]()
         for languageCode in Locale.isoLanguageCodes {
-            let localizedReleaseNoteURL = basename
+            let baseLocalizedReleaseNoteURL = basename
                 .appendingPathExtension(languageCode)
-                .appendingPathExtension("html")
-            if (try? localizedReleaseNoteURL.checkResourceIsReachable()) ?? false,
+            
+            let htmlLocalizedReleaseNoteURL = baseLocalizedReleaseNoteURL.appendingPathExtension("html")
+            let plainTextLocalizedReleaseNoteURL = baseLocalizedReleaseNoteURL.appendingPathExtension("txt")
+            
+            let localizedReleaseNoteURL: URL?
+            
+            if (try? htmlLocalizedReleaseNoteURL.checkResourceIsReachable()) ?? false {
+                localizedReleaseNoteURL = htmlLocalizedReleaseNoteURL
+            } else if (try? plainTextLocalizedReleaseNoteURL.checkResourceIsReachable()) ?? false {
+                localizedReleaseNoteURL = plainTextLocalizedReleaseNoteURL
+            } else {
+                localizedReleaseNoteURL = nil
+            }
+            
+            if let localizedReleaseNoteURL = localizedReleaseNoteURL,
                let localizedReleaseNoteRemoteURL = self.releaseNoteURL(for: localizedReleaseNoteURL.lastPathComponent)
             {
                 localizedReleaseNotes.append((languageCode, localizedReleaseNoteRemoteURL))

@@ -1,0 +1,19 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("thumbnail") {
+  sources = [
+    "vivaldi_thumbnail_service.h",
+    "vivaldi_thumbnail_service.mm",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//base",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "ImageIO.framework",
+    "UIKit.framework",
+  ]
+}

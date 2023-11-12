@@ -8,6 +8,8 @@ source_set("bookmark_locales_include") {
     default_path = "default-bookmarks/custom/LynkCo/bookmark-locales.json"
   } else if (is_vivaldi_volvo) {
     default_path = "default-bookmarks/custom/Volvo/bookmark-locales.json"
+  } else if (is_vivaldi_gas) {
+    default_path = "default-bookmarks/custom/Detroit/bookmark-locales.json"
   } else {
     default_path = "default-bookmarks/bookmark-locales.json"
   }

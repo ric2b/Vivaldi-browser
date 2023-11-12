@@ -19,11 +19,12 @@
 #import "SUUpdateAlert.h"
 #import "SULocalizations.h"
 #import "SUApplicationInfo.h"
-#import "SUOperatingSystem.h"
 #import "SPUUserUpdateState.h"
 #import "SUErrors.h"
 #import "SPUInstallationType.h"
+#import "SPUStandardVersionDisplay.h"
 #import "SULog.h"
+#import "SPUNoUpdateFoundInfo.h"
 #include <time.h>
 #include <mach/mach_time.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
@@ -31,58 +32,58 @@
 
 #import <AppKit/AppKit.h>
 
+#if __MAC_OS_X_VERSION_MAX_ALLOWED < 140000
+@interface NSApplication (ActivationAPIs)
+- (void)activate;
+@end
+#endif
+
 // The amount of time the app is allowed to be idle for us to consider showing an update prompt right away when the app is active
 static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 30.0 : 5 * 60.0;
 
 @interface SPUStandardUserDriver () <SPUGentleUserDriverReminders>
 
-@property (nonatomic, readonly) SUHost *host;
-// We must store the oldHostName before the host is potentially replaced
-// because we may use this property after update has been installed
-@property (nonatomic, readonly) NSString *oldHostName;
-@property (nonatomic, readonly) NSURL *oldHostBundleURL;
-
-@property (nonatomic, weak, nullable, readonly) id <SPUStandardUserDriverDelegate> delegate;
-
-@property (nonatomic, copy) void (^installUpdateHandler)(SPUUserUpdateChoice);
-@property (nonatomic, copy) void (^cancellation)(void);
-
-@property (nonatomic) SUStatusController *checkingController;
-// Note: we expose a private interface for activeUpdateAlert in SPUStandardUserDriver+Private.h as NSWindowController
-@property (nonatomic) SUUpdateAlert *activeUpdateAlert;
-@property (nonatomic) SUStatusController *statusController;
-@property (nonatomic) SUUpdatePermissionPrompt *permissionPrompt;
-
-@property (nonatomic) uint64_t expectedContentLength;
-@property (nonatomic) uint64_t bytesDownloaded;
+// Note: we expose a private interface for activeUpdateAlert property in SPUStandardUserDriver+Private.h as NSWindowController
+@property (nonatomic, readonly, nullable) NSWindowController *activeUpdateAlert;
 
 @end
 
 @implementation SPUStandardUserDriver
 {
     void (^_retryTerminatingApplication)(void);
-    mach_timebase_info_data_t _timebaseInfo;
-    double _timeSinceOpportuneUpdateNotice;
+    void (^_installUpdateHandler)(SPUUserUpdateChoice);
+    void (^_cancellation)(void);
+    
+    SUHost *_host;
+    // We must store the oldHostName before the host is potentially replaced
+    // because we may use this property after update has been installed
+    NSString *_oldHostName;
+    NSURL *_oldHostBundleURL;
+    
     id<NSObject> _applicationBecameActiveAfterUpdateAlertBecameKeyObserver;
     NSValue *_updateAlertWindowFrameValue;
+    SUStatusController *_checkingController;
+    
+    SUUpdateAlert *_activeUpdateAlert;
+    
+    SUStatusController *_statusController;
+    SUUpdatePermissionPrompt *_permissionPrompt;
+    
+    __weak id <SPUStandardUserDriverDelegate> _delegate;
+    
+    mach_timebase_info_data_t _timebaseInfo;
+    
+    uint64_t _expectedContentLength;
+    uint64_t _bytesDownloaded;
+    double _timeSinceOpportuneUpdateNotice;
+    
     BOOL _updateAlertWindowWasInactive;
     BOOL _loggedGentleUpdateReminderWarning;
     BOOL _regularApplicationUpdate;
     BOOL _updateReceivedUserAttention;
 }
 
-@synthesize host = _host;
-@synthesize oldHostName = _oldHostName;
-@synthesize oldHostBundleURL = _oldHostBundleURL;
-@synthesize installUpdateHandler = _installUpdateHandler;
-@synthesize cancellation = _cancellation;
-@synthesize delegate = _delegate;
-@synthesize checkingController = _checkingController;
 @synthesize activeUpdateAlert = _activeUpdateAlert;
-@synthesize statusController = _statusController;
-@synthesize permissionPrompt = _permissionPrompt;
-@synthesize expectedContentLength = _expectedContentLength;
-@synthesize bytesDownloaded = _bytesDownloaded;
 
 #pragma mark Birth
 
@@ -106,7 +107,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     return self;
 }
 
-- (double)currentTime
+- (double)currentTime SPU_OBJC_DIRECT
 {
     if (_timebaseInfo.denom > 0) {
         return (1.0 * mach_absolute_time() * _timebaseInfo.numer / _timebaseInfo.denom);
@@ -123,21 +124,34 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 
 #pragma mark Update Permission
 
+- (void)_activateApplication SPU_OBJC_DIRECT
+{
+    if (@available(macOS 14, *)) {
+        [NSApp activate];
+    } else {
+        [NSApp activateIgnoringOtherApps:YES];
+    }
+}
+
 - (void)showUpdatePermissionRequest:(SPUUpdatePermissionRequest *)request reply:(void (^)(SUUpdatePermissionResponse *))reply
 {
     assert(NSThread.isMainThread);
     
     if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
-        [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
+        [self _activateApplication];
     }
     
     __weak __typeof__(self) weakSelf = self;
-    self.permissionPrompt = [[SUUpdatePermissionPrompt alloc] initPromptWithHost:self.host request:request reply:^(SUUpdatePermissionResponse *response) {
+    _permissionPrompt = [[SUUpdatePermissionPrompt alloc] initPromptWithHost:_host request:request reply:^(SUUpdatePermissionResponse *response) {
         reply(response);
-        weakSelf.permissionPrompt = nil;
+        
+        __typeof__(self) strongSelf = weakSelf;
+        if (strongSelf != nil) {
+            strongSelf->_permissionPrompt = nil;
+        }
     }];
     
-    [self.permissionPrompt showWindow:nil];
+    [_permissionPrompt showWindow:nil];
 }
 
 #pragma mark Update Alert Focus
@@ -145,7 +159,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 // This private method is used by SPUUpdater when scheduling for update checks
 - (void)logGentleScheduledUpdateReminderWarningIfNeeded
 {
-    id<SPUStandardUserDriverDelegate> delegate = self.delegate;
+    id<SPUStandardUserDriverDelegate> delegate = _delegate;
     if (!_loggedGentleUpdateReminderWarning && (![delegate respondsToSelector:@selector(supportsGentleScheduledUpdateReminders)] || !delegate.supportsGentleScheduledUpdateReminders)) {
         BOOL isBackgroundApp = [SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]];
         if (isBackgroundApp) {
@@ -158,10 +172,10 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 
 // updateItem should be non-nil when showing an update for first time for scheduled updates
 // If appcastItem is != nil, then state must be != nil
-- (void)setUpActiveUpdateAlertForScheduledUpdate:(SUAppcastItem * _Nullable)updateItem state:(SPUUserUpdateState * _Nullable)state
+- (void)setUpActiveUpdateAlertForScheduledUpdate:(SUAppcastItem * _Nullable)updateItem state:(SPUUserUpdateState * _Nullable)state SPU_OBJC_DIRECT
 {
     // Make sure the window is loaded in any case
-    [self.activeUpdateAlert window];
+    [_activeUpdateAlert window];
     
     [self _removeApplicationBecomeActiveObserver];
     
@@ -170,11 +184,11 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
         if (![NSApp isActive]) {
             // If the user initiated an update check, we should make the app active,
             // regardless if it's a background running app or not
-            [NSApp activateIgnoringOtherApps:YES];
+            [self _activateApplication];
         }
         
-        [self.activeUpdateAlert showWindow:nil];
-        [self.activeUpdateAlert setInstallButtonFocus:YES];
+        [_activeUpdateAlert showWindow:nil];
+        [_activeUpdateAlert setInstallButtonFocus:YES];
     } else {
         // Handle scheduled update check
         uint64_t timeElapsedSinceOpportuneUpdateNotice = (uint64_t)([self currentTime] - _timeSinceOpportuneUpdateNotice);
@@ -183,7 +197,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
         BOOL appNearUpdaterInitialization = (timeElapsedSinceOpportuneUpdateNotice <= 3000000000ULL);
         
         // We will always show an update alert at the right time
-        [self.activeUpdateAlert setInstallButtonFocus:YES];
+        [_activeUpdateAlert setInstallButtonFocus:YES];
         
         // If the delegate doesn't override our behavior:
         // For regular applications, only show the update alert if the app is active and if it's an an opportune time, otherwise, we'll wait until the app becomes active again.
@@ -269,57 +283,61 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
             }
         }
         
+        id <SPUStandardUserDriverDelegate> delegate = _delegate;
         BOOL handleShowingUpdates;
-        if ([self.delegate respondsToSelector:@selector(standardUserDriverShouldHandleShowingScheduledUpdate:andInImmediateFocus:)]) {
-            handleShowingUpdates = [self.delegate standardUserDriverShouldHandleShowingScheduledUpdate:(SUAppcastItem * _Nonnull)updateItem andInImmediateFocus:immediateFocus];
+        if ([delegate respondsToSelector:@selector(standardUserDriverShouldHandleShowingScheduledUpdate:andInImmediateFocus:)]) {
+            handleShowingUpdates = [delegate standardUserDriverShouldHandleShowingScheduledUpdate:(SUAppcastItem * _Nonnull)updateItem andInImmediateFocus:immediateFocus];
         } else {
             handleShowingUpdates = YES;
         }
         
         if (!handleShowingUpdates) {
             // Delay a runloop cycle to make sure the update can properly be checked
-            SPUStandardUserDriver *__weak weakSelf = self;
+            __weak __typeof__(self) weakSelf = self;
             dispatch_async(dispatch_get_main_queue(), ^{
-                id<SPUStandardUserDriverDelegate> delegate = weakSelf.delegate;
-                if ([delegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
-                    [delegate standardUserDriverWillHandleShowingUpdate:handleShowingUpdates forUpdate:(SUAppcastItem * _Nonnull)updateItem state:(SPUUserUpdateState * _Nonnull)state];
-                } else {
-                    SULog(SULogLevelError, @"Error: Delegate <%@> is handling showing scheduled update but does not implement %@", delegate, NSStringFromSelector(@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)));
+                __typeof__(self) strongSelf = weakSelf;
+                if (strongSelf != nil) {
+                    id<SPUStandardUserDriverDelegate> innerDelegate = strongSelf->_delegate;
+                    if ([innerDelegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
+                        [innerDelegate standardUserDriverWillHandleShowingUpdate:handleShowingUpdates forUpdate:(SUAppcastItem * _Nonnull)updateItem state:(SPUUserUpdateState * _Nonnull)state];
+                    } else {
+                        SULog(SULogLevelError, @"Error: Delegate <%@> is handling showing scheduled update but does not implement %@", innerDelegate, NSStringFromSelector(@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)));
+                    }
                 }
             });
         } else {
             // The update will be shown, but not necessarily immediately if !driverShowingUpdateNow
             // It is useful to post this early in case the delegate wants to post a notification
-            if ([self.delegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
-                [self.delegate standardUserDriverWillHandleShowingUpdate:handleShowingUpdates forUpdate:(SUAppcastItem * _Nonnull)updateItem state:(SPUUserUpdateState * _Nonnull)state];
+            if ([delegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
+                [delegate standardUserDriverWillHandleShowingUpdate:handleShowingUpdates forUpdate:(SUAppcastItem * _Nonnull)updateItem state:(SPUUserUpdateState * _Nonnull)state];
             }
             
             if (!driverShowingUpdateNow) {
                 [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidBecomeActive:) name:NSApplicationDidBecomeActiveNotification object:NSApp];
             } else {
                 if (activatingApp) {
-                    [NSApp activateIgnoringOtherApps:YES];
+                    [self _activateApplication];
                 }
                 
                 if (showingUpdateInBack) {
-                    [self.activeUpdateAlert.window orderBack:nil];
+                    [_activeUpdateAlert.window orderBack:nil];
                 } else {
-                    [self.activeUpdateAlert showWindow:nil];
+                    [_activeUpdateAlert showWindow:nil];
                 }
             }
         }
     }
 }
 
-- (void)_removeApplicationBecomeActiveObserver
+- (void)_removeApplicationBecomeActiveObserver SPU_OBJC_DIRECT
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:NSApplicationDidBecomeActiveNotification object:NSApp];
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)__unused aNotification
 {
-    [self.activeUpdateAlert showWindow:nil];
-    [self.activeUpdateAlert setInstallButtonFocus:YES];
+    [_activeUpdateAlert showWindow:nil];
+    [_activeUpdateAlert setInstallButtonFocus:YES];
     
     [self _removeApplicationBecomeActiveObserver];
 }
@@ -332,19 +350,23 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     [self closeCheckingWindow];
     
-    id <SUVersionDisplay> versionDisplayer = nil;
-    if ([self.delegate respondsToSelector:@selector(standardUserDriverRequestsVersionDisplayer)]) {
-        versionDisplayer = [self.delegate standardUserDriverRequestsVersionDisplayer];
+    id<SPUStandardUserDriverDelegate> delegate = _delegate;
+    id<SUVersionDisplay> customVersionDisplayer = nil;
+    
+    if ([delegate respondsToSelector:@selector(standardUserDriverRequestsVersionDisplayer)]) {
+        customVersionDisplayer = [delegate standardUserDriverRequestsVersionDisplayer];
     }
     
-    BOOL needsToObserveUserAttention = [self.delegate respondsToSelector:@selector(standardUserDriverDidReceiveUserAttentionForUpdate:)];
+    id<SUVersionDisplay> versionDisplayer = (customVersionDisplayer != nil) ? customVersionDisplayer : [SPUStandardVersionDisplay standardVersionDisplay];
     
-    __weak SPUStandardUserDriver *weakSelf = self;
-    __weak id<SPUStandardUserDriverDelegate> weakDelegate = self.delegate;
-    self.activeUpdateAlert = [[SUUpdateAlert alloc] initWithAppcastItem:appcastItem state:state host:self.host versionDisplayer:versionDisplayer completionBlock:^(SPUUserUpdateChoice choice, NSRect windowFrame, BOOL wasKeyWindow) {
+    BOOL needsToObserveUserAttention = [delegate respondsToSelector:@selector(standardUserDriverDidReceiveUserAttentionForUpdate:)];
+    
+    __weak __typeof__(self) weakSelf = self;
+    __weak id<SPUStandardUserDriverDelegate> weakDelegate = delegate;
+    _activeUpdateAlert = [[SUUpdateAlert alloc] initWithAppcastItem:appcastItem state:state host:_host versionDisplayer:versionDisplayer completionBlock:^(SPUUserUpdateChoice choice, NSRect windowFrame, BOOL wasKeyWindow) {
         reply(choice);
         
-        SPUStandardUserDriver *strongSelf = weakSelf;
+        __typeof__(self) strongSelf = weakSelf;
         
         if (strongSelf != nil) {
             if (needsToObserveUserAttention && !strongSelf->_updateReceivedUserAttention) {
@@ -362,7 +384,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
             strongSelf->_updateAlertWindowFrameValue = [NSValue valueWithRect:windowFrame];
             strongSelf->_updateAlertWindowWasInactive = !wasKeyWindow;
             
-            strongSelf.activeUpdateAlert = nil;
+            strongSelf->_activeUpdateAlert = nil;
         }
     } didBecomeKeyBlock:^{
         if (!needsToObserveUserAttention) {
@@ -370,7 +392,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
         }
         
         if ([NSApp isActive]) {
-            SPUStandardUserDriver *strongSelf = weakSelf;
+            __typeof__(self) strongSelf = weakSelf;
             if (strongSelf != nil && !strongSelf->_updateReceivedUserAttention) {
                 strongSelf->_updateReceivedUserAttention = YES;
                 
@@ -382,12 +404,12 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
             // We need to listen for when the app becomes active again, and then test if the window alert
             // is still key. if it is, let the delegate know. Remove the observation after that.
             
-            SPUStandardUserDriver *strongSelfOuter = weakSelf;
+            __typeof__(self) strongSelfOuter = weakSelf;
             if (strongSelfOuter != nil && strongSelfOuter->_applicationBecameActiveAfterUpdateAlertBecameKeyObserver == nil) {
                 strongSelfOuter->_applicationBecameActiveAfterUpdateAlertBecameKeyObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:NSApp queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification * _Nonnull __unused note) {
-                    SPUStandardUserDriver *strongSelf = weakSelf;
+                    __typeof__(self) strongSelf = weakSelf;
                     if (strongSelf != nil) {
-                        if (!strongSelf->_updateReceivedUserAttention && [strongSelf.activeUpdateAlert.window isKeyWindow]) {
+                        if (!strongSelf->_updateReceivedUserAttention && [strongSelf->_activeUpdateAlert.window isKeyWindow]) {
                             strongSelf->_updateReceivedUserAttention = YES;
                             
                             id<SPUStandardUserDriverDelegate> strongDelegate = weakDelegate;
@@ -410,8 +432,8 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     // For user initiated checks, let the delegate know we'll be showing an update
     // For scheduled checks, -setUpActiveUpdateAlertForUpdate:state: below will handle this
-    if (state.userInitiated && [self.delegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
-        [self.delegate standardUserDriverWillHandleShowingUpdate:YES forUpdate:appcastItem state:state];
+    if (state.userInitiated && [delegate respondsToSelector:@selector(standardUserDriverWillHandleShowingUpdate:forUpdate:state:)]) {
+        [delegate standardUserDriverWillHandleShowingUpdate:YES forUpdate:appcastItem state:state];
     }
     
     [self setUpActiveUpdateAlertForScheduledUpdate:(state.userInitiated ? nil : appcastItem) state:state];
@@ -421,7 +443,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    [self.activeUpdateAlert showUpdateReleaseNotesWithDownloadData:downloadData];
+    [_activeUpdateAlert showUpdateReleaseNotesWithDownloadData:downloadData];
 }
 
 - (void)showUpdateReleaseNotesFailedToDownloadWithError:(NSError *)error
@@ -431,23 +453,23 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     // I don't want to expose SULog here because it's more of a user driver facing error
     // For our purposes we just ignore it and continue on..
     NSLog(@"Failed to download release notes with error: %@", error);
-    [self.activeUpdateAlert showReleaseNotesFailedToDownload];
+    [_activeUpdateAlert showReleaseNotesFailedToDownload];
 }
 
 - (void)showUpdateInFocus
 {
     BOOL mayNeedToActivateApp;
-    if (self.activeUpdateAlert != nil) {
+    if (_activeUpdateAlert != nil) {
         [self setUpActiveUpdateAlertForScheduledUpdate:nil state:nil];
         mayNeedToActivateApp = NO;
-    } else if (self.permissionPrompt != nil) {
-        [self.permissionPrompt showWindow:nil];
+    } else if (_permissionPrompt != nil) {
+        [_permissionPrompt showWindow:nil];
         mayNeedToActivateApp = YES;
-    } else if (self.statusController != nil) {
-        [self.statusController showWindow:nil];
+    } else if (_statusController != nil) {
+        [_statusController showWindow:nil];
         mayNeedToActivateApp = YES;
-    } else if (self.checkingController != nil) {
-        [self.checkingController showWindow:nil];
+    } else if (_checkingController != nil) {
+        [_checkingController showWindow:nil];
         mayNeedToActivateApp = YES;
     } else if (_retryTerminatingApplication != nil) {
         [self _showAndConfigureStatusControllerForReadyToInstallWithAction:@selector(retryTermination:) closable:YES];
@@ -458,20 +480,24 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     if (mayNeedToActivateApp && ![NSApp isActive]) {
         // Make the app active if it's not already active, e.g, from a menu bar extra
-        [NSApp activateIgnoringOtherApps:YES];
+        [self _activateApplication];
     }
 }
 
 #pragma mark Install & Relaunch Update
 
-- (void)_showAndConfigureStatusControllerForReadyToInstallWithAction:(SEL)selector closable:(BOOL)closable
+- (void)_showAndConfigureStatusControllerForReadyToInstallWithAction:(SEL)selector closable:(BOOL)closable SPU_OBJC_DIRECT
 {
     [self createAndShowStatusControllerWithClosable:closable];
     
-    [self.statusController beginActionWithTitle:SULocalizedString(@"Ready to Install", nil) maxProgressValue:1.0 statusText:nil];
-    [self.statusController setProgressValue:1.0]; // Fill the bar.
-    [self.statusController setButtonEnabled:YES];
-    [self.statusController setButtonTitle:SULocalizedString(@"Install and Relaunch", nil) target:self action:selector isDefault:YES];
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
+    
+    [_statusController beginActionWithTitle:SULocalizedStringFromTableInBundle(@"Ready to Install", SPARKLE_TABLE, sparkleBundle, nil) maxProgressValue:1.0 statusText:nil];
+    [_statusController setProgressValue:1.0]; // Fill the bar.
+    [_statusController setButtonEnabled:YES];
+    [_statusController setButtonTitle:SULocalizedStringFromTableInBundle(@"Install and Relaunch", SPARKLE_TABLE, sparkleBundle, nil) target:self action:selector isDefault:YES];
 }
 
 - (void)showReadyToInstallAndRelaunch:(void (^)(SPUUserUpdateChoice))installUpdateHandler
@@ -482,14 +508,14 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     [NSApp requestUserAttention:NSInformationalRequest];
     
-    self.installUpdateHandler = installUpdateHandler;
+    _installUpdateHandler = [installUpdateHandler copy];
 }
 
 - (void)installAndRestart:(id)__unused sender
 {
-    if (self.installUpdateHandler != nil) {
-        self.installUpdateHandler(SPUUserUpdateChoiceInstall);
-        self.installUpdateHandler = nil;
+    if (_installUpdateHandler != nil) {
+        _installUpdateHandler(SPUUserUpdateChoiceInstall);
+        _installUpdateHandler = nil;
     }
 }
 
@@ -506,37 +532,41 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    self.cancellation = cancellation;
+    _cancellation = [cancellation copy];
     
-    self.checkingController = [[SUStatusController alloc] initWithHost:self.host centerPointValue:nil minimizable:NO closable:NO];
-    [[self.checkingController window] center]; // Force the checking controller to load its window.
-    [self.checkingController beginActionWithTitle:SULocalizedString(@"Checking for updates…", nil) maxProgressValue:0.0 statusText:nil];
-    [self.checkingController setButtonTitle:SULocalizedString(@"Cancel", nil) target:self action:@selector(cancelCheckForUpdates:) isDefault:NO];
-    [self.checkingController showWindow:self];
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
+    
+    _checkingController = [[SUStatusController alloc] initWithHost:_host windowTitle:[NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"Updating %@", SPARKLE_TABLE, sparkleBundle, nil), [_host name]] centerPointValue:nil minimizable:NO closable:NO];
+    [[_checkingController window] center]; // Force the checking controller to load its window.
+    [_checkingController beginActionWithTitle:SULocalizedStringFromTableInBundle(@"Checking for updates…", SPARKLE_TABLE, sparkleBundle, nil) maxProgressValue:0.0 statusText:nil];
+    [_checkingController setButtonTitle:SULocalizedStringFromTableInBundle(@"Cancel", SPARKLE_TABLE, sparkleBundle, nil) target:self action:@selector(cancelCheckForUpdates:) isDefault:NO];
     
     // For background applications, obtain focus.
     // Useful if the update check is requested from another app like System Preferences.
-    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]])
-    {
-        [NSApp activateIgnoringOtherApps:YES];
+    if ([SUApplicationInfo isBackgroundApplication:[NSApplication sharedApplication]]) {
+        [self _activateApplication];
     }
+    
+    [_checkingController showWindow:self];
 }
 
-- (void)closeCheckingWindow
+- (void)closeCheckingWindow SPU_OBJC_DIRECT
 {
-    if (self.checkingController != nil)
+    if (_checkingController != nil)
     {
-        [self.checkingController close];
-        self.checkingController = nil;
-        self.cancellation = nil;
+        [_checkingController close];
+        _checkingController = nil;
+        _cancellation = nil;
     }
 }
 
 - (void)cancelCheckForUpdates:(id)__unused sender
 {
-    if (self.cancellation != nil) {
-        self.cancellation();
-        self.cancellation = nil;
+    if (_cancellation != nil) {
+        _cancellation();
+        _cancellation = nil;
     }
     [self closeCheckingWindow];
 }
@@ -549,13 +579,17 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     [self closeCheckingWindow];
     
-    [self.statusController close];
-    self.statusController = nil;
+    [_statusController close];
+    _statusController = nil;
+    
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
     
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = SULocalizedString(@"Update Error!", nil);
+    alert.messageText = SULocalizedStringFromTableInBundle(@"Update Error!", SPARKLE_TABLE, sparkleBundle, nil);
     alert.informativeText = [NSString stringWithFormat:@"%@", [error localizedDescription]];
-    [alert addButtonWithTitle:SULocalizedString(@"Cancel Update", nil)];
+    [alert addButtonWithTitle:SULocalizedStringFromTableInBundle(@"Cancel Update", SPARKLE_TABLE, sparkleBundle, nil)];
     [self showAlert:alert secondaryAction:nil];
     
     acknowledgement();
@@ -567,44 +601,78 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     [self closeCheckingWindow];
     
-    NSAlert *alert = [NSAlert alertWithError:error];
+    id <SPUStandardUserDriverDelegate> delegate = _delegate;
+    
+    id<SUVersionDisplay> customVersionDisplayer;
+    if ([delegate respondsToSelector:@selector(standardUserDriverRequestsVersionDisplayer)]) {
+        customVersionDisplayer = [delegate standardUserDriverRequestsVersionDisplayer];
+    } else {
+        customVersionDisplayer = nil;
+    }
+    
+    SPUNoUpdateFoundReason reason = (SPUNoUpdateFoundReason)[(NSNumber *)error.userInfo[SPUNoUpdateFoundReasonKey] integerValue];
+    
+    SUAppcastItem *latestAppcastItem = error.userInfo[SPULatestAppcastItemFoundKey];
+    
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#else
+    NSBundle *sparkleBundle = nil;
+#endif
+    
+    // If we have a custom version displayer, then override the recovery suggestion using the
+    // proper version display
+    NSError *presentationError;
+    if (customVersionDisplayer != nil) {
+        NSString *recoverySuggestion = SPUNoUpdateFoundRecoverySuggestion(reason, latestAppcastItem, _host, customVersionDisplayer, sparkleBundle);
+        
+        NSMutableDictionary<NSErrorUserInfoKey, id> *userInfo = [error.userInfo mutableCopy];
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] = recoverySuggestion;
+        
+        presentationError = [NSError errorWithDomain:error.domain code:error.code userInfo:[userInfo copy]];
+    } else {
+        presentationError = error;
+    }
+    
+    NSAlert *alert = [NSAlert alertWithError:presentationError];
     alert.alertStyle = NSAlertStyleInformational;
     
     // Can we give more information to the user?
-    SPUNoUpdateFoundReason reason = (SPUNoUpdateFoundReason)[(NSNumber *)error.userInfo[SPUNoUpdateFoundReasonKey] integerValue];
-    
     void (^secondaryAction)(void) = nil;
-    SUAppcastItem *latestAppcastItem = error.userInfo[SPULatestAppcastItemFoundKey];
     if (latestAppcastItem != nil) {
         switch (reason) {
             case SPUNoUpdateFoundReasonOnLatestVersion:
             case SPUNoUpdateFoundReasonOnNewerThanLatestVersion: {
                 // Show the user the past version history if available
-                NSString *localizedButtonTitle = SULocalizedString(@"Version History", nil);
 
-                // Check if the delegate implements a Version History action
-                id <SPUStandardUserDriverDelegate> delegate = self.delegate;
+                // Check if the delegate allows showing the Version History
+                BOOL shouldShowVersionHistory = (![delegate respondsToSelector:@selector(standardUserDriverShouldShowVersionHistoryForAppcastItem:)] || [delegate standardUserDriverShouldShowVersionHistoryForAppcastItem:latestAppcastItem]);
                 
-                if ([delegate respondsToSelector:@selector(standardUserDriverShowVersionHistoryForAppcastItem:)]) {
-                    [alert addButtonWithTitle:localizedButtonTitle];
+                if (shouldShowVersionHistory) {
+                    NSString *localizedButtonTitle = SULocalizedStringFromTableInBundle(@"Version History", SPARKLE_TABLE, sparkleBundle, nil);
                     
-                    secondaryAction = ^{
-                        [delegate standardUserDriverShowVersionHistoryForAppcastItem:latestAppcastItem];
-                    };
-                } else if (latestAppcastItem.fullReleaseNotesURL != nil) {
-                    // Open the full release notes URL if informed
-                    [alert addButtonWithTitle:localizedButtonTitle];
-                    
-                    secondaryAction = ^{
-                        [[NSWorkspace sharedWorkspace] openURL:(NSURL * _Nonnull)latestAppcastItem.fullReleaseNotesURL];
-                    };
-                } else if (latestAppcastItem.releaseNotesURL != nil) {
-                    // Fall back to opening the release notes URL
-                    [alert addButtonWithTitle:localizedButtonTitle];
-                    
-                    secondaryAction = ^{
-                        [[NSWorkspace sharedWorkspace] openURL:(NSURL * _Nonnull)latestAppcastItem.releaseNotesURL];
-                    };
+                    // Check if the delegate implements its own Version History action
+                    if ([delegate respondsToSelector:@selector(standardUserDriverShowVersionHistoryForAppcastItem:)]) {
+                        [alert addButtonWithTitle:localizedButtonTitle];
+                        
+                        secondaryAction = ^{
+                            [delegate standardUserDriverShowVersionHistoryForAppcastItem:latestAppcastItem];
+                        };
+                    } else if (latestAppcastItem.fullReleaseNotesURL != nil) {
+                        // Open the full release notes URL if informed
+                        [alert addButtonWithTitle:localizedButtonTitle];
+                        
+                        secondaryAction = ^{
+                            [[NSWorkspace sharedWorkspace] openURL:(NSURL * _Nonnull)latestAppcastItem.fullReleaseNotesURL];
+                        };
+                    } else if (latestAppcastItem.releaseNotesURL != nil) {
+                        // Fall back to opening the release notes URL
+                        [alert addButtonWithTitle:localizedButtonTitle];
+                        
+                        secondaryAction = ^{
+                            [[NSWorkspace sharedWorkspace] openURL:(NSURL * _Nonnull)latestAppcastItem.releaseNotesURL];
+                        };
+                    }
                 }
                 
                 break;
@@ -613,7 +681,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
             case SPUNoUpdateFoundReasonSystemIsTooNew:
                 if (latestAppcastItem.infoURL != nil) {
                     // Show the user the product's link if available
-                    [alert addButtonWithTitle:SULocalizedString(@"Learn More…", nil)];
+                    [alert addButtonWithTitle:SULocalizedStringFromTableInBundle(@"Learn More…", SPARKLE_TABLE, sparkleBundle, nil)];
                     
                     secondaryAction = ^{
                         [[NSWorkspace sharedWorkspace] openURL:(NSURL * _Nonnull)latestAppcastItem.infoURL];
@@ -630,15 +698,15 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     acknowledgement();
 }
 
-- (void)showAlert:(NSAlert *)alert secondaryAction:(void (^ _Nullable)(void))secondaryAction
+- (void)showAlert:(NSAlert *)alert secondaryAction:(void (^ _Nullable)(void))secondaryAction SPU_OBJC_DIRECT
 {
-    id <SPUStandardUserDriverDelegate> delegate = self.delegate;
+    id <SPUStandardUserDriverDelegate> delegate = _delegate;
     
     if ([delegate respondsToSelector:@selector(standardUserDriverWillShowModalAlert)]) {
         [delegate standardUserDriverWillShowModalAlert];
     }
     
-    [alert setIcon:[SUApplicationInfo bestIconForHost:self.host]];
+    [alert setIcon:[SUApplicationInfo bestIconForHost:_host]];
     
     NSModalResponse response = [alert runModal];
     if (response == NSAlertSecondButtonReturn && secondaryAction != nil) {
@@ -652,16 +720,17 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 
 #pragma mark Download & Install Updates
 
-- (void)createAndShowStatusControllerWithClosable:(BOOL)closable
+- (void)createAndShowStatusControllerWithClosable:(BOOL)closable SPU_OBJC_DIRECT
 {
-    if (self.statusController == nil) {
+    if (_statusController == nil) {
         // We will make the status window minimizable for regular app updates which are often
         // quick and atomic to install on quit. But we won't do this for package based updates.
+        id <SPUStandardUserDriverDelegate> delegate = _delegate;
         BOOL minimizable;
         if (!_regularApplicationUpdate) {
             minimizable = NO;
-        } else if ([self.delegate respondsToSelector:@selector(standardUserDriverAllowsMinimizableStatusWindow)]) {
-            minimizable = [self.delegate standardUserDriverAllowsMinimizableStatusWindow];
+        } else if ([delegate respondsToSelector:@selector(standardUserDriverAllowsMinimizableStatusWindow)]) {
+            minimizable = [delegate standardUserDriverAllowsMinimizableStatusWindow];
         } else {
             minimizable = YES;
         }
@@ -676,12 +745,12 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
             centerPointValue = nil;
         }
         
-        self.statusController = [[SUStatusController alloc] initWithHost:self.host centerPointValue:centerPointValue minimizable:minimizable closable:closable];
+        _statusController = [[SUStatusController alloc] initWithHost:_host windowTitle:[NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"Updating %@", SPARKLE_TABLE, SUSparkleBundle(), nil), _host.name] centerPointValue:centerPointValue minimizable:minimizable closable:closable];
         
         if (_updateAlertWindowWasInactive) {
-            [self.statusController.window orderFront:nil];
+            [_statusController.window orderFront:nil];
         } else {
-            [self.statusController showWindow:self];
+            [_statusController showWindow:self];
         }
     }
 }
@@ -690,22 +759,26 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    self.cancellation = cancellation;
+    _cancellation = [cancellation copy];
     
     [self createAndShowStatusControllerWithClosable:NO];
     
-    [self.statusController beginActionWithTitle:SULocalizedString(@"Downloading update…", @"Take care not to overflow the status window.") maxProgressValue:1.0 statusText:nil];
-    [self.statusController setProgressValue:0.0];
-    [self.statusController setButtonTitle:SULocalizedString(@"Cancel", nil) target:self action:@selector(cancelDownload:) isDefault:NO];
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
     
-    self.bytesDownloaded = 0;
+    [_statusController beginActionWithTitle:SULocalizedStringFromTableInBundle(@"Downloading update…", SPARKLE_TABLE, sparkleBundle, @"Take care not to overflow the status window.") maxProgressValue:1.0 statusText:nil];
+    [_statusController setProgressValue:0.0];
+    [_statusController setButtonTitle:SULocalizedStringFromTableInBundle(@"Cancel", SPARKLE_TABLE, sparkleBundle, nil) target:self action:@selector(cancelDownload:) isDefault:NO];
+    
+    _bytesDownloaded = 0;
 }
 
 - (void)cancelDownload:(id)__unused sender
 {
-    if (self.cancellation != nil) {
-        self.cancellation();
-        self.cancellation = nil;
+    if (_cancellation != nil) {
+        _cancellation();
+        _cancellation = nil;
     }
 }
 
@@ -713,9 +786,9 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    self.expectedContentLength = expectedContentLength;
+    _expectedContentLength = expectedContentLength;
     if (expectedContentLength == 0) {
-        [self.statusController setMaxProgressValue:0.0];
+        [_statusController setMaxProgressValue:0.0];
     }
 }
 
@@ -723,19 +796,23 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
 
-    self.bytesDownloaded += length;
+    _bytesDownloaded += length;
 
     NSByteCountFormatter *formatter = [[NSByteCountFormatter alloc] init];
     [formatter setZeroPadsFractionDigits:YES];
+    
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
 
-    if (self.expectedContentLength > 0.0) {
-        double newProgressValue = (double)self.bytesDownloaded / (double)self.expectedContentLength;
+    if (_expectedContentLength > 0.0) {
+        double newProgressValue = (double)_bytesDownloaded / (double)_expectedContentLength;
         
-        [self.statusController setProgressValue:MIN(newProgressValue, 1.0)];
+        [_statusController setProgressValue:MIN(newProgressValue, 1.0)];
         
-        [self.statusController setStatusText:[NSString stringWithFormat:SULocalizedString(@"%@ of %@", @"The download progress in units of bytes, e.g. 100 KB of 1,0 MB"), [formatter stringFromByteCount:(long long)self.bytesDownloaded], [formatter stringFromByteCount:(long long)MAX(self.bytesDownloaded, self.expectedContentLength)]]];
+        [_statusController setStatusText:[NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%@ of %@", SPARKLE_TABLE, sparkleBundle, @"The download progress in units of bytes, e.g. 100 KB of 1,0 MB"), [formatter stringFromByteCount:(long long)_bytesDownloaded], [formatter stringFromByteCount:(long long)MAX(_bytesDownloaded, _expectedContentLength)]]];
     } else {
-        [self.statusController setStatusText:[NSString stringWithFormat:SULocalizedString(@"%@ downloaded", @"The download progress in a unit of bytes, e.g. 100 KB"), [formatter stringFromByteCount:(long long)self.bytesDownloaded]]];
+        [_statusController setStatusText:[NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%@ downloaded", SPARKLE_TABLE, sparkleBundle, @"The download progress in a unit of bytes, e.g. 100 KB"), [formatter stringFromByteCount:(long long)_bytesDownloaded]]];
     }
 }
 
@@ -743,20 +820,24 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    self.cancellation = nil;
+    _cancellation = nil;
     
     [self createAndShowStatusControllerWithClosable:NO];
-    [self.statusController beginActionWithTitle:SULocalizedString(@"Extracting update…", @"Take care not to overflow the status window.") maxProgressValue:1.0 statusText:nil];
-    [self.statusController setProgressValue:0.0];
-    [self.statusController setButtonTitle:SULocalizedString(@"Cancel", nil) target:nil action:nil isDefault:NO];
-    [self.statusController setButtonEnabled:NO];
+#if SPARKLE_COPY_LOCALIZATIONS
+    NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
+    
+    [_statusController beginActionWithTitle:SULocalizedStringFromTableInBundle(@"Extracting update…", SPARKLE_TABLE, sparkleBundle, @"Take care not to overflow the status window.") maxProgressValue:1.0 statusText:nil];
+    [_statusController setProgressValue:0.0];
+    [_statusController setButtonTitle:SULocalizedStringFromTableInBundle(@"Cancel", SPARKLE_TABLE, sparkleBundle, nil) target:nil action:nil isDefault:NO];
+    [_statusController setButtonEnabled:NO];
 }
 
 - (void)showExtractionReceivedProgress:(double)progress
 {
     assert(NSThread.isMainThread);
     
-    [self.statusController setProgressValue:progress];
+    [_statusController setProgressValue:progress];
 }
 
 - (void)showInstallingUpdateWithApplicationTerminated:(BOOL)applicationTerminated retryTerminatingApplication:(void (^)(void))retryTerminatingApplication
@@ -765,14 +846,14 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     
     if (applicationTerminated) {
         // Note this will only show up if -showReadyToInstallAndRelaunch: was called beforehand
-        [self.statusController beginActionWithTitle:SULocalizedString(@"Installing update…", @"Take care not to overflow the status window.") maxProgressValue:0.0 statusText:nil];
-        [self.statusController setButtonEnabled:NO];
+        [_statusController beginActionWithTitle:SULocalizedStringFromTableInBundle(@"Installing update…", SPARKLE_TABLE, SUSparkleBundle(), @"Take care not to overflow the status window.") maxProgressValue:0.0 statusText:nil];
+        [_statusController setButtonEnabled:NO];
     } else {
         // The "quit" event can always be canceled or delayed by the application we're updating
         // So we can't easily predict how long the installation will take or if it won't happen right away
         // We close our status window because we don't want it persisting for too long and have it obscure other windows
-        [self.statusController close];
-        self.statusController = nil;
+        [_statusController close];
+        _statusController = nil;
         
         // Keep retry handler in case user tries to show update in focus again
         _retryTerminatingApplication = [retryTerminatingApplication copy];
@@ -784,33 +865,37 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     assert(NSThread.isMainThread);
     
     // Close window showing update is installing
-    [self.statusController close];
-    self.statusController = nil;
+    [_statusController close];
+    _statusController = nil;
     
     // Only show installed prompt when the app is not relaunched
     // When the app is relaunched, there is enough of a UI from relaunching the app.
     if (!relaunched) {
+#if SPARKLE_COPY_LOCALIZATIONS
+        NSBundle *sparkleBundle = SUSparkleBundle();
+#endif
+        
         NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = SULocalizedString(@"Update Installed", nil);
+        alert.messageText = SULocalizedStringFromTableInBundle(@"Update Installed", SPARKLE_TABLE, sparkleBundle, nil);
         
         // Extract information from newly updated bundle if available
         NSString *hostName;
         NSString *hostVersion;
-        NSBundle *newBundle = [NSBundle bundleWithURL:self.oldHostBundleURL];
+        NSBundle *newBundle = [NSBundle bundleWithURL:_oldHostBundleURL];
         if (newBundle != nil) {
             SUHost *newHost = [[SUHost alloc] initWithBundle:newBundle];
             hostName = newHost.name;
             hostVersion = newHost.displayVersion;
         } else {
             // This may happen if Sparkle's normalization is enabled
-            hostName = self.oldHostName;
+            hostName = _oldHostName;
             hostVersion = nil;
         }
         
         if (hostVersion != nil) {
-            alert.informativeText = [NSString stringWithFormat:SULocalizedString(@"%@ is now updated to version %@!", nil), hostName, hostVersion];
+            alert.informativeText = [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%@ is now updated to version %@!", SPARKLE_TABLE, sparkleBundle, nil), hostName, hostVersion];
         } else {
-            alert.informativeText = [NSString stringWithFormat:SULocalizedString(@"%@ is now updated!", nil), hostName];
+            alert.informativeText = [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%@ is now updated!", SPARKLE_TABLE, sparkleBundle, nil), hostName];
         }
         [self showAlert:alert secondaryAction:nil];
     }
@@ -824,7 +909,7 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
 {
     assert(NSThread.isMainThread);
     
-    id<SPUStandardUserDriverDelegate> delegate = self.delegate;
+    id<SPUStandardUserDriverDelegate> delegate = _delegate;
     if ([delegate respondsToSelector:@selector(standardUserDriverWillFinishUpdateSession)]) {
         [delegate standardUserDriverWillFinishUpdateSession];
     }
@@ -835,25 +920,25 @@ static const NSTimeInterval SUScheduledUpdateIdleEventLeewayInterval = DEBUG ? 3
     }
     
     _updateReceivedUserAttention = NO;
-    self.installUpdateHandler = nil;
-    self.cancellation = nil;
+    _installUpdateHandler = nil;
+    _cancellation = nil;
     _retryTerminatingApplication = nil;
     
     [self closeCheckingWindow];
     
-    if (self.permissionPrompt) {
-        [self.permissionPrompt close];
-        self.permissionPrompt = nil;
+    if (_permissionPrompt) {
+        [_permissionPrompt close];
+        _permissionPrompt = nil;
     }
     
-    if (self.statusController) {
-        [self.statusController close];
-        self.statusController = nil;
+    if (_statusController) {
+        [_statusController close];
+        _statusController = nil;
     }
     
-    if (self.activeUpdateAlert) {
-        [self.activeUpdateAlert close];
-        self.activeUpdateAlert = nil;
+    if (_activeUpdateAlert) {
+        [_activeUpdateAlert close];
+        _activeUpdateAlert = nil;
     }
     
     [self _removeApplicationBecomeActiveObserver];

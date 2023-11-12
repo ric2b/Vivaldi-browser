@@ -9,7 +9,6 @@ import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
@@ -23,7 +22,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.url.GURL;
 
@@ -248,7 +246,6 @@ public class PseudoTab {
      * This should/can be called when emulating restarting in instrumented tests, or between
      * Robolectric tests.
      */
-    @VisibleForTesting
     public static void clearForTesting() {
         synchronized (sLock) {
             sAllTabs.clear();
@@ -277,8 +274,7 @@ public class PseudoTab {
 
             List<PseudoTab> related = new ArrayList<>();
             int rootId = member.getRootId();
-            if (rootId == Tab.INVALID_TAB_ID
-                    || !TabUiFeatureUtilities.isTabGroupsAndroidEnabled(context)) {
+            if (rootId == Tab.INVALID_TAB_ID) {
                 related.add(member);
                 return related;
             }
@@ -308,7 +304,6 @@ public class PseudoTab {
         return related;
     }
 
-    @VisibleForTesting
     static int getAllTabsCountForTests() {
         synchronized (sLock) {
             return sAllTabs.size();
@@ -373,8 +368,7 @@ public class PseudoTab {
                             sActiveTabFromStateFile = tab;
                         }
                         int rootId = tab.getRootId();
-                        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(context)
-                                && seenRootId.contains(rootId)) {
+                        if (seenRootId.contains(rootId)) {
                             return;
                         }
                         sAllTabsFromStateFile.add(tab);

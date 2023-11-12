@@ -282,7 +282,7 @@ ask there. Be sure that the
 [waterfall](https://build.chromium.org/buildbot/waterfall/) is green and the
 tree is open before checking out. This will increase your chances of success.
 
-### Improving performance of `git status`
+### Improving performance of git commands
 
 #### Increase the vnode cache size
 
@@ -348,6 +348,10 @@ You can significantly speed up git by using [fsmonitor.](https://github.blog/202
 You should enable fsmonitor in large repos, such as Chromium and v8. Enabling
 it globally will launch many processes and probably isn't worthwhile. The
 command to enable fsmonitor in the current repo is:
+
+> WARNING: There is a major issue with fsmonitor resulting in git diff-index
+> returning wrong results. Skip enabling this until
+[crbug.com/1475405](https://crbug.com/1475405) is fixed.
 
 ```shell
 $ git config core.fsmonitor true

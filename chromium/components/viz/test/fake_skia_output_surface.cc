@@ -31,6 +31,7 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/presentation_feedback.h"
@@ -41,8 +42,7 @@ namespace viz {
 
 FakeSkiaOutputSurface::FakeSkiaOutputSurface(
     scoped_refptr<ContextProvider> context_provider)
-    : SkiaOutputSurface(SkiaOutputSurface::Type::kOpenGL),
-      context_provider_(std::move(context_provider)) {}
+    : context_provider_(std::move(context_provider)) {}
 
 FakeSkiaOutputSurface::~FakeSkiaOutputSurface() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -301,7 +301,7 @@ void FakeSkiaOutputSurface::CopyOutput(
 
   GrDirectContext* direct = GrAsDirectContext(gr_context());
   auto copy_image = surface->makeImageSnapshot()->makeSubset(
-      RectToSkIRect(geometry.sampling_bounds), direct);
+      direct, RectToSkIRect(geometry.sampling_bounds));
   // Send copy request by copying into a bitmap.
   SkBitmap bitmap;
   copy_image->asLegacyBitmap(&bitmap);
@@ -360,14 +360,15 @@ bool FakeSkiaOutputSurface::GetGrBackendTexture(
       image_context.mailbox_holder().sync_token.GetConstData());
   auto texture_id = gl->CreateAndTexStorage2DSharedImageCHROMIUM(
       image_context.mailbox_holder().mailbox.name);
-  auto gl_format = gpu::TextureStorageFormat(
-      image_context.format(),
+  auto gl_format_desc = gpu::ToGLFormatDesc(
+      image_context.format(), /*plane_index=*/0,
       context_provider()->ContextCapabilities().angle_rgbx_internal_format);
   GrGLTextureInfo gl_texture_info = {
-      image_context.mailbox_holder().texture_target, texture_id, gl_format};
-  *backend_texture = GrBackendTexture(image_context.size().width(),
-                                      image_context.size().height(),
-                                      GrMipMapped::kNo, gl_texture_info);
+      image_context.mailbox_holder().texture_target, texture_id,
+      gl_format_desc.storage_internal_format};
+  *backend_texture = GrBackendTextures::MakeGL(
+      image_context.size().width(), image_context.size().height(),
+      skgpu::Mipmapped::kNo, gl_texture_info);
   return true;
 }
 

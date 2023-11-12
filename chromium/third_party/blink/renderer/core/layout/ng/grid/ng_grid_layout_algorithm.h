@@ -219,11 +219,13 @@ class CORE_EXPORT NGGridLayoutAlgorithm
       absl::optional<LayoutUnit> opt_fragment_relative_block_offset =
           absl::nullopt) const;
 
+  // `containing_grid_area` is an optional out parameter that holds the computed
+  // grid area (offset and size) of the specified grid item.
   NGConstraintSpace CreateConstraintSpaceForLayout(
       const GridItemData& grid_item,
       const NGGridLayoutData& layout_data,
-      LogicalRect* containing_grid_area,
       NGGridLayoutSubtree&& opt_layout_subtree = NGGridLayoutSubtree(),
+      LogicalRect* containing_grid_area = nullptr,
       LayoutUnit unavailable_block_size = LayoutUnit(),
       bool min_block_size_should_encompass_intrinsic_size = false,
       absl::optional<LayoutUnit> opt_fragment_relative_block_offset =
@@ -246,8 +248,7 @@ class CORE_EXPORT NGGridLayoutAlgorithm
   // This is used for fragmentation which requires us to know the final offset
   // of each item before fragmentation occurs.
   void PlaceGridItems(
-      const GridItems& grid_items,
-      const NGGridLayoutSubtree& layout_subtree,
+      const NGGridSizingTree& sizing_tree,
       Vector<EBreakBetween>* out_row_break_between,
       Vector<GridItemPlacementData>* out_grid_items_placement_data = nullptr);
 
@@ -257,9 +258,8 @@ class CORE_EXPORT NGGridLayoutAlgorithm
   // This will go through all the grid_items and place fragments which belong
   // within this fragmentainer.
   void PlaceGridItemsForFragmentation(
-      const GridItems& grid_items,
+      const NGGridSizingTree& sizing_tree,
       const Vector<EBreakBetween>& row_break_between,
-      NGGridLayoutData* layout_data,
       Vector<GridItemPlacementData>* grid_item_placement_data,
       Vector<LayoutUnit>* row_offset_adjustments,
       LayoutUnit* intrinsic_block_size,

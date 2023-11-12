@@ -32,6 +32,10 @@ class WebAuthnBrowserBridge {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jframe_host) const;
 
+  void CleanupCredManRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jframe_host) const;
+
   void OnCredManConditionalRequestPending(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jframe_host,
@@ -48,6 +52,8 @@ class WebAuthnBrowserBridge {
       const base::android::JavaParamRef<jobject>& jframe_host,
       const base::android::JavaParamRef<jstring>& jusername,
       const base::android::JavaParamRef<jstring>& jpassword);
+
+  void Destroy(JNIEnv* env);
 
  private:
   // Java object that owns this WebAuthnBrowserBridge.

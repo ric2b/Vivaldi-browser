@@ -48,6 +48,7 @@
         fields_to_diff: [
             "font",
             "white-space-collapse",
+            "text-autospace",
         ],
         methods_to_diff: [
           {
@@ -76,7 +77,7 @@
         name: "DiffNeedsFullLayoutAndPaintInvalidation",
         fields_to_diff: ["padding-top", "padding-left", "padding-right",
                 "padding-bottom", "appearance", "-webkit-line-clamp",
-                "text-overflow", "shape-margin", "order", "-webkit-highlight",
+                "text-overflow", "shape-margin", "order",
                 "text-indent", "text-align-last", "EffectiveZoom",
                 "word-break", "overflow-wrap", "-webkit-line-break",
                 "-webkit-text-security",
@@ -89,11 +90,9 @@
                 "-webkit-text-stroke-width", "line-height",
                 "-webkit-border-horizontal-spacing",
                 "-webkit-border-vertical-spacing", "TextAutosizingMultiplier",
-                "ImplicitNamedGridColumnLines","ImplicitNamedGridRowLines", "NamedGridArea",
-                "initial-letter",
+                "grid-template-areas", "initial-letter",
                 "grid-auto-rows", "grid-template-rows", "grid-template-columns",
-                "grid-auto-columns", "row-gap", "NamedGridAreaRowCount",
-                "NamedGridAreaColumnCount", "grid-auto-flow",
+                "grid-auto-columns", "row-gap", "grid-auto-flow",
                 "-webkit-box-flex", "-webkit-box-ordinal-group", "flex-basis",
                 "flex-shrink", "flex-grow", "flex-direction", "flex-wrap", "-webkit-box-align",
                 "-webkit-box-decoration-break", "-webkit-box-pack", "-webkit-box-orient",
@@ -107,7 +106,7 @@
                 "CssDominantBaseline", "text-anchor",
                 "stroke-width", "stroke-miterlimit", "stroke-linecap", "stroke-linejoin",
                 "marker-end", "marker-mid", "marker-start", "scrollbar-width", "object-view-box",
-                "position-fallback"],
+                "position-fallback", "position-fallback-bounds"],
         methods_to_diff: [
           {
             method: "BorderLeftWidth()",
@@ -240,7 +239,7 @@
                 "max-height", "VerticalAlignLength", "box-sizing", "align-content",
                 "align-items", "align-self", "justify-content", "justify-items",
                 "justify-self", "contain", "contain-intrinsic-width",
-                "contain-intrinsic-height", "container-type",
+                "contain-intrinsic-height", "container-type", "form-sizing",
                 "content-visibility", "aspect-ratio", "overflow-clip-margin",
                 "-internal-align-content-block", "orphans", "widows",
                 "scrollbar-gutter", "break-after", "break-before",
@@ -258,6 +257,14 @@
             method: "SkipsContents()",
             field_dependencies: ["content-visibility"]
           },
+          {
+            method: "ScrollStartTargetX()",
+            field_dependencies: ["scroll-start-target-x"]
+          },
+          {
+            method: "ScrollStartTargetY()",
+            field_dependencies: ["scroll-start-target-y"]
+          }
         ],
 	predicates_to_test: [
 	  {
@@ -341,10 +348,6 @@
             predicate: "a.StrokeDashArrayDataEquivalent(b)",
             field_dependencies: ["stroke-dasharray"]
           },
-	  {
-	    predicate: "a.AnchorScrollDataEquivalent(b)",
-	    field_dependencies: ["anchor-scroll"],
-	  },
         ]
     },
     {
@@ -398,14 +401,11 @@
     },
     {
         name: "UpdatePropertySpecificDifferencesFilter",
+        fields_to_diff: ["filter"],
         predicates_to_test: [
           {
             predicate: "a.ReflectionDataEquivalent(b)",
             field_dependencies: ["-webkit-box-reflect"]
-          },
-          {
-            predicate: "a.FilterDataEquivalent(b)",
-            field_dependencies: ["filter"]
           },
         ]
     },

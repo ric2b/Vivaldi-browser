@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-test/mojo_webui_test_support.js';
-
 import {BrowserProxy, CrToastManagerElement, DangerType, DownloadsManagerElement, loadTimeData, PageRemote, States} from 'chrome://downloads/downloads.js';
+import {stringToMojoString16, stringToMojoUrl} from 'chrome://resources/js/mojo_type_util.js';
 import {isMac} from 'chrome://resources/js/platform.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -32,19 +31,28 @@ suite('manager tests', function() {
     assertTrue(!!toastManager);
   });
 
-  test('long URLs elide', async () => {
-    callbackRouterRemote.insertItems(0, [createDownload({
-                                       fileName: 'file name',
-                                       state: States.COMPLETE,
-                                       sinceString: 'Today',
-                                       url: 'a'.repeat(1000),
-                                     })]);
+  test('long URLs don\'t elide', async () => {
+    const url = 'https://' +
+        'a'.repeat(1000) + '.com/document.pdf';
+    const displayUrl = 'https://' +
+        '啊'.repeat(1000) + '.com/document.pdf';
+    callbackRouterRemote.insertItems(
+        0, [createDownload({
+          fileName: 'file name',
+          state: States.COMPLETE,
+          sinceString: 'Today',
+          url: stringToMojoUrl(url),
+          displayUrl: stringToMojoString16(displayUrl),
+        })]);
     await callbackRouterRemote.$.flushForTesting();
     flush();
 
     const item = manager.shadowRoot!.querySelector('downloads-item')!;
     assertLT(item.$.url.offsetWidth, item.offsetWidth);
-    assertEquals(300, item.$.url.textContent!.length);
+    assertEquals(displayUrl, item.$.url.textContent);
+    assertEquals(url, item.$.url.href);
+    assertEquals(url, item.$['file-link'].href);
+    assertEquals(url, item.$.url.href);
   });
 
   test('inserting items at beginning render dates correctly', async () => {
@@ -103,7 +111,7 @@ suite('manager tests', function() {
                                        fileName: 'file name',
                                        state: States.COMPLETE,
                                        sinceString: 'Today',
-                                       url: 'a'.repeat(1000),
+                                       url: stringToMojoUrl('a'.repeat(1000)),
                                      })]);
     await callbackRouterRemote.$.flushForTesting();
     flush();
@@ -155,7 +163,7 @@ suite('manager tests', function() {
                                        fileName: 'file name',
                                        state: States.COMPLETE,
                                        sinceString: 'Today',
-                                       url: 'a'.repeat(1000),
+                                       url: stringToMojoUrl('a'.repeat(1000)),
                                      })]);
     await callbackRouterRemote.$.flushForTesting();
 

@@ -33,8 +33,6 @@ export class MockVolumeManager {
     this.driveConnectionState = {
       type: /** @type {!chrome.fileManagerPrivate.DriveConnectionStateType} */ (
           'ONLINE'),
-      hasCellularNetworkAccess: false,
-      canPinHostedFiles: false,
     };
 
     // Create Drive.   Drive attempts to resolve FilesSystemURLs for '/root',
@@ -289,6 +287,11 @@ export class MockVolumeManager {
    */
   isDisabled(volume) {
     return false;
+  }
+
+  /** @override */
+  isAllowedVolume(volumeInfo) {
+    return true;
   }
 }
 

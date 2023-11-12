@@ -288,8 +288,6 @@ namespace autotestPrivate {
   // A mapping of crosapi::browser_util::LacrosMode
   enum LacrosMode {
     Disabled,
-    SideBySide,
-    Primary,
     Only
   };
 
@@ -818,6 +816,16 @@ namespace autotestPrivate {
   callback RemoveFuseboxTempDirCallback = void();
 
   callback IsFeatureEnabledCallback = void(boolean enabled);
+
+  // Response data for <code>getCurrentInputMethodDescriptor</code>.
+  // Add more fields from ash/input_method/InputMethodDescriptor as needed.
+  dictionary GetCurrentInputMethodDescriptorData {
+    DOMString keyboardLayout;
+  };
+
+  // Response callback for current input method keyboard layout.
+  callback GetCurrentInputMethodDescriptorCallback = void
+      (GetCurrentInputMethodDescriptorData data);
 
   interface Functions {
     // Must be called to allow autotestPrivateAPI events to be fired.
@@ -1581,6 +1589,16 @@ namespace autotestPrivate {
     // a Chrome uprev into ChromeOS changed the default feature state.
     [supportsPromises] static void isFeatureEnabled(
       DOMString feature_name, IsFeatureEnabledCallback callback);
+
+    // Returns keyboard layout used for current input method.
+    [supportsPromises] static void getCurrentInputMethodDescriptor(
+        GetCurrentInputMethodDescriptorCallback callback);
+
+    // ARC set interactive enable/disable state.
+    // |enabled|: Enable ARC interactive.
+    // |callback|: Called when the operation sent to ARC by mojo.
+    [supportsPromises] static void setArcInteractiveState(
+      boolean enabled, VoidCallback callback);
   };
 
   interface Events {

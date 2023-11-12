@@ -6,8 +6,8 @@
 
 #import <utility>
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
@@ -28,10 +28,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 const CGFloat kEstimatedRowMaxHeight = 150;
@@ -189,7 +185,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (itemType == ItemTypeSuggestedActionSearchHistory &&
       self.searchText.length) {
     __weak TableViewTabsSearchSuggestedHistoryCell* weakCell =
-        base::mac::ObjCCastStrict<TableViewTabsSearchSuggestedHistoryCell>(
+        base::apple::ObjCCastStrict<TableViewTabsSearchSuggestedHistoryCell>(
             cell);
     NSString* currentSearchText = self.searchText;
     weakCell.searchTerm = currentSearchText;

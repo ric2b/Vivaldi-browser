@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Endurkalla fyrri stillingar</translation>
 <translation id="4478664379124702289">Vista hlek&amp;k sem...</translation>
 <translation id="4520385623207007473">Kökur í notkun</translation>
+<translation id="456449593072900590">Eyða þegar Vivaldi er lokað</translation>
 <translation id="4580596421317071374">Aðgangsorð eru vistuð í <ph name="GOOGLE_PASSWORD_MANAGER" /> í þessu tæki.</translation>
 <translation id="4593021220803146968">&amp;Fara á <ph name="URL" /></translation>
 <translation id="4595560905247879544">Öppum og viðbótum getur aðeins verið breytt af stjórnanda (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -235,6 +236,7 @@
 <translation id="4839303808932127586">Vi&amp;sta myndband sem...</translation>
 <translation id="4840096453115567876">Viltu samt loka einkaviðmóti?</translation>
 <translation id="488785315393301722">Sýna frekari upplýsingar</translation>
+<translation id="4895799941222633551">Búa til &amp; flýtileið...</translation>
 <translation id="4912643508233590958">Vakning úr dvala</translation>
 <translation id="49265687513387605">Get ekki varpað skjá. Athugaðu hvort þú eigir eftir að staðfesta skjávörpun.</translation>
 <translation id="4927753642311223124">Hér er ekkert að sjá, haldið áfram.</translation>
@@ -272,12 +274,12 @@
 <translation id="5370819323174483825">&amp;Endurhlaða</translation>
 <translation id="5390743329570580756">Senda fyrir</translation>
 <translation id="5398572795982417028">Bil síðna nær út fyrir fjölda síðna, skorðast við <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Búa til &amp; flýtileið...</translation>
 <translation id="5425042808445046667">Halda áfram niðurhali</translation>
 <translation id="5427459444770871191">Snúa &amp;réttsælis</translation>
 <translation id="5431318178759467895">Litur</translation>
 <translation id="5485102783864353244">Bæta við smáforriti</translation>
 <translation id="5486561344817861625">Líkja eftir endurræsingu vafra</translation>
-<translation id="5487521232677179737">Eyða gögnum</translation>
 <translation id="5509693895992845810">Vista &amp;sem...</translation>
 <translation id="5521078259930077036">Er þetta heimasíðan sem þú bjóst við?</translation>
 <translation id="5542132724887566711">Sniðmát</translation>
@@ -303,7 +305,6 @@
 <translation id="583281660410589416">Óþekkt</translation>
 <translation id="5851868085455377790">Útgefandi</translation>
 <translation id="5860491529813859533">Kveikja á</translation>
-<translation id="5867841422488265304">Leitaðu að eða sláðu inn veffang</translation>
 <translation id="5910363049092958439">Vi&amp;sta mynd sem...</translation>
 <translation id="5914724413750400082">Leifastofn (<ph name="MODULUS_NUM_BITS" /> bitar):
   <ph name="MODULUS_HEX_DUMP" />
@@ -373,12 +374,12 @@
 <translation id="7070484045139057854">Getur lesið og breytt gögnum síðu</translation>
 <translation id="708060913198414444">V&amp;ista veffang hljóðskrár</translation>
 <translation id="7121728544325372695">Snjöll bandstrik</translation>
+<translation id="7144856456372460176">&amp;Setja upp <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Hlaðið frá:</translation>
 <translation id="7186088072322679094">Geyma í tækjastiku</translation>
 <translation id="7287143125007575591">Aðgangi hafnað.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /><ph name="VERTICAL_DPI" />punktar á tommu</translation>
 <translation id="7339785458027436441">Athuga stafsetningu meðan á innslætti stendur</translation>
-<translation id="73786666777299047">Opna vefverslun Chrome</translation>
 <translation id="7385854874724088939">Mistókst að prenta. Athugið prentara og reynið aftur.</translation>
 <translation id="7412226954991670867">GPU mynni</translation>
 <translation id="7421925624202799674">&amp;Sýna frumgögn síðu</translation>
@@ -439,6 +440,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8382913212082956454">Afrita n&amp;etfang</translation>
 <translation id="8434480141477525001">NaCl aflúsunargátt</translation>
 <translation id="8449008133205184768">Líma og halda útliti</translation>
+<translation id="8477178913400731244">Eyða gögnum</translation>
 <translation id="8477384620836102176">&amp;Almennt</translation>
 <translation id="8496717697661868878">Keyra þessa viðbót</translation>
 <translation id="8512476990829870887">Hætta ferli</translation>

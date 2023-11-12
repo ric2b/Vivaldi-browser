@@ -6,10 +6,11 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/task_environment.h"
+#import "base/test/test_timeouts.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
 #import "components/signin/public/base/signin_pref_names.h"
@@ -24,10 +25,6 @@
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 // Constants for configuring a FakeSystemIdentity.
@@ -47,22 +44,24 @@ class AddAccountSigninManagerTest : public PlatformTest {
         identityWithEmail:[NSString stringWithUTF8String:kTestEmail]
                    gaiaID:[NSString stringWithUTF8String:kTestGaiaID]
                      name:@"Foo"];
-    return base::mac::ObjCCastStrict<FakeSystemIdentityInteractionManager>(
+    return base::apple::ObjCCastStrict<FakeSystemIdentityInteractionManager>(
         fake_system_identity_manager()->CreateInteractionManager());
   }
 
   void WaitForFakeAddAccountViewPresented(NSString* expectedUserEmail) {
     EXPECT_NSEQ(expectedUserEmail,
                 identity_interaction_manager_.lastStartAuthActivityUserEmail);
-    base::test::ios::WaitUntilCondition(^bool() {
-      return identity_interaction_manager_.isActivityViewPresented;
-    });
+    ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+        TestTimeouts::action_timeout(), ^bool() {
+          return identity_interaction_manager_.isActivityViewPresented;
+        }));
   }
 
   void WaitForFakeAddAccountViewDismissed() {
-    base::test::ios::WaitUntilCondition(^bool() {
-      return !identity_interaction_manager_.isActivityViewPresented;
-    });
+    ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+        TestTimeouts::action_timeout(), ^bool() {
+          return !identity_interaction_manager_.isActivityViewPresented;
+        }));
   }
 
   FakeSystemIdentityManager* fake_system_identity_manager() {
@@ -171,10 +170,11 @@ TEST_F(AddAccountSigninManagerTest, AddAccountWithEmailSigninInterrupted) {
   WaitForFakeAddAccountViewPresented(
       /*expectedUserEmail=*/@"email@example.com");
   __block BOOL completionCalled = NO;
-  [signin_manager_ interruptAddAccountAnimated:YES
-                                    completion:^() {
-                                      completionCalled = YES;
-                                    }];
+  [signin_manager_
+      interruptWithAction:SigninCoordinatorInterrupt::DismissWithAnimation
+               completion:^() {
+                 completionCalled = YES;
+               }];
   WaitForFakeAddAccountViewDismissed();
   EXPECT_TRUE(completionCalled);
 }
@@ -266,10 +266,11 @@ TEST_F(AddAccountSigninManagerTest, AddAccountWithoutEmailSigninInterrupted) {
   [signin_manager_ showSigninWithDefaultUserEmail:nil];
   WaitForFakeAddAccountViewPresented(/*expectedUserEmail=*/nil);
   __block BOOL completionCalled = NO;
-  [signin_manager_ interruptAddAccountAnimated:YES
-                                    completion:^() {
-                                      completionCalled = YES;
-                                    }];
+  [signin_manager_
+      interruptWithAction:SigninCoordinatorInterrupt::DismissWithAnimation
+               completion:^() {
+                 completionCalled = YES;
+               }];
   WaitForFakeAddAccountViewDismissed();
   EXPECT_TRUE(completionCalled);
 }

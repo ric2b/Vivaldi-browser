@@ -19,7 +19,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 // Vivaldi
-import org.vivaldi.browser.bookmarks.BookmarkDialogDelegate;
+import org.vivaldi.browser.bookmarks.VivaldiBookmarkPanelDelegate;
 
 /** Responsible for the business logic for the BookmarkManagerToolbar. */
 public class BookmarkToolbarCoordinator {
@@ -33,7 +33,8 @@ public class BookmarkToolbarCoordinator {
             DragReorderableRecyclerViewAdapter dragReorderableRecyclerViewAdapter,
             boolean isDialogUi, OneshotSupplier<BookmarkDelegate> bookmarkDelegateSupplier,
             BookmarkModel bookmarkModel, BookmarkOpener bookmarkOpener,
-            BookmarkUiPrefs bookmarkUiPrefs, ModalDialogManager modalDialogManager) {
+            BookmarkUiPrefs bookmarkUiPrefs, ModalDialogManager modalDialogManager,
+            Runnable endSearchRunnable) {
         mToolbar = (BookmarkToolbar) selectableListLayout.initializeToolbar(
                 R.layout.bookmark_toolbar, selectionDelegate, 0, R.id.normal_menu_group,
                 R.id.selection_mode_menu_group, null, isDialogUi);
@@ -50,7 +51,8 @@ public class BookmarkToolbarCoordinator {
         mMediator = new BookmarkToolbarMediator(context, mModel, dragReorderableRecyclerViewAdapter,
                 bookmarkDelegateSupplier, selectionDelegate, bookmarkModel, bookmarkOpener,
                 bookmarkUiPrefs,
-                new BookmarkAddNewFolderCoordinator(context, modalDialogManager, bookmarkModel));
+                new BookmarkAddNewFolderCoordinator(context, modalDialogManager, bookmarkModel),
+                endSearchRunnable);
 
         PropertyModelChangeProcessor.create(mModel, mToolbar, BookmarkToolbarViewBinder::bind);
     }
@@ -66,7 +68,7 @@ public class BookmarkToolbarCoordinator {
              return mToolbar;
     }
 
-    public void setBookmarkDialogDelegate(BookmarkDialogDelegate bookmarkDialogDelegate) {
-        mMediator.setBookmarkDialogDelegate(bookmarkDialogDelegate);
+    public void setBookmarkPanelDelegate(VivaldiBookmarkPanelDelegate bookmarkPanelDelegate) {
+        mMediator.setBookmarkPanelDelegate(bookmarkPanelDelegate);
     }
 }

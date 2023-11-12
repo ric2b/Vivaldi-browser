@@ -12,7 +12,6 @@
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/i18n/rtl.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
+#include "chrome/browser/ui/tabs/organization/metrics.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -83,6 +83,9 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
+#include "base/debug/dump_without_crashing.h"
+#include "base/strings/string_number_conversions.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/remote_cocoa/browser/window.h"
 #endif
 
@@ -263,8 +266,8 @@ class TabDragController::SourceTabStripEmptinessTracker
     parent_->OnSourceTabStripEmpty();
   }
 
-  const raw_ptr<TabStripModel, DanglingUntriaged> tab_strip_;
-  const raw_ptr<TabDragController, DanglingUntriaged> parent_;
+  const raw_ptr<TabStripModel, AcrossTasksDanglingUntriaged> tab_strip_;
+  const raw_ptr<TabDragController, AcrossTasksDanglingUntriaged> parent_;
 };
 
 class TabDragController::DraggedTabsClosedTracker
@@ -375,7 +378,7 @@ void TabDragController::Init(TabDragContext* source_context,
   presentation_time_recorder_ = ui::CreatePresentationTimeHistogramRecorder(
       source_context->GetWidget()->GetCompositor(),
       kTabDraggingPresentationTimeHistogram,
-      kTabDraggingPresentationTimeMaxHistogram);
+      kTabDraggingPresentationTimeMaxHistogram, base::Seconds(10));
   // Do not release capture when transferring capture between widgets on:
   // - Desktop Linux
   //     Mouse capture is not synchronous on desktop Linux. Chrome makes
@@ -493,6 +496,13 @@ void TabDragController::Init(TabDragContext* source_context,
         NOTREACHED_NORETURN();
     }
   }
+
+  // Start listening for tabs to be closed or replaced in `source_context_`, in
+  // case this happens before the mouse is moved enough to fully start the drag.
+  // See crbug/1445776.
+  attached_context_tabs_closed_tracker_ =
+      std::make_unique<DraggedTabsClosedTracker>(
+          source_context_->GetTabStripModel(), this);
 }
 
 // static
@@ -586,6 +596,13 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
   if (current_state_ == DragState::kNotStarted) {
     if (!CanStartDrag(point_in_screen))
       return;  // User hasn't dragged far enough yet.
+
+    // If any of the tabs have disappeared (e.g. closed or discarded), cancel
+    // the drag session. See crbug.com/1445776.
+    if (GetViewsMatchingDraggedContents(source_context_).empty()) {
+      EndDrag(END_DRAG_CANCEL);
+      return;
+    }
 
     // On windows SaveFocus() may trigger a capture lost, which destroys us.
     {
@@ -1738,10 +1755,11 @@ gfx::Point TabDragController::GetAttachedDragPoint(
 
 std::vector<TabSlotView*> TabDragController::GetViewsMatchingDraggedContents(
     TabDragContext* context) {
-  TabStripModel* model = attached_context_->GetTabStripModel();
+  const TabStripModel* const model = context->GetTabStripModel();
   std::vector<TabSlotView*> views;
   for (size_t i = first_tab_index(); i < drag_data_.size(); ++i) {
-    int model_index = model->GetIndexOfWebContents(drag_data_[i].contents);
+    const int model_index =
+        model->GetIndexOfWebContents(drag_data_[i].contents);
     if (model_index == TabStripModel::kNoTab)
       return std::vector<TabSlotView*>();
     views.push_back(context->GetTabAt(model_index));
@@ -2112,6 +2130,12 @@ void TabDragController::CompleteDrag() {
       model->SetSelectionFromModel(selection);
     }
   }
+
+  if (source_context_ == attached_context_) {
+    LogTabStripOrganizationUKM(
+        attached_context_->GetTabStripModel(),
+        SuggestedTabStripOrganizationReason::DRAGGED_WITHIN_SAME_TABSTRIP);
+  }
 }
 
 void TabDragController::MaximizeAttachedWindow() {
@@ -2220,7 +2244,8 @@ gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
     TabDragContext* source,
     const gfx::Point& point_in_screen,
     std::vector<gfx::Rect>* drag_bounds) {
-  gfx::Point center(0, source->height() / 2);
+  // Vertically center the dragged tabs around the mouse.
+  gfx::Point center(0, drag_bounds->front().CenterPoint().y());
   views::View::ConvertPointToWidget(source, &center);
   gfx::Rect new_bounds(source->GetWidget()->GetRestoredBounds());
 
@@ -2633,26 +2658,20 @@ bool TabDragController::CanAttachTo(gfx::NativeWindow window) {
     if (active_index == TabStripModel::kNoTab) {
       LOG(ERROR) << "TabStripModel of the browser tyring to attach to has no "
                     "active tab.";
-
-      // Avoid dumping too many times not to impact the performance as this may
-      // be called multiple times for each mouse drag.
-      static bool has_crash_reported_for_no_tab = false;
-      if (!has_crash_reported_for_no_tab) {
-        base::debug::DumpWithoutCrashing();
-        has_crash_reported_for_no_tab = true;
-      }
     } else {
       LOG(ERROR)
           << "TabStripModel of the browser trying to attach to has invalid "
           << "active index: " << active_index;
+    }
 
-      // Avoid dumping too many times not to impact the performance as this may
-      // be called multiple times for each mouse drag.
-      static bool has_crash_reported_for_invalid_index = false;
-      if (!has_crash_reported_for_invalid_index) {
-        base::debug::DumpWithoutCrashing();
-        has_crash_reported_for_invalid_index = true;
-      }
+    // Avoid dumping too many times not to impact the performance as this may
+    // be called multiple times for each mouse drag.
+    static bool has_crash_reported = false;
+    if (!has_crash_reported) {
+      static crash_reporter::CrashKeyString<20> key("active_tab");
+      key.Set(base::NumberToString(active_index));
+      base::debug::DumpWithoutCrashing();
+      has_crash_reported = true;
     }
     return false;
   }

@@ -31,7 +31,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_MAC)
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #elif BUILDFLAG(IS_WIN)
 #include "base/path_service.h"
 #endif
@@ -207,6 +207,19 @@ base::TimeDelta ExternalConstantsOverrider::IdleCheckPeriod() const {
                          << kDevOverrideKeyIdleCheckPeriodSeconds
                          << "]: " << base::Value::GetTypeName(value->type());
   return base::Seconds(value->GetInt());
+}
+
+absl::optional<bool> ExternalConstantsOverrider::IsMachineManaged() const {
+  if (!override_values_.contains(kDevOverrideKeyManagedDevice)) {
+    return next_provider_->IsMachineManaged();
+  }
+  const base::Value* is_managed =
+      override_values_.Find(kDevOverrideKeyManagedDevice);
+  CHECK(is_managed->is_bool())
+      << "Unexpected type of override[" << kDevOverrideKeyManagedDevice
+      << "]: " << base::Value::GetTypeName(is_managed->type());
+
+  return absl::make_optional(is_managed->GetBool());
 }
 
 // static

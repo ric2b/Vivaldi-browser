@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator.h"
 
-#import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "base/apple/foundation_util.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
@@ -39,10 +39,6 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface AdaptiveToolbarCoordinator () <AdaptiveToolbarViewControllerDelegate>
 
@@ -118,24 +114,28 @@
   self.viewController.locationBarViewController = locationBarViewController;
 }
 
+- (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
+  BOOL isNonIncognitoNTP = !self.browser->GetBrowserState()->IsOffTheRecord() &&
+                           IsVisibleURLNewTabPage(webState);
+
+  [self.mediator updateConsumerForWebState:webState];
+  [self.viewController updateForSideSwipeSnapshot:isNonIncognitoNTP];
+}
+
+- (void)resetToolbarAfterSideSwipeSnapshot {
+  [self.mediator updateConsumerForWebState:self.browser->GetWebStateList()
+                                               ->GetActiveWebState()];
+  [self.viewController resetAfterSideSwipeSnapshot];
+}
+
+- (void)showPrerenderingAnimation {
+  [self.viewController showPrerenderingAnimation];
+}
+
 #pragma mark - AdaptiveToolbarViewControllerDelegate
 
 - (void)exitFullscreen {
   FullscreenController::FromBrowser(self.browser)->ExitFullscreen();
-}
-
-#pragma mark - SideSwipeToolbarSnapshotProviding
-
-- (UIImage*)toolbarSideSwipeSnapshotForWebState:(web::WebState*)webState {
-  [self updateToolbarForSideSwipeSnapshot:webState];
-
-  UIImage* toolbarSnapshot = CaptureViewWithOption(
-      [self.viewController view], [[UIScreen mainScreen] scale],
-      kClientSideRendering);
-
-  [self resetToolbarAfterSideSwipeSnapshot];
-
-  return toolbarSnapshot;
 }
 
 #pragma mark - NewTabPageControllerDelegate
@@ -147,6 +147,10 @@
 - (UIResponder<UITextInput>*)fakeboxScribbleForwardingTarget {
   // Implemented in `ToolbarCoordinator`.
   return nil;
+}
+
+- (void)didNavigateToNTPOnActiveWebState {
+  // Implemented in `ToolbarCoordinator`.
 }
 
 #pragma mark - ToolbarCommands
@@ -211,19 +215,6 @@
       [[ToolbarButtonVisibilityConfiguration alloc] initWithType:type];
 
   return buttonFactory;
-}
-
-- (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-  BOOL isNTP = IsVisibleURLNewTabPage(webState);
-
-  [self.mediator updateConsumerForWebState:webState];
-  [self.viewController updateForSideSwipeSnapshotOnNTP:isNTP];
-}
-
-- (void)resetToolbarAfterSideSwipeSnapshot {
-  [self.mediator updateConsumerForWebState:self.browser->GetWebStateList()
-                                               ->GetActiveWebState()];
-  [self.viewController resetAfterSideSwipeSnapshot];
 }
 
 @end

@@ -2,7 +2,7 @@
 
 #import "ios/ui/notes/cells/note_home_node_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "notes/note_node.h"
@@ -40,11 +40,16 @@ using l10n_util::GetNSString;
   [super configureCell:cell withStyler:styler];
   if (_noteNode->is_folder()) {
     TableViewNoteFolderCell* noteCell =
-        base::mac::ObjCCastStrict<TableViewNoteFolderCell>(cell);
+        base::apple::ObjCCastStrict<TableViewNoteFolderCell>(cell);
     noteCell.folderTitleTextField.text =
         note_utils_ios::TitleForNoteNode(_noteNode);
-    noteCell.folderImageView.image =
-        [UIImage imageNamed:vNotesFolderIcon];
+    if (self.shouldShowTrashIcon) {
+      noteCell.folderImageView.image =
+          [UIImage imageNamed:vNotesTrashFolderIcon];
+    } else {
+      noteCell.folderImageView.image =
+          [UIImage imageNamed:vNotesFolderIcon];
+    }
     noteCell.noteAccessoryType =
         TableViewNoteFolderAccessoryTypeDisclosureIndicator;
     noteCell.accessibilityIdentifier =
@@ -63,12 +68,13 @@ using l10n_util::GetNSString;
             (itemsCount > 1 ? notesString : noteString)];
   } else {
     TableViewNoteCell* noteCell =
-    base::mac::ObjCCastStrict<TableViewNoteCell>(cell);
+        base::apple::ObjCCastStrict<TableViewNoteCell>(cell);
     [noteCell
         configureNoteWithTitle:note_utils_ios::TitleForNoteNode(_noteNode)
                      createdAt:note_utils_ios::createdAtForNoteNode(_noteNode)];
     noteCell.accessibilityLabel = [noteCell accessibilityLabelString];
     noteCell.accessibilityTraits |= UIAccessibilityTraitButton;
+    noteCell.imageView.image = [UIImage imageNamed:vNotesIcon];
   }
 }
 

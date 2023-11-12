@@ -21,6 +21,7 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.Log;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
@@ -48,6 +49,9 @@ public class TabDragSource {
     private boolean mAcceptNextDrop;
     private OnDragListenerImpl mOnDragListenerImpl;
     private View.DragShadowBuilder mTabDragShadowBuilder;
+    private PointF mStartPointOnScreen;
+    private PointF mDropLocation;
+    private float mTabsToolbarHeightInDp;
 
     private float mPxToDp;
 
@@ -113,6 +117,20 @@ public class TabDragSource {
         return mTabDragShadowBuilder;
     }
 
+    PointF getTabDropPosition() {
+        return mDropLocation;
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    void setTabDropPosition(PointF dropLocation) {
+        mDropLocation = dropLocation;
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+    void setTabsToolbarHeightInDp(float tabsToolbarHeightInDp) {
+        mTabsToolbarHeightInDp = tabsToolbarHeightInDp;
+    }
+
     @VisibleForTesting
     class OnDragListenerImpl implements View.OnDragListener {
         private int mLastAction;
@@ -121,9 +139,14 @@ public class TabDragSource {
         private float mLastXPosition;
         private float mLastYPosition;
         private boolean mPointerInView;
+        private boolean mDragShadowVisible;
 
         @Override
         public boolean onDrag(View view, DragEvent dragEvent) {
+            // Since drag events are over Chrome window hence set the appropriate drag shadow, if
+            // required.
+            setDragShadow(view, dragEvent);
+
             // Check if the events are being received in the possible drop targets.
             if (canAcceptTabDrop(view, dragEvent)) return false;
 
@@ -201,6 +224,66 @@ public class TabDragSource {
             mLastXPosition = 0.0f;
             mLastYPosition = 0.0f;
         }
+
+        @VisibleForTesting
+        boolean canAcceptTabDrop(View view, DragEvent dragEvent) {
+            // If the event is received by a non source chrome window then mark to accept the drop
+            // in the destination chrome window only if drop is within the tabs strip area.
+            if (System.identityHashCode(view) != getDragSourceTabsToolbarHashCode()) {
+                // Check if the drop is in the tabs strip area of the toolbar container.
+                // The container has two toolbars strips stacked on each other. The top one is the
+                // tabs strip layout and lower is for omnibox and navigation buttons. The tab drop
+                // is accepted only in the top tabs toolbar area only.
+                if (dragEvent.getAction() == DragEvent.ACTION_DROP
+                        && inTabsToolbarArea(view, dragEvent)) {
+                    mAcceptNextDrop = true;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        private void showDragShadow(boolean show) {
+            View dragSourceView = mSourceStripLayoutHelper.getToolbarContainerView();
+            mTabDragShadowBuilder =
+                    new TabDragShadowBuilder(show ? getDragShadowView(dragSourceView)
+                                                  : getEmptyDragShadowView(dragSourceView),
+                            mStartPointOnScreen);
+            dragSourceView.updateDragShadow(mTabDragShadowBuilder);
+            mDragShadowVisible = show;
+        }
+
+        private void setDragShadow(View view, DragEvent dragEvent) {
+            switch (dragEvent.getAction()) {
+                case DragEvent.ACTION_DRAG_LOCATION:
+                    boolean inTabsStripArea = inTabsToolbarArea(view, dragEvent);
+                    if (inTabsStripArea && mDragShadowVisible) {
+                        showDragShadow(false);
+                    }
+                    if (!inTabsStripArea && !mDragShadowVisible) {
+                        showDragShadow(true);
+                    }
+                    break;
+                case DragEvent.ACTION_DROP:
+                    showDragShadow(false);
+                    mDropLocation =
+                            new PointF(dragEvent.getX() * mPxToDp, dragEvent.getY() * mPxToDp);
+                    break;
+                case DragEvent.ACTION_DRAG_ENDED:
+                    showDragShadow(false);
+                    break;
+                case DragEvent.ACTION_DRAG_ENTERED:
+                    // No action here as the location is not specified. During the first
+                    // ACTION_DRAG_LOCATION event the correct drag shadow will be set.
+                    mDragShadowVisible = true;
+                    break;
+                case DragEvent.ACTION_DRAG_EXITED:
+                    showDragShadow(true);
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 
     @VisibleForTesting
@@ -212,9 +295,10 @@ public class TabDragSource {
     }
 
     private void initiateTabDragAndDrop(View view, ClipData dragData, PointF startPointInView) {
+        mStartPointOnScreen = getPositionOnScreen(view, startPointInView);
         // Instantiate the drag shadow builder.
-        mTabDragShadowBuilder = new TabDragShadowBuilder(
-                getDragShadowView(view), getPositionOnScreen(view, startPointInView));
+        mTabDragShadowBuilder =
+                new TabDragShadowBuilder(getEmptyDragShadowView(view), mStartPointOnScreen);
 
         // Start the drag.
         int flags = View.DRAG_FLAG_GLOBAL;
@@ -263,12 +347,13 @@ public class TabDragSource {
             Drawable icon =
                     context.getPackageManager().getApplicationIcon(context.getApplicationInfo());
             imageView.setImageDrawable(icon);
-            imageView.setVisibility(View.VISIBLE);
             imageView.setBackgroundDrawable(new ColorDrawable(Color.LTGRAY));
 
             // Get Chrome window dimensions.
             int shadowWidth = ((Activity) context).getWindow().getDecorView().getWidth();
             int shadowHeight = ((Activity) context).getWindow().getDecorView().getHeight();
+
+            // Add app icon in the center of the drag shadow.
             int iconWidth = icon.getIntrinsicWidth();
             int iconHeight = icon.getIntrinsicHeight();
             int paddingHorizontal = (shadowWidth - iconWidth) / 2;
@@ -279,6 +364,17 @@ public class TabDragSource {
         } catch (Exception e) {
             Log.e(TAG, "DnD Failed to create drag shadow image view: " + e.getMessage());
         }
+        return imageView;
+    }
+
+    private View getEmptyDragShadowView(View view) {
+        Context context = view.getContext();
+        ImageView imageView = new ImageView(context);
+        // View is empty and nothing is shown for now.
+        // Get Chrome window dimensions and set the view to that size.
+        int shadowWidth = ((Activity) context).getWindow().getDecorView().getWidth();
+        int shadowHeight = ((Activity) context).getWindow().getDecorView().getHeight();
+        imageView.layout(0, 0, shadowWidth, shadowHeight);
         return imageView;
     }
 
@@ -351,6 +447,10 @@ public class TabDragSource {
                 tabsToolbarView, SUPPORTED_MIMETYPES, tabDropTarget.getDropContentReceiver());
         mOnDragListenerImpl = new OnDragListenerImpl();
         tabsToolbarView.setOnDragListener(mOnDragListenerImpl);
+
+        // Save the tabs toolbar height as it occupies the top half of the toolbar container.
+        mTabsToolbarHeightInDp =
+                tabsToolbarView.getContext().getResources().getDimension(R.dimen.tab_strip_height);
     }
 
     @VisibleForTesting
@@ -374,26 +474,6 @@ public class TabDragSource {
         mPxToDp = 0.0f;
     }
 
-    @VisibleForTesting
-    boolean canAcceptTabDrop(View view, DragEvent dragEvent) {
-        // If the event is received by a non source chrome window then mark to accept the drop in
-        // the destination chrome window only if drop is within the tabs strip area.
-        if (System.identityHashCode(view) != getDragSourceTabsToolbarHashCode()) {
-            // Check if the drop is in the tabs strip area of the toolbar container.
-            // The container has two toolbars strips stacked on each other. The top one is the tabs
-            // strip layout and lower is for omnibox and navigation buttons. The tab drop is
-            // accepted only in the top tabs toolbar area only.
-            if ((dragEvent.getAction() == DragEvent.ACTION_DROP)
-                    // TODO(b/288959915): Exactly determine the tabs toolbar area rather than using
-                    // the approximate top half height of the toolbar container.
-                    && (dragEvent.getY() < view.getHeight() / 2.0f)) {
-                mAcceptNextDrop = true;
-            }
-            return true;
-        }
-        return false;
-    }
-
     private ClipData createClipDataFromTab(Tab tabBeingDragged, View view) {
         String clipData = getClipDataInfo(tabBeingDragged);
         if (clipData != null && clipData.length() > 0) {
@@ -410,7 +490,8 @@ public class TabDragSource {
 
     int getTabIdFromClipData(ClipData.Item item) {
         String[] itemTexts = item.getText().toString().split(";");
-        return Integer.parseInt(itemTexts[0].replaceAll("[^0-9]", ""));
+        String numberText = itemTexts[0].replaceAll("[^0-9]", "");
+        return numberText.isEmpty() ? Tab.INVALID_TAB_ID : Integer.parseInt(numberText);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -478,5 +559,9 @@ public class TabDragSource {
         float positionYOnScreen = (topLeftLocationOfToolbarView[1] - topLeftLocationOfDecorView[1])
                 + positionInView.y / mPxToDp;
         return new PointF(positionXOnScreen, positionYOnScreen);
+    }
+
+    private boolean inTabsToolbarArea(View view, DragEvent dragEvent) {
+        return (dragEvent.getY() <= mTabsToolbarHeightInDp);
     }
 }

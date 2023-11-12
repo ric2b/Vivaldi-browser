@@ -1715,23 +1715,30 @@ GLES2ReadbackARGBImagePixelsINTERNAL(const GLbyte* mailbox,
       dst_height, dst_color_type, dst_alpha_type, dst_row_bytes, src_x, src_y,
       plane_index, pixels);
 }
-void GL_APIENTRY GLES2WritePixelsINTERNAL(const GLbyte* mailbox,
-                                          const void* src_color_space,
-                                          GLuint src_color_space_size,
-                                          GLuint src_size,
-                                          GLuint src_width,
-                                          GLuint src_height,
-                                          GLuint src_sk_color_type,
-                                          GLuint src_sk_alpha_type,
-                                          GLuint src_row_bytes,
-                                          GLint x_offset,
-                                          GLint y_offset,
-                                          GLint plane_index,
-                                          const void* src_pixels) {
-  gles2::GetGLContext()->WritePixelsINTERNAL(
-      mailbox, src_color_space, src_color_space_size, src_size, src_width,
-      src_height, src_sk_color_type, src_sk_alpha_type, src_row_bytes, x_offset,
-      y_offset, plane_index, src_pixels);
+void GL_APIENTRY GLES2WritePixelsYUVINTERNAL(const GLbyte* mailbox,
+                                             GLuint src_size_plane1,
+                                             GLuint src_size_plane2,
+                                             GLuint src_size_plane3,
+                                             GLuint src_size_plane4,
+                                             GLuint src_width,
+                                             GLuint src_height,
+                                             GLuint src_plane_config,
+                                             GLuint src_subsampling,
+                                             GLuint src_datatype,
+                                             GLuint src_row_bytes_plane1,
+                                             GLuint src_row_bytes_plane2,
+                                             GLuint src_row_bytes_plane3,
+                                             GLuint src_row_bytes_plane4,
+                                             const void* src_pixels_plane1,
+                                             const void* src_pixels_plane2,
+                                             const void* src_pixels_plane3,
+                                             const void* src_pixels_plane4) {
+  gles2::GetGLContext()->WritePixelsYUVINTERNAL(
+      mailbox, src_size_plane1, src_size_plane2, src_size_plane3,
+      src_size_plane4, src_width, src_height, src_plane_config, src_subsampling,
+      src_datatype, src_row_bytes_plane1, src_row_bytes_plane2,
+      src_row_bytes_plane3, src_row_bytes_plane4, src_pixels_plane1,
+      src_pixels_plane2, src_pixels_plane3, src_pixels_plane4);
 }
 void GL_APIENTRY GLES2EnableiOES(GLenum target, GLuint index) {
   gles2::GetGLContext()->EnableiOES(target, index);
@@ -1827,6 +1834,17 @@ GLES2GetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
                                                      GLint* params) {
   gles2::GetGLContext()->GetFramebufferPixelLocalStorageParameterivANGLE(
       plane, pname, params);
+}
+void GL_APIENTRY GLES2ClipControlEXT(GLenum origin, GLenum depth) {
+  gles2::GetGLContext()->ClipControlEXT(origin, depth);
+}
+void GL_APIENTRY GLES2PolygonModeANGLE(GLenum face, GLenum mode) {
+  gles2::GetGLContext()->PolygonModeANGLE(face, mode);
+}
+void GL_APIENTRY GLES2PolygonOffsetClampEXT(GLfloat factor,
+                                            GLfloat units,
+                                            GLfloat clamp) {
+  gles2::GetGLContext()->PolygonOffsetClampEXT(factor, units, clamp);
 }
 
 namespace gles2 {
@@ -3193,8 +3211,8 @@ extern const NameToFunc g_gles2_function_table[] = {
             glReadbackARGBImagePixelsINTERNAL),
     },
     {
-        "glWritePixelsINTERNAL",
-        reinterpret_cast<GLES2FunctionPointer>(glWritePixelsINTERNAL),
+        "glWritePixelsYUVINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(glWritePixelsYUVINTERNAL),
     },
     {
         "glEnableiOES",
@@ -3288,6 +3306,18 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glGetFramebufferPixelLocalStorageParameterivANGLE",
         reinterpret_cast<GLES2FunctionPointer>(
             glGetFramebufferPixelLocalStorageParameterivANGLE),
+    },
+    {
+        "glClipControlEXT",
+        reinterpret_cast<GLES2FunctionPointer>(glClipControlEXT),
+    },
+    {
+        "glPolygonModeANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(glPolygonModeANGLE),
+    },
+    {
+        "glPolygonOffsetClampEXT",
+        reinterpret_cast<GLES2FunctionPointer>(glPolygonOffsetClampEXT),
     },
     {
         nullptr,

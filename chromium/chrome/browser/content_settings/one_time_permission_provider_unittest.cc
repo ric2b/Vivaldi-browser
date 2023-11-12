@@ -428,6 +428,10 @@ TEST_P(OneTimePermissionProviderExpiryTest, RenewContentSetting_Noop) {
   // The lifetime given by `constraints` is ignored.
   base::Time original_expiration = metadata.expiration();
 
+  EXPECT_FALSE(one_time_permission_provider_->RenewContentSetting(
+      primary_url, primary_url, ContentSettingsType::GEOLOCATION,
+      absl::nullopt));
+
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             TestUtils::GetContentSetting(
                 one_time_permission_provider_.get(), primary_url, primary_url,

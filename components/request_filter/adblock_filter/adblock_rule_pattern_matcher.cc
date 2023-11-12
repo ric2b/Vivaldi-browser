@@ -264,15 +264,15 @@ RulePatternMatcher::UrlInfo::UrlInfo(const GURL& url)
 RulePatternMatcher::UrlInfo::~UrlInfo() = default;
 
 RulePatternMatcher::RulePatternMatcher(const flat::RequestFilterRule& rule)
-    : rule_(rule), pattern_(ToStringPiece(rule_.pattern())) {
-  DCHECK(rule_.pattern_type() == flat::PatternType_PLAIN ||
-         rule_.pattern_type() == flat::PatternType_WILDCARDED);
-  DCHECK((rule_.anchor_type() & flat::AnchorType_START) == 0 ||
-         (rule_.anchor_type() & flat::AnchorType_HOST) == 0);
-  DCHECK((rule_.anchor_type() &
+    : rule_(rule), pattern_(ToStringPiece(rule_->pattern())) {
+  DCHECK(rule_->pattern_type() == flat::PatternType_PLAIN ||
+         rule_->pattern_type() == flat::PatternType_WILDCARDED);
+  DCHECK((rule_->anchor_type() & flat::AnchorType_START) == 0 ||
+         (rule_->anchor_type() & flat::AnchorType_HOST) == 0);
+  DCHECK((rule_->anchor_type() &
           (flat::AnchorType_START | flat::AnchorType_HOST)) == 0 ||
          !base::StartsWith(pattern_, "*"));
-  DCHECK((rule_.anchor_type() & (flat::AnchorType_END)) == 0 ||
+  DCHECK((rule_->anchor_type() & (flat::AnchorType_END)) == 0 ||
          !base::EndsWith(pattern_, "*"));
 }
 
@@ -282,11 +282,11 @@ bool RulePatternMatcher::MatchesUrl(const UrlInfo& url) const {
   if (pattern_.empty())
     return true;
 
-  if ((rule_.options() & flat::OptionFlag_IS_CASE_SENSITIVE) != 0) {
-    return IsCaseSensitiveMatch(pattern_, rule_.anchor_type(), url.spec(),
+  if ((rule_->options() & flat::OptionFlag_IS_CASE_SENSITIVE) != 0) {
+    return IsCaseSensitiveMatch(pattern_, rule_->anchor_type(), url.spec(),
                                 url.host());
   } else {
-    return IsCaseSensitiveMatch(pattern_, rule_.anchor_type(),
+    return IsCaseSensitiveMatch(pattern_, rule_->anchor_type(),
                                 url.fold_case_spec(), url.host());
   }
 }

@@ -824,16 +824,18 @@ TEST_F(DeskSyncBridgeTest, DeskTemplateJsonConversionShouldBeLossless) {
       desk_template_conversion::SerializeDeskTemplateAsBaseValue(
           desk_template.get(), app_cache());
 
-  std::unique_ptr<ash::DeskTemplate> converted_desk_template =
+  auto converted_desk_template =
       desk_template_conversion::ParseDeskTemplateFromBaseValue(
           template_value, ash::DeskTemplateSource::kPolicy);
 
-  EXPECT_EQ(desk_template->desk_restore_data()->ConvertToValue(),
-            converted_desk_template->desk_restore_data()->ConvertToValue());
+  EXPECT_TRUE(converted_desk_template.has_value());
+  EXPECT_EQ(
+      desk_template->desk_restore_data()->ConvertToValue(),
+      converted_desk_template.value()->desk_restore_data()->ConvertToValue());
 
   WorkspaceDeskSpecifics converted_desk_proto =
-      desk_template_conversion::ToSyncProto(converted_desk_template.get(),
-                                            app_cache());
+      desk_template_conversion::ToSyncProto(
+          converted_desk_template.value().get(), app_cache());
 
   EXPECT_THAT(converted_desk_proto, EqualsSpecifics(desk_proto));
 }
@@ -1409,6 +1411,22 @@ TEST_F(DeskSyncBridgeTest, GetEntryByUUIDShouldSucceed) {
   auto result = bridge()->GetEntryByUUID(MakeTestUuid(TestUuidId(1)));
   EXPECT_EQ(result.status, DeskModel::GetEntryByUuidStatus::kOk);
   EXPECT_TRUE(result.entry);
+}
+
+TEST_F(DeskSyncBridgeTest, GetAllEntriesByUuidsReturnsCorrectSet) {
+  InitializeBridge();
+
+  AddTwoTemplates();
+
+  std::set<base::Uuid> entry_uuids = bridge()->GetAllEntryUuids();
+
+  EXPECT_EQ(2ul, entry_uuids.size());
+
+  entry_uuids.erase(MakeTestUuid(TestUuidId(1)));
+  entry_uuids.erase(MakeTestUuid(TestUuidId(2)));
+
+  // IFF the set is correct it should be empty.
+  EXPECT_TRUE(entry_uuids.empty());
 }
 
 // Verify that event_flag placeholder has been set. This is a short-term

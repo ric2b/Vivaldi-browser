@@ -6,12 +6,15 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/power/battery_notification.h"
+#include "ash/system/power/battery_saver_controller.h"
 #include "ash/system/power/dual_role_notification.h"
 #include "base/command_line.h"
 #include "base/i18n/number_formatting.h"
@@ -28,7 +31,6 @@ using message_center::MessageCenter;
 using message_center::Notification;
 
 namespace ash {
-
 namespace {
 
 const char kNotifierPower[] = "ash.power";
@@ -59,8 +61,10 @@ std::string GetNotificationStateString(
   switch (notification_state) {
     case PowerNotificationController::NOTIFICATION_NONE:
       return "none";
-    case PowerNotificationController::NOTIFICATION_LOW_POWER:
-      return "low power";
+    case PowerNotificationController::NOTIFICATION_BSM_THRESHOLD_OPT_OUT:
+      return "low power - battery saver opt out";
+    case PowerNotificationController::NOTIFICATION_BSM_THRESHOLD_OPT_IN:
+      return "low power - battery saver opt in";
     case PowerNotificationController::NOTIFICATION_CRITICAL:
       return "critical power";
   }
@@ -68,11 +72,12 @@ std::string GetNotificationStateString(
   return "Unknown state";
 }
 
-void LogBatteryForUsbCharger(
-    PowerNotificationController::NotificationState state,
-    int battery_percent) {
+void LogBattery(PowerNotificationController::NotificationState state,
+                double battery_percent,
+                bool is_usb_charger_connected) {
   VLOG(1) << "Showing " << GetNotificationStateString(state)
-          << " notification. USB charger is connected. "
+          << " notification. "
+          << (is_usb_charger_connected ? "USB charger is connected." : "")
           << "Battery percentage: " << battery_percent << "%.";
 }
 
@@ -90,7 +95,12 @@ const char PowerNotificationController::kUsbNotificationId[] = "usb-charger";
 
 PowerNotificationController::PowerNotificationController(
     message_center::MessageCenter* message_center)
-    : message_center_(message_center) {
+    : message_center_(message_center),
+      battery_saver_activation_charge_percent_(
+          features::kBatterySaverActivationChargePercent.Get()),
+      critical_percentage_(5),
+      low_power_percentage_(battery_saver_activation_charge_percent_),
+      no_warning_percentage_(low_power_percentage_ + 5) {
   PowerStatus::Get()->AddObserver(this);
 }
 
@@ -192,12 +202,101 @@ void PowerNotificationController::MaybeShowDualRoleNotification() {
   dual_role_notification_->Update();
 }
 
+absl::optional<bool>
+PowerNotificationController::HandleBatterySaverNotifications() {
+  const PowerStatus& status = *PowerStatus::Get();
+
+  const bool on_AC_power = status.IsMainsChargerConnected();
+  const double rounded_battery_percent = status.GetRoundedBatteryPercent();
+
+  const bool below_threshold =
+      rounded_battery_percent <= battery_saver_activation_charge_percent_;
+  const bool threshold_conditions_met =
+      !on_AC_power && below_threshold && !battery_saver_triggered_;
+
+  const bool no_notification_currently_showing =
+      notification_state_ == NOTIFICATION_NONE;
+
+  // Notification State Machine based on opt-in/out experiment arms.
+  switch (features::kBatterySaverNotificationBehavior.Get()) {
+    case features::kBSMAutoEnable:
+      // Auto Enable when either the battery percentage is at the low power
+      // threshold (~20%).
+      if (threshold_conditions_met) {
+        battery_saver_triggered_ = true;
+        Shell::Get()->battery_saver_controller()->SetState(
+            true, BatterySaverController::UpdateReason::kThreshold);
+
+        // Send Opt-Out Notification at
+        // `battery_saver_activation_charge_percent_` battery percentage.
+        if (no_notification_currently_showing) {
+          notification_state_ =
+              PowerNotificationController::NOTIFICATION_BSM_THRESHOLD_OPT_OUT;
+          return true;
+        }
+      }
+      break;
+    case features::kBSMOptIn:
+      // Ask the user to manually enable battery saver mode at the low power
+      // threshold (~20%).
+      if (threshold_conditions_met) {
+        battery_saver_triggered_ = true;
+
+        // Send Opt-In Notification at
+        // `battery_saver_activation_charge_percent_` battery percentage.
+        if (no_notification_currently_showing) {
+          notification_state_ =
+              PowerNotificationController::NOTIFICATION_BSM_THRESHOLD_OPT_IN;
+          return true;
+        }
+      }
+      break;
+    default:
+      break;
+  }
+
+  return absl::nullopt;
+}
+
 bool PowerNotificationController::UpdateNotificationState() {
   const PowerStatus& status = *PowerStatus::Get();
-  if (!status.IsBatteryPresent() || status.IsBatteryTimeBeingCalculated() ||
-      status.IsMainsChargerConnected()) {
+  const bool on_AC_power = status.IsMainsChargerConnected();
+
+  // When charging, we clear the previous notification, and disable battery
+  // saver. This means when we unplug the charger (under the threshold), we want
+  // to resend the notification.
+  if (on_AC_power) {
+    battery_saver_triggered_ = false;
+  }
+
+  // Battery Saver Notification doesn't have a time remaining text, so send
+  // the notification + turn on battery saver right away.
+  if (!status.IsBatteryPresent() ||
+      (!features::IsBatterySaverAvailable() &&
+       status.IsBatteryTimeBeingCalculated()) ||
+      on_AC_power) {
     notification_state_ = NOTIFICATION_NONE;
     return false;
+  }
+
+  // Send different notifications if Battery Saver flag is enabled.
+  if (features::IsBatterySaverAvailable()) {
+    const double rounded_battery_percent = status.GetRoundedBatteryPercent();
+    const bool on_USB_power = status.IsUsbChargerConnected();
+    const bool on_line_power = status.IsLinePowerConnected();
+
+    // Reset threshold when charging and percent remaining goes above the
+    // threshold.
+    if ((on_AC_power || on_USB_power || on_line_power) &&
+        rounded_battery_percent > battery_saver_activation_charge_percent_) {
+      battery_saver_triggered_ = false;
+    }
+
+    // Check if we are supposed to send a battery saver notification.
+    absl::optional<bool> should_update = HandleBatterySaverNotifications();
+    return should_update != absl::nullopt
+               ? should_update.value()
+               : UpdateNotificationStateForRemainingPercentageBatterySaver();
   }
 
   return status.IsUsbChargerConnected()
@@ -235,12 +334,14 @@ bool PowerNotificationController::UpdateNotificationStateForRemainingTime() {
         return true;
       }
       if (remaining_minutes <= kLowPowerMinutes) {
-        notification_state_ = NOTIFICATION_LOW_POWER;
+        notification_state_ = NOTIFICATION_BSM_THRESHOLD_OPT_IN;
         LogBatteryForNoCharger(notification_state_, remaining_minutes);
         return true;
       }
       return false;
-    case NOTIFICATION_LOW_POWER:
+    // Essentially Low Power Notification State.
+    case NOTIFICATION_BSM_THRESHOLD_OPT_OUT:
+    case NOTIFICATION_BSM_THRESHOLD_OPT_IN:
       if (remaining_minutes <= kCriticalMinutes) {
         notification_state_ = NOTIFICATION_CRITICAL;
         LogBatteryForNoCharger(notification_state_, remaining_minutes);
@@ -271,19 +372,66 @@ bool PowerNotificationController::
     case NOTIFICATION_NONE:
       if (remaining_percentage <= kCriticalPercentage) {
         notification_state_ = NOTIFICATION_CRITICAL;
-        LogBatteryForUsbCharger(notification_state_, remaining_percentage);
+        LogBattery(notification_state_, remaining_percentage, true);
         return true;
       }
       if (remaining_percentage <= kLowPowerPercentage) {
-        notification_state_ = NOTIFICATION_LOW_POWER;
-        LogBatteryForUsbCharger(notification_state_, remaining_percentage);
+        notification_state_ = NOTIFICATION_BSM_THRESHOLD_OPT_IN;
+        LogBattery(notification_state_, remaining_percentage, true);
         return true;
       }
       return false;
-    case NOTIFICATION_LOW_POWER:
+    case NOTIFICATION_BSM_THRESHOLD_OPT_OUT:
+    case NOTIFICATION_BSM_THRESHOLD_OPT_IN:
       if (remaining_percentage <= kCriticalPercentage) {
         notification_state_ = NOTIFICATION_CRITICAL;
-        LogBatteryForUsbCharger(notification_state_, remaining_percentage);
+        LogBattery(notification_state_, remaining_percentage, true);
+        return true;
+      }
+      return false;
+    case NOTIFICATION_CRITICAL:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
+
+bool PowerNotificationController::
+    UpdateNotificationStateForRemainingPercentageBatterySaver() {
+  const PowerStatus* status = PowerStatus::Get();
+  const double rounded_battery_percent = status->GetRoundedBatteryPercent();
+
+  if (rounded_battery_percent >= no_warning_percentage_ ||
+      status->IsBatteryFull()) {
+    notification_state_ = NOTIFICATION_NONE;
+    return false;
+  }
+
+  switch (notification_state_) {
+    case NOTIFICATION_NONE:
+      if (rounded_battery_percent <= critical_percentage_) {
+        notification_state_ = NOTIFICATION_CRITICAL;
+        LogBattery(notification_state_, rounded_battery_percent,
+                   status->IsUsbChargerConnected());
+        return true;
+      }
+      if (rounded_battery_percent <= low_power_percentage_) {
+        notification_state_ =
+            features::kBatterySaverNotificationBehavior.Get() ==
+                    features::kBSMAutoEnable
+                ? NOTIFICATION_BSM_THRESHOLD_OPT_OUT
+                : NOTIFICATION_BSM_THRESHOLD_OPT_IN;
+        LogBattery(notification_state_, rounded_battery_percent,
+                   status->IsUsbChargerConnected());
+        return true;
+      }
+      return false;
+    case NOTIFICATION_BSM_THRESHOLD_OPT_OUT:
+    case NOTIFICATION_BSM_THRESHOLD_OPT_IN:
+      if (rounded_battery_percent <= critical_percentage_) {
+        notification_state_ = NOTIFICATION_CRITICAL;
+        LogBattery(notification_state_, rounded_battery_percent,
+                   status->IsUsbChargerConnected());
         return true;
       }
       return false;

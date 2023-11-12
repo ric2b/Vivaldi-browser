@@ -30,10 +30,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 }  // namespace
@@ -176,9 +172,11 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 
   // Prepare the dismissal callback.
   __weak __typeof(self) weakSelf = self;
-  ProceduralBlockWithSnoozeAction dismissalCallback =
-      ^(feature_engagement::Tracker::SnoozeAction snoozeAction) {
-        [weakSelf popupMenuIPHDidDismissWithSnoozeAction:snoozeAction];
+  CallbackWithIPHDismissalReasonType dismissalCallback =
+      ^(IPHDismissalReasonType IPHDismissalReasonType,
+        feature_engagement::Tracker::SnoozeAction snoozeAction) {
+        [weakSelf popupMenuIPHDidDismissWithReasonType:IPHDismissalReasonType
+                                          SnoozeAction:snoozeAction];
       };
 
   // Create the BubbleViewControllerPresenter.
@@ -189,21 +187,32 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
       [[BubbleViewControllerPresenter alloc]
           initDefaultBubbleWithText:text
                      arrowDirection:arrowDirection
-                          alignment:BubbleAlignmentTrailing
+                          alignment:BubbleAlignmentBottomOrTrailing
                isLongDurationBubble:NO
                   dismissalCallback:dismissalCallback];
   bubbleViewControllerPresenter.voiceOverAnnouncement = text;
   return bubbleViewControllerPresenter;
 }
 
-- (void)popupMenuIPHDidDismissWithSnoozeAction:
-    (feature_engagement::Tracker::SnoozeAction)snoozeAction {
+- (void)popupMenuIPHDidDismissWithReasonType:
+            (IPHDismissalReasonType)IPHDismissalReasonType
+                                SnoozeAction:
+                                    (feature_engagement::Tracker::SnoozeAction)
+                                        snoozeAction {
+  if (IPHDismissalReasonType == IPHDismissalReasonType::kTappedAnchorView) {
+    self.inSessionWithHistoryMenuItemIPH = YES;
+  }
   [self trackerIPHDidDismissWithSnoozeAction:snoozeAction];
   [self.UIUpdater updateUIForIPHDismissed];
   self.popupMenuBubblePresenter = nil;
 }
 
 - (void)prepareToShowPopupMenuBubble {
+  // There must be a feature engagment tracker to show a bubble.
+  if (!self.featureEngagementTracker) {
+    return;
+  }
+
   // If the Feature Engagement Tracker isn't ready, queue up and re-show when
   // it has finished initializing.
   if (!self.featureEngagementTracker->IsInitialized()) {
@@ -262,11 +271,11 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 
   // Present the bubble after the delay.
   self.popupMenuBubblePresenter = bubblePresenter;
-  self.inSessionWithHistoryMenuItemIPH = YES;
   [self.popupMenuBubblePresenter
       presentInViewController:self.baseViewController
                          view:self.baseViewController.view
-                  anchorPoint:anchorPoint];
+                  anchorPoint:anchorPoint
+              anchorViewFrame:anchorFrame];
   [self.UIUpdater updateUIForOverflowMenuIPHDisplayed];
 }
 
@@ -280,14 +289,15 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 
   // Prepare the dismissal callback.
   __weak __typeof(self) weakSelf = self;
-  ProceduralBlockWithSnoozeAction dismissalCallback =
-      ^(feature_engagement::Tracker::SnoozeAction snoozeAction) {
+  CallbackWithIPHDismissalReasonType dismissalCallback =
+      ^(IPHDismissalReasonType IPHDismissalReasonType,
+        feature_engagement::Tracker::SnoozeAction snoozeAction) {
         [weakSelf overflowMenuIPHDidDismissWithSnoozeAction:snoozeAction];
       };
 
   BubbleAlignment alignment = anchorXInParent < 0.5 * parentViewWidth
-                                  ? BubbleAlignmentLeading
-                                  : BubbleAlignmentTrailing;
+                                  ? BubbleAlignmentTopOrLeading
+                                  : BubbleAlignmentBottomOrTrailing;
 
   // Create the BubbleViewControllerPresenter.
   BubbleArrowDirection arrowDirection = BubbleArrowDirectionUp;

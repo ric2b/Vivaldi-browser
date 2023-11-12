@@ -38,8 +38,7 @@ using resource_coordinator::TabLoadTracker;
 namespace {
 
 void BackgroundTracingTrigger() {
-  content::BackgroundTracingManager::GetInstance().EmitNamedTrigger(
-      "session-restore-config");
+  content::BackgroundTracingManager::EmitNamedTrigger("session-restore-config");
 }
 
 const base::TickClock* GetDefaultTickClock() {

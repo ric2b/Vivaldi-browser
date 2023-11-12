@@ -52,6 +52,11 @@ class Tracker;
 // NonModalDefaultBrowserPromoSchedulerSceneAgent.
 @property(nonatomic, weak) SceneState* sceneState;
 
+// Vivaldi
+- (void)searchEngineShortcutActivatedForURL:(TemplateURL*)templateURL;
+- (void)resetActivatedSearchEngineShortcut;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_MEDIATOR_H_

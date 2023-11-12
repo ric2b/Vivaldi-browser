@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/notes/note_model_type_processor.h"
 
 namespace syncer {
@@ -32,11 +33,9 @@ class NoteModelTypeProcessor;
 // This service owns the NoteModelTypeProcessor.
 class NoteSyncService : public KeyedService {
  public:
-  // If `wipe_model_on_stopping_sync_with_clear_data` is `true`,
-  // lifetime of notes in the associated storage is coupled with sync
-  // metadata's, so disabling sync will delete notes in the storage.
   NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
-                  bool wipe_model_on_stopping_sync_with_clear_data);
+                  syncer::WipeModelUponSyncDisabledBehavior
+                      wipe_model_upon_sync_disabled_behavior);
 
   NoteSyncService(const NoteSyncService&) = delete;
   NoteSyncService& operator=(const NoteSyncService&) = delete;

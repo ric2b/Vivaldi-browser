@@ -105,6 +105,7 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
                                   const std::u16string& label,
                                   const ui::ImageModel& icon);
   void AddTitle(const std::u16string& label);
+  void AddTitleWithStringId(int string_id);
 
   // Adds a separator of the specified type to the model.
   // - Adding a separator after another separator is always invalid if they
@@ -206,7 +207,6 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
   absl::optional<size_t> GetIndexOfCommandId(int command_id) const;
 
   // Overridden from MenuModel:
-  bool HasIcons() const override;
   size_t GetItemCount() const override;
   ItemType GetTypeAt(size_t index) const override;
   ui::MenuSeparatorType GetSeparatorTypeAt(size_t index) const override;
@@ -283,7 +283,8 @@ class COMPONENT_EXPORT(UI_BASE) SimpleMenuModel : public MenuModel {
   void OnMenuClosed();
 
   ItemVector items_;
-  const raw_ptr<Delegate, DanglingUntriaged> delegate_;
+
+  raw_ptr<Delegate, AcrossTasksDanglingUntriaged> delegate_;
 
   base::WeakPtrFactory<SimpleMenuModel> method_factory_{this};
 };

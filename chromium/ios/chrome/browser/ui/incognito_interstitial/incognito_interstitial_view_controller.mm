@@ -6,9 +6,9 @@
 
 #import <algorithm>
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/util/attributed_string_util.h"
@@ -31,10 +31,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -92,9 +88,9 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
     self.bannerName = @"vivaldi_open_in_private_tab";
   } else {
   self.bannerName = kIncognitoInterstitialBannerName;
+  self.bannerSize = BannerImageSizeType::kStandard;
   } // End Vivaldi
 
-  self.isTallBanner = NO;
   self.shouldBannerFillTopSpace = YES;
   self.shouldHideBanner = IsCompactHeight(self.traitCollection);
 
@@ -257,9 +253,9 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
   self.shouldHideBanner = IsCompactHeight(self.traitCollection);
   [self updateNavigationBarAppearance];
-  [super traitCollectionDidChange:previousTraitCollection];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -321,25 +317,21 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
     _expandURLButton =
         [[ExtendedTouchTargetButton alloc] initWithFrame:CGRectZero
                                            primaryAction:readMoreAction];
-    [_expandURLButton setAttributedTitle:readMoreString
-                                forState:UIControlStateNormal];
 
-    // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-    // iOS 15.
-    if (base::ios::IsRunningOnIOS15OrLater() &&
-        IsUIButtonConfigurationEnabled()) {
-      if (@available(iOS 15, *)) {
-        UIButtonConfiguration* buttonConfiguration =
-            [UIButtonConfiguration plainButtonConfiguration];
-        buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-            CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
-        _expandURLButton.configuration = buttonConfiguration;
-      }
+    if (IsUIButtonConfigurationEnabled()) {
+      UIButtonConfiguration* buttonConfiguration =
+          [UIButtonConfiguration plainButtonConfiguration];
+      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+          CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
+      buttonConfiguration.attributedTitle = readMoreString;
+      _expandURLButton.configuration = buttonConfiguration;
     } else {
       UIEdgeInsets insets = UIEdgeInsetsMake(CGFLOAT_EPSILON, CGFLOAT_EPSILON,
                                              CGFLOAT_EPSILON, CGFLOAT_EPSILON);
       SetTitleEdgeInsets(_expandURLButton, insets);
       SetContentEdgeInsets(_expandURLButton, insets);
+      [_expandURLButton setAttributedTitle:readMoreString
+                                  forState:UIControlStateNormal];
     }
 
     _expandURLButton.backgroundColor = self.view.backgroundColor;

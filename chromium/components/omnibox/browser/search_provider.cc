@@ -62,6 +62,10 @@
 #include "url/url_constants.h"
 #include "url/url_util.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 using metrics::OmniboxEventProto;
 
 // Helpers --------------------------------------------------------------------
@@ -265,6 +269,16 @@ void SearchProvider::Start(const AutocompleteInput& input,
     keyword_provider = nullptr;
 
   const TemplateURL* default_provider = model->GetDefaultSearchProvider();
+
+#if BUILDFLAG(IS_IOS)
+  // Note:(prio@vivaldi.com) - This iOS flag can be safe to remove when Android
+  // implements the private tab search engine settings.
+  if (vivaldi::IsVivaldiRunning() && client()->IsOffTheRecord()) {
+    default_provider = model->GetDefaultSearchProvider(
+          TemplateURLService::kDefaultSearchPrivate);
+  } // End Vivaldi
+#endif
+
   if (default_provider &&
       !default_provider->SupportsReplacement(model->search_terms_data()))
     default_provider = nullptr;
@@ -415,7 +429,7 @@ const AutocompleteInput SearchProvider::GetInput(bool is_keyword) const {
 
 void SearchProvider::OnURLLoadComplete(
     const network::SimpleURLLoader* source,
-    const bool response_received,
+    const int response_code,
     std::unique_ptr<std::string> response_body) {
   TRACE_EVENT0("omnibox", "SearchProvider::OnURLLoadComplete");
   DCHECK(!done_);
@@ -424,7 +438,7 @@ void SearchProvider::OnURLLoadComplete(
   // Ensure the request succeeded and that the provider used is still available.
   // A verbatim match cannot be generated without this provider, causing errors.
   const bool request_succeeded =
-      response_received && GetTemplateURL(is_keyword);
+      response_code == 200 && GetTemplateURL(is_keyword);
 
   LogLoadComplete(request_succeeded, is_keyword);
 

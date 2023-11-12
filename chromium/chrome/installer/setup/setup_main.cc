@@ -19,6 +19,8 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/dcheck_is_on.h"
+#include "base/debug/handle_hooks_win.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -43,6 +45,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "base/win/current_module.h"
 #include "base/win/process_startup_helper.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_com_initializer.h"
@@ -1517,14 +1520,10 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
 
 }  // namespace installer
 
-int WINAPI wWinMain(HINSTANCE instance,
-                    HINSTANCE prev_instance,
-                    wchar_t* command_line,
-                    int show_command) {
+namespace {
+
+int SetupMain(HINSTANCE instance) {
   vivaldi::g_inside_installer_application = true;
-#if !defined(OFFICIAL_BUILD)
-  vivaldi::CheckForDebugSetupCommand(show_command);
-#endif
 
   // Check to see if the CPU is supported before doing anything else. There's
   // very little than can safely be accomplished if the CPU isn't supported
@@ -1600,10 +1599,18 @@ int WINAPI wWinMain(HINSTANCE instance,
   base::win::RegisterInvalidParamHandler();
   base::win::SetupCRT(cmd_line);
 
-#if defined(ARCH_CPU_64_BITS) || defined(NDEBUG)
-  // Disable the handle verifier for all but 32-bit debug builds.
+  // HandleVerifier detects and reports incorrect handle manipulations. It
+  // tracks handle operations on builds that support DCHECK only.
+#if !DCHECK_IS_ON()
   base::win::DisableHandleVerifier();
-#endif
+#elif !defined(COMPONENT_BUILD)
+  // Patch the main EXE on non-component builds when DCHECKs are enabled. This
+  // allows detection of third party code that might attempt to meddle with the
+  // process's handles. This must be done when single-threaded to avoid other
+  // threads attempting to make calls through the hooks while they are being
+  // emplaced.
+  base::debug::HandleHooks::AddIATPatch(CURRENT_MODULE());
+#endif  // !defined(COMPONENT_BUILD)
 
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
 
@@ -1811,4 +1818,20 @@ int WINAPI wWinMain(HINSTANCE instance,
   VLOG(1) << "Installation complete, returning: " << return_code;
 
   return return_code;
+}
+
+}  // namespace
+
+int WINAPI wWinMain(HINSTANCE instance,
+                    HINSTANCE prev_instance,
+                    wchar_t* command_line,
+                    int show_command) {
+#if !defined(OFFICIAL_BUILD)
+  vivaldi::CheckForDebugSetupCommand(show_command);
+#endif
+
+  // https://crbug.com/896565: Graceful shutdown sometimes fails for reasons out
+  // of the installer's control. Crashes from such failures are inactionable, so
+  // terminate the process forthwith.
+  base::Process::TerminateCurrentProcessImmediately(SetupMain(instance));
 }

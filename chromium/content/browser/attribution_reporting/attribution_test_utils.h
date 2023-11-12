@@ -19,6 +19,7 @@
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/destination_set.h"
+#include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
@@ -74,6 +75,9 @@ AttributionConfig::RateLimitConfig RateLimitWith(
 AttributionConfig::EventLevelLimit EventLevelLimitWith(
     base::FunctionRef<void(content::AttributionConfig::EventLevelLimit&)> f);
 
+AttributionConfig::AggregateLimit AggregateLimitWith(
+    base::FunctionRef<void(content::AttributionConfig::AggregateLimit&)> f);
+
 AttributionConfig AttributionConfigWith(
     base::FunctionRef<void(AttributionConfig&)> f);
 
@@ -92,8 +96,6 @@ class SourceBuilder {
   SourceBuilder& operator=(SourceBuilder&&);
 
   SourceBuilder& SetExpiry(base::TimeDelta delta);
-
-  SourceBuilder& SetEventReportWindow(base::TimeDelta delta);
 
   SourceBuilder& SetAggregatableReportWindow(base::TimeDelta delta);
 
@@ -128,12 +130,19 @@ class SourceBuilder {
   SourceBuilder& SetAggregatableBudgetConsumed(
       int64_t aggregatable_budget_consumed);
 
+  SourceBuilder& SetRandomizedResponseRate(double randomized_response_rate);
+
   SourceBuilder& SetAggregatableDedupKeys(
       std::vector<uint64_t> aggregatable_dedup_keys);
 
   SourceBuilder& SetIsWithinFencedFrame(bool is_within_fenced_frame);
 
   SourceBuilder& SetDebugReporting(bool debug_reporting);
+
+  SourceBuilder& SetEventReportWindows(
+      attribution_reporting::EventReportWindows);
+
+  SourceBuilder& SetMaxEventLevelReports(int max_event_level_reports);
 
   StorableSource Build() const;
 
@@ -164,7 +173,11 @@ class SourceBuilder {
   std::vector<uint64_t> dedup_keys_;
   attribution_reporting::AggregationKeys aggregation_keys_;
   int64_t aggregatable_budget_consumed_ = 0;
+  double randomized_response_rate_ = 0;
   std::vector<uint64_t> aggregatable_dedup_keys_;
+  absl::optional<attribution_reporting::EventReportWindows>
+      event_report_windows_ = absl::nullopt;
+  absl::optional<int> max_event_level_reports_ = absl::nullopt;
   bool is_within_fenced_frame_ = false;
   bool debug_reporting_ = false;
 };
@@ -284,8 +297,6 @@ class ReportBuilder {
 
   ReportBuilder& SetExternalReportId(base::Uuid external_report_id);
 
-  ReportBuilder& SetRandomizedTriggerRate(double rate);
-
   ReportBuilder& SetReportId(AttributionReport::Id id);
 
   ReportBuilder& SetAggregatableHistogramContributions(
@@ -313,7 +324,6 @@ class ReportBuilder {
   base::Time report_time_;
   int64_t priority_ = 0;
   base::Uuid external_report_id_;
-  double randomized_trigger_rate_ = 0;
   AttributionReport::Id report_id_{0};
   std::vector<AggregatableHistogramContribution> contributions_;
   absl::optional<attribution_reporting::SuitableOrigin>
@@ -474,8 +484,18 @@ MATCHER_P(AggregatableBudgetConsumedIs, matcher, "") {
                             result_listener);
 }
 
+MATCHER_P(RandomizedResponseRateIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.randomized_response_rate(),
+                            result_listener);
+}
+
 MATCHER_P(SourceActiveStateIs, matcher, "") {
   return ExplainMatchResult(matcher, arg.active_state(), result_listener);
+}
+
+MATCHER_P(EventReportWindowsIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.event_report_windows(),
+                            result_listener);
 }
 
 // Trigger matchers.
@@ -521,11 +541,6 @@ MATCHER_P(TriggerDataIs, matcher, "") {
 
 MATCHER_P(TriggerPriorityIs, matcher, "") {
   return ExplainMatchResult(matcher, arg.priority, result_listener);
-}
-
-MATCHER_P(RandomizedTriggerRateIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.randomized_trigger_rate,
-                            result_listener);
 }
 
 MATCHER_P(ReportURLIs, matcher, "") {

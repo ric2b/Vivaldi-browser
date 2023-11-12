@@ -14,7 +14,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/containers/stack.h"
-#include "base/containers/stack_container.h"
+
 #include "base/i18n/string_compare.h"
 #include "chrome/android/chrome_jni_headers/NotesBridge_jni.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -145,18 +145,18 @@ void NotesBridge::GetPermanentNodeIDs(
     const JavaParamRef<jobject>& j_result_obj) {
   DCHECK(IsLoaded());
 
-  base::StackVector<const NoteNode*, 8> permanent_nodes;
+  absl::InlinedVector<const NoteNode*, 8> permanent_nodes;
 
   // Save all the permanent nodes.
   const NoteNode* root_node = notes_model_->root_node();
-  permanent_nodes->push_back(root_node);
+  permanent_nodes.push_back(root_node);
   for (const auto& child : root_node->children())
-    permanent_nodes->push_back(child.get());
+    permanent_nodes.push_back(child.get());
 
   // Write the permanent nodes to |j_result_obj|.
-  for (base::StackVector<const NoteNode*, 8>::ContainerType::const_iterator it =
-           permanent_nodes->begin();
-       it != permanent_nodes->end(); ++it) {
+  for (absl::InlinedVector<const NoteNode*, 8>::InlinedVector::const_iterator it =
+           permanent_nodes.begin();
+       it != permanent_nodes.end(); ++it) {
     if (*it != nullptr) {
       Java_NotesBridge_addToNoteIdList(env, j_result_obj, (*it)->id(),
                                        GetNoteType(*it));

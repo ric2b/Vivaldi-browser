@@ -27,16 +27,13 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using l10n_util::GetNSString;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -126,7 +123,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
                                                kSymbolToolbarPointSize)];
 
   if (IsVivaldiRunning()) {
-    UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
+    UIImage* menuImage = [UIImage imageNamed:vToolbarMenu];
     toolsMenuButton = [[ToolbarButton alloc] initWithImage:menuImage];
   } // End Vivaldi
 
@@ -213,16 +210,15 @@ const CGFloat kSymbolToolbarPointSize = 24;
           initWithImage:[newTabButtonImage
                         imageFlippedForRightToLeftLayoutDirection]];
   } else {
-  NSString* symbolName = base::FeatureList::IsEnabled(kSFSymbolsFollowUp)
-                             ? kPlusCircleFillSymbol
-                             : kLegacyPlusCircleFillSymbol;
   UIImage* image = SymbolWithPalette(
-      CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
+      CustomSymbolWithPointSize(kPlusCircleFillSymbol, kSymbolToolbarPointSize),
+      @[
         [UIColor colorNamed:kGrey600Color],
         [self.toolbarConfiguration locationBarBackgroundColorWithVisibility:1]
       ]);
   UIImage* IPHHighlightedImage = SymbolWithPalette(
-      CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
+      CustomSymbolWithPointSize(kPlusCircleFillSymbol, kSymbolToolbarPointSize),
+      @[
         // The color of the 'plus'.
         _toolbarConfiguration.buttonsTintColorIPHHighlighted,
         // The filling color of the circle.
@@ -253,28 +249,31 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 - (UIButton*)cancelButton {
   UIButton* cancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  cancelButton.titleLabel.font = [UIFont systemFontOfSize:kLocationBarFontSize];
   cancelButton.tintColor = [UIColor colorNamed:kBlueColor];
-  [cancelButton setTitle:l10n_util::GetNSString(IDS_CANCEL)
-                forState:UIControlStateNormal];
   [cancelButton setContentHuggingPriority:UILayoutPriorityRequired
                                   forAxis:UILayoutConstraintAxisHorizontal];
   [cancelButton
       setContentCompressionResistancePriority:UILayoutPriorityRequired
                                       forAxis:UILayoutConstraintAxisHorizontal];
 
-  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-  // iOS 15.
-  if (base::ios::IsRunningOnIOS15OrLater() &&
-      IsUIButtonConfigurationEnabled()) {
-    if (@available(iOS 15, *)) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-          0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
-      cancelButton.configuration = buttonConfiguration;
-    }
+  if (IsUIButtonConfigurationEnabled()) {
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+        0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
+    UIFont* font = [UIFont systemFontOfSize:kLocationBarFontSize];
+    NSDictionary* attributes = @{NSFontAttributeName : font};
+    NSMutableAttributedString* attributedString =
+        [[NSMutableAttributedString alloc]
+            initWithString:l10n_util::GetNSString(IDS_CANCEL)
+                attributes:attributes];
+    buttonConfiguration.attributedTitle = attributedString;
+    cancelButton.configuration = buttonConfiguration;
   } else {
+    cancelButton.titleLabel.font =
+        [UIFont systemFontOfSize:kLocationBarFontSize];
+    [cancelButton setTitle:l10n_util::GetNSString(IDS_CANCEL)
+                  forState:UIControlStateNormal];
     UIEdgeInsets contentInsets = UIEdgeInsetsMake(
         0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
     SetContentEdgeInsets(cancelButton, contentInsets);
@@ -324,7 +323,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)shieldButton {
-  UIImage* shieldImage = [UIImage imageNamed:vATBShieldTrackers];
+  UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
   ToolbarButton* shieldButton =
     [[ToolbarButton alloc]
         initWithImage:[shieldImage
@@ -351,19 +350,38 @@ const CGFloat kSymbolToolbarPointSize = 24;
   moreButton.accessibilityLabel = GetNSString(IDS_ACCNAME_MORE);
   moreButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
-  moreButton.menu = [self contextMenuForMoreWithAllButtons:NO];
+  moreButton.menu =
+    [self contextMenuForMoreWithAllButtons:NO
+                            atbSettingType:ATBSettingNoBlocking];
   moreButton.showsMenuAsPrimaryAction = YES;
   return moreButton;
 }
 
 /// Returns the more button options based on the browsing state.
-- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons {
+- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons
+                             atbSettingType:(ATBSettingType)type {
+
+  NSString* shieldIcon = vATBShieldNone;
+  switch (type) {
+    case ATBSettingNoBlocking:
+      shieldIcon = vATBShieldNone;
+      break;
+    case ATBSettingBlockTrackers:
+      shieldIcon = vATBShieldTrackers;
+      break;
+    case ATBSettingBlockTrackersAndAds:
+      shieldIcon = vATBShieldTrackesAndAds;
+      break;
+    default:
+      break;
+  }
 
   NSString* atbTitle =
       GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
   UIAction* atbAction =
       [UIAction actionWithTitle:atbTitle
-                          image:[UIImage imageNamed:vATBShieldTrackers]
+                          image:[[UIImage imageNamed:shieldIcon]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                      identifier:nil
                         handler:^(__kindof UIAction*_Nonnull
                                   action) {

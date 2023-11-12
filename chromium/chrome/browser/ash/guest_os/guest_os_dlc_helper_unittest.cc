@@ -35,6 +35,43 @@ TEST_F(GuestOsDlcInstallationTest, Success) {
   EXPECT_TRUE(result.Get().has_value());
 }
 
+TEST_F(GuestOsDlcInstallationTest, AlreadyInstalled) {
+  base::test::TestFuture<GuestOsDlcInstallation::Result> result;
+
+  dlcservice::DlcState state;
+  state.set_id("test-dlc");
+  state.set_state(dlcservice::DlcState::INSTALLED);
+  FakeDlcserviceClient()->set_dlc_state(state);
+  FakeDlcserviceClient()->set_install_error(dlcservice::kErrorInternal);
+  GuestOsDlcInstallation installation("test-dlc", result.GetCallback(),
+                                      base::DoNothing());
+
+  EXPECT_TRUE(result.Get().has_value());
+}
+
+TEST_F(GuestOsDlcInstallationTest, AlreadyInstalling) {
+  base::test::TestFuture<GuestOsDlcInstallation::Result> result;
+
+  dlcservice::DlcState state;
+  state.set_id("test-dlc");
+  state.set_state(dlcservice::DlcState::INSTALLING);
+  FakeDlcserviceClient()->set_dlc_state(state);
+  FakeDlcserviceClient()->set_install_error(dlcservice::kErrorInternal);
+  GuestOsDlcInstallation installation("test-dlc", result.GetCallback(),
+                                      base::DoNothing());
+
+  // After some time we're still checking.
+  task_environment_.FastForwardBy(base::Seconds(5));
+  EXPECT_FALSE(result.IsReady());
+
+  state.set_state(dlcservice::DlcState::INSTALLED);
+  FakeDlcserviceClient()->set_dlc_state(state);
+
+  // Eventually the install completes.
+  task_environment_.FastForwardBy(base::Seconds(10));
+  EXPECT_TRUE(result.Get().has_value());
+}
+
 TEST_F(GuestOsDlcInstallationTest, RetryOnBusyInternal) {
   base::test::TestFuture<GuestOsDlcInstallation::Result> result;
 
@@ -67,7 +104,7 @@ TEST_F(GuestOsDlcInstallationTest, GivesUpAfterMaxRetries) {
   EXPECT_FALSE(result.Get().has_value());
 }
 
-TEST_F(GuestOsDlcInstallationTest, Cancel) {
+TEST_F(GuestOsDlcInstallationTest, CancelImmediately) {
   base::test::TestFuture<GuestOsDlcInstallation::Result> result;
 
   auto installation = std::make_unique<GuestOsDlcInstallation>(
@@ -77,6 +114,29 @@ TEST_F(GuestOsDlcInstallationTest, Cancel) {
   installation.reset();
 
   // Cancelling is synchronous.
+  EXPECT_TRUE(result.IsReady());
+  EXPECT_FALSE(result.Get().has_value());
+  EXPECT_EQ(result.Get().error(), GuestOsDlcInstallation::Error::Cancelled);
+}
+
+TEST_F(GuestOsDlcInstallationTest, CancelGracefully) {
+  base::test::TestFuture<GuestOsDlcInstallation::Result> result;
+
+  // Start off busy so the installation takes some time.
+  FakeDlcserviceClient()->set_install_error(dlcservice::kErrorBusy);
+  GuestOsDlcInstallation installation("test-dlc", result.GetCallback(),
+                                      base::DoNothing());
+
+  // Cancel gracefully won't return until dlcservice does.
+  // Double "RunUntilIdle" needed to force the first busy result.
+  task_environment_.RunUntilIdle();
+  installation.CancelGracefully();
+  task_environment_.RunUntilIdle();
+  EXPECT_FALSE(result.IsReady());
+
+  // In this test, dlcservice is forever busy, but if we cancel it'll stop
+  // retrying.
+  task_environment_.FastForwardBy(base::Seconds(10));
   EXPECT_TRUE(result.IsReady());
   EXPECT_FALSE(result.Get().has_value());
   EXPECT_EQ(result.Get().error(), GuestOsDlcInstallation::Error::Cancelled);

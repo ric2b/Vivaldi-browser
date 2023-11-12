@@ -12,12 +12,14 @@
 #include "chrome/browser/password_manager/android/password_generation_controller.h"
 #include "chrome/browser/touch_to_fill/password_generation/android/touch_to_fill_password_generation_bridge.h"
 #include "components/autofill/core/common/password_generation_util.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/gfx/geometry/rect.h"
 
 class ManualFillingController;
 class PasswordGenerationDialogViewInterface;
 class TouchToFillPasswordGenerationController;
+struct PasswordGenerationElementData;
 
 namespace password_manager {
 class ContentPasswordManagerDriver;
@@ -32,6 +34,7 @@ class PasswordManagerClient;
 // class.
 class PasswordGenerationControllerImpl
     : public PasswordGenerationController,
+      public content::WebContentsObserver,
       public content::WebContentsUserData<PasswordGenerationControllerImpl> {
  public:
   using CreateDialogFactory = base::RepeatingCallback<std::unique_ptr<
@@ -71,12 +74,13 @@ class PasswordGenerationControllerImpl
   void GeneratedPasswordRejected(
       autofill::password_generation::PasswordGenerationType type) override;
   void HideBottomSheetIfNeeded() override;
-  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   // Creates the |TouchToFillPasswordGenerationController| with mocked bridge
   // for testing.
   std::unique_ptr<TouchToFillPasswordGenerationController>
   CreateTouchToFillGenerationControllerForTesting(
-      std::unique_ptr<TouchToFillPasswordGenerationBridge> bridge) override;
+      std::unique_ptr<TouchToFillPasswordGenerationBridge> bridge,
+      base::WeakPtr<ManualFillingController> manual_filling_controller)
+      override;
   gfx::NativeWindow top_level_native_window() override;
   content::WebContents* web_contents() override;
   autofill::FieldSignature get_field_signature_for_testing() override;
@@ -98,10 +102,6 @@ class PasswordGenerationControllerImpl
   explicit PasswordGenerationControllerImpl(content::WebContents* web_contents);
 
  private:
-  // Data including the form and field for which generation was requested,
-  // their signatures and the maximum password size.
-  struct GenerationElementData;
-
   enum class TouchToFillState {
     kNone,
     kIsShowing,
@@ -118,6 +118,13 @@ class PasswordGenerationControllerImpl
       CreateDialogFactory create_dialog_callback,
       CreateTouchToFillGenerationControllerFactory
           create_touch_to_fill_generation_controller);
+
+  // content::WebContentsObserver:
+  // Called when the `content::WebContents` render frame is deleted.
+  // Ensures that the password generation bottom sheet is hidden when the frame
+  // is removed.
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
+  void WebContentsDestroyed() override;
 
   std::unique_ptr<TouchToFillPasswordGenerationController>
   CreateTouchToFillGenerationController();
@@ -142,13 +149,12 @@ class PasswordGenerationControllerImpl
   // and the generation element data.
   void ResetFocusState();
 
-  // The PasswordManagerClient associated with the current |web_contents_|.
+  // The PasswordManagerClient associated with the current `web_contents_`.
   // Used to tell the renderer that manual generation was requested.
-  raw_ptr<password_manager::PasswordManagerClient, DanglingUntriaged> client_ =
-      nullptr;
+  const raw_ptr<password_manager::PasswordManagerClient> client_;
 
   // Data for the generation element used to generate the password.
-  std::unique_ptr<GenerationElementData> generation_element_data_;
+  std::unique_ptr<PasswordGenerationElementData> generation_element_data_;
 
   // Password manager driver for the currently active frame. This is set
   // when a password field focus event arrives from the renderer and unset

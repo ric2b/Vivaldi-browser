@@ -39,6 +39,8 @@ namespace optimization_guide {
 
 namespace {
 
+constexpr char kAuthHeaderBearer[] = "Bearer ";
+
 // Returns the string that can be used to record histograms for the request
 // context.
 //
@@ -63,6 +65,8 @@ std::string GetStringNameForRequestContext(
       return "Journeys";
     case proto::RequestContext::CONTEXT_NEW_TAB_PAGE:
       return "NewTabPage";
+    case proto::RequestContext::CONTEXT_PAGE_INSIGHTS_HUB:
+      return "PageInsightsHub";
   }
   NOTREACHED();
   return std::string();
@@ -178,6 +182,7 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
         optimization_types,
     optimization_guide::proto::RequestContext request_context,
     const std::string& locale,
+    const std::string& access_token,
     bool skip_cache,
     HintsFetchedCallback hints_fetched_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -225,7 +230,6 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
   }
 
   hints_fetch_start_time_ = base::TimeTicks::Now();
-
   proto::GetHintsRequest get_hints_request;
   get_hints_request.add_supported_key_representations(proto::HOST);
   get_hints_request.add_supported_key_representations(proto::FULL_URL);
@@ -282,9 +286,14 @@ bool HintsFetcher::FetchOptimizationGuideServiceHints(
         })");
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
+  if (!access_token.empty()) {
+    // Add to request header
+    resource_request->headers.SetHeader(
+        net::HttpRequestHeaders::kAuthorization,
+        base::StrCat({kAuthHeaderBearer, access_token}));
+  }
 
   resource_request->url = optimization_guide_service_url_;
-
   resource_request->method = "POST";
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 

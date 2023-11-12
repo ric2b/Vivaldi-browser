@@ -35,6 +35,7 @@ via `finder:disable-stale` and `finder:enable-stale`.
 """
 
 import argparse
+import datetime
 import os
 
 from gpu_path_util import setup_telemetry_paths  # pylint: disable=unused-import
@@ -120,12 +121,16 @@ def main() -> None:
   expectations.RegisterInstance(expectations_instance)
 
   test_expectation_map = expectations_instance.CreateTestExpectationMap(
-      args.expectation_file, args.tests, args.expectation_grace_period)
+      args.expectation_file, args.tests,
+      datetime.timedelta(days=args.expectation_grace_period))
   ci_builders = builders_instance.GetCiBuilders()
 
-  querier = gpu_queries.GpuBigQueryQuerier(args.suite, args.project,
+  querier = gpu_queries.GpuBigQueryQuerier(args.suite,
+                                           args.project,
                                            args.num_samples,
-                                           args.large_query_mode, args.jobs)
+                                           args.large_query_mode,
+                                           args.jobs,
+                                           use_batching=args.use_batching)
   # Unmatched results are mainly useful for script maintainers, as they don't
   # provide any additional information for the purposes of finding unexpectedly
   # passing tests or unused expectations.

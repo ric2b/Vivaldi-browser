@@ -32,6 +32,7 @@ class NewTabButton : public views::ImageButton,
   METADATA_HEADER(NewTabButton);
 
   static const gfx::Size kButtonSize;
+  static const int kIconSize;
 
   NewTabButton(TabStrip* tab_strip, PressedCallback callback);
   NewTabButton(const NewTabButton&) = delete;
@@ -41,7 +42,7 @@ class NewTabButton : public views::ImageButton,
   // Called when the tab strip transitions to/from single tab mode, the frame
   // state changes or the accent color changes.  Updates the glyph colors for
   // the best contrast on the background.
-  virtual void FrameColorsChanged();
+  void FrameColorsChanged();
 
   void AnimateToStateForTesting(views::InkDropState state);
 
@@ -87,11 +88,16 @@ class NewTabButton : public views::ImageButton,
   // views::MaskedTargeterDelegate:
   bool GetHitTestMask(SkPath* mask) const override;
 
+  // The NewTabButton consists of a foreground image on top of a background
+  // texture. First we paint the background with PaintFill. This is clipped to a
+  // circle to make the button appear circular. Then we paint the
+  // foreground image with PaintIcon.
+  //
   // Paints the fill region of the button into |canvas|.
   void PaintFill(gfx::Canvas* canvas) const;
 
   // Tab strip that contains this button.
-  raw_ptr<TabStrip, DanglingUntriaged> tab_strip_;
+  raw_ptr<TabStrip, AcrossTasksDanglingUntriaged> tab_strip_;
 
   // Contains our ink drop layer so it can paint above our background.
   raw_ptr<views::InkDropContainerView, DanglingUntriaged> ink_drop_container_;

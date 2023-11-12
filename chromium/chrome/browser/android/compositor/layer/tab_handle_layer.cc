@@ -46,7 +46,6 @@ void TabHandleLayer::SetProperties(
     float y,
     float width,
     float height,
-    float content_offset_x,
     float content_offset_y,
     float divider_offset_x,
     float bottom_margin,
@@ -222,7 +221,6 @@ void TabHandleLayer::SetProperties(
     }
 
     int title_x = is_rtl ? padding_left + close_width : padding_left;
-    title_x += is_rtl ? 0 : content_offset_x;
 
     // Note(david@vivaldi.com): When close button is not visible we can increase
     // the title space in order to see more of the title. Also pass the show
@@ -231,9 +229,8 @@ void TabHandleLayer::SetProperties(
     title_layer->ShowOnlyFavicon(is_shown_as_favicon);
     title_layer->SetIsCloseButtonVisible(close_button_alpha == 1.f);
 
-    title_layer->setBounds(gfx::Size(
-        width - padding_right - padding_left - close_width - content_offset_x,
-        height));
+    title_layer->setBounds(
+        gfx::Size(width - padding_right - padding_left - close_width, height));
     if (foreground_) {
       title_x += original_x;
       title_y += original_y;
@@ -284,8 +281,6 @@ void TabHandleLayer::SetProperties(
   }
   if (vivaldi::IsVivaldiRunning()) {
     decoration_tab_->SetOpacity(tab_alpha);
-    if (title_layer != NULL)
-      title_layer->setOpacity(foreground_ ? 1.f : 0.5f);
     close_button_->SetOpacity(foreground_ ? 1.f : 0.5f);
   }
 }

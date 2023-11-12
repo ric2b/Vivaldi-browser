@@ -51,6 +51,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "net/url_request/url_request_throttler_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/url_constants.h"
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -274,6 +275,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       base::PassKey<URLRequestContextBuilder>());
 
   context->set_enable_brotli(enable_brotli_);
+  context->set_enable_zstd(enable_zstd_);
   context->set_check_cleartext_permitted(check_cleartext_permitted_);
   context->set_require_network_anonymization_key(
       require_network_anonymization_key_);
@@ -575,6 +577,10 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   protocol_handlers_.clear();
 
   context->set_job_factory(std::move(job_factory));
+
+  if (cookie_deprecation_label_.has_value()) {
+    context->set_cookie_deprecation_label(*cookie_deprecation_label_);
+  }
 
   return context;
 }

@@ -23,6 +23,8 @@
 <translation id="1379470994139227452">Ställ in Vivaldi som standard</translation>
 <translation id="1381484244248892686">Du kan använda sparade lösenord på vilken enhet som helst. De sparas i Vivaldi Password Manager för <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Sök</translation>
+<translation id="1397515084080510783">Inga synkroniserade flikar</translation>
+<translation id="1410197035576869800">App-ikon</translation>
 <translation id="1430638949087011281">Ingen blockering</translation>
 <translation id="1446108955355168157">Skapa ett krypteringslösenord för att kryptera och skydda dina synkroniseringsdata (lösenord, bokmärken, anteckningar med mera). Detta lösenord kommer aldrig att skickas till oss.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> objekt</translation>
@@ -67,6 +69,7 @@
 <translation id="2391028308389203648">Turkisk (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktivera</translation>
 <translation id="2434910957904013691">Synkronisera Allt</translation>
+<translation id="2448144008809286557">Har du glömt <ph name="BEGIN_LINK" />Användarnamn<ph name="END_LINK" /> eller <ph name="BEGIN_LINK" />Lösenord<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">UNDANTAG</translation>
 <translation id="2558801801411970131">Blockerar spårare</translation>
 <translation id="2577446409661931381">Ny anteckning</translation>
@@ -82,6 +85,7 @@ blockerad</translation>
 <translation id="2842985007712546952">Överordnad mapp</translation>
 <translation id="2843343418360315034">Ungersk (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Initierar Synkronisering...</translation>
+<translation id="2874111661876416905">Sök med Vivaldi</translation>
 <translation id="2874121295511641364">Synkronisera skrivna webbadresser och öppna flikar</translation>
 <translation id="2898963176829412617">Ny mapp…</translation>
 <translation id="2961573414320947355">Vill du öppna alla länkar i Vivaldi? Se till att ställa in oss som standard.</translation>
@@ -130,7 +134,7 @@ blockerad</translation>
 <translation id="3997823869212225788">Ange den sexsiffriga koden</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4032606071208172574">(Standard)</translation>
-<translation id="4048057312173843244">Synkroniserade flikar från andra enheter visas här. Logga in på Synkronisering för att använda den här tjänsten.</translation>
+<translation id="4048057312173843244">Synkroniserade flikar från andra enheter visas här. Logga in på Sync för att använda den här tjänsten.</translation>
 <translation id="4073968054795398875">Synkroniseringsservern har problem. Försöker snart initiera synkroniseringen igen...</translation>
 <translation id="4096707694175478403">Panel</translation>
 <translation id="414098425907666915">Privat sök</translation>
@@ -146,12 +150,14 @@ blockerad</translation>
 blockerad</translation>
 <translation id="4299298331965375737">Gör Vivaldi till din standardwebbläsare?</translation>
 <translation id="4304224509867189079">Logga in</translation>
+<translation id="4316955624679873896">Bokmärkt i</translation>
 <translation id="432696242656678770">Rysk (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spansk (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Vietnamesisk (<ph name="ORIGIN" />)</translation>
 <translation id="4394049700291259645">Inaktivera</translation>
 <translation id="4413780690230851155">Radera webbläsarhistorik</translation>
 <translation id="4452878871193896747">Indonesisk (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Du har för närvarande inga flikar synkroniserade från andra enheter.</translation>
 <translation id="4493850495402472953">och</translation>
 <translation id="4497115807425788318">Plats</translation>
 <translation id="4507213865286211606">Förhandsgranskning av storlek</translation>
@@ -184,10 +190,12 @@ blockerad</translation>
 <translation id="497942794017668482">Blockerar spårare och annonser</translation>
 <translation id="5037761343305489956">Kopierat till anteckning</translation>
 <translation id="504986598654589766">Att surfa i en privat flik innebär att sökningar, besökta sidor, kakor och temporära filer inte lagras av Vivaldi. Din anslutning kommer inte krypteras eller på annat sätt förändras.</translation>
+<translation id="5094376253685335202">Aktivera synkronisering</translation>
 <translation id="5116316489033177455">Synkronisera bokmärken och snabbval</translation>
 <translation id="5122095890854520072">Lettisk (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Inloggningen misslyckades</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Skicka koden igen<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Hämtar flikar och historik...</translation>
 <translation id="5238642303473095117">Radera data</translation>
 <translation id="5245732982828228444">Du hittar dina anteckningar här</translation>
 <translation id="5249199221558969362">Vänligen ange en realistisk livslängd.</translation>
@@ -214,6 +222,7 @@ blockerad</translation>
 <translation id="5857090052475505287">Ny mapp</translation>
 <translation id="5859825823508296659">Redigera domän</translation>
 <translation id="5867841422488265304">Sök eller skriv en webbadress</translation>
+<translation id="5869217094746242845">Läs mer om integritet och säkerhet</translation>
 <translation id="5871497086027727873">1 objekt har flyttats</translation>
 <translation id="5898502570200301364">Du kan använda lösenorden som du sparat i Vivaldi Password Manager i andra appar på din iPhone.</translation>
 <translation id="5900160494089383343">Detta användarnamn är inte tillgängligt.</translation>
@@ -255,8 +264,10 @@ blockerad</translation>
 <translation id="6946395294519639514">Med paneler kan du hålla go-to-verktyg inom räckhåll i webbläsarens sidofält.</translation>
 <translation id="6967884871145366229">Hantera sekretessinställningar</translation>
 <translation id="6973630695168034713">Mappar</translation>
+<translation id="7006864796794806241">Återställa lösenord</translation>
 <translation id="7029809446516969842">Lösenord</translation>
 <translation id="7041964446309059643">Manuell</translation>
+<translation id="7110758301321962823">Återställ användarnamn</translation>
 <translation id="7194677467200983873">Senaste synkronisering:</translation>
 <translation id="7196846668589096106">Skrivbordsflikar</translation>
 <translation id="7210372243397300116">Sökmapp</translation>
@@ -266,6 +277,7 @@ blockerad</translation>
 <translation id="7311118006561484338">Efter titel</translation>
 <translation id="7325310788570036874">Fortsätt surfa på webben smartare, smidigare och snabbare med Vivaldi.</translation>
 <translation id="734110743815267231">Hebreisk (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Öppna privat?</translation>
 <translation id="7362952245780030555">Välj mellan fullständiga skrivbordsflikar eller den förenklade flikbytaren.</translation>
 <translation id="7379938540614588640">Nederländsk (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Lägg till ny källa</translation>
@@ -305,8 +317,10 @@ blockerad</translation>
 <translation id="8275038454117074363">Importera</translation>
 <translation id="8329813750766387010">Uppdaterad: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Ta bort varningar om kakor (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">För att se flikar från andra enheter måste du aktivera Sync.</translation>
 <translation id="8366175803122817174">Öppna Alla anteckningsadresser</translation>
 <translation id="8384409685584033392">Sidinfo</translation>
+<translation id="839736845446313156">Registrera</translation>
 <translation id="8414685983518053656">Anteckningar</translation>
 <translation id="8423076545503792640">Begäran misslyckades på grund av ett fel. Vänligen försök igen senare.</translation>
 <translation id="8428213095426709021">Inställningar</translation>
@@ -322,6 +336,7 @@ blockerad</translation>
 <translation id="8677007239430848917">Lägg till din första anteckning genom att trycka på plusikonen nedan</translation>
 <translation id="8684294196284714094">Är du redo att ställa in Vivaldi som din standardwebbläsare?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> objekt raderade</translation>
+<translation id="8763006697839582351">Öppet i Vivaldi Privat</translation>
 <translation id="8804164990146287819">Integritetspolicy</translation>
 <translation id="8819841443522803117">Dags att byta standardwebbläsare? Välj Vivaldi.</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
@@ -333,7 +348,6 @@ blockerad</translation>
 <translation id="9043882097999887291">Annonser
 blockerade</translation>
 <translation id="9065203028668620118">Redigera</translation>
-<translation id="9078193189520575214">Tillämpar ändringar...</translation>
 <translation id="9079251484401922158">Finsk (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 föremål</translation>
 <translation id="9091665118798175641">Synkronisera formulärets autofyllningsinformation</translation>

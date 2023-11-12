@@ -16,10 +16,10 @@ import static org.chromium.chrome.browser.ui.device_lock.DeviceLockProperties.PR
 import android.accounts.Account;
 import android.app.Activity;
 import android.app.KeyguardManager;
-import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
-import android.provider.Settings;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
 import org.chromium.components.signin.AccountManagerFacade;
@@ -38,21 +38,21 @@ public class DeviceLockMediator {
 
     private final WindowAndroid mWindowAndroid;
     private final Activity mActivity;
-    private final Account mAccount;
+    private final @Nullable Account mAccount;
     private final ReauthenticatorBridge mDeviceLockAuthenticatorBridge;
     private final AccountReauthenticationUtils mAccountReauthenticationUtils;
 
-    public DeviceLockMediator(boolean inSignInFlow, DeviceLockCoordinator.Delegate delegate,
-            WindowAndroid windowAndroid, ReauthenticatorBridge deviceLockAuthenticatorBridge,
-            Activity activity, Account account) {
-        this(inSignInFlow, delegate, windowAndroid, deviceLockAuthenticatorBridge,
+    public DeviceLockMediator(DeviceLockCoordinator.Delegate delegate, WindowAndroid windowAndroid,
+            ReauthenticatorBridge deviceLockAuthenticatorBridge, Activity activity,
+            @Nullable Account account) {
+        this(delegate, windowAndroid, deviceLockAuthenticatorBridge,
                 new AccountReauthenticationUtils(), activity, account);
     }
 
-    protected DeviceLockMediator(boolean inSignInFlow, DeviceLockCoordinator.Delegate delegate,
+    protected DeviceLockMediator(DeviceLockCoordinator.Delegate delegate,
             WindowAndroid windowAndroid, ReauthenticatorBridge deviceLockAuthenticatorBridge,
             AccountReauthenticationUtils accountReauthenticationUtils, Activity activity,
-            Account account) {
+            @Nullable Account account) {
         mDelegate = delegate;
         mActivity = activity;
         mAccount = account;
@@ -62,8 +62,8 @@ public class DeviceLockMediator {
         mModel = new PropertyModel.Builder(ALL_KEYS)
                          .with(PREEXISTING_DEVICE_LOCK, isDeviceLockPresent())
                          .with(DEVICE_SUPPORTS_PIN_CREATION_INTENT,
-                                 isDeviceLockCreationIntentSupported())
-                         .with(IN_SIGN_IN_FLOW, inSignInFlow)
+                                 DeviceLockUtils.isDeviceLockCreationIntentSupported(mActivity))
+                         .with(IN_SIGN_IN_FLOW, account != null)
                          .with(ON_CREATE_DEVICE_LOCK_CLICKED, v -> onCreateDeviceLockClicked())
                          .with(ON_GO_TO_OS_SETTINGS_CLICKED, v -> onGoToOSSettingsClicked())
                          .with(ON_USER_UNDERSTANDS_CLICKED, v -> onUserUnderstandsClicked())
@@ -85,33 +85,19 @@ public class DeviceLockMediator {
         return keyguardManager.isDeviceSecure();
     }
 
-    private boolean isDeviceLockCreationIntentSupported() {
-        return new Intent(DevicePolicyManager.ACTION_SET_NEW_PASSWORD)
-                       .resolveActivity(mActivity.getPackageManager())
-                != null;
-    }
-
-    private Intent createDeviceLockDirectlyIntent() {
-        return new Intent(DevicePolicyManager.ACTION_SET_NEW_PASSWORD);
-    }
-
-    private Intent createDeviceLockThroughOSSettingsIntent() {
-        return new Intent(Settings.ACTION_SECURITY_SETTINGS);
-    }
-
     private void onCreateDeviceLockClicked() {
-        navigateToDeviceLockCreation(createDeviceLockDirectlyIntent(),
-                () -> triggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
+        navigateToDeviceLockCreation(DeviceLockUtils.createDeviceLockDirectlyIntent(),
+                () -> maybeTriggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
     }
 
     private void onGoToOSSettingsClicked() {
-        navigateToDeviceLockCreation(createDeviceLockThroughOSSettingsIntent(),
-                () -> triggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
+        navigateToDeviceLockCreation(DeviceLockUtils.createDeviceLockThroughOSSettingsIntent(),
+                () -> maybeTriggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
     }
 
     private void onUserUnderstandsClicked() {
         triggerDeviceLockChallenge(
-                () -> triggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
+                () -> maybeTriggerAccountReauthenticationChallenge(mDelegate::onDeviceLockReady));
     }
 
     private void navigateToDeviceLockCreation(Intent intent, Runnable onSuccess) {
@@ -134,7 +120,12 @@ public class DeviceLockMediator {
         }, false);
     }
 
-    private void triggerAccountReauthenticationChallenge(Runnable onSuccess) {
+    private void maybeTriggerAccountReauthenticationChallenge(Runnable onSuccess) {
+        // If no account is specified, the current flow does not require account reauthentication.
+        if (mAccount == null) {
+            onSuccess.run();
+            return;
+        }
         mAccountReauthenticationUtils.confirmCredentialsOrRecentAuthentication(
                 getAccountManager(), mAccount, mActivity, (confirmationResult) -> {
                     if (confirmationResult

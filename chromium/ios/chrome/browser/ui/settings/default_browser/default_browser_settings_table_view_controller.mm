@@ -23,10 +23,6 @@
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // Icon image names.

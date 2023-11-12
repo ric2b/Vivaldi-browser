@@ -79,7 +79,7 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
     {ContentSettingsType::STORAGE_ACCESS, 67},
     {ContentSettingsType::CAMERA_PAN_TILT_ZOOM, 68},
     {ContentSettingsType::WINDOW_MANAGEMENT, 69},
-    {ContentSettingsType::INSECURE_LOCAL_NETWORK, 70},
+    {ContentSettingsType::INSECURE_PRIVATE_NETWORK, 70},
     {ContentSettingsType::LOCAL_FONTS, 71},
     {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, 72},
     {ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, 73},
@@ -114,7 +114,11 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
     // The value 100 is assigned to COOKIES!
     // Removed GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS in M116.
     {ContentSettingsType::MIDI, 102},
-    {ContentSettingsType::ALL_SCREEN_CAPTURE, 103}
+    {ContentSettingsType::ALL_SCREEN_CAPTURE, 103},
+    {ContentSettingsType::COOKIE_CONTROLS_METADATA, 104},
+    {ContentSettingsType::TPCD_SUPPORT, 105},
+    {ContentSettingsType::AUTO_PICTURE_IN_PICTURE, 106},
+    {ContentSettingsType::TPCD_METADATA_GRANTS, 107},
 
     // As mentioned at the top, please don't forget to update ContentType in
     // enums.xml when you add entries here!

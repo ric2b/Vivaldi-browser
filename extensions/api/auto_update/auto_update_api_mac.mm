@@ -4,7 +4,7 @@
 
 #import <Foundation/Foundation.h>
 #include "app/vivaldi_constants.h"
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #import "chrome/browser/app_controller_mac.h"
 
 namespace extensions {
@@ -16,7 +16,7 @@ ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   AppController* controller =
-    base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
+    base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
 
   if (params->with_ui) {
     [controller checkForUpdates:nil];
@@ -45,7 +45,7 @@ AutoUpdateDisableUpdateNotifierFunction::Run() {
 ExtensionFunction::ResponseAction
 AutoUpdateInstallUpdateAndRestartFunction::Run() {
   AppController* controller =
-      base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
+      base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
   [controller installUpdateAndRestart];
   return RespondNow(NoArguments());
 }
@@ -94,7 +94,7 @@ AutoUpdateGetLastCheckTimeFunction::Run() {
 
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
   AppController* controller =
-    base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
+    base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
   absl::optional<AutoUpdateStatus> status = [controller getUpdateStatus];
   std::string version_string = [controller getUpdateVersion];
   std::string release_notes_url = [controller getUpdateReleaseNotesUrl];

@@ -87,6 +87,12 @@ void SharedImageStub::ExecuteDeferredRequest(
       OnCreateSharedImage(std::move(request->get_create_shared_image()));
       break;
 
+    case mojom::DeferredSharedImageRequest::Tag::
+        kCreateSharedImageBackedByBuffer:
+      OnCreateSharedImageBackedByBuffer(
+          std::move(request->get_create_shared_image_backed_by_buffer()));
+      break;
+
     case mojom::DeferredSharedImageRequest::Tag::kCreateSharedImageWithData:
       OnCreateSharedImageWithData(
           std::move(request->get_create_shared_image_with_data()));
@@ -142,6 +148,33 @@ void SharedImageStub::ExecuteDeferredRequest(
   }
 }
 
+bool SharedImageStub::GetGpuMemoryBufferHandleInfo(
+    const gpu::Mailbox& mailbox,
+    gfx::GpuMemoryBufferHandle& handle,
+    viz::SharedImageFormat& format,
+    gfx::Size& size,
+    gfx::BufferUsage& buffer_usage) {
+  TRACE_EVENT0("gpu", "SharedImageStub::GetGpuMemoryBufferHandleInfo");
+
+  if (!mailbox.IsSharedImage()) {
+    LOG(ERROR) << "SharedImageStub: Trying to access a SharedImage with a "
+                  "non-SharedImage mailbox.";
+    OnError();
+    return false;
+  }
+
+  // Note that we are not making |context_state_| current here as of now since
+  // it is not needed to get the handle from the backings. Make context current
+  // if we find that it is required.
+
+  if (!factory_->GetGpuMemoryBufferHandleInfo(mailbox, handle, format, size,
+                                              buffer_usage)) {
+    LOG(ERROR) << "SharedImageStub: Unable to get GpuMemoryBufferHandle";
+    return false;
+  }
+  return true;
+}
+
 bool SharedImageStub::CreateSharedImage(const Mailbox& mailbox,
                                         gfx::GpuMemoryBufferHandle handle,
                                         gfx::BufferFormat format,
@@ -162,6 +195,12 @@ bool SharedImageStub::CreateSharedImage(const Mailbox& mailbox,
 
   bool needs_gl = usage & SHARED_IMAGE_USAGE_GLES2;
   if (!MakeContextCurrent(needs_gl)) {
+    OnError();
+    return false;
+  }
+
+  if (!IsPlaneValidForGpuMemoryBufferFormat(plane, format)) {
+    LOG(ERROR) << "SharedImageStub: Incompatible format.";
     OnError();
     return false;
   }
@@ -197,6 +236,13 @@ bool SharedImageStub::CreateSharedImage(const Mailbox& mailbox,
     OnError();
     return false;
   }
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN)
+  if (format.PrefersExternalSampler()) {
+    LOG(ERROR) << "SharedImageStub: Incompatible format.";
+    OnError();
+    return false;
+  }
+#endif
 
   bool needs_gl = usage & SHARED_IMAGE_USAGE_GLES2;
   if (!MakeContextCurrent(needs_gl)) {
@@ -238,6 +284,11 @@ bool SharedImageStub::UpdateSharedImage(const Mailbox& mailbox,
   return true;
 }
 
+void SharedImageStub::SetGpuExtraInfo(const gfx::GpuExtraInfo& gpu_extra_info) {
+  CHECK(factory_);
+  factory_->SetGpuExtraInfo(gpu_extra_info);
+}
+
 void SharedImageStub::OnCreateSharedImage(
     mojom::CreateSharedImageParamsPtr params) {
   TRACE_EVENT2("gpu", "SharedImageStub::OnCreateSharedImage", "width",
@@ -258,6 +309,34 @@ void SharedImageStub::OnCreateSharedImage(
           params->mailbox, params->format, params->size, params->color_space,
           params->surface_origin, params->alpha_type, gpu::kNullSurfaceHandle,
           params->usage, GetLabel(params->debug_label))) {
+    LOG(ERROR) << kSICreationFailureError;
+    OnError();
+    return;
+  }
+
+  sync_point_client_state_->ReleaseFenceSync(params->release_id);
+}
+
+void SharedImageStub::OnCreateSharedImageBackedByBuffer(
+    mojom::CreateSharedImageBackedByBufferParamsPtr params) {
+  TRACE_EVENT2("gpu", "SharedImageStub::OnCreateSharedImage", "width",
+               params->size.width(), "height", params->size.height());
+  if (!params->mailbox.IsSharedImage()) {
+    LOG(ERROR) << kInvalidMailboxOnCreateError;
+    OnError();
+    return;
+  }
+
+  bool needs_gl = params->usage & SHARED_IMAGE_USAGE_GLES2;
+  if (!MakeContextCurrent(needs_gl)) {
+    OnError();
+    return;
+  }
+
+  if (!factory_->CreateSharedImage(
+          params->mailbox, params->format, params->size, params->color_space,
+          params->surface_origin, params->alpha_type, gpu::kNullSurfaceHandle,
+          params->usage, GetLabel(params->debug_label), params->buffer_usage)) {
     LOG(ERROR) << kSICreationFailureError;
     OnError();
     return;

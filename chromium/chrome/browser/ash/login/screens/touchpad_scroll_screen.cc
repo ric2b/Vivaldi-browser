@@ -81,7 +81,7 @@ bool TouchpadScrollScreen::ShouldBeSkipped(const WizardContext& context) const {
     return true;
   }
 
-  if (chrome_user_manager_util::IsPublicSessionOrEphemeralLogin()) {
+  if (chrome_user_manager_util::IsManagedGuestSessionOrEphemeralLogin()) {
     return true;
   }
 
@@ -92,9 +92,9 @@ bool TouchpadScrollScreen::ShouldBeSkipped(const WizardContext& context) const {
   if (features::IsOobeTouchpadScrollEnabled()) {
     auto* choobe_controller =
         WizardController::default_controller()->choobe_flow_controller();
-    if (choobe_controller) {
-      return choobe_controller->ShouldScreenBeSkipped(
-          TouchpadScrollScreenView::kScreenId);
+    if (choobe_controller && choobe_controller->ShouldScreenBeSkipped(
+                                 TouchpadScrollScreenView::kScreenId)) {
+      return true;
     }
   }
 

@@ -8,9 +8,9 @@
 
 #include <memory>
 
+#import "base/apple/foundation_util.h"
+#import "base/apple/scoped_cftyperef.h"
 #include "base/functional/callback_helpers.h"
-#import "base/mac/foundation_util.h"
-#import "base/mac/scoped_cftyperef.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -37,10 +37,6 @@
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #include "ui/views/widget/widget_interactive_uitest_utils.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using extensions::AppWindow;
 using extensions::PlatformAppBrowserTest;

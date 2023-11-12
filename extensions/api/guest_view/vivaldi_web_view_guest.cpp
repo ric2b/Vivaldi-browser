@@ -569,6 +569,18 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   navigate_params.tabstrip_index = index;
   navigate_params.tabstrip_add_types = add_types;
   navigate_params.source_contents = web_contents();
+
+  // Use the sessionstorage from the opener guest.
+  static_cast<content::WebContentsImpl*>(guest->web_contents())
+      ->GetController()
+      .SetSessionStorageNamespace(
+          web_contents()->GetSiteInstance()->GetStoragePartitionConfig(),
+          static_cast<content::WebContentsImpl*>(web_contents())
+              ->GetController()
+              .GetSessionStorageNamespace(web_contents()
+                                              ->GetSiteInstance()
+                                              ->GetStoragePartitionConfig()));
+
   Navigate(&navigate_params);
 
   if (!browser->is_vivaldi()) {

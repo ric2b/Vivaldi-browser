@@ -104,8 +104,9 @@ bool NodeRespondsToTapGesture(Node* node) {
     // Tapping on a text field or other focusable item should trigger
     // adjustment, except that iframe elements are hard-coded to support focus
     // but the effect is often invisible so they should be excluded.
-    if (element->IsMouseFocusable() && !IsA<HTMLIFrameElement>(element))
+    if (element->IsFocusable() && !IsA<HTMLIFrameElement>(element)) {
       return true;
+    }
     // Accept nodes that has a CSS effect when touched.
     if (element->ChildrenOrSiblingsAffectedByActive() ||
         element->ChildrenOrSiblingsAffectedByHover())
@@ -420,15 +421,17 @@ gfx::PointF ConvertToRootFrame(LocalFrameView* view, gfx::PointF pt) {
 // Adjusts 'point' to the nearest point inside rect, and leaves it unchanged if
 // already inside.
 void AdjustPointToRect(gfx::PointF& point, const gfx::Rect& rect) {
-  if (point.x() < rect.x())
+  if (point.x() < rect.x()) {
     point.set_x(rect.x());
-  else if (point.x() > rect.right())
-    point.set_x(rect.right());
+  } else if (point.x() >= rect.right()) {
+    point.set_x(rect.right() - 1);
+  }
 
-  if (point.y() < rect.y())
+  if (point.y() < rect.y()) {
     point.set_y(rect.y());
-  else if (point.y() > rect.bottom())
-    point.set_y(rect.bottom());
+  } else if (point.y() >= rect.bottom()) {
+    point.set_y(rect.bottom() - 1);
+  }
 }
 
 bool SnapTo(const SubtargetGeometry& geom,
@@ -485,7 +488,6 @@ bool SnapTo(const SubtargetGeometry& geom,
 // instance be distance squared or area of intersection.
 bool FindNodeWithLowestDistanceMetric(Node*& adjusted_node,
                                       gfx::Point& adjusted_point,
-                                      gfx::Rect& target_area,
                                       const gfx::Point& touch_hotspot,
                                       const gfx::Rect& touch_area,
                                       SubtargetGeometryList& subtargets,
@@ -503,7 +505,6 @@ bool FindNodeWithLowestDistanceMetric(Node*& adjusted_node,
       if (SnapTo(*it, touch_hotspot, touch_area, snapped_point)) {
         adjusted_point = snapped_point;
         adjusted_node = node;
-        target_area = it->BoundingBox();
         best_distance_metric = distance_metric;
       }
     } else if (distance_metric - best_distance_metric < kZeroTolerance) {
@@ -512,7 +513,6 @@ bool FindNodeWithLowestDistanceMetric(Node*& adjusted_node,
           // Try to always return the inner-most element.
           adjusted_point = snapped_point;
           adjusted_node = node;
-          target_area = it->BoundingBox();
         }
       }
     }
@@ -521,11 +521,6 @@ bool FindNodeWithLowestDistanceMetric(Node*& adjusted_node,
   // As for HitTestResult.innerNode, we skip over pseudo elements.
   if (adjusted_node && adjusted_node->IsPseudoElement()) {
     adjusted_node = adjusted_node->ParentOrShadowHostNode();
-  }
-
-  if (adjusted_node) {
-    target_area =
-        adjusted_node->GetDocument().View()->ConvertToRootFrame(target_area);
   }
 
   return adjusted_node != nullptr;
@@ -538,13 +533,12 @@ bool FindBestCandidate(Node*& adjusted_node,
                        const HeapVector<Member<Node>>& nodes,
                        NodeFilter node_filter,
                        AppendSubtargetsForNode append_subtargets_for_node) {
-  gfx::Rect target_area;
   touch_adjustment::SubtargetGeometryList subtargets;
   touch_adjustment::CompileSubtargetList(nodes, subtargets, node_filter,
                                          append_subtargets_for_node);
   return touch_adjustment::FindNodeWithLowestDistanceMetric(
-      adjusted_node, adjusted_point, target_area, touch_hotspot, touch_area,
-      subtargets, touch_adjustment::HybridDistanceFunction);
+      adjusted_node, adjusted_point, touch_hotspot, touch_area, subtargets,
+      touch_adjustment::HybridDistanceFunction);
 }
 
 }  // namespace touch_adjustment
@@ -556,6 +550,8 @@ bool FindBestTouchAdjustmentCandidate(
     const gfx::Point& touch_hotspot,
     const gfx::Rect& touch_area,
     const HeapVector<Member<Node>>& nodes) {
+  // TODO(https://crbug.com/1469267): A CHECK here caused failures on Android!
+  DCHECK(touch_area.Contains(touch_hotspot));
   touch_adjustment::NodeFilter node_filter;
   touch_adjustment::AppendSubtargetsForNode append_subtargets_for_node;
 
@@ -581,18 +577,18 @@ bool FindBestTouchAdjustmentCandidate(
                            append_subtargets_for_node);
 }
 
-LayoutSize GetHitTestRectForAdjustment(LocalFrame& frame,
-                                       const LayoutSize& touch_area) {
+PhysicalSize GetHitTestRectForAdjustment(LocalFrame& frame,
+                                         const PhysicalSize& touch_area) {
   ChromeClient& chrome_client = frame.GetChromeClient();
   float device_scale_factor =
       chrome_client.GetScreenInfo(frame).device_scale_factor;
 
   float page_scale_factor = frame.GetPage()->PageScaleFactor();
-  const LayoutSize max_size_in_dip(touch_adjustment::kMaxAdjustmentSizeDip,
-                                   touch_adjustment::kMaxAdjustmentSizeDip);
+  const PhysicalSize max_size_in_dip(touch_adjustment::kMaxAdjustmentSizeDip,
+                                     touch_adjustment::kMaxAdjustmentSizeDip);
 
-  const LayoutSize min_size_in_dip(touch_adjustment::kMinAdjustmentSizeDip,
-                                   touch_adjustment::kMinAdjustmentSizeDip);
+  const PhysicalSize min_size_in_dip(touch_adjustment::kMinAdjustmentSizeDip,
+                                     touch_adjustment::kMinAdjustmentSizeDip);
   // (when use-zoom-for-dsf enabled) touch_area is in physical pixel scaled,
   // max_size_in_dip should be converted to physical pixel and scale too.
   return touch_area

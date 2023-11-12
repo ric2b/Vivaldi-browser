@@ -82,6 +82,11 @@ void TemplateURLServiceClientImpl::OnURLVisited(
       url_row.url(),
       ui::PageTransitionCoreTypeIs(new_visit.transition,
                                    ui::PAGE_TRANSITION_KEYWORD),
+
+      // Vivaldi
+      (new_visit.transition & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) != 0
+      // End Vivaldi
+
   };
   owner_->OnHistoryURLVisited(details);
 }

@@ -9,10 +9,7 @@
 #import "base/check_op.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model_observer.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#import "ios/web/common/features.h"
 
 namespace {
 // Object that increments `counter` by 1 for its lifetime.
@@ -30,6 +27,14 @@ class ScopedIncrementer {
 
 FullscreenModel::FullscreenModel() = default;
 FullscreenModel::~FullscreenModel() = default;
+
+void FullscreenModel::AddObserver(FullscreenModelObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void FullscreenModel::RemoveObserver(FullscreenModelObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
 
 void FullscreenModel::IncrementDisabledCounter() {
   if (++disabled_counter_ == 1U) {
@@ -52,6 +57,10 @@ void FullscreenModel::DecrementDisabledCounter() {
       observer.FullscreenModelEnabledStateChanged(this);
     }
   }
+}
+
+void FullscreenModel::ForceEnterFullscreen() {
+  SetProgress(0.0);
 }
 
 void FullscreenModel::ResetForNavigation() {
@@ -402,14 +411,17 @@ void FullscreenModel::OnContentScrollOffsetBroadcasted(CGFloat offset) {
 }
 
 void FullscreenModel::OnScrollViewIsScrollingBroadcasted(bool scrolling) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetScrollViewIsScrolling(scrolling);
 }
 
 void FullscreenModel::OnScrollViewIsZoomingBroadcasted(bool zooming) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetScrollViewIsZooming(zooming);
 }
 
 void FullscreenModel::OnScrollViewIsDraggingBroadcasted(bool dragging) {
+  CHECK(base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault));
   SetScrollViewIsDragging(dragging);
 }
 

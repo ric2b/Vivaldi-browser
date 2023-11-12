@@ -15,7 +15,23 @@
 namespace extensions {
 
 using FileHandler = api::file_handlers::FileHandler;
-using WebFileHandlersInfo = std::vector<FileHandler>;
+
+struct WebFileHandler {
+  enum class LaunchType {
+    kSingleClient,
+    kMultipleClients,
+  };
+
+  FileHandler file_handler;
+  LaunchType launch_type = LaunchType::kSingleClient;
+
+  // Return an enum type instead of the idl string type. This value is currently
+  // set to `single-client` if it or nothing is provided, set to
+  // `multiple-clients` if that's provided, or errors in any other case.
+  LaunchType GetLaunchType() const { return launch_type; }
+};
+
+using WebFileHandlersInfo = std::vector<WebFileHandler>;
 
 // Structured contents of the `file_handlers` manifest key.
 struct WebFileHandlers : public Extension::ManifestData {
@@ -30,9 +46,17 @@ struct WebFileHandlers : public Extension::ManifestData {
   static bool HasFileHandlers(const Extension& extension);
 
   // Support for web file handlers, introduced in MV3 based on the web API named
-  // `File Handling Explainer`.
+  // `File Handling Explainer`. True when MV3 and either using
+  // the kExtensionWebFileHandlers feature or a QuickOffice extension.
   // TODO(crbug/1179530): Remove after MV2 deprecation.
-  static bool SupportsWebFileHandlers(const int manifest_version);
+  static bool SupportsWebFileHandlers(const Extension& extension);
+
+  // Return an enum type instead of the idl string type. This value is currently
+  // set to `single-client` if it or nothing is provided, set to
+  // `multiple-clients` if that's provided, or errors in any other case.
+  // TODO(crbug/1448893): Store enum instead of the string on manifest parse.
+  static WebFileHandler::LaunchType GetLaunchType(
+      const absl::optional<std::string>& launch_type);
 };
 
 // Parses the `file_handlers` manifest key.

@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
 #include "components/language/core/browser/url_language_histogram.h"
 #include "components/translate/content/browser/content_translate_driver.h"
-#include "components/translate/content/browser/per_frame_content_translate_driver.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_step.h"
 #include "components/translate/core/common/translate_errors.h"
@@ -64,10 +63,6 @@ class VivaldiTranslateClient
   // Returns the ContentTranslateDriver instance associated with this
   // WebContents.
   translate::ContentTranslateDriver* translate_driver();
-
-  // Returns the PerFrameContentTranslateDriver instance, if any, associated
-  // with this WebContents.
-  translate::PerFrameContentTranslateDriver* per_frame_translate_driver();
 
   // Helper method to return a new TranslatePrefs instance.
   static std::unique_ptr<translate::TranslatePrefs> CreateTranslatePrefs(
@@ -127,8 +122,6 @@ class VivaldiTranslateClient
   void WebContentsDestroyed() override;
 
   std::unique_ptr<translate::ContentTranslateDriver> translate_driver_;
-  std::unique_ptr<translate::PerFrameContentTranslateDriver>
-      per_frame_translate_driver_;
   std::unique_ptr<translate::TranslateManager> translate_manager_;
 
 #if BUILDFLAG(IS_ANDROID)

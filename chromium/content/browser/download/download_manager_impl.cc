@@ -1484,7 +1484,7 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
                 rfh->GetProcess()->GetID(), rfh->GetFrameTreeNodeId(),
                 storage_partition->GetFileSystemContext(),
                 storage_partition->GetPartitionDomain(),
-                static_cast<RenderFrameHostImpl*>(rfh)->storage_key()));
+                static_cast<RenderFrameHostImpl*>(rfh)->GetStorageKey()));
   } else if (params->url().SchemeIs(url::kDataScheme)) {
     pending_url_loader_factory =
         std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(

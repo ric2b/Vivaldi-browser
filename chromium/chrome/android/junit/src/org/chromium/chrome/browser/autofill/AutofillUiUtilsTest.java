@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.autofill;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.widget.EditText;
 
 import androidx.test.filters.SmallTest;
@@ -19,10 +20,13 @@ import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.autofill.AutofillUiUtils.ErrorType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.url.GURL;
 
 import java.util.Calendar;
@@ -292,7 +296,25 @@ public class AutofillUiUtilsTest {
 
     @Test
     @SmallTest
-    @Features.DisableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
+    @EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)
+    public void testResizeAndAddRoundedCornersAndGreyBorder() {
+        Bitmap testImage = Bitmap.createBitmap(400, 300, Bitmap.Config.ARGB_8888);
+        AutofillUiUtils.CardIconSpecs testSpecs = AutofillUiUtils.CardIconSpecs.create(
+                ContextUtils.getApplicationContext(), AutofillUiUtils.CardIconSize.LARGE);
+
+        Bitmap resizedTestImage = AutofillUiUtils.resizeAndAddRoundedCornersAndGreyBorder(
+                testImage, testSpecs, /* addRoundedCornersAndGreyBorder= */ true);
+
+        // Verify that the image gets resized to required dimensions. We can't verify other
+        // enhancements like border and corner-radius because they are not properties of the bitmap
+        // image.
+        Assert.assertEquals(resizedTestImage.getWidth(), testSpecs.getWidth());
+        Assert.assertEquals(resizedTestImage.getHeight(), testSpecs.getHeight());
+    }
+
+    @Test
+    @SmallTest
+    @DisableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
     public void testVirtualCardShowsCapitalOneVirtualCardIconWhenMetadataNotEnabled() {
         Assert.assertTrue(AutofillUiUtils.shouldShowCustomIcon(
                 new GURL(AutofillUiUtils.CAPITAL_ONE_ICON_URL), /* isVirtualCard= */ true));
@@ -300,7 +322,7 @@ public class AutofillUiUtilsTest {
 
     @Test
     @SmallTest
-    @Features.EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
+    @EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
     public void testNonVirtualCardDoesNotShowCapitalOneVirtualCardIconWhenMetadataEnabled() {
         Assert.assertFalse(AutofillUiUtils.shouldShowCustomIcon(
                 new GURL(AutofillUiUtils.CAPITAL_ONE_ICON_URL), /* isVirtualCard= */ false));
@@ -308,7 +330,7 @@ public class AutofillUiUtilsTest {
 
     @Test
     @SmallTest
-    @Features.EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
+    @EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)
     public void testBothVirtualAndNonVirtualCardsShowRichCardArtWhenMetadataEnabled() {
         Assert.assertTrue(AutofillUiUtils.shouldShowCustomIcon(
                 new GURL("https://www.richcardart.com/richcardart.png"),

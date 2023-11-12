@@ -280,13 +280,13 @@ void AddGroupToBitmask(uint32_t* group_bitmask, ServerFieldType type) {
     case autofill::FieldTypeGroup::kName:
       *group_bitmask |= kName;
       break;
-    case autofill::FieldTypeGroup::kAddressHome:
+    case autofill::FieldTypeGroup::kAddress:
       *group_bitmask |= kAddress;
       break;
     case autofill::FieldTypeGroup::kEmail:
       *group_bitmask |= kEmail;
       break;
-    case autofill::FieldTypeGroup::kPhoneHome:
+    case autofill::FieldTypeGroup::kPhone:
       *group_bitmask |= kPhone;
       break;
     default:
@@ -321,9 +321,9 @@ uint32_t DetermineGroups(const FormStructure& form) {
   return group_bitmask;
 }
 
-uint32_t DetermineGroups(const std::vector<ServerFieldType>& types) {
+uint32_t DetermineGroups(const ServerFieldTypeSet& types) {
   uint32_t group_bitmask = 0;
-  for (const auto& type : types) {
+  for (const ServerFieldType type : types) {
     AddGroupToBitmask(&group_bitmask, type);
   }
   return group_bitmask;

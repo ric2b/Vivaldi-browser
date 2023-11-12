@@ -16,10 +16,6 @@
 #include "device/fido/mac/icloud_keychain_sys.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#if !defined(__OBJC__) || !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @class NSWindow;
 
 namespace device::fido::icloud_keychain {
@@ -39,6 +35,9 @@ class API_AVAILABLE(macos(13.3)) FakeSystemInterface : public SystemInterface {
   // `AuthorizeAndContinue`.
   void set_next_auth_state(AuthState next_auth_state);
 
+  // cancel_count returns the number of times that `Cancel` has been called.
+  unsigned cancel_count() const { return cancel_count_; }
+
   // SetMakeCredentialResult sets the values that will be returned from the next
   // call to `MakeCredential`. If not set, `MakeCredential` will return an
   // error.
@@ -55,6 +54,10 @@ class API_AVAILABLE(macos(13.3)) FakeSystemInterface : public SystemInterface {
                              base::span<const uint8_t> signature,
                              base::span<const uint8_t> user_id,
                              base::span<const uint8_t> credential_id);
+
+  // SetMakeCredentialError configures the `NSError` that will be returned
+  // from the next `GetAssertion` call.
+  void SetGetAssertionError(int code, std::string msg);
 
   // SetCredentials causes `GetPlatformCredentials` to simulate that the given
   // credentials are on the system. (Note that `GetPlatformCredentials` ignores
@@ -76,14 +79,14 @@ class API_AVAILABLE(macos(13.3)) FakeSystemInterface : public SystemInterface {
   void MakeCredential(
       NSWindow* window,
       CtapMakeCredentialRequest request,
-      base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-          callback) override;
+      base::OnceCallback<void(ASAuthorization*, NSError*)> callback) override;
 
   void GetAssertion(
       NSWindow* window,
       CtapGetAssertionRequest request,
-      base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-          callback) override;
+      base::OnceCallback<void(ASAuthorization*, NSError*)> callback) override;
+
+  void Cancel() override;
 
  protected:
   friend class base::RefCounted<SystemInterface>;
@@ -98,10 +101,13 @@ class API_AVAILABLE(macos(13.3)) FakeSystemInterface : public SystemInterface {
       make_credential_attestation_object_bytes_;
   absl::optional<std::vector<uint8_t>> make_credential_credential_id_;
 
+  absl::optional<std::pair<int, std::string>> get_assertion_error_;
   absl::optional<std::vector<uint8_t>> get_assertion_authenticator_data_;
   absl::optional<std::vector<uint8_t>> get_assertion_signature_;
   absl::optional<std::vector<uint8_t>> get_assertion_user_id_;
   absl::optional<std::vector<uint8_t>> get_assertion_credential_id_;
+
+  unsigned cancel_count_ = 0;
 
   std::vector<DiscoverableCredentialMetadata> creds_;
 };

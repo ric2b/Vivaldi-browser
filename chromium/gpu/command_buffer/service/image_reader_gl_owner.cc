@@ -14,6 +14,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/scoped_hardware_buffer_fence_sync.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -33,6 +34,11 @@
 namespace gpu {
 
 namespace {
+
+BASE_FEATURE(kAlwaysUsePrivateFormatForImageReader,
+             "AlwaysUsePrivateFormatForImageReader",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 bool IsSurfaceControl(TextureOwner::Mode mode) {
   switch (mode) {
     case TextureOwner::Mode::kAImageReaderInsecureSurfaceControl:
@@ -101,7 +107,8 @@ class ImageReaderGLOwner::ScopedHardwareBufferImpl
   void SetReadFence(base::ScopedFD fence_fd) final {
     // Client can call this method multiple times for a hardware buffer. Hence
     // all the client provided sync_fd should be merged. Eg: BeginReadAccess()
-    // can be called multiple times for a SharedImageVideo representation.
+    // can be called multiple times for an AndroidVideoImageBacking
+    // representation.
     read_fence_ = gl::MergeFDs(std::move(read_fence_), std::move(fence_fd));
   }
 
@@ -134,6 +141,11 @@ ImageReaderGLOwner::ImageReaderGLOwner(
   AIMAGE_FORMATS format = mode == Mode::kAImageReaderSecureSurfaceControl
                               ? AIMAGE_FORMAT_PRIVATE
                               : AIMAGE_FORMAT_YUV_420_888;
+
+  if (base::FeatureList::IsEnabled(kAlwaysUsePrivateFormatForImageReader)) {
+    format = AIMAGE_FORMAT_PRIVATE;
+  }
+
   AImageReader* reader = nullptr;
 
   // The usage flag below should be used when the buffer will be read from by
@@ -321,14 +333,6 @@ void ImageReaderGLOwner::UpdateTexImage() {
   current_image_ref_.emplace(this, image, std::move(scoped_acquire_fence_fd));
 }
 
-void ImageReaderGLOwner::EnsureTexImageBound(GLuint service_id) {
-  // This method is supposed to be called only if the TextureOwner instance
-  // binds the texture on update, which ImageReaderGLOwner does not. If this
-  // method *is* ever called on this class it will not work as the caller is
-  // expecting; hence CHECK to ensure that any such instances are caught.
-  CHECK(false);
-}
-
 std::unique_ptr<base::android::ScopedHardwareBufferFenceSync>
 ImageReaderGLOwner::GetAHardwareBuffer() {
   base::AutoLock auto_lock(lock_);
@@ -355,7 +359,6 @@ ImageReaderGLOwner::GetAHardwareBuffer() {
 }
 
 gfx::Rect ImageReaderGLOwner::GetCropRectLocked() {
-  DCHECK_CALLED_ON_VALID_THREAD(gpu_main_thread_checker_);
   lock_.AssertAcquired();
   if (!current_image_ref_)
     return gfx::Rect();
@@ -509,7 +512,6 @@ bool ImageReaderGLOwner::GetCodedSizeAndVisibleRect(
     gfx::Size rotated_visible_size,
     gfx::Size* coded_size,
     gfx::Rect* visible_rect) {
-  DCHECK_CALLED_ON_VALID_THREAD(gpu_main_thread_checker_);
   base::AutoLock auto_lock(lock_);
   DCHECK(visible_rect);
   DCHECK(coded_size);

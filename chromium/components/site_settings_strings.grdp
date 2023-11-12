@@ -22,6 +22,12 @@
   <message name="IDS_SITE_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS_MID_SENTENCE" desc="The label used for the automatic downloads site settings controls when used mid-sentence.">
     automatic downloads
   </message>
+  <message name="IDS_SITE_SETTINGS_TYPE_AUTO_PICTURE_IN_PICTURE" desc="The label used for the auto-picture-in-picture site settings controls.">
+    Auto picture-in-picture
+  </message>
+  <message name="IDS_SITE_SETTINGS_TYPE_AUTO_PICTURE_IN_PICTURE_MID_SENTENCE" desc="The label used for the auto-picture-in-picture site settings controls when used mid-sentence.">
+    auto picture-in-picture
+  </message>
   <message name="IDS_SITE_SETTINGS_TYPE_BACKGROUND_SYNC" desc="The label used for the background sync site settings controls.">
     Background sync
   </message>
@@ -220,11 +226,10 @@
   <message name="IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT_MID_SENTENCE" desc="The label used for the window management site settings controls when used mid-sentence.">
     window management
   </message>
-  <!-- TODO(https://crbug.com/1433644): Replace with the final SAA strings.  -->
-  <message name="IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS" translateable="false" desc="The label used for the storage access site settings controls.">
+  <message name="IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS" desc="The name of a Chrome setting. This string also appears as the title of a dialog box and as the title of a Chrome settings page.">
     Embedded content
   </message>
-  <message name="IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE" translateable="false" desc="The label used for the storage access site settings controls when used mid-sentence.">
+  <message name="IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE" desc="The name of a Chrome setting. This string also appears as the title of a dialog box and as the title of a Chrome settings page. Used mid-sentence.">
     embedded content
   </message>
   </if>

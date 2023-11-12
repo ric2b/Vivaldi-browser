@@ -17,7 +17,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000143
+    "kCurrentDataVersion": 10000144
   },
 
   // The following engines are included in country lists and are added to the
@@ -301,7 +301,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_ZZ}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -311,7 +311,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_BY}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -321,7 +321,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_DE}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -331,7 +331,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_CA}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -341,7 +341,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_GB}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -351,7 +351,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_US}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },
@@ -361,7 +361,7 @@
       "keyword": "e",
       "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
       "search_url": "https://www.ecosia.org/search?q={searchTerms}&{ecosia:Referral_FR}",
-      "suggest_url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
       "type": "SEARCH_ENGINE_ECOSIA",
       "id": 4
     },

@@ -39,7 +39,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history_clusters.ClusterVisit;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersCoordinator;
@@ -53,11 +52,9 @@ import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import org.chromium.components.browser_ui.widget.DateDividedAdapter.DateViewHolder;
@@ -294,14 +291,14 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
                 }
 
                 @Override
-                public boolean areTabGroupsEnabled() {
-                    return TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mActivity);
+                public boolean isRenameEnabled() {
+                    return ChromeFeatureList.isEnabled(ChromeFeatureList.RENAME_JOURNEYS);
                 }
             };
 
             mHistoryClustersCoordinator = new HistoryClustersCoordinator(mProfile, activity,
                     TemplateUrlServiceFactory.getForProfile(mProfile), historyClustersDelegate,
-                    ChromeAccessibilityUtil.get(), mSnackbarManager);
+                    mSnackbarManager);
         }
 
         // 1. Create selectable components.
@@ -481,6 +478,10 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
                 (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom)
                         -> updateTouchDelegate(
                                 compositeTouchDelegate, view, tabLayout, new AtomicReference<>()));
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.RENAME_JOURNEYS)) {
+            firstTab.view.getTab().setText(R.string.history_clusters_by_date_tab_label);
+            secondTab.view.getTab().setText(R.string.history_clusters_by_group_tab_label);
+        }
         return viewGroup;
     }
 
@@ -887,7 +888,8 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         recordUserAction("ClearBrowsingData");
         recordClearBrowsingDataMetric();
         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
-        settingsLauncher.launchSettingsActivity(mActivity, ClearBrowsingDataTabsFragment.class);
+        settingsLauncher.launchSettingsActivity(
+                mActivity, SettingsLauncher.SettingsFragment.CLEAR_BROWSING_DATA_ADVANCED_PAGE);
     }
 
     // HistoryContentManager.Observer
@@ -911,22 +913,18 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         notifyHistoryClustersCoordinatorOfDeletion();
     }
 
-    @VisibleForTesting
     TextView getEmptyViewForTests() {
         return mEmptyView;
     }
 
-    @VisibleForTesting
     public HistoryContentManager getContentManagerForTests() {
         return mContentManager;
     }
 
-    @VisibleForTesting
     SelectionDelegate<HistoryItem> getSelectionDelegateForTests() {
         return mSelectionDelegate;
     }
 
-    @VisibleForTesting
     HistoryManagerToolbar getToolbarForTests() {
         return mToolbar;
     }

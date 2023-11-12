@@ -31,6 +31,7 @@ class OSExchangeData;
 
 namespace ash {
 
+class AcceleratorPrefsDelegate;
 class AccessibilityDelegate;
 class BackGestureContextualNudgeController;
 class BackGestureContextualNudgeDelegate;
@@ -44,6 +45,7 @@ class NearbyShareDelegate;
 class SavedDeskDelegate;
 class SystemSoundsDelegate;
 class UserEducationDelegate;
+class WindowState;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -66,6 +68,10 @@ class ASH_EXPORT ShellDelegate {
   // Creates and returns the delegate of the Game Dashboard feature.
   virtual std::unique_ptr<GameDashboardDelegate> CreateGameDashboardDelegate()
       const = 0;
+
+  // Creates a accelerator_prefs_delegate.
+  virtual std::unique_ptr<AcceleratorPrefsDelegate>
+  CreateAcceleratorPrefsDelegate() const = 0;
 
   // Creates the delegate for the Glanceables feature.
   virtual std::unique_ptr<GlanceablesDelegate> CreateGlanceablesDelegate(
@@ -149,7 +155,8 @@ class ASH_EXPORT ShellDelegate {
   virtual bool IsSessionRestoreInProgress() const = 0;
 
   // Adjust system configuration for a Locked Fullscreen window.
-  virtual void SetUpEnvironmentForLockedFullscreen(bool locked) = 0;
+  virtual void SetUpEnvironmentForLockedFullscreen(
+      const WindowState& window_state) = 0;
 
   // Ui Dev Tools control.
   virtual bool IsUiDevToolsStarted() const;

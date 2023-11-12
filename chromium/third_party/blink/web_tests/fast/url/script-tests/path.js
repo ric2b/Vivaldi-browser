@@ -40,12 +40,12 @@ cases = [
   // (Disabled because requires UTF8)
   // ["/foo%2\xc2\xa9zbar", "/foo%2%C2%A9zbar"],
   ["/foo%2\u00c2\u00a9zbar", "/foo%2%C3%82%C2%A9zbar"],
-  // Regular characters that are escaped should be unescaped
-  ["/foo%41%7a", "/fooAz"],
+  // Regular characters that are escaped should not be unescaped
+  ["/foo%41%7a", "/foo%41%7a"],
   // Funny characters that are unescaped should be escaped
   ["/foo\u0009\u0091%91", "/foo%C2%91%91"],
-  // Invalid characters that are escaped should cause a failure.
-  ["/foo%00%51", "/foo%00Q"],
+  // Null character that is escaped should not cause a failure.
+  ["/foo%00%51", "/foo%00%51"],
   // Some characters should be passed through unchanged regardless of esc.
   ["/(%28:%3A%29)", "/(%28:%3A%29)"],
   // Characters that are properly escaped should not have the case changed
@@ -78,14 +78,18 @@ cases = [
   ["/\uFEFF/foo", "/%EF%BB%BF/foo"],
   // The BIDI override code points RLO and LRO
   ["/\u202E/foo/\u202D/bar", "/%E2%80%AE/foo/%E2%80%AD/bar"],
-  // U+FF0F FULLWIDTH SOLIDUS should normalize to / in a hostname
-  ["\uFF0Ffoo/", "%2Ffoo/"],
-
+  // U+FF0F is an invalid host codepoint.
+  ["\uFF0Ffoo/", ""],
 ];
 
 for (var i = 0; i < cases.length; ++i) {
   test_vector = cases[i][0];
   expected_result = cases[i][1];
+  if (!expected_result) {
+    // The result of `canonicalize` should be same as the input if input is an
+    // invalid URL.
+    expected_result = test_vector;
+  }
   shouldBe("canonicalize('http://example.com" + test_vector + "')",
            "'http://example.com" + expected_result + "'");
 }

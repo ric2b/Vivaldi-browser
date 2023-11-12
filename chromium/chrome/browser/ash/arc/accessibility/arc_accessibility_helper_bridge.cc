@@ -18,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs_factory.h"
+#include "chrome/browser/ash/arc/accessibility/geometry_util.h"
 #include "chrome/browser/ash/arc/input_method_manager/arc_input_method_manager_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/accessibility_private.h"
@@ -25,17 +26,16 @@
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
-#include "components/language/core/browser/pref_names.h"
-#include "components/live_caption/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/event_router.h"
+#include "services/accessibility/android/accessibility_info_data_wrapper.h"
 #include "services/accessibility/android/android_accessibility_util.h"
-#include "services/accessibility/android/geometry_util.h"
 #include "services/accessibility/android/public/mojom/accessibility_helper.mojom-shared.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
@@ -99,8 +99,7 @@ void DispatchFocusChange(
       node_data->bounds_in_screen,
       1.0f / exo::WMHelper::GetInstance()->GetDeviceScaleFactorForWindow(
                  active_window));
-  bounds_in_screen.Offset(
-      0, ax::android::GetChromeWindowHeightOffsetInDip(active_window));
+  bounds_in_screen.Offset(0, GetChromeWindowHeightOffsetInDip(active_window));
 
   const display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestView(active_window);
@@ -142,65 +141,7 @@ class ArcAccessibilityHelperBridgeFactory
   ~ArcAccessibilityHelperBridgeFactory() override = default;
 };
 
-static constexpr const char* kTextShadowRaised =
-    "-2px -2px 4px rgba(0, 0, 0, 0.5)";
-static constexpr const char* kTextShadowDepressed =
-    "2px 2px 4px rgba(0, 0, 0, 0.5)";
-static constexpr const char* kTextShadowUniform =
-    "-1px 0px 0px black, 0px -1px 0px black, 1px 0px 0px black, 0px  1px 0px "
-    "black";
-static constexpr const char* kTextShadowDropShadow =
-    "0px 0px 2px rgba(0, 0, 0, 0.5), 2px 2px 2px black";
-
-std::string GetARGBFromPrefs(PrefService* prefs,
-                             const char* color_pref_name,
-                             const char* opacity_pref_name) {
-  const std::string color = prefs->GetString(color_pref_name);
-  if (color.empty()) {
-    return "";
-  }
-  const int opacity = prefs->GetInteger(opacity_pref_name);
-  return base::StringPrintf("rgba(%s,%s)", color.c_str(),
-                            base::NumberToString(opacity / 100.0).c_str());
-}
-
 }  // namespace
-
-ax::android::mojom::CaptionStylePtr GetCaptionStyleFromPrefs(
-    PrefService* prefs) {
-  DCHECK(prefs);
-
-  ax::android::mojom::CaptionStylePtr style =
-      ax::android::mojom::CaptionStyle::New();
-
-  style->text_size = prefs->GetString(prefs::kAccessibilityCaptionsTextSize);
-  style->text_color =
-      GetARGBFromPrefs(prefs, prefs::kAccessibilityCaptionsTextColor,
-                       prefs::kAccessibilityCaptionsTextOpacity);
-  style->background_color =
-      GetARGBFromPrefs(prefs, prefs::kAccessibilityCaptionsBackgroundColor,
-                       prefs::kAccessibilityCaptionsBackgroundOpacity);
-  style->user_locale = prefs->GetString(language::prefs::kApplicationLocale);
-
-  const std::string test_shadow =
-      prefs->GetString(prefs::kAccessibilityCaptionsTextShadow);
-  if (test_shadow == kTextShadowRaised) {
-    style->text_shadow_type = ax::android::mojom::CaptionTextShadowType::RAISED;
-  } else if (test_shadow == kTextShadowDepressed) {
-    style->text_shadow_type =
-        ax::android::mojom::CaptionTextShadowType::DEPRESSED;
-  } else if (test_shadow == kTextShadowUniform) {
-    style->text_shadow_type =
-        ax::android::mojom::CaptionTextShadowType::UNIFORM;
-  } else if (test_shadow == kTextShadowDropShadow) {
-    style->text_shadow_type =
-        ax::android::mojom::CaptionTextShadowType::DROP_SHADOW;
-  } else {
-    style->text_shadow_type = ax::android::mojom::CaptionTextShadowType::NONE;
-  }
-
-  return style;
-}
 
 // static
 void ArcAccessibilityHelperBridge::CreateFactory() {
@@ -213,17 +154,6 @@ ArcAccessibilityHelperBridge::GetForBrowserContext(
     content::BrowserContext* context) {
   return ArcAccessibilityHelperBridgeFactory::GetForBrowserContext(context);
 }
-
-// The list of prefs we want to observe.
-const char* const kCaptionStylePrefsToObserve[] = {
-    prefs::kAccessibilityCaptionsTextSize,
-    prefs::kAccessibilityCaptionsTextFont,
-    prefs::kAccessibilityCaptionsTextColor,
-    prefs::kAccessibilityCaptionsTextOpacity,
-    prefs::kAccessibilityCaptionsBackgroundColor,
-    prefs::kAccessibilityCaptionsTextShadow,
-    prefs::kAccessibilityCaptionsBackgroundOpacity,
-    language::prefs::kApplicationLocale};
 
 ArcAccessibilityHelperBridge::ArcAccessibilityHelperBridge(
     content::BrowserContext* browser_context,
@@ -238,13 +168,6 @@ ArcAccessibilityHelperBridge::ArcAccessibilityHelperBridge(
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(
       Profile::FromBrowserContext(browser_context)->GetPrefs());
-
-  for (const char* const pref_name : kCaptionStylePrefsToObserve) {
-    pref_change_registrar_->Add(
-        pref_name, base::BindRepeating(
-                       &ArcAccessibilityHelperBridge::UpdateCaptionSettings,
-                       base::Unretained(this)));
-  }
 
   arc_bridge_service_->accessibility_helper()->SetHost(this);
   arc_bridge_service_->accessibility_helper()->AddObserver(this);
@@ -277,7 +200,6 @@ void ArcAccessibilityHelperBridge::Shutdown() {
 
 void ArcAccessibilityHelperBridge::OnConnectionReady() {
   UpdateEnabledFeature();
-  UpdateCaptionSettings();
 
   AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
   if (accessibility_manager) {
@@ -474,16 +396,6 @@ ArcAccessibilityHelperBridge::GetFilterType() {
   return ax::android::mojom::AccessibilityFilterType::OFF;
 }
 
-void ArcAccessibilityHelperBridge::UpdateCaptionSettings() const {
-  ax::android::mojom::CaptionStylePtr caption_style =
-      GetCaptionStyleFromPrefs(profile_->GetPrefs());
-
-  if (!caption_style)
-    return;
-
-  accessibility_helper_instance_.SetCaptionStyle(std::move(caption_style));
-}
-
 void ArcAccessibilityHelperBridge::OnActionResult(const ui::AXActionData& data,
                                                   bool result) const {
   ax::android::AXTreeSourceAndroid* tree_source =
@@ -526,7 +438,7 @@ ArcAccessibilityHelperBridge::OnGetTextLocationDataResultInternal(
     return absl::nullopt;
 
   const gfx::RectF& rect_f =
-      ax::android::ScaleAndroidPxToChromePx(result_rect.value(), window);
+      ScaleAndroidPxToChromePx(result_rect.value(), window);
 
   return gfx::ToEnclosingRect(rect_f);
 }

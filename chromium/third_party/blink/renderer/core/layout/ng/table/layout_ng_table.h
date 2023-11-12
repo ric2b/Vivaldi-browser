@@ -101,6 +101,8 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
   explicit LayoutNGTable(Element*);
   ~LayoutNGTable() override;
 
+  void Trace(Visitor*) const override;
+
   static LayoutNGTable* CreateAnonymousWithParent(const LayoutObject&);
 
   bool IsFirstCell(const LayoutNGTableCell&) const;
@@ -118,10 +120,10 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
 
   const NGTableBorders* GetCachedTableBorders() const {
     NOT_DESTROYED();
-    return cached_table_borders_.get();
+    return cached_table_borders_.Get();
   }
 
-  void SetCachedTableBorders(scoped_refptr<const NGTableBorders>);
+  void SetCachedTableBorders(const NGTableBorders*);
 
   const NGTableTypes::Columns* GetCachedTableColumnConstraints();
 
@@ -158,24 +160,16 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
       const LayoutObject* parent) const override;
 
   LayoutUnit BorderTop() const override;
-
   LayoutUnit BorderBottom() const override;
-
   LayoutUnit BorderLeft() const override;
-
   LayoutUnit BorderRight() const override;
 
   // The collapsing border model disallows paddings on table.
   // See http://www.w3.org/TR/CSS2/tables.html#collapsing-borders.
   LayoutUnit PaddingTop() const override;
-
   LayoutUnit PaddingBottom() const override;
-
   LayoutUnit PaddingLeft() const override;
-
   LayoutUnit PaddingRight() const override;
-
-  NGPhysicalBoxStrut BorderBoxOutsets() const override;
 
   // TODO(1151101)
   // ClientLeft/Top are incorrect for tables, but cannot be fixed
@@ -233,7 +227,7 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
   void InvalidateCachedTableBorders();
 
   // Table borders are cached because computing collapsed borders is expensive.
-  scoped_refptr<const NGTableBorders> cached_table_borders_;
+  Member<const NGTableBorders> cached_table_borders_;
 
   // Table columns do not depend on any outside data (e.g. NGConstraintSpace).
   // They are cached because computing them is expensive.

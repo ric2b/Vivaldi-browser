@@ -10,6 +10,7 @@
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/address_contact_form_label_formatter.h"
 #include "components/autofill/core/browser/ui/address_email_form_label_formatter.h"
@@ -35,21 +36,21 @@ LabelFormatter::LabelFormatter(const std::vector<AutofillProfile*>& profiles,
                                const std::string& app_locale,
                                ServerFieldType focused_field_type,
                                uint32_t groups,
-                               const std::vector<ServerFieldType>& field_types)
+                               const ServerFieldTypeSet& field_types)
     : profiles_(profiles),
       app_locale_(app_locale),
       focused_field_type_(focused_field_type),
       groups_(groups) {
   const FieldTypeGroup focused_group = AutofillType(focused_field_type).group();
   DenseSet<FieldTypeGroup> groups_for_labels{
-      FieldTypeGroup::kName, FieldTypeGroup::kAddressHome,
-      FieldTypeGroup::kEmail, FieldTypeGroup::kPhoneHome};
+      FieldTypeGroup::kName, FieldTypeGroup::kAddress, FieldTypeGroup::kEmail,
+      FieldTypeGroup::kPhone};
 
   // If a user is focused on an address field, then parts of the address may be
   // shown in the label. For example, if the user is focusing on a street
   // address field, then it may be helpful to show the city in the label.
   // Otherwise, the focused field should not appear in the label.
-  if (focused_group != FieldTypeGroup::kAddressHome) {
+  if (focused_group != FieldTypeGroup::kAddress) {
     groups_for_labels.erase(focused_group);
   }
 
@@ -84,7 +85,7 @@ std::unique_ptr<LabelFormatter> LabelFormatter::Create(
     const std::vector<AutofillProfile*>& profiles,
     const std::string& app_locale,
     ServerFieldType focused_field_type,
-    const std::vector<ServerFieldType>& field_types) {
+    const ServerFieldTypeSet& field_types) {
   const uint32_t groups = data_util::DetermineGroups(field_types);
   if (!data_util::IsSupportedFormType(groups)) {
     return nullptr;

@@ -5,6 +5,7 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -155,7 +156,7 @@ struct DefaultBookmarkParser {
                          std::vector<DefaultBookmarkItem>* default_items,
                          bool inside_bookmarks_folder);
 
-  DefaultBookmarkTree& tree;
+  const raw_ref<DefaultBookmarkTree> tree;
 
   // The set of partner folders and bookmarks outside Bookmarks folder that are
   // used by a particular bookmark file.
@@ -172,19 +173,19 @@ void DefaultBookmarkParser::ParseBookmarkList(
     std::vector<DefaultBookmarkItem>* default_items,
     bool inside_bookmarks_folder) {
   if (!value_list->is_list()) {
-    tree.valid = false;
+    tree->valid = false;
     LOG(ERROR) << kChildrenKey << " is not an array.";
     return;
   }
   if (level > 5) {
-    tree.valid = false;
+    tree->valid = false;
     LOG(ERROR) << "too deaply nested default bookmarks";
     return;
   }
 
   for (base::Value& dict : value_list->GetList()) {
     if (!dict.is_dict()) {
-      tree.valid = false;
+      tree->valid = false;
       LOG(ERROR) << "a child of " << kChildrenKey << " is not a dictionary";
       continue;
     }
@@ -194,15 +195,15 @@ void DefaultBookmarkParser::ParseBookmarkList(
     const PartnerDetails* details = nullptr;
     if (std::string* value = dict.GetDict().FindString(kNameKey)) {
       details = vivaldi_partners::FindDetailsByName(*value);
-      #if BUILDFLAG(IS_IOS)
-            if (*value == "vivaldigame")
-              continue;
-      #endif
+#if BUILDFLAG(IS_IOS)
+      if (*value == "vivaldigame")
+        continue;
+#endif
     }
     if (!details) {
-      tree.valid = false;
+      tree->valid = false;
       LOG(ERROR) << "bookmark node with missing or unknown name: "
-        << *dict.GetDict().FindString(kNameKey);
+                 << *dict.GetDict().FindString(kNameKey);
       continue;
     }
     if (base::Value* children = dict.GetDict().Find(kChildrenKey)) {
@@ -211,7 +212,7 @@ void DefaultBookmarkParser::ParseBookmarkList(
       item.title = details->title;
       item.speeddial = details->speeddial;
       if (!used_details.insert(details).second) {
-        tree.valid = false;
+        tree->valid = false;
         LOG(ERROR) << "duplicated folder " << details->name;
       }
       bool bookmarks_folder =
@@ -221,14 +222,14 @@ void DefaultBookmarkParser::ParseBookmarkList(
     } else {
       // Bookmark URL
       if (level == 0) {
-        tree.valid = false;
+        tree->valid = false;
         LOG(ERROR) << "top-level bookmark " << item.title << "is not a folder";
       }
       if (std::string* value = dict.GetDict().FindString(kTitleKey)) {
         item.title = std::move(*value);
       }
       if (item.title.empty()) {
-        tree.valid = false;
+        tree->valid = false;
         LOG(ERROR) << "bookmark without title";
       }
 
@@ -246,19 +247,19 @@ void DefaultBookmarkParser::ParseBookmarkList(
           if (url.is_valid()) {
             item.url = std::move(url);
           } else {
-            tree.valid = false;
+            tree->valid = false;
             LOG(ERROR) << kURLKey << " for bookmark " << item.title
                        << " is not a valid URL: " << *value;
           }
         }
       } else {
-        tree.valid = false;
+        tree->valid = false;
         LOG(ERROR) << "bookmark " << item.title << " without " << kURLKey;
       }
 
       if (inside_bookmarks_folder) {
         if (!used_details2.insert(details).second) {
-          tree.valid = false;
+          tree->valid = false;
           LOG(ERROR) << "bookmark is defined twice inside bookmarks folder - "
                      << item.title;
         }
@@ -266,7 +267,7 @@ void DefaultBookmarkParser::ParseBookmarkList(
         item.alternative_uuid = details->uuid;
       } else {
         if (!used_details.insert(details).second) {
-          tree.valid = false;
+          tree->valid = false;
           LOG(ERROR) << "bookmark is defined twice - " << item.title;
         }
         item.uuid = details->uuid;
@@ -284,7 +285,7 @@ void DefaultBookmarkParser::ParseBookmarkList(
     }
 
     default_items->push_back(std::move(item));
-    tree.item_count++;
+    tree->item_count++;
   }
 }
 
@@ -293,21 +294,23 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
     LOG(ERROR) << "default bookmark json is not an object";
     return;
   }
-  std::string* version = default_bookmarks_value.GetDict().FindString(kVersionKey);
+  std::string* version =
+      default_bookmarks_value.GetDict().FindString(kVersionKey);
   if (!version || version->empty()) {
     LOG(ERROR) << "no " << kVersionKey << " in json";
     return;
   }
-  tree.version = std::move(*version);
+  tree->version = std::move(*version);
 
-  base::Value* bookmark_list = default_bookmarks_value.GetDict().Find(kChildrenKey);
+  base::Value* bookmark_list =
+      default_bookmarks_value.GetDict().Find(kChildrenKey);
   if (!bookmark_list) {
     LOG(ERROR) << "no " << kChildrenKey << " array.";
     return;
   }
 
-  tree.valid = true;
-  ParseBookmarkList(0, bookmark_list, &tree.top_items, false);
+  tree->valid = true;
+  ParseBookmarkList(0, bookmark_list, &tree->top_items, false);
 }
 
 absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {

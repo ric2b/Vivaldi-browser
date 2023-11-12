@@ -12,6 +12,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
+#include "chrome/browser/ssl/https_first_mode_settings_tracker.h"
 #include "chrome/browser/ssl/https_only_mode_tab_helper.h"
 #include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/common/chrome_features.h"
@@ -47,6 +48,8 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "components/guest_view/browser/guest_view_base.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+#include "app/vivaldi_apptools.h"
 
 using security_interstitials::https_only_mode::RecordHttpsFirstModeNavigation;
 using security_interstitials::https_only_mode::
@@ -191,8 +194,7 @@ HttpsUpgradesInterceptor::MaybeCreateInterceptor(
   }
   PrefService* prefs = profile->GetPrefs();
   bool https_first_mode_enabled =
-      base::FeatureList::IsEnabled(features::kHttpsFirstModeV2) && prefs &&
-      prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled);
+      prefs && prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled);
   return std::make_unique<HttpsUpgradesInterceptor>(
       frame_tree_node_id, https_first_mode_enabled, navigation_ui_data);
 }
@@ -233,8 +235,9 @@ void HttpsUpgradesInterceptor::MaybeCreateLoader(
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // If this is a GuestView (e.g., Chrome Apps <webview>) then HTTPS-First Mode
+  // If this is a GuestView (e.g., Chrome Apps <webview>) then HTTPS-First Mode 
   // should not apply. See crbug.com/1233889 for more details.
+  if (!vivaldi::IsVivaldiRunning())
   if (guest_view::GuestViewBase::IsGuest(web_contents)) {
     std::move(callback).Run({});
     return;
@@ -505,6 +508,15 @@ void HttpsUpgradesInterceptor::MaybeCreateLoaderOnHstsQueryCompleted(
             tab_helper->fallback_url().host(),
             web_contents->GetPrimaryMainFrame()->GetStoragePartition());
       }
+      // Also record this fallback event so that we can auto-enable HFM based on
+      // browsing patterns later on.
+      HttpsFirstModeService* hfm_service =
+          HttpsFirstModeServiceFactory::GetForProfile(profile);
+      // HttpsFirstModeService can be null in tests.
+      if (hfm_service) {
+        hfm_service->MaybeEnableHttpsFirstModeForUser(
+            /*add_fallback_entry=*/true);
+      }
     }
 
     tab_helper->set_is_navigation_upgraded(false);
@@ -636,6 +648,16 @@ bool HttpsUpgradesInterceptor::MaybeCreateLoaderForResponse(
       state->AllowHttpForHost(
           tab_helper->fallback_url().host(),
           web_contents->GetPrimaryMainFrame()->GetStoragePartition());
+    }
+
+    // Also record this fallback event so that we can auto-enable HFM based on
+    // browsing patterns later on.
+    HttpsFirstModeService* hfm_service =
+        HttpsFirstModeServiceFactory::GetForProfile(profile);
+    // HttpsFirstModeService can be null in tests.
+    if (hfm_service) {
+      hfm_service->MaybeEnableHttpsFirstModeForUser(
+          /*add_fallback_entry=*/true);
     }
   }
 

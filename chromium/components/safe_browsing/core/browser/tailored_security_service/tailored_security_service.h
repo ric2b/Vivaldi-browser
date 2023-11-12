@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/functional/callback_forward.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -25,12 +26,16 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
+namespace network {
+class SharedURLLoaderFactory;
+}
+
 namespace signin {
 class IdentityManager;
 }
 
-namespace network {
-class SharedURLLoaderFactory;
+namespace syncer {
+class SyncService;
 }
 
 namespace safe_browsing {
@@ -79,6 +84,7 @@ class TailoredSecurityService : public KeyedService {
   using CompletionCallback = base::OnceCallback<void(Request*, bool success)>;
 
   TailoredSecurityService(signin::IdentityManager* identity_manager,
+                          syncer::SyncService* sync_service,
                           PrefService* prefs);
   ~TailoredSecurityService() override;
 
@@ -153,6 +159,9 @@ class TailoredSecurityService : public KeyedService {
   // callback.
   virtual void MaybeNotifySyncUser(bool is_enabled, base::Time previous_update);
 
+  // Returns whether the user has history sync enabled in preferences.
+  bool HistorySyncEnabledForUser();
+
   PrefService* prefs() { return prefs_; }
 
   signin::IdentityManager* identity_manager() { return identity_manager_; }
@@ -161,11 +170,25 @@ class TailoredSecurityService : public KeyedService {
   GetURLLoaderFactory() = 0;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(
+      TailoredSecurityServiceTest,
+      RetryEnabledTimestampUpdateCallbackSetsStateToRetryNeeded);
+  FRIEND_TEST_ALL_PREFIXES(TailoredSecurityServiceTest,
+                           RetryEnabledTimestampUpdateCallbackRecordsStartTime);
+  FRIEND_TEST_ALL_PREFIXES(
+      TailoredSecurityServiceTest,
+      RetryDisabledTimestampUpdateCallbackDoesNotRecordStartTime);
+  FRIEND_TEST_ALL_PREFIXES(TailoredSecurityServiceTest,
+                           RetryDisabledStateRemainsUnset);
   friend class TailoredSecurityTabHelperTest;
 
-  // Stores pointer to IdentityManager instance. It must outlive the
-  // TailoredSecurityService and can be null during tests.
-  raw_ptr<signin::IdentityManager, DanglingUntriaged> identity_manager_;
+  // Stores pointer to `IdentityManager` instance. It must outlive the
+  // `TailoredSecurityService` and can be null during tests.
+  raw_ptr<signin::IdentityManager> identity_manager_;
+
+  // Stores pointer to `SyncService` instance. It must outlive the
+  // `TailoredSecurityService` and can be null during tests.
+  raw_ptr<syncer::SyncService> sync_service_;
 
   // Pending TailoredSecurity queries to be canceled if not complete by
   // profile shutdown.

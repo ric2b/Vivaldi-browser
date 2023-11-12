@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Каб паўторна ўвесці даныя, неабходныя для загрузкі старонкі, неабходна яе перазагрузіць.</translation>
 <translation id="3234666976984236645">Заўседы выяўляць важнае змесціва на гэтым сайце</translation>
 <translation id="3308738399950580893">рэклама</translation>
+<translation id="3384522979010096022">Ваша арганізацыя не дазваляе вам праглядаць гэты сайт</translation>
 <translation id="3422472998109090673">Старонка <ph name="HOST_NAME" /> недаступная.</translation>
 <translation id="3427092606871434483">Дазваляць (прадвызначана)</translation>
 <translation id="3447661539832366887">Уладальнік гэтай прылады адключыў гульню з дыназаўрам.</translation>
@@ -164,7 +165,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
 <translation id="7219179957768738017">У гэтым злучэнні выкарыстоўваецца <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Паказваць апавяшчэнні</translation>
-<translation id="7260504762447901703">Адклікаць доступ</translation>
 <translation id="7353601530677266744">Загадны радок</translation>
 <translation id="7364115444476960850">Старонка, на якую вы хочаце перайсці, была заблакаваная Vivaldi<ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Шлях да профілю</translation>

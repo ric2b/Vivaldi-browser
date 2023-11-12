@@ -8,6 +8,8 @@ import android.os.Bundle;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -23,6 +25,8 @@ import java.util.List;
  */
 @JNINamespace("policy::android")
 public class CombinedPolicyProvider {
+    private static final String TAG = "CombinedPProvider";
+
     private static CombinedPolicyProvider sInstance;
 
     private long mNativeCombinedPolicyProvider;
@@ -48,6 +52,8 @@ public class CombinedPolicyProvider {
             return;
         }
 
+        Log.i(TAG, "#linkNativeInternal() " + mPolicyProviders.size());
+
         if (mPolicyProviders.isEmpty()) {
             mPolicyCacheProvider = new PolicyCacheProvider();
             mPolicyCacheProvider.setManagerAndSource(this, /* source = */ 0);
@@ -69,6 +75,10 @@ public class CombinedPolicyProvider {
      * disambiguating updates.
      */
     public void registerProvider(PolicyProvider provider) {
+        Log.i(TAG,
+                "#registerProvider() provider:" + provider
+                        + " isPolicyCacheEnabled:" + isPolicyCacheEnabled()
+                        + " policyProvidersSize:" + mPolicyProviders.size());
         if (isPolicyCacheEnabled()) {
             mPolicyCacheProvider = null;
         }
@@ -91,6 +101,7 @@ public class CombinedPolicyProvider {
     }
 
     void onSettingsAvailable(int source, Bundle newSettings) {
+        Log.i(TAG, "#onSettingsAvailable() " + source);
         if (mNativeCombinedPolicyProvider == 0) return;
 
         List<Bundle> policies;
@@ -107,9 +118,11 @@ public class CombinedPolicyProvider {
         }
         for (Bundle settings : policies) {
             for (String key : settings.keySet()) {
+                Log.i(TAG, "#setPolicy() " + key + " -> " + settings.get(key));
                 mPolicyConverter.setPolicy(key, settings.get(key));
             }
         }
+        Log.i(TAG, "#flushPolicies()");
         CombinedPolicyProviderJni.get().flushPolicies(mNativeCombinedPolicyProvider, get());
     }
 
@@ -145,7 +158,6 @@ public class CombinedPolicyProvider {
         }
     }
 
-    @VisibleForTesting
     List<PolicyProvider> getPolicyProvidersForTesting() {
         return mPolicyProviders;
     }
@@ -165,7 +177,9 @@ public class CombinedPolicyProvider {
     }
 
     static void setForTesting(CombinedPolicyProvider p) {
+        var oldValue = sInstance;
         sInstance = p;
+        ResettersForTesting.register(() -> sInstance = oldValue);
     }
 
     @NativeMethods

@@ -83,8 +83,8 @@ BASE_FEATURE(kForceHeuristicMemorySaver,
 BASE_FEATURE(kHighEfficiencyMultistateMode,
              "HighEfficiencyMultistateMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<bool> kHighEfficiencyDefaultHeuristicMode{
-    &kHighEfficiencyMultistateMode, "default_heuristic_mode", false};
+const base::FeatureParam<bool> kHighEfficiencyShowRecommendedBadge{
+    &kHighEfficiencyMultistateMode, "show_recommended_badge", false};
 
 BASE_FEATURE(kDiscardedTabTreatment,
              "DiscardedTabTreatment",
@@ -136,16 +136,24 @@ const base::FeatureParam<int> kMemoryUsageInHovercardsHighThresholdBytes{
     &kMemoryUsageInHovercards,
     "memory_usage_in_hovercards_high_threshold_bytes", 800 * 1024 * 1024};
 
+// Mapping of enum value to parameter string for "memory_update_trigger" param.
+constexpr base::FeatureParam<MemoryUsageInHovercardsUpdateTrigger>::Option
+    kMemoryUsageInHovercardsUpdateTriggerOptions[] = {
+        {MemoryUsageInHovercardsUpdateTrigger::kBackground, "background"},
+        {MemoryUsageInHovercardsUpdateTrigger::kNavigation, "navigation"},
+};
+
+const base::FeatureParam<MemoryUsageInHovercardsUpdateTrigger>
+    kMemoryUsageInHovercardsUpdateTrigger{
+        &kMemoryUsageInHovercards, "memory_update_trigger",
+        MemoryUsageInHovercardsUpdateTrigger::kBackground,
+        &kMemoryUsageInHovercardsUpdateTriggerOptions};
+
 #endif
 
 BASE_FEATURE(kBFCachePerformanceManagerPolicy,
              "BFCachePerformanceManagerPolicy",
-#if !BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUrgentPageDiscarding,
              "UrgentPageDiscarding",

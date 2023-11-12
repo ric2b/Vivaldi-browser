@@ -8,7 +8,7 @@
 
 #import <memory>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
@@ -30,10 +30,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface PrimaryToolbarCoordinator ()
 
@@ -120,40 +116,15 @@ using vivaldi::IsVivaldiRunning;
   return self.viewController;
 }
 
-- (id<ViewRevealingAnimatee>)animatee {
-  return self.viewController;
-}
-
 - (id<ToolbarAnimatee>)toolbarAnimatee {
   CHECK(self.viewController);
   return self.viewController;
-}
-
-- (void)setPanGestureHandler:
-    (ViewRevealingVerticalPanHandler*)panGestureHandler {
-  self.viewController.panGestureHandler = panGestureHandler;
-}
-
-- (void)showPrerenderingAnimation {
-  [self.viewController showPrerenderingAnimation];
 }
 
 #pragma mark - ToolbarCommands
 
 - (void)triggerToolbarSlideInAnimation {
   [self.viewController triggerToolbarSlideInAnimationFromBelow:NO];
-}
-
-#pragma mark - Protected override
-
-- (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-  [super updateToolbarForSideSwipeSnapshot:webState];
-  [self.delegate updateToolbarForSideSwipeSnapshot:webState];
-}
-
-- (void)resetToolbarAfterSideSwipeSnapshot {
-  [super resetToolbarAfterSideSwipeSnapshot];
-  [self.delegate resetToolbarAfterSideSwipeSnapshot];
 }
 
 #pragma mark - VIVALDI

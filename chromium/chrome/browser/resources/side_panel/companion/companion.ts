@@ -71,6 +71,9 @@ enum ParamType {
   // Arguments for sending Visual Search results from browser to iframe.
   VISUAL_SEARCH_PARAMS = 'visualSearchParams',
 
+  // Arguments for sending Visual Search alt text from browser to iframe.
+  VISUAL_SEARCH_IMAGE_ALT_TEXTS = 'visualSearchImageAltTexts',
+
   // Arguments for sending companion loading state from iframe to browser.
   COMPANION_LOADING_STATE = 'companionLoadingState',
 }
@@ -176,25 +179,16 @@ function initialize() {
         }
       });
 
-  companionProxy.callbackRouter.onNavigationError.addListener(() => {
-    const networkErrorOverlay = document.getElementById('network-error-page');
-    const frame = document.body.querySelector('iframe');
-    assert(frame);
-    assert(networkErrorOverlay);
-
-    // Hide the frame and show the network error overlay.
-    networkErrorOverlay.style.display = 'block';
-    frame.style.display = 'none';
-  });
-
   // POST dataUris from the Visual Search classification results to the iframe
   companionProxy.callbackRouter.onDeviceVisualClassificationResult.addListener(
       (results: VisualSearchResult[]) => {
         const dataUris = results.map(result => result.dataUri);
+        const altTexts = results.map(result => result.altText);
         const message = {
           [ParamType.METHOD_TYPE]:
               MethodType.kOnDeviceVisualClassificationResult,
           [ParamType.VISUAL_SEARCH_PARAMS]: dataUris,
+          [ParamType.VISUAL_SEARCH_IMAGE_ALT_TEXTS]: altTexts,
         };
 
         const companionOrigin =
@@ -205,6 +199,17 @@ function initialize() {
           frame.contentWindow.postMessage(message, companionOrigin);
         }
       });
+
+  companionProxy.callbackRouter.onNavigationError.addListener(() => {
+    const networkErrorOverlay = document.getElementById('network-error-page');
+    const frame = document.body.querySelector('iframe');
+    assert(frame);
+    assert(networkErrorOverlay);
+
+    // Hide the frame and show the network error overlay.
+    networkErrorOverlay.style.display = 'block';
+    frame.style.display = 'none';
+  });
 
   companionProxy.callbackRouter.notifyLinkOpen.addListener(
       (openedUrl: Url, metadata: LinkOpenMetadata) => {
@@ -283,6 +288,8 @@ function onCompanionMessageEvent(event: MessageEvent) {
   } else if (methodType === MethodType.kCompanionLoadingState) {
     companionProxy.handler.onLoadingState(
         data[ParamType.COMPANION_LOADING_STATE]);
+  } else if (methodType === MethodType.kRefreshCompanionPage) {
+    companionProxy.handler.refreshCompanionPage();
   }
 }
 

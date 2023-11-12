@@ -4,6 +4,7 @@
 
 #import "ios/web/public/session/crw_navigation_item_storage.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
@@ -13,10 +14,6 @@
 #import "ios/web/public/session/proto/proto_util.h"
 #import "ios/web/public/web_client.h"
 #import "net/base/mac/url_conversions.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace web {
 
@@ -73,12 +70,27 @@ const char kNavigationItemSerializedRequestHeadersSizeHistogram[] =
   storage.set_title(base::UTF16ToUTF8(_title));
   web::SerializeTimeToProto(_timestamp, *storage.mutable_timestamp());
   storage.set_user_agent(web::UserAgentTypeToProto(_userAgentType));
-  web::SerializeReferrerToProto(_referrer, *storage.mutable_referrer());
-  web::SerializeHttpRequestHeadersToProto(
-      _HTTPRequestHeaders, *storage.mutable_http_request_headers());
+  // To reduce disk usage, NavigationItemImpl does not serialize invalid
+  // referrer or empty HTTP header map. The helper function responsible
+  // for the serialisation enforces this with assertion, so skip items
+  // that should not be serialised.
+  if (_referrer.url.is_valid()) {
+    web::SerializeReferrerToProto(_referrer, *storage.mutable_referrer());
+  }
+  if (_HTTPRequestHeaders.count) {
+    web::SerializeHttpRequestHeadersToProto(
+        _HTTPRequestHeaders, *storage.mutable_http_request_headers());
+  }
 }
 
 #pragma mark - NSObject
+
+- (BOOL)isEqual:(NSObject*)object {
+  CRWNavigationItemStorage* other =
+      base::apple::ObjCCast<CRWNavigationItemStorage>(object);
+
+  return [other cr_isEqualSameClass:self];
+}
 
 - (NSString*)description {
   NSMutableString* description =
@@ -257,6 +269,43 @@ const char kNavigationItemSerializedRequestHeadersSizeHistogram[] =
 
 - (void)setTitle:(const std::u16string&)title {
   _title = title;
+}
+
+#pragma mark Private
+
+- (BOOL)cr_isEqualSameClass:(CRWNavigationItemStorage*)other {
+  if (_URL != other.URL) {
+    return NO;
+  }
+
+  // -virtualURL getter is complex and does not always return `_virtualURL`,
+  // so use the property for both `self` and `other` to ensure correctness.
+  if (self.virtualURL != other.virtualURL) {
+    return NO;
+  }
+
+  if (_referrer != other.referrer) {
+    return NO;
+  }
+
+  if (_timestamp != other.timestamp) {
+    return NO;
+  }
+
+  if (_title != other.title) {
+    return NO;
+  }
+
+  if (_userAgentType != other.userAgentType) {
+    return NO;
+  }
+
+  if (_HTTPRequestHeaders != other.HTTPRequestHeaders &&
+      ![_HTTPRequestHeaders isEqual:other.HTTPRequestHeaders]) {
+    return NO;
+  }
+
+  return YES;
 }
 
 @end

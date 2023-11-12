@@ -342,11 +342,11 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   os = "netbsd";
 #elif defined(OS_ZOS)
   os = "zos";
+#elif defined(OS_SERENITY)
+  os = "serenity";
 #else
 #error Unknown OS type.
 #endif
-  // NOTE: Adding a new port? Please follow
-  // https://chromium.googlesource.com/chromium/src/+/master/docs/new_port_policy.md
 
   // Host architecture.
   static const char kX86[] = "x86";

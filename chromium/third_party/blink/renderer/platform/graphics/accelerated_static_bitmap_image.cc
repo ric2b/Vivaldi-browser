@@ -9,7 +9,6 @@
 
 #include "base/task/single_thread_task_runner.h"
 #include "components/viz/common/resources/release_callback.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -38,6 +37,7 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 #include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace blink {
@@ -389,9 +389,9 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
       context_provider_wrapper->ContextProvider()->GetGrGLTextureFormat(
           viz::SkColorTypeToSinglePlaneSharedImageFormat(
               sk_image_info_.colorType()));
-  GrBackendTexture backend_texture(sk_image_info_.width(),
-                                   sk_image_info_.height(), GrMipMapped::kNo,
-                                   texture_info);
+  auto backend_texture =
+      GrBackendTextures::MakeGL(sk_image_info_.width(), sk_image_info_.height(),
+                                skgpu::Mipmapped::kNo, texture_info);
 
   GrSurfaceOrigin origin = IsOriginTopLeft() ? kTopLeft_GrSurfaceOrigin
                                              : kBottomLeft_GrSurfaceOrigin;
@@ -480,14 +480,14 @@ AcceleratedStaticBitmapImage::ConvertToColorSpace(
                    .makeColorType(color_type)
                    .makeWH(Size().width(), Size().height());
 
-  auto usage_flags = ContextProviderWrapper()
-                         ->ContextProvider()
-                         ->SharedImageInterface()
-                         ->UsageForMailbox(mailbox_);
+  const auto usage_flags = ContextProviderWrapper()
+                               ->ContextProvider()
+                               ->SharedImageInterface()
+                               ->UsageForMailbox(mailbox_);
   auto provider = CanvasResourceProvider::CreateSharedImageProvider(
       image_info, cc::PaintFlags::FilterQuality::kLow,
       CanvasResourceProvider::ShouldInitialize::kNo, ContextProviderWrapper(),
-      RasterMode::kGPU, IsOriginTopLeft(), usage_flags);
+      RasterMode::kGPU, usage_flags);
   if (!provider) {
     return nullptr;
   }

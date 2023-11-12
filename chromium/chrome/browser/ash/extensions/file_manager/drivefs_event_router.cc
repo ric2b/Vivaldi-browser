@@ -156,7 +156,16 @@ void DriveFsEventRouter::OnItemProgress(
   if (!ash::features::IsInlineSyncStatusProgressEventsEnabled()) {
     return;
   }
-  const std::string path = event.path;
+  base::FilePath file_path;
+  std::string path;
+
+  if (event.file_path.has_value()) {
+    file_path = *event.file_path;
+    path = file_path.value();
+  } else {
+    path = event.path;
+    file_path = base::FilePath(path);
+  }
 
   drivefs::SyncStatus status;
   if (event.progress == 0) {
@@ -169,9 +178,8 @@ void DriveFsEventRouter::OnItemProgress(
 
   std::vector<const drivefs::SyncState> filtered_states;
 
-  filtered_states.emplace_back(
-      drivefs::SyncState{status, static_cast<float>(event.progress) / 100.0f,
-                         base::FilePath(path)});
+  filtered_states.emplace_back(drivefs::SyncState{
+      status, static_cast<float>(event.progress) / 100.0f, file_path});
 
   if (status == drivefs::SyncStatus::kCompleted) {
     const auto previous_state_iter = path_to_sync_state_.find(path);
@@ -179,10 +187,6 @@ void DriveFsEventRouter::OnItemProgress(
     if (was_tracked) {
       // Stop tracking completed events but push it to subscribers.
       path_to_sync_state_.erase(previous_state_iter);
-    } else {
-      // If path wasn't tracked in the first place, don't report its completed
-      // event to subscribers.
-      return;
     }
   } else {
     path_to_sync_state_[path] = filtered_states.back();

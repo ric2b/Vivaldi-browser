@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/apple/foundation_util.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,10 +54,6 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using autofill::FieldDataManager;
 using autofill::FieldRendererId;
@@ -144,8 +140,8 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
   // Identifier of the last focused field.
   FieldRendererId _lastFocusedFieldIdentifier;
 
-  // Identifier of the last focused frame.
-  web::WebFrame* _lastFocusedFrame;
+  // Last focused frame.
+  raw_ptr<web::WebFrame> _lastFocusedFrame;
 
   // A refcounted object is stored here, because otherwise the driver can
   // be deleted with the frame, and the driver needs to be alive after the
@@ -299,14 +295,24 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
     return;
   }
   web::WebFrame* webFrame = webFramesManager->GetFrameWithId(frameId);
-  if (!webFrame || webFrame->IsMainFrame()) {
+  if (!webFrame) {
+    return;
+  }
+
+  // Avoid keeping a pointer to a destroyed frame.
+  if (webFrame == _lastFocusedFrame) {
+    _lastFocusedFrame = nullptr;
+  }
+
+  // Main frame becomes unavailable, submission detection will happen after the
+  // the new main frame is loaded.
+  if (webFrame->IsMainFrame()) {
     return;
   }
 
   // Casting is safe, as this code is run on iOS Chrome & WebView only.
   auto* driver = static_cast<IOSPasswordManagerDriver*>(
       [_driverHelper PasswordManagerDriver:webFrame]);
-
   auto fieldDataManager =
       UniqueIDDataTabHelper::FromWebState(_webState)->GetFieldDataManager();
   _passwordManager->OnIframeDetach(frameId, driver, *fieldDataManager);
@@ -802,11 +808,16 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
               sharedPasswordController:self
         showGeneratedPotentialPassword:self.generatedPotentialPassword
                        decisionHandler:^(BOOL accept) {
+                         SharedPasswordController* strongSelf = weakSelf;
+                         if (!strongSelf) {
+                           return;
+                         }
+
                          if (accept) {
                            LogPasswordGenerationEvent(
                                autofill::password_generation::
                                    PASSWORD_ACCEPTED);
-                           [weakSelf
+                           [strongSelf
                                injectGeneratedPasswordForFormId:formIdentifier
                                                         inFrame:frame
                                               generatedPassword:
@@ -816,6 +827,11 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
                                                   clearPotentialPassword];
                          } else {
                            clearPotentialPassword();
+                           IOSPasswordManagerDriver* driver =
+                               [strongSelf->_driverHelper
+                                   PasswordManagerDriver:frame];
+                           strongSelf->_passwordManager
+                               ->OnPasswordNoLongerGenerated(driver);
                          }
                        }];
   };

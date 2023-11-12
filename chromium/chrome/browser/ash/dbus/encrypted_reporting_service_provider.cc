@@ -67,7 +67,7 @@ EncryptedReportingServiceProvider::EncryptedReportingServiceProvider(
       memory_resource_(base::MakeRefCounted<::reporting::ResourceManager>(
           kDefaultMemoryAllocation)),
       upload_provider_(std::move(upload_provider)) {
-  DCHECK(upload_provider_.get());
+  CHECK(upload_provider_.get());
 }
 
 EncryptedReportingServiceProvider::~EncryptedReportingServiceProvider() =
@@ -75,7 +75,7 @@ EncryptedReportingServiceProvider::~EncryptedReportingServiceProvider() =
 
 void EncryptedReportingServiceProvider::Start(
     scoped_refptr<dbus::ExportedObject> exported_object) {
-  DCHECK(OnOriginThread());
+  CHECK(OnOriginThread());
 
   if (!::reporting::StorageSelector::is_uploader_required()) {
     // We should never get to here, since the provider is only exported
@@ -140,10 +140,27 @@ EncryptedReportingServiceProvider::GetEncryptionKeyAttachedCallback() {
           missive_client->GetWeakPtr()));
 }
 
+// static
+::reporting::UploadClient::UpdateConfigInMissiveCallback
+EncryptedReportingServiceProvider::GetUpdateConfigInMissiveCallback() {
+  chromeos::MissiveClient* const missive_client =
+      chromeos::MissiveClient::Get();
+  return base::BindPostTask(
+      missive_client->origin_task_runner(),
+      base::BindRepeating(
+          [](base::WeakPtr<chromeos::MissiveClient> missive_client,
+             ::reporting::ListOfBlockedDestinations destinations) {
+            if (missive_client) {
+              missive_client->UpdateConfigInMissive(std::move(destinations));
+            }
+          },
+          missive_client->GetWeakPtr()));
+}
+
 void EncryptedReportingServiceProvider::RequestUploadEncryptedRecords(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  DCHECK(OnOriginThread());
+  CHECK(OnOriginThread());
   auto response = dbus::Response::FromMethodCall(method_call);
   ::reporting::UploadEncryptedRecordResponse response_message;
 
@@ -222,7 +239,7 @@ void EncryptedReportingServiceProvider::RequestUploadEncryptedRecords(
           remaining_storage_capacity,
           ::reporting::FileUploadDelegate::kMaxUploadBufferSize))};
 
-  DCHECK(upload_provider_);
+  CHECK(upload_provider_);
   chromeos::MissiveClient* const missive_client =
       chromeos::MissiveClient::Get();
   if (!missive_client) {

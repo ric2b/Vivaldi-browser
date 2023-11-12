@@ -1,0 +1,11 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_search_engine_settings") {
+  sources = [
+    "vivaldi_search_engine_settings_view_controller.h",
+    "vivaldi_search_engine_settings_view_controller.mm",
+  ]
+  deps = [
+    "//base",
+  ]
+}

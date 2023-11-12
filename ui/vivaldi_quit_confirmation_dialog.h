@@ -42,7 +42,7 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
  public:
   // If stop_asking is true the user should not be asked for
   // a confirmation again.
-  using QuitCallback = base::OnceCallback<void(bool close, bool stop_asking)>;
+  using QuitCallback = base::OnceCallback<void(bool accepted, bool stop_asking)>;
 
   VivaldiQuitConfirmationDialog(QuitCallback quit_callback,
                                 gfx::NativeWindow window,
@@ -66,7 +66,7 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   gfx::Size CalculatePreferredSize() const override;
 
  private:
-  void RunCallback(bool close);
+  void RunCallback(bool accepted);
 
   std::unique_ptr<views::Checkbox> CreateExtraView();
 

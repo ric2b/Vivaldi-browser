@@ -20,10 +20,6 @@
 #import "net/base/url_util.h"
 #import "url/url_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace web {
 namespace wk_navigation_util {
 
@@ -153,8 +149,8 @@ bool ExtractTargetURL(const GURL& restore_session_url, GURL* target_url) {
       << restore_session_url.possibly_invalid_spec()
       << " is not a restore session URL";
   std::string target_url_spec;
-  bool success =
-      restore_session_url.ref().find(kRestoreSessionTargetUrlHashPrefix) == 0;
+  bool success = base::StartsWith(restore_session_url.ref(),
+                                  kRestoreSessionTargetUrlHashPrefix);
   if (success) {
     std::string encoded_target_url = restore_session_url.ref().substr(
         strlen(kRestoreSessionTargetUrlHashPrefix));

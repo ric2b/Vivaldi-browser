@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,6 +34,17 @@ void AccessibilityServiceRouter::BindAssistiveTechnologyController(
     accessibility_service_->BindAssistiveTechnologyController(
         std::move(at_controller_receiver), enabled_features);
   }
+}
+
+void AccessibilityServiceRouter::ConnectDevToolsAgent(
+    ::mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent,
+    mojom::AssistiveTechnologyType type) {
+#if BUILDFLAG(ENABLE_ACCESSIBILITY_SERVICE)
+  LaunchIfNotRunning();
+  // Check to make sure the service was actually launched.
+  CHECK(accessibility_service_.is_bound());
+  accessibility_service_->ConnectDevToolsAgent(std::move(agent), type);
+#endif
 }
 
 void AccessibilityServiceRouter::LaunchIfNotRunning() {

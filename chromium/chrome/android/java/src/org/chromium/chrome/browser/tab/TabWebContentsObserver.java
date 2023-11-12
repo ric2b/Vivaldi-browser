@@ -119,7 +119,6 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         }
     }
 
-    @VisibleForTesting
     public void simulateRendererKilledForTesting() {
         if (mObserver != null) mObserver.renderProcessGone();
     }

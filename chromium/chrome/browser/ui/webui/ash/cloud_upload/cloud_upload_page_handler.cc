@@ -14,7 +14,7 @@
 #include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/chromeos/office_web_app/office_web_app.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload.mojom.h"
-#include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
+#include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -54,7 +54,7 @@ void CloudUploadPageHandler::GetDialogArgs(GetDialogArgsCallback callback) {
 
 void CloudUploadPageHandler::IsOfficeWebAppInstalled(
     IsOfficeWebAppInstalledCallback callback) {
-  std::move(callback).Run(CloudUploadDialog::IsOfficeWebAppInstalled(profile_));
+  std::move(callback).Run(ash::cloud_upload::IsOfficeWebAppInstalled(profile_));
 }
 
 void CloudUploadPageHandler::InstallOfficeWebApp(
@@ -87,13 +87,19 @@ void CloudUploadPageHandler::InstallOfficeWebApp(
 
 void CloudUploadPageHandler::IsODFSMounted(IsODFSMountedCallback callback) {
   // Assume any file system mounted by ODFS is the correct one.
-  std::move(callback).Run(CloudUploadDialog::IsODFSMounted(profile_));
+  std::move(callback).Run(ash::cloud_upload::IsODFSMounted(profile_));
 }
 
 void CloudUploadPageHandler::SignInToOneDrive(
     SignInToOneDriveCallback callback) {
   web_ui_->GetWebContents()->GetTopLevelNativeWindow()->Hide();
-  CloudUploadDialog::RequestODFSMount(
+  if (!odfs_mount_called_) {
+    // Log only once per setup flow.
+    odfs_mount_called_ = true;
+    UMA_HISTOGRAM_BOOLEAN("FileBrowser.OfficeFiles.Setup.ODFSAvailability",
+                          IsODFSInstalled(profile_));
+  }
+  RequestODFSMount(
       profile_,
       base::BindOnce(&CloudUploadPageHandler::OnMountResponse,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -115,7 +121,6 @@ void CloudUploadPageHandler::RespondWithLocalTaskAndClose(int task_position) {
 void CloudUploadPageHandler::SetOfficeAsDefaultHandler() {
   using file_manager::file_tasks::kActionIdOpenInOffice;
 
-  // TODO(b:275912658): Only set handlers if that group has no type set already
   file_manager::file_tasks::SetWordFileHandlerToFilesSWA(profile_,
                                                          kActionIdOpenInOffice);
   file_manager::file_tasks::SetExcelFileHandlerToFilesSWA(

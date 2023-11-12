@@ -4,11 +4,35 @@
 
 import {openTab} from '/_test_resources/test_util/tabs_util.js';
 
-function getInjectedElementIds() {
-  let childIds = [];
-  for (const child of document.body.children)
-    childIds.push(child.id);
-  return childIds.sort();
+// Navigates to an url requested by the extension and returns the opened tab.
+async function navigateToRequestedUrl() {
+  const config = await chrome.test.getConfig();
+  const url = `http://hostperms.com:${config.testServer.port}/simple.html`;
+  let tab = await openTab(url);
+  return tab;
+}
+
+// Returns the injected element ids in `tabId`.
+async function getInjectedElementIds(tabId) {
+  let injectedElements = await chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: () => {
+      let childIds = [];
+      for (const child of document.body.children)
+        childIds.push(child.id);
+      return childIds.sort();
+    }
+  });
+
+  chrome.test.assertEq(1, injectedElements.length);
+  return injectedElements[0].result;
+};
+
+async function getTitleForTab(tabId) {
+  let results = await chrome.scripting.executeScript(
+      {target: {tabId}, func: () => document.title});
+  chrome.test.assertEq(1, results.length);
+  return results[0].result;
 };
 
 chrome.test.runTests([
@@ -180,7 +204,19 @@ chrome.test.runTests([
 
     await chrome.test.assertPromiseRejects(
         chrome.scripting.registerContentScripts(scripts),
-        `Error: Content script's ID must not be empty`);
+        `Error: Script's ID must not be empty`);
+
+    chrome.test.succeed();
+  },
+
+  // Test that no scripts are registered when an empty array of scripts is
+  // passed to scripting.registerContentScripts().
+  async function emptyScripts() {
+    await chrome.scripting.unregisterContentScripts();
+
+    await chrome.scripting.registerContentScripts([]);
+    let scripts = await chrome.scripting.getRegisteredContentScripts();
+    chrome.test.assertEq(0, scripts.length);
 
     chrome.test.succeed();
   },
@@ -195,7 +231,7 @@ chrome.test.runTests([
 
     await chrome.test.assertPromiseRejects(
         chrome.scripting.registerContentScripts(scripts),
-        `Error: Content script's ID '${scriptId}' must not start with '_'`);
+        `Error: Script's ID '${scriptId}' must not start with '_'`);
 
     chrome.test.succeed();
   },
@@ -297,20 +333,12 @@ chrome.test.runTests([
       runAt: 'document_end'
     }];
 
-    async function getTitleForTab(tabId) {
-      let results = await chrome.scripting.executeScript(
-          {target: {tabId}, func: () => document.title});
-      chrome.test.assertEq(1, results.length);
-      return results[0].result;
-    };
-
     await chrome.scripting.registerContentScripts(scripts);
-    const config = await chrome.test.getConfig();
-    const url = `http://hostperms.com:${config.testServer.port}/simple.html`;
-    const tab = await openTab(url);
-    const title = await getTitleForTab(tab.id);
+    const tab = await navigateToRequestedUrl();
 
+    const title = await getTitleForTab(tab.id);
     chrome.test.assertEq('I CHANGED TITLE!!!', title);
+
     chrome.test.succeed();
   },
 
@@ -361,32 +389,111 @@ chrome.test.runTests([
     ];
 
     await chrome.scripting.registerContentScripts(scripts);
-    const config = await chrome.test.getConfig();
-    const url = `http://hostperms.com:${config.testServer.port}/simple.html`;
-    let tab = await openTab(url);
-    let results = await chrome.scripting.executeScript(
-        {target: {tabId: tab.id}, func: getInjectedElementIds});
+    let tab = await navigateToRequestedUrl();
 
     // Both scripts should be injected, and both scripts should inject one
     // element.
-    chrome.test.assertEq(1, results.length);
-    chrome.test.assertEq(['injected', 'injected_2'], results[0].result);
+    chrome.test.assertEq(
+      ['injected', 'injected_2'], await getInjectedElementIds(tab.id));
     scripts = await chrome.scripting.getRegisteredContentScripts();
     chrome.test.assertEq(2, scripts.length);
 
     await chrome.scripting.unregisterContentScripts(
         {ids: ['inject_element_1']});
-    tab = await openTab(url);
-    results = await chrome.scripting.executeScript(
-        {target: {tabId: tab.id}, func: getInjectedElementIds});
+    tab = await navigateToRequestedUrl();
 
     // After removing the script with id 'inject_element_1' and opening a tab,
     // only 'inject_element_2' should be injected.
-    chrome.test.assertEq(1, results.length);
-    chrome.test.assertEq(['injected_2'], results[0].result);
+    chrome.test.assertEq(['injected_2'], await getInjectedElementIds(tab.id));
 
     scripts = await chrome.scripting.getRegisteredContentScripts();
     chrome.test.assertEq(1, scripts.length);
+
+    chrome.test.succeed();
+  },
+
+  // Test that unregisterContentScripts with no given filter unregisters all
+  // content scripts.
+  async function unregisterScript_NoFilter() {
+    await chrome.scripting.unregisterContentScripts();
+
+    const contentScripts = [
+      {
+        id: 'contentScript1',
+        matches: ['*://*/*'],
+        js: ['inject_element.js'],
+        runAt: 'document_end'
+      },
+      {
+        id: 'contentScript2',
+        matches: ['*://*/*'],
+        js: ['inject_element_2.js'],
+        runAt: 'document_end'
+      }
+    ];
+
+    await chrome.scripting.registerContentScripts(contentScripts);
+    let tab = await navigateToRequestedUrl();
+
+    // Verify content scripts are injected.
+    chrome.test.assertEq(
+      ['injected', 'injected_2'], await getInjectedElementIds(tab.id));
+
+    // Unregister all content scripts.
+    await chrome.scripting.unregisterContentScripts();
+
+    // Verify all content scripts are removed.
+    let registeredContentScripts =
+        await chrome.scripting.getRegisteredContentScripts();
+    chrome.test.assertEq(0, registeredContentScripts.length);
+
+    // Re-navigate to the requested url, and verify no script is injected.
+    tab = await navigateToRequestedUrl();
+    chrome.test.assertEq([], await getInjectedElementIds(tab.id));
+
+    chrome.test.succeed();
+  },
+
+  // Test that unregisterContentScripts with empty filter ids unregisters all
+  // content scripts.
+  // TODO(crbug.com/1300657): This is incorrect, when filter ids is empty it
+  // should not unregister any script.
+  async function unregisterScript_EmptyFilterIds() {
+    await chrome.scripting.unregisterContentScripts();
+
+    const contentScripts = [
+      {
+        id: 'contentScript1',
+        matches: ['*://*/*'],
+        js: ['inject_element.js'],
+        runAt: 'document_end'
+      },
+      {
+        id: 'contentScript2',
+        matches: ['*://*/*'],
+        js: ['inject_element_2.js'],
+        runAt: 'document_end'
+      }
+    ];
+
+    await chrome.scripting.registerContentScripts(contentScripts);
+    let tab = await navigateToRequestedUrl();
+
+    // Verify content scripts are injected.
+    chrome.test.assertEq(
+      ['injected', 'injected_2'], await getInjectedElementIds(tab.id));
+
+    // Unregister all content scripts.
+    await chrome.scripting.unregisterContentScripts({ ids: [] });
+
+    // Verify all content scripts are removed.
+    let registeredContentScripts =
+      await chrome.scripting.getRegisteredContentScripts();
+    chrome.test.assertEq(0, registeredContentScripts.length);
+
+    // Re-navigate to the requested url, and verify no script is injected.
+    tab = await navigateToRequestedUrl();
+    chrome.test.assertEq([], await getInjectedElementIds(tab.id));
 
     chrome.test.succeed();
   },
@@ -399,7 +506,7 @@ chrome.test.runTests([
     const scriptId = '_manifest_only';
     await chrome.test.assertPromiseRejects(
         chrome.scripting.unregisterContentScripts({ids: [scriptId]}),
-        `Error: Content script's ID '${scriptId}' must not start with '_'`);
+        `Error: Script's ID '${scriptId}' must not start with '_'`);
     chrome.test.succeed();
   },
 
@@ -454,27 +561,19 @@ chrome.test.runTests([
     }];
 
     await chrome.scripting.registerContentScripts(scripts);
-    const config = await chrome.test.getConfig();
-    const url = `http://hostperms.com:${config.testServer.port}/simple.html`;
-    let tab = await openTab(url);
-    let results = await chrome.scripting.executeScript(
-        {target: {tabId: tab.id}, func: getInjectedElementIds});
+    let tab = await navigateToRequestedUrl();
 
     // One element with id 'injected' should be injected.
-    chrome.test.assertEq(1, results.length);
-    chrome.test.assertEq(['injected'], results[0].result);
+    chrome.test.assertEq(['injected'], await getInjectedElementIds(tab.id));
     scripts = await chrome.scripting.getRegisteredContentScripts();
     chrome.test.assertEq(1, scripts.length);
 
     await chrome.scripting.updateContentScripts(updatedScripts);
-    tab = await openTab(url);
-    results = await chrome.scripting.executeScript(
-        {target: {tabId: tab.id}, func: getInjectedElementIds});
+    tab = await navigateToRequestedUrl();
 
     // After the script is updated, one element with id 'injected_2' should be
     // injected.
-    chrome.test.assertEq(1, results.length);
-    chrome.test.assertEq(['injected_2'], results[0].result);
+    chrome.test.assertEq(['injected_2'], await getInjectedElementIds(tab.id));
 
     const expectedScripts = [{
       id: 'inject_element_1',
@@ -519,7 +618,7 @@ chrome.test.runTests([
 
     await chrome.test.assertPromiseRejects(
         chrome.scripting.updateContentScripts(updatedScripts),
-        `Error: Content script with ID '${
+        `Error: Script with ID '${
             nonexistentScriptId}' does not exist or is not fully registered`);
 
     const expectedScripts = [{
@@ -627,6 +726,71 @@ chrome.test.runTests([
 
     scripts = await chrome.scripting.getRegisteredContentScripts();
     chrome.test.assertEq(expectedScripts, scripts);
+
+    chrome.test.succeed();
+  },
+
+  // Test that if two updateContentScripts calls are made in quick succession,
+  // then both calls should succeed in updating their scripts and the old
+  // version of these scripts are overwritten.
+  // Regression for crbug.com/1454710.
+  async function parallelUpdateContentScriptsCalls() {
+    await chrome.scripting.unregisterContentScripts();
+    var scripts = [
+      {
+        id: 'script_1',
+        matches: ['*://*/*'],
+        js: ['inject_element.js'],
+        runAt: 'document_end',
+        allFrames: true
+      },
+      {
+        id: 'script_2',
+        matches: ['*://*/*'],
+        js: ['inject_element_2.js'],
+        runAt: 'document_end',
+        allFrames: true
+      }
+    ];
+
+    // First, register 2 scripts that each inject a different element into the
+    // page.
+    await chrome.scripting.registerContentScripts(scripts);
+    let tab = await navigateToRequestedUrl();
+
+    // Both scripts should be injected, and both scripts should inject one
+    // element.
+    chrome.test.assertEq(
+      ['injected', 'injected_2'], await getInjectedElementIds(tab.id));
+
+    // Now update `script_1` and `script_2` to inject different elements.
+    const updatedScript1 = [{
+      id: 'script_1',
+      matches: ['*://*/*'],
+      js: ['inject_element_3.js'],
+      allFrames: false,
+      persistAcrossSessions: false
+    }];
+
+    const updatedScript2 = [{
+      id: 'script_2',
+      matches: ['*://*/*'],
+      js: ['inject_element_4.js'],
+      allFrames: true,
+      persistAcrossSessions: false
+    }];
+
+    await Promise.allSettled([
+      chrome.scripting.updateContentScripts(updatedScript1),
+      chrome.scripting.updateContentScripts(updatedScript2)
+    ]);
+
+    tab = await navigateToRequestedUrl();
+
+    // Check that the old versions of both scripts are not injected by checking
+    // that the IDs of the elements injected pertain to the updated scripts.
+    chrome.test.assertEq(
+      ['injected_3', 'injected_4'], await getInjectedElementIds(tab.id));
 
     chrome.test.succeed();
   },

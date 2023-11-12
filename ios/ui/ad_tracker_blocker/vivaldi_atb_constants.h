@@ -6,10 +6,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#pragma mark - NOTIFICATION
-extern NSString* vATBHostKey;
-extern NSString* vATBSiteSettingsDidChange;
-
 #pragma mark - SIZE AND PADDINGS
 // Corner radius for tracker blocker count background
 extern const CGFloat vBlockedCountBgCornerRadius;

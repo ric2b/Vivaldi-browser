@@ -597,6 +597,10 @@ ExtensionFunction::ResponseAction UtilitiesGetUrlFragmentsFunction::Run() {
   return RespondNow(Error("Unexpected call to the browser process"));
 }
 
+ExtensionFunction::ResponseAction UtilitiesUrlToThumbnailTextFunction::Run() {
+  return RespondNow(Error("Unexpected call to the browser process"));
+}
+
 ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
   using vivaldi::utilities::GetSelectedText::Params;
   namespace Results = vivaldi::utilities::GetSelectedText::Results;
@@ -1479,40 +1483,25 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
         Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
     bool version_changed = false;
     std::string version = ::vivaldi::GetVivaldiVersionString();
-    std::string mail_version = ::vivaldi::GetVivaldiMailVersionString();
     std::string last_seen_version =
         profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
-    std::string last_seen_mail_version = profile->GetPrefs()->GetString(
-        vivaldiprefs::kStartupLastSeenMailVersion);
 
     std::vector<std::string> version_array = base::SplitString(
         version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-    std::vector<std::string> mail_version_array = base::SplitString(
-        mail_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
     std::vector<std::string> last_seen_array =
         base::SplitString(last_seen_version, ".", base::KEEP_WHITESPACE,
                           base::SPLIT_WANT_NONEMPTY);
-    std::vector<std::string> last_seen_mail_array =
-        base::SplitString(last_seen_mail_version, ".", base::KEEP_WHITESPACE,
-                          base::SPLIT_WANT_NONEMPTY);
 
-    if (version_array.size() != 4 || last_seen_array.size() != 4 ||
-        mail_version_array.size() != 4 || last_seen_mail_array.size() != 4) {
+    if (version_array.size() != 4 || last_seen_array.size() != 4) {
       version_changed = true;
       results.firstrun = last_seen_array.size() == 0;
       profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                      version);
-      profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenMailVersion,
-                                     mail_version);
     } else {
-      version_changed =
-          HasVersionChanged(version_array, last_seen_array) ||
-          HasVersionChanged(mail_version_array, last_seen_mail_array);
+      version_changed = HasVersionChanged(version_array, last_seen_array);
       if (version_changed) {
         profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                        version);
-        profile->GetPrefs()->SetString(
-            vivaldiprefs::kStartupLastSeenMailVersion, mail_version);
       }
     }
 

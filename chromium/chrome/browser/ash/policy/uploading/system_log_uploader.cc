@@ -66,6 +66,8 @@ const char* const kSystemLogFileNames[] = {"/var/log/bios_info.txt",
                                            "/var/log/chrome/chrome",
                                            "/var/log/chrome/chrome.PREVIOUS",
                                            "/var/log/eventlog.txt",
+                                           "/var/log/extensions.log",
+                                           "/var/log/extensions.1.log",
                                            "/var/log/platform_info.txt",
                                            "/var/log/messages",
                                            "/var/log/messages.1",
@@ -335,13 +337,9 @@ SystemLogUploader::SystemLogUploader(
       base::BindRepeating(&SystemLogUploader::RefreshUploadSettings,
                           base::Unretained(this)));
 
-  // Fetch the current value of the policy.
+  // Fetch the current value of the policy. This will also schedule a
+  // system log upload if uploads become enabled.
   RefreshUploadSettings();
-
-  // Immediately schedule the next system log upload (last_upload_attempt_ is
-  // set to the start of the epoch, so this will trigger an update upload in the
-  // immediate future).
-  ScheduleNextSystemLogUpload(upload_frequency_, absl::nullopt);
 }
 
 SystemLogUploader::~SystemLogUploader() {}
@@ -404,8 +402,18 @@ void SystemLogUploader::RefreshUploadSettings() {
 
   // CrosSettings are trusted - we want to use the last trusted values, by
   // default do not upload system logs.
+  // We also want to schedule a job if the settings switch to enabled, so
+  // store the previous value.
+  const bool previous_upload_enabled = upload_enabled_;
   if (!settings->GetBoolean(ash::kSystemLogUploadEnabled, &upload_enabled_)) {
     upload_enabled_ = false;
+  }
+
+  // Schedule a log upload job if uploads were previously disabled and
+  // are now enabled. If no jobs have been attempted (ie. last_upload_attempt_
+  // is the initial value) it will be scheduled immediately.
+  if (!previous_upload_enabled && upload_enabled_){
+    ScheduleNextSystemLogUpload(upload_frequency_, absl::nullopt);
   }
 }
 

@@ -10,11 +10,11 @@
 #include <utility>
 
 #include "base/strings/string_number_conversions.h"
+#include "base/test/gmock_expected_support.h"
 #include "base/test/values_test_util.h"
 #include "base/types/expected.h"
 #include "base/types/optional_util.h"
 #include "base/values.h"
-#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/test_utils.h"
 #include "components/attribution_reporting/trigger_registration_error.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -94,30 +94,9 @@ TEST(AggregatableValuesTest, Parse_KeyLength) {
     EXPECT_TRUE(parse_dict_with_key_length(length).has_value());
   }
 
-  EXPECT_EQ(parse_dict_with_key_length(26),
-            base::unexpected(
-                TriggerRegistrationError::kAggregatableValuesKeyTooLong));
-}
-
-TEST(AggregatableValuesTest, Parse_KeyCount) {
-  auto parse_dict_with_key_count = [](size_t count) {
-    base::Value::Dict dict;
-    for (size_t i = 0; i < count; i++) {
-      dict.Set(base::NumberToString(i), 1);
-    }
-    base::Value value(std::move(dict));
-    return AggregatableValues::FromJSON(&value);
-  };
-
-  for (size_t count = 0; count <= kMaxAggregationKeysPerSourceOrTrigger;
-       count++) {
-    EXPECT_TRUE(parse_dict_with_key_count(count).has_value());
-  }
-
-  EXPECT_EQ(
-      parse_dict_with_key_count(kMaxAggregationKeysPerSourceOrTrigger + 1),
-      base::unexpected(
-          TriggerRegistrationError::kAggregatableValuesTooManyKeys));
+  EXPECT_THAT(parse_dict_with_key_length(26),
+              base::test::ErrorIs(
+                  TriggerRegistrationError::kAggregatableValuesKeyTooLong));
 }
 
 TEST(AggregatableValuesTest, ToJson) {

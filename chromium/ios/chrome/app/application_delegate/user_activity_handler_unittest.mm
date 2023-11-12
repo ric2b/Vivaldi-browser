@@ -37,8 +37,23 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/common/intents/ClearBrowsingDataIntent.h"
+#import "ios/chrome/common/intents/ManagePasswordsIntent.h"
+#import "ios/chrome/common/intents/ManagePaymentMethodsIntent.h"
+#import "ios/chrome/common/intents/ManageSettingsIntent.h"
+#import "ios/chrome/common/intents/OpenBookmarksIntent.h"
 #import "ios/chrome/common/intents/OpenInChromeIncognitoIntent.h"
 #import "ios/chrome/common/intents/OpenInChromeIntent.h"
+#import "ios/chrome/common/intents/OpenLatestTabIntent.h"
+#import "ios/chrome/common/intents/OpenLensIntent.h"
+#import "ios/chrome/common/intents/OpenNewTabIntent.h"
+#import "ios/chrome/common/intents/OpenReadingListIntent.h"
+#import "ios/chrome/common/intents/OpenRecentTabsIntent.h"
+#import "ios/chrome/common/intents/OpenTabGridIntent.h"
+#import "ios/chrome/common/intents/RunSafetyCheckIntent.h"
+#import "ios/chrome/common/intents/SearchWithVoiceIntent.h"
+#import "ios/chrome/common/intents/SetChromeDefaultBrowserIntent.h"
+#import "ios/chrome/common/intents/ViewHistoryIntent.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "net/base/mac/url_conversions.h"
@@ -48,10 +63,6 @@
 #import "third_party/ocmock/gtest_support.h"
 #import "ui/base/page_transition_types.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 #pragma mark - Test class.
 
@@ -779,16 +790,19 @@ TEST_F(UserActivityHandlerTest,
   FakeConnectionInformation* fakeConnectionInformation =
       [[FakeConnectionInformation alloc] init];
 
+  // Set a list of parameter to test, where each entry has a post open action
+  // name, whether or not it should open a new tab, whether or not to use
+  // incognito, and the post open action enum value.
   NSArray* parametersToTest = @[
-    @[ @"OpenNewSearch", @NO, @(FOCUS_OMNIBOX) ],
-    @[ @"OpenIncognitoSearch", @YES, @(FOCUS_OMNIBOX) ],
-    @[ @"OpenVoiceSearch", @NO, @(START_VOICE_SEARCH) ],
-    @[ @"OpenQRScanner", @NO, @(START_QR_CODE_SCANNER) ],
+    @[ @"OpenNewSearch", @YES, @NO, @(FOCUS_OMNIBOX) ],
+    @[ @"OpenIncognitoSearch", @YES, @YES, @(FOCUS_OMNIBOX) ],
+    @[ @"OpenVoiceSearch", @YES, @NO, @(START_VOICE_SEARCH) ],
+    @[ @"OpenQRScanner", @YES, @NO, @(START_QR_CODE_SCANNER) ],
     @[
-      @"OpenLensFromAppIconLongPress", @NO,
+      @"OpenLensFromAppIconLongPress", @NO, @NO,
       @(START_LENS_FROM_APP_ICON_LONG_PRESS)
     ],
-    @[ @"OpenLensFromSpotlight", @NO, @(START_LENS_FROM_SPOTLIGHT) ]
+    @[ @"OpenLensFromSpotlight", @NO, @NO, @(START_LENS_FROM_SPOTLIGHT) ]
   ];
 
   swizzleHandleStartupParameters();
@@ -813,13 +827,19 @@ TEST_F(UserActivityHandlerTest,
                                             initStage:InitStageFinal];
 
     // Tests.
-    EXPECT_EQ(gurlNewTab,
-              [fakeConnectionInformation startupParameters].externalURL);
-    EXPECT_EQ([[parameters objectAtIndex:1] boolValue]
+    if ([[parameters objectAtIndex:1] boolValue]) {
+      EXPECT_EQ(gurlNewTab,
+                [fakeConnectionInformation startupParameters].externalURL);
+    } else {
+      EXPECT_TRUE(
+          [fakeConnectionInformation startupParameters].externalURL.is_empty());
+    }
+
+    EXPECT_EQ([[parameters objectAtIndex:2] boolValue]
                   ? ApplicationModeForTabOpening::INCOGNITO
                   : ApplicationModeForTabOpening::NORMAL,
               [fakeConnectionInformation startupParameters].applicationMode);
-    EXPECT_EQ([[parameters objectAtIndex:2] intValue],
+    EXPECT_EQ([[parameters objectAtIndex:3] intValue],
               [fakeConnectionInformation startupParameters].postOpeningAction);
     EXPECT_TRUE(completionHandlerExecuted());
     EXPECT_TRUE(completionHandlerArgument());
@@ -860,4 +880,458 @@ TEST_F(UserActivityHandlerTest, PerformActionForShortcutItemWithFirstRunUI) {
   EXPECT_TRUE(completionHandlerExecuted());
   EXPECT_FALSE(completionHandlerArgument());
   EXPECT_FALSE(getHandleStartupParametersHasBeenCalled());
+}
+
+// Test that Chrome respond to open reading list intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenReadingList) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenReadingListIntent"];
+
+  OpenReadingListIntent* intent = [[OpenReadingListIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_READING_LIST,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Test that Chrome respond to open bookmarks intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenBookmarks) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenBookmarksIntent"];
+
+  OpenBookmarksIntent* intent = [[OpenBookmarksIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_BOOKMARKS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Test that Chrome respond to open recent tabs intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenRecentTabs) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenRecentTabsIntent"];
+
+  OpenRecentTabsIntent* intent = [[OpenRecentTabsIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_RECENT_TABS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to open tab grid intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenTabGrid) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenTabGridIntent"];
+
+  OpenTabGridIntent* intent = [[OpenTabGridIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_TAB_GRID,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to search with voice intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentSearchWithVoice) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"SearchWithVoiceIntent"];
+
+  SearchWithVoiceIntent* intent = [[SearchWithVoiceIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(START_VOICE_SEARCH,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to open new tab intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenNewTab) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenNewTabIntent"];
+
+  OpenNewTabIntent* intent = [[OpenNewTabIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(NO_ACTION,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to set chrome as default browser intent.
+TEST_F(UserActivityHandlerTest,
+       ContinueUserActivityIntentSetChromeDefaultBrowser) {
+  NSUserActivity* userActivity = [[NSUserActivity alloc]
+      initWithActivityType:@"SetChromeDefaultBrowserIntent"];
+
+  SetChromeDefaultBrowserIntent* intent =
+      [[SetChromeDefaultBrowserIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(SET_CHROME_DEFAULT_BROWSER,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to view chrome history intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentViewChromeHistory) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"ViewHistoryIntent"];
+
+  ViewHistoryIntent* intent = [[ViewHistoryIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(VIEW_HISTORY,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to manage payment methods intent.
+TEST_F(UserActivityHandlerTest,
+       ContinueUserActivityIntentManagePaymentMethods) {
+  NSUserActivity* userActivity = [[NSUserActivity alloc]
+      initWithActivityType:@"ManagePaymentMethodsIntent"];
+
+  ManagePaymentMethodsIntent* intent =
+      [[ManagePaymentMethodsIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_PAYMENT_METHODS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to run safety check intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentRunSafetyCheck) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"RunSafetyCheckIntent"];
+
+  RunSafetyCheckIntent* intent = [[RunSafetyCheckIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(RUN_SAFETY_CHECK,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to run manage passwords intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentManagePasswords) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"ManagePasswordsIntent"];
+
+  ManagePasswordsIntent* intent = [[ManagePasswordsIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(MANAGE_PASSWORDS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to manage settings intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentManageSettings) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"ManageSettingsIntent"];
+
+  ManageSettingsIntent* intent = [[ManageSettingsIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(MANAGE_SETTINGS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to Open Latest Tab intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenLatestTab) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenLatestTabIntent"];
+
+  OpenLatestTabIntent* intent = [[OpenLatestTabIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_LATEST_TAB,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to Open Lens intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentOpenLensFromIntents) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"OpenLensIntent"];
+
+  OpenLensIntent* intent = [[OpenLensIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(START_LENS_FROM_INTENTS,
+            [connectionInformationMock startupParameters].postOpeningAction);
+}
+
+// Tests that Chrome respond to Clear Browsing Data intent.
+TEST_F(UserActivityHandlerTest, ContinueUserActivityIntentClearBrowsingData) {
+  NSUserActivity* userActivity =
+      [[NSUserActivity alloc] initWithActivityType:@"ClearBrowsingDataIntent"];
+
+  ClearBrowsingDataIntent* intent = [[ClearBrowsingDataIntent alloc] init];
+
+  INInteraction* interaction = [[INInteraction alloc] initWithIntent:intent
+                                                            response:nil];
+
+  id mock_user_activity = CreateMockNSUserActivity(userActivity, interaction);
+
+  FakeStartupInformation* fakeStartupInformation =
+      [[FakeStartupInformation alloc] init];
+  FakeConnectionInformation* connectionInformationMock =
+      [[FakeConnectionInformation alloc] init];
+  MockTabOpener* tabOpener = [[MockTabOpener alloc] init];
+
+  [UserActivityHandler continueUserActivity:mock_user_activity
+                        applicationIsActive:YES
+                                  tabOpener:tabOpener
+                      connectionInformation:connectionInformationMock
+                         startupInformation:fakeStartupInformation
+                               browserState:nullptr
+                                  initStage:InitStageFinal];
+
+  EXPECT_EQ(OPEN_CLEAR_BROWSING_DATA_DIALOG,
+            [connectionInformationMock startupParameters].postOpeningAction);
 }

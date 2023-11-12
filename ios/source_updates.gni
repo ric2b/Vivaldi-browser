@@ -22,6 +22,7 @@ update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h",
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.mm",
+    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h",
   ]
 }
 
@@ -142,5 +143,12 @@ update_target("//ios/chrome/browser/ui/webui:webui") {
     sources += [
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.mm",
       "//vivaldi/ios/ui/about/vivaldi_ios_about_version.h",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/whats_new:whats_new") {
+    sources += [
+      "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.mm",
+      "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h",
   ]
 }

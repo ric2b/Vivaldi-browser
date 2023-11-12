@@ -463,7 +463,7 @@ const struct PersistData persistence_tests[] = {
      "HTTP/1.1 200 OK\n"
      "Set-Cookie: foo=bar\n"
      "Foo: 2\n"
-     "Clear-Site-Data: { \"types\" : [ \"cookies\" ] }\n"
+     "Clear-Site-Data: \"cookies\"\n"
      "Bar: 3\n",
 
      "HTTP/1.1 200 OK\n"
@@ -1826,6 +1826,18 @@ TEST(HttpResponseHeadersTest, SetHeader) {
       "Content-Length: 42\n"
       "connection: close\n",
       ToSimpleString(headers));
+}
+
+TEST(HttpResponseHeadersTest, TryToCreateWithNul) {
+  static constexpr char kHeadersWithNuls[] = {
+      "HTTP/1.1 200 OK\0"
+      "Content-Type: application/octet-stream\0"};
+  // The size must be specified explicitly to include the nul characters.
+  static constexpr base::StringPiece kHeadersWithNulsAsStringPiece(
+      kHeadersWithNuls, sizeof(kHeadersWithNuls));
+  scoped_refptr<HttpResponseHeaders> headers =
+      HttpResponseHeaders::TryToCreate(kHeadersWithNulsAsStringPiece);
+  EXPECT_EQ(headers, nullptr);
 }
 
 #if !BUILDFLAG(CRONET_BUILD)

@@ -31,6 +31,7 @@ class CSSParserContext;
 class CSSParserObserver;
 class CSSParserTokenStream;
 class StyleRule;
+class StyleRuleViewTransitions;
 class StyleRuleBase;
 class StyleRuleCharset;
 class StyleRuleCounterStyle;
@@ -225,7 +226,11 @@ class CORE_EXPORT CSSParserImpl {
   StyleRulePage* ConsumePageRule(CSSParserTokenStream&);
   StyleRuleProperty* ConsumePropertyRule(CSSParserTokenStream&);
   StyleRuleCounterStyle* ConsumeCounterStyleRule(CSSParserTokenStream&);
-  StyleRuleBase* ConsumeScopeRule(CSSParserTokenStream&);
+  StyleRuleBase* ConsumeScopeRule(CSSParserTokenStream&,
+                                  CSSNestingType,
+                                  StyleRule* parent_rule_for_nesting);
+  StyleRuleViewTransitions* ConsumeViewTransitionsRule(
+      CSSParserTokenStream& stream);
   StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream& stream,
                                            CSSNestingType,
                                            StyleRule* parent_rule_for_nesting);
@@ -240,7 +245,8 @@ class CORE_EXPORT CSSParserImpl {
                                               CSSParserTokenStream& block);
   StyleRule* ConsumeStyleRule(CSSParserTokenStream&,
                               CSSNestingType,
-                              StyleRule* parent_rule_for_nesting);
+                              StyleRule* parent_rule_for_nesting,
+                              bool semicolon_aborts_nested_selector);
   StyleRule* ConsumeStyleRuleContents(base::span<CSSSelector> selector_vector,
                                       CSSParserTokenStream& stream);
 
@@ -250,6 +256,14 @@ class CORE_EXPORT CSSParserImpl {
       CSSNestingType,
       StyleRule* parent_rule_for_nesting,
       HeapVector<Member<StyleRuleBase>, 4>* child_rules);
+
+  void ConsumeRuleListOrNestedDeclarationList(
+      CSSParserTokenStream&,
+      bool is_nested_group_rule,
+      CSSNestingType,
+      StyleRule* parent_rule_for_nesting,
+      HeapVector<Member<StyleRuleBase>, 4>* child_rules);
+
   // If id is absl::nullopt, we're parsing a qualified style rule;
   // otherwise, we're parsing an at-rule.
   StyleRuleBase* ConsumeNestedRule(absl::optional<CSSAtRuleID> id,
@@ -285,7 +299,11 @@ class CORE_EXPORT CSSParserImpl {
   // directly in @media, @supports or similar (which cannot hold properties
   // by themselves, only rules; see
   // https://github.com/w3c/csswg-drafts/issues/7850).
-  StyleRule* CreateImplicitNestedRule(StyleRule* parent_rule_for_nesting);
+  //
+  // If CSSNestingType::kScope is provided, an implicit :scope {} rule
+  // is created instead.
+  StyleRule* CreateImplicitNestedRule(CSSNestingType,
+                                      StyleRule* parent_rule_for_nesting);
 
   // FIXME: Can we build CSSPropertyValueSets directly?
   HeapVector<CSSPropertyValue, 64> parsed_properties_;

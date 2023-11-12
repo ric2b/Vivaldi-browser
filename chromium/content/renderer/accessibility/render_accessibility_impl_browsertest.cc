@@ -170,7 +170,7 @@ class RenderAccessibilityHostInterceptor
   }
 
   void HandleAXEvents(blink::mojom::AXUpdatesAndEventsPtr updates_and_events,
-                      int32_t reset_token,
+                      uint32_t reset_token,
                       HandleAXEventsCallback callback) override {
     handled_updates_.insert(handled_updates_.end(),
                             updates_and_events->updates.begin(),
@@ -179,7 +179,8 @@ class RenderAccessibilityHostInterceptor
   }
 
   void HandleAXLocationChanges(
-      std::vector<blink::mojom::LocationChangesPtr> changes) override {
+      std::vector<blink::mojom::LocationChangesPtr> changes,
+      uint32_t reset_token) override {
     for (auto& change : changes)
       location_changes_.emplace_back(std::move(change));
   }
@@ -314,7 +315,7 @@ class RenderAccessibilityImplTest : public RenderViewTest {
   }
 
   void SetMode(ui::AXMode mode) {
-    frame()->GetRenderAccessibilityManager()->SetMode(mode);
+    frame()->GetRenderAccessibilityManager()->SetMode(mode, 1);
   }
 
   ui::AXTreeUpdate GetLastAccUpdate() {
@@ -404,15 +405,20 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   // Even if the first event is sent on an element other than
   // the root, the whole tree should be updated because we know
   // the browser doesn't have the root element.
+  // When the entire page is reloaded like this, all of the nodes are sent.
   LoadHTML(html);
   document = GetMainFrame()->GetDocument();
   root_obj = WebAXObject::FromWebDocument(document);
+  SendPendingAccessibilityEvents();
+  EXPECT_EQ(6, CountAccessibilityNodesSentToBrowser());
   ClearHandledUpdates();
+
+  // Now fire a single event and ensure that only one update is sent.
   const WebAXObject& first_child = root_obj.ChildAt(0);
   GetRenderAccessibilityImpl()->HandleAXEvent(
       ui::AXEvent(first_child.AxID(), ax::mojom::Event::kFocus));
   SendPendingAccessibilityEvents();
-  EXPECT_EQ(6, CountAccessibilityNodesSentToBrowser());
+  EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
 }
 
 TEST_F(RenderAccessibilityImplTest, HideAccessibilityObject) {
@@ -1098,6 +1104,7 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   // and the keyup event is delayed 100ms to look more natural. We need to wait
   // for them to happen to finish the test cleanly in the TearDown phase.
   task_environment_.FastForwardBy(base::Seconds(1));
+  GetRenderAccessibilityImpl()->GetAXContext()->UpdateAXForAllDocuments();
 
   gfx::RectF expected_bounds;
   blink::WebAXObject offset_container;
@@ -1208,7 +1215,14 @@ class AXImageAnnotatorTest : public RenderAccessibilityImplTest {
   MockAnnotationService mock_annotator_;
 };
 
-TEST_F(AXImageAnnotatorTest, OnImageAdded) {
+// TODO(crbug.com/1477047, fuchsia:132924): Reenable test on Fuchsia once
+// post-lifecycle serialization is turned on.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_OnImageAdded DISABLED_OnImageAdded
+#else
+#define MAYBE_OnImageAdded OnImageAdded
+#endif
+TEST_F(AXImageAnnotatorTest, MAYBE_OnImageAdded) {
   LoadHTMLAndRefreshAccessibilityTree(R"HTML(
       <body>
         <p>Test document</p>
@@ -1247,12 +1261,13 @@ TEST_F(AXImageAnnotatorTest, OnImageAdded) {
   task_environment_.RunUntilIdle();
 
   EXPECT_THAT(mock_annotator().image_ids_,
-              ElementsAre("test1.jpg", "test1.jpg", "test2.jpg"));
-  ASSERT_EQ(3u, mock_annotator().image_processors_.size());
+              ElementsAre("test1.jpg", "test2.jpg", "test1.jpg", "test2.jpg"));
+  ASSERT_EQ(4u, mock_annotator().image_processors_.size());
   EXPECT_TRUE(mock_annotator().image_processors_[0].is_bound());
   EXPECT_TRUE(mock_annotator().image_processors_[1].is_bound());
   EXPECT_TRUE(mock_annotator().image_processors_[2].is_bound());
-  EXPECT_EQ(3u, mock_annotator().callbacks_.size());
+  EXPECT_TRUE(mock_annotator().image_processors_[3].is_bound());
+  EXPECT_EQ(4u, mock_annotator().callbacks_.size());
 }
 
 TEST_F(AXImageAnnotatorTest, OnImageUpdated) {

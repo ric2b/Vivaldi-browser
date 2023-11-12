@@ -183,8 +183,7 @@ void AppendInstallChildProcessSwitches(base::CommandLine& command_line) {
       vivaldi::constants::kVivaldiStandalone,
   };
   const base::CommandLine& current = *base::CommandLine::ForCurrentProcess();
-  command_line.CopySwitchesFrom(current, switched_to_copy,
-                                std::size(switched_to_copy));
+  command_line.CopySwitchesFrom(current, switched_to_copy);
 }
 
 namespace {

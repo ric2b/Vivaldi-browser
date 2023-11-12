@@ -17,10 +17,6 @@
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 NSString* const kFindInPageActivityType =

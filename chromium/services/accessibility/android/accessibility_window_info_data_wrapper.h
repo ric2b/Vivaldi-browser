@@ -35,7 +35,7 @@ class AccessibilityWindowInfoDataWrapper : public AccessibilityInfoDataWrapper {
   int32_t GetId() const override;
   const gfx::Rect GetBounds() const override;
   bool IsVisibleToUser() const override;
-  bool IsVirtualNode() const override;
+  bool IsWebNode() const override;
   bool IsIgnored() const override;
   bool IsImportantInAndroid() const override;
   bool IsFocusableInFullFocusMode() const override;
@@ -58,8 +58,9 @@ class AccessibilityWindowInfoDataWrapper : public AccessibilityInfoDataWrapper {
   bool GetProperty(mojom::AccessibilityWindowIntListProperty prop,
                    std::vector<int32_t>* out_value) const;
 
-  raw_ptr<mojom::AccessibilityWindowInfoData, ExperimentalAsh> window_ptr_ =
-      nullptr;
+  raw_ptr<mojom::AccessibilityWindowInfoData,
+          DanglingUntriaged | ExperimentalAsh>
+      window_ptr_ = nullptr;
 };
 
 }  // namespace ax::android

@@ -14,10 +14,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "tools/mac/power/power_sampler/battery_sampler.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace power_sampler {
 
 namespace {
@@ -28,7 +24,7 @@ class TestM1SensorsReader : public power_metrics::M1SensorsReader {
  public:
   TestM1SensorsReader()
       : power_metrics::M1SensorsReader(
-            base::ScopedCFTypeRef<IOHIDEventSystemClientRef>()) {}
+            base::apple::ScopedCFTypeRef<IOHIDEventSystemClientRef>()) {}
 
   void set_temperatures(TemperaturesCelsius temperatures) {
     temperatures_ = temperatures;

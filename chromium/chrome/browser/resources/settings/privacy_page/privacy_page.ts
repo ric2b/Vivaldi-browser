@@ -37,8 +37,8 @@ import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, Router} from '../router.js';
-import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl} from '../safety_hub/safety_hub_browser_proxy.js';
-import {ChooserType, ContentSettingsTypes, CookieControlsMode, NotificationSetting} from '../site_settings/constants.js';
+import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
+import {ChooserType, ContentSetting, ContentSettingsTypes, CookieControlsMode, NotificationSetting} from '../site_settings/constants.js';
 import {SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {PrivacyGuideAvailabilityMixin} from './privacy_guide/privacy_guide_availability_mixin.js';
@@ -189,6 +189,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             loadTimeData.getBoolean('enablePermissionStorageAccessApi'),
       },
 
+      autoPictureInPictureEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('autoPictureInPictureEnabled'),
+      },
+
       /**
        * Whether the File System Access Persistent Permissions UI should be
        * displayed.
@@ -227,9 +232,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             map.set(routes.PRIVACY_GUIDE.path, '#privacyGuideLinkRow');
           }
 
+          /*
           if (routes.PRIVACY_SANDBOX) {
             map.set(routes.PRIVACY_SANDBOX.path, '#privacySandboxLinkRow');
           }
+          */
 
           return map;
         },
@@ -251,6 +258,14 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
       contentSettingsTypesEnum_: {
         type: Object,
         value: ContentSettingsTypes,
+      },
+
+      /**
+       * Expose ContentSetting enum to HTML bindings.
+       */
+      contentSettingEnum_: {
+        type: Object,
+        value: ContentSetting,
       },
 
       /**
@@ -278,8 +293,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
       enableSafetyHub_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('enableSafetyHub');
+          return loadTimeData.getBoolean('enableSafetyHub') &&
+              !loadTimeData.getBoolean('isGuest');
         },
+      },
+
+      showPreloadingSubpage_: {
+        type: Boolean,
+        value: () => !loadTimeData.getBoolean(
+            'isPerformanceSettingsPreloadingSubpageEnabled'),
       },
     };
   }
@@ -303,9 +325,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private isPrivacySandboxRestrictedNoticeEnabled_: boolean;
   private isPrivacySandboxSettings4_: boolean;
   private privateStateTokensEnabled_: boolean;
+  private autoPictureInPictureEnabled_: boolean;
   private safetyCheckNotificationPermissionsEnabled_: boolean;
   private enablePermissionStorageAccessApi_: boolean;
   private enableSafetyHub_: boolean;
+  private showPreloadingSubpage_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
   private browserProxy_: PrivacyPageBrowserProxy =
@@ -341,14 +365,16 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         'cookieSettingDescriptionChanged',
         (description: string) => this.cookieSettingDescription_ = description);
 
-    this.addWebUiListener(
-        'notification-permission-review-list-maybe-changed',
-        (sites: NotificationPermission[]) =>
-            this.onReviewNotificationPermissionListChanged_(sites));
+    if (this.safetyCheckNotificationPermissionsEnabled_ && !this.isGuest_) {
+      this.addWebUiListener(
+          SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
+          (sites: NotificationPermission[]) =>
+              this.onReviewNotificationPermissionListChanged_(sites));
 
-    this.safetyHubBrowserProxy_.getNotificationPermissionReview().then(
-        (sites: NotificationPermission[]) =>
-            this.onReviewNotificationPermissionListChanged_(sites));
+      this.safetyHubBrowserProxy_.getNotificationPermissionReview().then(
+          (sites: NotificationPermission[]) =>
+              this.onReviewNotificationPermissionListChanged_(sites));
+    }
   }
 
   override currentRouteChanged() {
@@ -420,6 +446,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   }
 
   private onPrivacySandboxClick_() {
+    /*
     this.interactedWithPage_();
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacySandbox.OpenedFromSettingsParent');
@@ -435,6 +462,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call.
     this.shadowRoot!.querySelector<HTMLAnchorElement>('#privacySandboxLink')!
         .dispatchEvent(new MouseEvent('click'));
+        */
   }
 
   private onPrivacyGuideClick_() {
@@ -450,12 +478,13 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private onReviewNotificationPermissionListChanged_(
       permissions: NotificationPermission[]) {
     // The notification permissions review is shown when there are items to
-    // review (provided the feature is enabled). Once visible it remains that
-    // way to show completion info, even if the list is emptied.
+    // review (provided the feature is enabled and should be shown). Once
+    // visible it remains that way to show completion info, even if the list is
+    // emptied.
     if (this.showNotificationPermissionsReview_) {
       return;
     }
-    this.showNotificationPermissionsReview_ =
+    this.showNotificationPermissionsReview_ = !this.isGuest_ &&
         this.safetyCheckNotificationPermissionsEnabled_ &&
         permissions.length > 0;
   }

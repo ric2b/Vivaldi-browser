@@ -17,10 +17,10 @@ export class TestManageProfilesBrowserProxy extends TestBrowserProxy implements
       'openManageProfileSettingsSubPage', 'launchSelectedProfile',
       'askOnStartupChanged', 'getNewProfileSuggestedThemeInfo',
       'getProfileThemeInfo', 'removeProfile', 'getProfileStatistics',
-      'closeProfileStatistics', 'selectNewAccount', 'createProfile',
+      'closeProfileStatistics', 'selectNewAccount',
       'createProfileAndOpenCustomizationDialog', 'setProfileName',
       'recordSignInPromoImpression', 'getAvailableIcons', 'getSwitchProfile',
-      'confirmProfileSwitch', 'cancelProfileSwitch',
+      'confirmProfileSwitch', 'cancelProfileSwitch', 'updateProfileOrder',
       // <if expr="chromeos_lacros">
       'getAvailableAccounts', 'openAshAccountSettingsPage',
       'selectExistingAccountLacros', 'openDeviceGuestLinkLacros',
@@ -110,14 +110,6 @@ export class TestManageProfilesBrowserProxy extends TestBrowserProxy implements
     this.methodCalled('selectNewAccount', [profileColor]);
   }
 
-  createProfile(
-      profileName: string, profileColor: number, avatarIndex: number,
-      createShortcut: boolean) {
-    this.methodCalled(
-        'createProfile',
-        [profileName, profileColor, avatarIndex, createShortcut]);
-  }
-
   createProfileAndOpenCustomizationDialog(profileColor: number) {
     this.methodCalled(
         'createProfileAndOpenCustomizationDialog', [profileColor]);
@@ -169,6 +161,10 @@ export class TestManageProfilesBrowserProxy extends TestBrowserProxy implements
 
   cancelProfileSwitch() {
     this.methodCalled('cancelProfileSwitch');
+  }
+
+  updateProfileOrder(fromIndex: number, toIndex: number) {
+    this.methodCalled('updateProfileOrder', [fromIndex, toIndex]);
   }
 
   // <if expr="chromeos_lacros">

@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_site_setting_item.h"
@@ -200,7 +200,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     case ItemTypeSite: {
       TableViewItem* selectedItem = [model itemAtIndexPath:indexPath];
       VivaldiATBSiteSettingItem* selectedSetting =
-          base::mac::ObjCCastStrict<VivaldiATBSiteSettingItem>(selectedItem);
+          base::apple::ObjCCastStrict<VivaldiATBSiteSettingItem>(selectedItem);
       [self navigateToSourceDomainEditingWithDomain:selectedSetting.item.title
                                         siteSetting:selectedSetting.item.type
                                           isEditing:YES];

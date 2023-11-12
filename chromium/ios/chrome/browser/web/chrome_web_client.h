@@ -48,6 +48,7 @@ class ChromeWebClient : public web::WebClient {
                         int64_t navigation_id,
                         base::OnceCallback<void(NSString*)> callback) override;
   UIView* GetWindowedContainer() override;
+  bool EnableFullscreenAPI() const override;
   bool EnableLongPressUIContextMenu() const override;
   bool EnableWebInspector(web::BrowserState* browser_state) const override;
   web::UserAgentType GetDefaultUserAgent(web::WebState* web_state,
@@ -60,10 +61,6 @@ class ChromeWebClient : public web::WebClient {
       web::WebState* web_state) const override;
   bool IsPointingToSameDocument(const GURL& url1,
                                 const GURL& url2) const override;
-  id<CRWFindSession> CreateFindSessionForWebState(
-      web::WebState* web_state) const override API_AVAILABLE(ios(16));
-  void StartTextSearchInWebState(web::WebState* web_state) override;
-  void StopTextSearchInWebState(web::WebState* web_state) override;
   bool IsMixedContentAutoupgradeEnabled(
       web::BrowserState* browser_state) const override;
   bool IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) override;

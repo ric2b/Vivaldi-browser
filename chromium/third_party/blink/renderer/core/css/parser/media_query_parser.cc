@@ -37,6 +37,7 @@ class MediaQueryFeatureSet : public MediaQueryParser::FeatureSet {
         feature == media_feature_names::kMinBlockSizeMediaFeature ||
         feature == media_feature_names::kMaxBlockSizeMediaFeature ||
         feature == media_feature_names::kStuckMediaFeature ||
+        feature == media_feature_names::kSnappedMediaFeature ||
         CSSVariableParser::IsValidVariableName(feature)) {
       return false;
     }
@@ -77,6 +78,9 @@ class MediaQueryFeatureSet : public MediaQueryParser::FeatureSet {
             RuntimeEnabledFeatures::CSSUpdateMediaFeatureEnabled()) ||
            (feature == media_feature_names::kPrefersReducedDataMediaFeature &&
             RuntimeEnabledFeatures::PrefersReducedDataEnabled()) ||
+           (feature ==
+                media_feature_names::kPrefersReducedTransparencyMediaFeature &&
+            RuntimeEnabledFeatures::PrefersReducedTransparencyEnabled()) ||
            (feature == media_feature_names::kForcedColorsMediaFeature &&
             RuntimeEnabledFeatures::ForcedColorsEnabled()) ||
            (feature == media_feature_names::kNavigationControlsMediaFeature &&
@@ -86,18 +90,22 @@ class MediaQueryFeatureSet : public MediaQueryParser::FeatureSet {
                 execution_context)) ||
            (feature ==
                 media_feature_names::kHorizontalViewportSegmentsMediaFeature &&
-            RuntimeEnabledFeatures::CSSFoldablesEnabled()) ||
+            RuntimeEnabledFeatures::ViewportSegmentsEnabled()) ||
            (feature ==
                 media_feature_names::kVerticalViewportSegmentsMediaFeature &&
-            RuntimeEnabledFeatures::CSSFoldablesEnabled()) ||
+            RuntimeEnabledFeatures::ViewportSegmentsEnabled()) ||
            (feature == media_feature_names::kDevicePostureMediaFeature &&
             RuntimeEnabledFeatures::DevicePostureEnabled()) ||
            (feature == media_feature_names::kOverflowInlineMediaFeature &&
             RuntimeEnabledFeatures::CSSOverflowMediaFeaturesEnabled()) ||
            (feature == media_feature_names::kOverflowBlockMediaFeature &&
             RuntimeEnabledFeatures::CSSOverflowMediaFeaturesEnabled()) ||
+           (feature == media_feature_names::kInvertedColorsMediaFeature &&
+            RuntimeEnabledFeatures::InvertedColorsEnabled()) ||
            (CSSVariableParser::IsValidVariableName(feature) &&
-            RuntimeEnabledFeatures::CSSStyleQueriesBooleanEnabled());
+            RuntimeEnabledFeatures::CSSStyleQueriesBooleanEnabled()) ||
+           (feature == media_feature_names::kScriptingMediaFeature &&
+            RuntimeEnabledFeatures::ScriptingMediaFeatureEnabled());
   }
 
   bool IsCaseSensitive(const String& feature) const override { return false; }

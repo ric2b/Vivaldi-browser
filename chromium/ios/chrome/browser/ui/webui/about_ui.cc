@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/format_macros.h"
 #include "base/i18n/number_formatting.h"
 #include "base/memory/ref_counted_memory.h"
@@ -25,6 +26,10 @@
 #include "ui/base/device_form_factor.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace {
 
@@ -100,6 +105,25 @@ std::string ChromeURLs() {
   return html;
 }
 
+// Vivaldi
+std::string VivaldiURLs() {
+  std::string html;
+  AppendHeader(&html, 0, "Vivaldi URLs");
+  AppendBody(&html);
+  html += "<h2>List of Vivaldi URLs</h2>\n<ul>\n";
+  std::vector<std::string> hosts(kChromeHostURLs,
+                                 kChromeHostURLs + kNumberOfChromeHostURLs);
+  std::sort(hosts.begin(), hosts.end());
+  for (std::vector<std::string>::const_iterator i = hosts.begin();
+       i != hosts.end(); ++i)
+    html += "<li><a href='chrome://" + *i + "/' id='" + *i + "'>vivaldi://" +
+            *i + "</a></li>\n";
+  html += "</ul>\n";
+  AppendFooter(&html);
+  return html;
+}
+// End Vivaldi
+
 }  // namespace
 
 // AboutUIHTMLSource ----------------------------------------------------------
@@ -119,7 +143,13 @@ void AboutUIHTMLSource::StartDataRequest(
   std::string response;
   // Add your data source here, in alphabetical order.
   if (source_name_ == kChromeUIChromeURLsHost) {
+
+    if (vivaldi::IsVivaldiRunning()) {
+      response = VivaldiURLs();
+    } else {
     response = ChromeURLs();
+    } // End Vivaldi
+
   } else if (source_name_ == kChromeUICreditsHost) {
     int idr = IDR_ABOUT_UI_CREDITS_HTML;
     if (path == kCreditsJsPath)
@@ -136,7 +166,7 @@ void AboutUIHTMLSource::StartDataRequest(
     for (base::HistogramBase* histogram : base::StatisticsRecorder::Sort(
              base::StatisticsRecorder::GetHistograms())) {
       std::string histogram_name = histogram->histogram_name();
-      if (histogram_name.find(path) == std::string::npos) {
+      if (!base::Contains(histogram_name, path)) {
         continue;
       }
       base::Value::Dict histogram_dict = histogram->ToGraphDict();

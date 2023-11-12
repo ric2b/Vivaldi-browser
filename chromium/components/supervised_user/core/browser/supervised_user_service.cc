@@ -20,6 +20,7 @@
 #include "components/google/core/common/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
@@ -43,6 +44,7 @@ SupervisedUserService::~SupervisedUserService() {
 // static
 void SupervisedUserService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualHosts);
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualURLs);
   registry->RegisterIntegerPref(prefs::kDefaultSupervisedUserFilteringBehavior,
@@ -53,8 +55,7 @@ void SupervisedUserService::RegisterProfilePrefs(
   }
   registry->RegisterIntegerPref(
       prefs::kFirstTimeInterstitialBannerState,
-      static_cast<int>(
-          supervised_user::FirstTimeInterstitialBannerState::kUnknown));
+      static_cast<int>(FirstTimeInterstitialBannerState::kUnknown));
 }
 
 void SupervisedUserService::Init() {
@@ -67,25 +68,10 @@ void SupervisedUserService::Init() {
       prefs::kSupervisedUserId,
       base::BindRepeating(&SupervisedUserService::OnSupervisedUserIdChanged,
                           base::Unretained(this)));
-  supervised_user::FirstTimeInterstitialBannerState banner_state =
-      static_cast<supervised_user::FirstTimeInterstitialBannerState>(
+  FirstTimeInterstitialBannerState banner_state =
+      static_cast<FirstTimeInterstitialBannerState>(
           user_prefs_->GetInteger(prefs::kFirstTimeInterstitialBannerState));
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-  if (supervised_user::CanDisplayFirstTimeInterstitialBanner()) {
-    if (banner_state ==
-            supervised_user::FirstTimeInterstitialBannerState::kUnknown &&
-        can_show_first_time_interstitial_banner_) {
-      banner_state =
-          supervised_user::FirstTimeInterstitialBannerState::kNeedToShow;
-    } else {
-      banner_state =
-          supervised_user::FirstTimeInterstitialBannerState::kSetupComplete;
-    }
-  }
-#else
-  banner_state =
-      supervised_user::FirstTimeInterstitialBannerState::kSetupComplete;
-#endif
+  banner_state = GetUpdatedBannerState(banner_state);
 
   user_prefs_->SetInteger(prefs::kFirstTimeInterstitialBannerState,
                           static_cast<int>(banner_state));
@@ -147,7 +133,6 @@ std::string SupervisedUserService::GetSecondCustodianName() const {
 }
 
 bool SupervisedUserService::IsURLFilteringEnabled() const {
-// TODO(b/271413641): Use capabilities to verify if filtering is enabled on iOS.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
   return IsSubjectToParentalControls();
 #else
@@ -187,6 +172,7 @@ void SupervisedUserService::RemoveObserver(
 }
 
 SupervisedUserService::SupervisedUserService(
+    signin::IdentityManager* identity_manager,
     KidsChromeManagementClient* kids_chrome_management_client,
     PrefService& user_prefs,
     SupervisedUserSettingsService& settings_service,
@@ -197,6 +183,7 @@ SupervisedUserService::SupervisedUserService(
     : user_prefs_(user_prefs),
       settings_service_(settings_service),
       sync_service_(sync_service),
+      identity_manager_(identity_manager),
       kids_chrome_management_client_(kids_chrome_management_client),
       delegate_(nullptr),
       url_filter_(std::move(check_webstore_url_callback),
@@ -215,6 +202,25 @@ void SupervisedUserService::ReportNonDefaultWebFilterValue() const {
   url_filter_.ReportWebFilterTypeMetrics();
 }
 
+FirstTimeInterstitialBannerState SupervisedUserService::GetUpdatedBannerState(
+    const FirstTimeInterstitialBannerState original_state) {
+  FirstTimeInterstitialBannerState target_state = original_state;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_IOS)
+  if (supervised_user::CanDisplayFirstTimeInterstitialBanner()) {
+    if (original_state != FirstTimeInterstitialBannerState::kSetupComplete &&
+        can_show_first_time_interstitial_banner_) {
+      target_state = FirstTimeInterstitialBannerState::kNeedToShow;
+    } else {
+      target_state = FirstTimeInterstitialBannerState::kSetupComplete;
+    }
+  }
+#else
+  target_state = FirstTimeInterstitialBannerState::kSetupComplete;
+#endif
+  return target_state;
+}
+
 void SupervisedUserService::SetActive(bool active) {
   if (active_ == active) {
     return;
@@ -228,7 +234,8 @@ void SupervisedUserService::SetActive(bool active) {
   settings_service_->SetActive(active_);
 
   // Trigger a sync reconfig to enable/disable the right SU data types.
-  // The logic to do this lives in the SupervisedUserSyncModelTypeController.
+  // The logic to do this lives in the
+  // SupervisedUserSettingsModelTypeController.
   // TODO(crbug.com/946473): Get rid of this hack and instead call
   // DataTypePreconditionChanged from the controller.
   if (sync_service_->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
@@ -420,17 +427,15 @@ void SupervisedUserService::MarkFirstTimeInterstitialBannerShown() const {
   if (ShouldShowFirstTimeInterstitialBanner()) {
     user_prefs_->SetInteger(
         prefs::kFirstTimeInterstitialBannerState,
-        static_cast<int>(
-            supervised_user::FirstTimeInterstitialBannerState::kSetupComplete));
+        static_cast<int>(FirstTimeInterstitialBannerState::kSetupComplete));
   }
 }
 
 bool SupervisedUserService::ShouldShowFirstTimeInterstitialBanner() const {
-  supervised_user::FirstTimeInterstitialBannerState banner_state =
-      static_cast<supervised_user::FirstTimeInterstitialBannerState>(
+  FirstTimeInterstitialBannerState banner_state =
+      static_cast<FirstTimeInterstitialBannerState>(
           user_prefs_->GetInteger(prefs::kFirstTimeInterstitialBannerState));
-  return banner_state ==
-         supervised_user::FirstTimeInterstitialBannerState::kNeedToShow;
+  return banner_state == FirstTimeInterstitialBannerState::kNeedToShow;
 }
 
 // Some Google-affiliated domains are not allowed to delete cookies for

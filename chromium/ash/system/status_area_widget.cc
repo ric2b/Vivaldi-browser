@@ -23,9 +23,11 @@
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/select_to_speak/select_to_speak_tray.h"
 #include "ash/system/eche/eche_tray.h"
+#include "ash/system/focus_mode/focus_mode_tray.h"
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/media/media_tray.h"
+#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/notification_center/notification_center_tray.h"
@@ -41,6 +43,7 @@
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/video_conference/video_conference_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -57,36 +60,6 @@
 #include "ui/message_center/message_center_types.h"
 
 namespace ash {
-
-////////////////////////////////////////////////////////////////////////////////
-// StatusAreaWidget::ScopedTrayBubbleCounter
-
-StatusAreaWidget::ScopedTrayBubbleCounter::ScopedTrayBubbleCounter(
-    StatusAreaWidget* status_area_widget)
-    : status_area_widget_(status_area_widget->weak_ptr_factory_.GetWeakPtr()) {
-  if (status_area_widget_->tray_bubble_count_ == 0) {
-    status_area_widget_->shelf()
-        ->shelf_layout_manager()
-        ->OnShelfTrayBubbleVisibilityChanged(/*bubble_shown=*/true);
-  }
-  ++status_area_widget_->tray_bubble_count_;
-}
-
-StatusAreaWidget::ScopedTrayBubbleCounter::~ScopedTrayBubbleCounter() {
-  // ScopedTrayBubbleCounter may live longer than StatusAreaWidget.
-  if (!status_area_widget_) {
-    return;
-  }
-
-  --status_area_widget_->tray_bubble_count_;
-  if (status_area_widget_->tray_bubble_count_ == 0) {
-    status_area_widget_->shelf()
-        ->shelf_layout_manager()
-        ->OnShelfTrayBubbleVisibilityChanged(/*bubble_shown=*/false);
-  }
-
-  DCHECK_GE(status_area_widget_->tray_bubble_count_, 0);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // StatusAreaWidget
@@ -114,6 +87,10 @@ void StatusAreaWidget::Initialize() {
   // Create the child views, left to right.
   overflow_button_tray_ =
       AddTrayButton(std::make_unique<StatusAreaOverflowButtonTray>(shelf_));
+  if (features::IsFocusModeEnabled()) {
+    // TODO(b/297445628): Get approval for order of focus mode tray in shelf.
+    focus_mode_tray_ = AddTrayButton(std::make_unique<FocusModeTray>(shelf_));
+  }
   if (features::IsVideoConferenceEnabled()) {
     video_conference_tray_ =
         AddTrayButton(std::make_unique<VideoConferenceTray>(shelf_));
@@ -210,6 +187,11 @@ StatusAreaWidget::~StatusAreaWidget() {
   if (features::IsQsRevampEnabled()) {
     animation_controller_.reset(nullptr);
   }
+
+  // `TrayBubbleView` might be deleted after `StatusAreaWidget`, so we reset the
+  // pointer here to avoid dangling pointer.
+  open_shelf_pod_bubble_ = nullptr;
+
   status_area_widget_delegate_->Shutdown();
 }
 
@@ -321,6 +303,7 @@ void StatusAreaWidget::LogVisiblePodCountMetric() {
       case TrayBackgroundViewCatalogName::kVirtualKeyboardStatusArea:
       case TrayBackgroundViewCatalogName::kWmMode:
       case TrayBackgroundViewCatalogName::kVideoConferenceTray:
+      case TrayBackgroundViewCatalogName::kFocusMode:
         if (!tray_button->GetVisible()) {
           continue;
         }
@@ -665,7 +648,7 @@ bool StatusAreaWidget::ShouldShowShelf() const {
   // Some TrayBackgroundViews' cache their bubble, the shelf should only be
   // forced to show if the bubble is visible, and we should not show the shelf
   // for cached, hidden bubbles.
-  if (tray_bubble_count_ > 0) {
+  if (open_shelf_pod_bubble_) {
     for (TrayBackgroundView* tray_button : tray_buttons_) {
       if (!tray_button->GetBubbleView()) {
         continue;
@@ -708,6 +691,42 @@ bool StatusAreaWidget::OnNativeWidgetActivationChanged(bool active) {
     status_area_widget_delegate_->SetPaneFocusAndFocusDefault();
   }
   return true;
+}
+
+void StatusAreaWidget::SetOpenShelfPodBubble(
+    TrayBubbleView* open_shelf_pod_bubble) {
+  if (open_shelf_pod_bubble_ == open_shelf_pod_bubble) {
+    return;
+  }
+
+  DCHECK(unified_system_tray_);
+  // We will ignore the message center bubble, since this bubble is on top of
+  // the Quick Settings and will be consider a "secondary bubble". As a result,
+  // it should not be set to be `open_shelf_pod_bubble_`. Note that this bubble
+  // will be removed when `kQsRevamp` is enabled.
+  if (unified_system_tray_->message_center_bubble() &&
+      open_shelf_pod_bubble ==
+          unified_system_tray_->message_center_bubble()->GetBubbleView()) {
+    DCHECK(!features::IsQsRevampEnabled());
+    return;
+  }
+
+  if (open_shelf_pod_bubble) {
+    DCHECK(open_shelf_pod_bubble->GetBubbleType() ==
+           TrayBubbleView::TrayBubbleType::kShelfPodBubble);
+
+    // We only keep track of bubbles that are anchored to the status area
+    // widget.
+    DCHECK(open_shelf_pod_bubble->IsAnchoredToStatusArea());
+
+    // There should not be 2 tray bubbles that are open at the same time (with
+    // the exception of message center bubble mentioned above).
+    DCHECK(!open_shelf_pod_bubble_);
+  }
+
+  open_shelf_pod_bubble_ = open_shelf_pod_bubble;
+  shelf()->shelf_layout_manager()->OnShelfTrayBubbleVisibilityChanged(
+      /*bubble_shown=*/open_shelf_pod_bubble_);
 }
 
 void StatusAreaWidget::OnViewVisibilityChanged(views::View* observed_view,
@@ -821,6 +840,12 @@ int StatusAreaWidget::GetCollapseAvailableWidth(bool force_collapsible) const {
   available_width += date_tray_->tray_container()->GetPreferredSize().width();
 
   return available_width;
+}
+
+void StatusAreaWidget::OnLockStateChanged(bool locked) {
+  for (auto* tray_button : tray_buttons_) {
+    tray_button->UpdateAfterLockStateChange(locked);
+  }
 }
 
 }  // namespace ash

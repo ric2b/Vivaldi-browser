@@ -9,10 +9,6 @@
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Feature disabled by default to keep showing old Zine feed.
 BASE_FEATURE(kDiscoverFeedInNtp,
              "DiscoverFeedInNtp",
@@ -28,9 +24,15 @@ BASE_FEATURE(kHideContentSuggestionsTiles,
              "HideContentSuggestionsTiles",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kTabResumption,
+             "TabResumption",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const char kMagicStackMostVisitedModuleParam[] = "MagicStackMostVisitedModule";
 
 const char kReducedSpaceParam[] = "ReducedNTPTopSpace";
+
+const char kHideIrrelevantModulesParam[] = "HideIrrelevantModules";
 
 // A parameter to indicate whether the native UI is enabled for the discover
 // feed.
@@ -39,12 +41,28 @@ const char kDiscoverFeedIsNativeUIEnabled[] = "DiscoverFeedIsNativeUIEnabled";
 const char kHideContentSuggestionsTilesParamMostVisited[] = "HideMostVisited";
 const char kHideContentSuggestionsTilesParamShortcuts[] = "HideShortcuts";
 
+const char kTabResumptionParameterName[] = "variant";
+const char kTabResumptionMostRecentTabOnlyParam[] =
+    "tab-resumption-recent-tab-only";
+const char kTabResumptionAllTabsParam[] = "tab-resumption-all-tabs";
+
 bool IsDiscoverFeedEnabled() {
   return base::FeatureList::IsEnabled(kDiscoverFeedInNtp);
 }
 
 bool IsMagicStackEnabled() {
   return base::FeatureList::IsEnabled(kMagicStack);
+}
+
+bool IsTabResumptionEnabled() {
+  return IsMagicStackEnabled() && base::FeatureList::IsEnabled(kTabResumption);
+}
+
+bool IsTabResumptionEnabledForMostRecentTabOnly() {
+  CHECK(IsTabResumptionEnabled());
+  std::string feature_param = base::GetFieldTrialParamValueByFeature(
+      kTabResumption, kTabResumptionParameterName);
+  return feature_param != kTabResumptionAllTabsParam;
 }
 
 bool ShouldPutMostVisitedSitesInMagicStack() {
@@ -57,13 +75,18 @@ double ReducedNTPTopMarginSpaceForMagicStack() {
                                                    kReducedSpaceParam, 0);
 }
 
+bool ShouldHideIrrelevantModules() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kMagicStack, kHideIrrelevantModulesParam, false);
+}
+
 bool ShouldHideMVT() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kHideContentSuggestionsTiles,
       kHideContentSuggestionsTilesParamMostVisited, false);
 }
 
-bool ShoudHideShortcuts() {
+bool ShouldHideShortcuts() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kHideContentSuggestionsTiles, kHideContentSuggestionsTilesParamShortcuts,
       false);

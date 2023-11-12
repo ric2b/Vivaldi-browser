@@ -68,6 +68,7 @@ class CompanionPageHandler
   void OpenUrlInBrowser(const absl::optional<GURL>& url_to_open,
                         bool use_new_tab) override;
   void OnLoadingState(side_panel::mojom::LoadingState loading_state) override;
+  void RefreshCompanionPage() override;
 
   // content::WebContentsObserver overrides.
   void DidFinishNavigation(
@@ -126,11 +127,13 @@ class CompanionPageHandler
 
   // This method is used as the callback that handles visual search results.
   // Its role is to perform some checks and do a mojom IPC to side panel.
-  void HandleVisualSearchResult(const std::vector<std::string> results,
-                                const VisualSuggestionsMetrics stats);
+  void HandleVisualSearchResult(
+      const visual_search::VisualSuggestionsResults results,
+      const VisualSuggestionsMetrics stats);
 
   // Method responsible for binding and sending VQS results to panel.
-  void SendVisualSearchResult(const std::vector<std::string>& results);
+  void SendVisualSearchResult(
+      const visual_search::VisualSuggestionsResults& results);
 
   mojo::Receiver<side_panel::mojom::CompanionPageHandler> receiver_;
   mojo::Remote<side_panel::mojom::CompanionPage> page_;

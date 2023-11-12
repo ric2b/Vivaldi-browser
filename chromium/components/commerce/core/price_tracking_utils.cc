@@ -12,8 +12,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/browser/bookmark_uuids.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/pref_names.h"
@@ -22,6 +25,8 @@
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace commerce {
 
@@ -414,16 +419,14 @@ void MaybeEnableEmailNotifications(PrefService* pref_service) {
   }
 }
 
-bool IsEmailDisabledByUser(PrefService* pref_service) {
-  if (pref_service) {
-    const PrefService::Preference* email_pref =
-        pref_service->FindPreference(kPriceEmailNotificationsEnabled);
-    if (email_pref && !email_pref->IsDefaultValue() &&
-        !email_pref->GetValue()->GetBool()) {
-      return true;
-    }
-  }
-  return false;
+bool GetEmailNotificationPrefValue(PrefService* pref_service) {
+  return pref_service &&
+         pref_service->GetBoolean(kPriceEmailNotificationsEnabled);
+}
+
+bool IsEmailNotificationPrefSetByUser(PrefService* pref_service) {
+  return pref_service &&
+         pref_service->HasPrefPath(kPriceEmailNotificationsEnabled);
 }
 
 CommerceSubscription BuildUserSubscriptionForClusterId(uint64_t cluster_id) {
@@ -450,6 +453,40 @@ const std::u16string& GetBookmarkParentNameOrDefault(
   const bookmarks::BookmarkNode* node =
       model->GetMostRecentlyAddedUserNodeForURL(url);
   return node ? node->parent()->GetTitle() : model->other_node()->GetTitle();
+}
+
+const bookmarks::BookmarkNode* GetShoppingCollectionBookmarkFolder(
+    bookmarks::BookmarkModel* model,
+    bool create_if_needed) {
+  if (!model) {
+    return nullptr;
+  }
+
+  const base::Uuid collection_uuid =
+      base::Uuid::ParseLowercase(bookmarks::kShoppingCollectionUuid);
+  const bookmarks::BookmarkNode* collection_node =
+      bookmarks::GetBookmarkNodeByUuid(model, collection_uuid);
+
+  CHECK(!collection_node || collection_node->is_folder());
+
+  if (!collection_node && !create_if_needed) {
+    return nullptr;
+  }
+
+  if (!collection_node) {
+    collection_node = model->AddFolder(
+        model->other_node(), model->other_node()->children().size(),
+        l10n_util::GetStringUTF16(IDS_SHOPPING_COLLECTION_FOLDER_NAME), nullptr,
+        absl::nullopt, collection_uuid);
+  }
+
+  return collection_node;
+}
+
+bool IsShoppingCollectionBookmarkFolder(const bookmarks::BookmarkNode* node) {
+  return node && node->is_folder() &&
+         node->uuid() ==
+             base::Uuid::ParseLowercase(bookmarks::kShoppingCollectionUuid);
 }
 
 }  // namespace commerce

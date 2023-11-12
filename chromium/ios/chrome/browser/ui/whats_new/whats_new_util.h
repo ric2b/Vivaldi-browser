@@ -63,12 +63,4 @@ const char* WhatsNewTypeToString(WhatsNewType type);
 // Returns a string version of WhatsNewType only for M116 content.
 const char* WhatsNewTypeToStringM116(WhatsNewType type);
 
-// Vivaldi: We don't want to use and mess up with the chromium logic to show
-// the first run or what's new related promo when browser is updated.
-extern NSString* vWhatsNewWasShownKey;
-
-bool IsVivaldiWhatsNewShown();
-void setVivaldiWhatsNewShown(bool shown);
-// End Vivaldi
-
 #endif  // IOS_CHROME_BROWSER_UI_WHATS_NEW_WHATS_NEW_UTIL_H_

@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/omnibox/omnibox_mediator.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
-#import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
+#import "ios/chrome/browser/shared/coordinator/default_browser_promo/default_browser_promo_scene_agent_utils.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
@@ -39,9 +39,11 @@
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 using base::UserMetricsAction;
 
@@ -139,6 +141,11 @@ using base::UserMetricsAction;
       search_engines::SupportsSearchImageWithLens(templateUrlService);
   self.currentDefaultSearchEngineFavicon = nil;
   [self updateConsumerEmptyTextImage];
+
+  // Vivaldi
+  [self.consumer updateSearchEngineList:templateUrlService->GetTemplateURLs()];
+  // End Vivaldi
+
 }
 
 #pragma mark - PopupMatchPreviewDelegate
@@ -233,11 +240,17 @@ using base::UserMetricsAction;
     }
   };
 
+  if (IsVivaldiRunning()) {
+    self.faviconLoader->FaviconForPageUrlOrHost(pageURL,
+                                                kMinFaviconSizePt,
+                                                handleFaviconResult);
+  } else {
   // Download the favicon.
   // The code below mimics that in OmniboxPopupMediator.
   self.faviconLoader->FaviconForPageUrl(
       pageURL, kMinFaviconSizePt, kMinFaviconSizePt,
       /*fallback_to_google_server=*/false, handleFaviconResult);
+  } // End Vivaldi
 }
 
 // Loads a favicon for the current default search engine.
@@ -257,6 +270,12 @@ using base::UserMetricsAction;
       self.templateURLService
           ? self.templateURLService->GetDefaultSearchProvider()
           : nullptr;
+
+  if (IsVivaldiRunning() && _isIncognito) {
+    defaultProvider =
+      self.templateURLService->GetDefaultSearchProvider(
+          TemplateURLService::kDefaultSearchPrivate);
+  } // End Vivaldi
 
   if (!defaultProvider) {
     // Service isn't available or default provider is disabled - either way we
@@ -308,9 +327,19 @@ using base::UserMetricsAction;
     std::string emptyPageUrl = defaultProvider->url_ref().ReplaceSearchTerms(
         TemplateURLRef::SearchTermsArgs(std::u16string()),
         _templateURLService->search_terms_data());
+
+    // Note: (prio@vivaldi.com) - Load the icon from preloaded cache,
+    // or history service. Don't use google server.
+    if (IsVivaldiRunning()) {
+      self.faviconLoader->FaviconForIconUrl(defaultProvider->favicon_url(),
+                                            kMinFaviconSizePt, kMinFaviconSizePt,
+                                            handleFaviconResult);
+    } else {
     self.faviconLoader->FaviconForPageUrl(
         GURL(emptyPageUrl), kMinFaviconSizePt, kMinFaviconSizePt,
         /*fallback_to_google_server=*/YES, handleFaviconResult);
+    } // End Vivaldi.
+
   } else {
     // Download the favicon.
     // The code below mimics that in OmniboxPopupMediator.
@@ -341,7 +370,7 @@ using base::UserMetricsAction;
   __weak __typeof(self) weakSelf = self;
   auto textCompletion =
       ^(__kindof id<NSItemProviderReading> providedItem, NSError* error) {
-        LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
+        LogCopyPasteInOmniboxForDefaultBrowserPromo();
         dispatch_async(dispatch_get_main_queue(), ^{
           NSString* text = static_cast<NSString*>(providedItem);
           if (text) {
@@ -363,7 +392,7 @@ using base::UserMetricsAction;
   auto lensCompletion =
       ^(__kindof id<NSItemProviderReading> providedItem, NSError* error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-          UIImage* image = base::mac::ObjCCast<UIImage>(providedItem);
+          UIImage* image = base::apple::ObjCCast<UIImage>(providedItem);
           if (image) {
             [weakSelf lensImage:image];
           }
@@ -468,9 +497,7 @@ using base::UserMetricsAction;
     return;
   }
 
-  [[NonModalDefaultBrowserPromoSchedulerSceneAgent
-      agentFromScene:self.sceneState] logUserPastedInOmnibox];
-
+  NotifyDefaultBrowserPromoUserPastedInOmnibox(self.sceneState);
   LogToFETUserPastedURLIntoOmnibox(self.tracker);
 }
 
@@ -500,6 +527,20 @@ using base::UserMetricsAction;
   return ios::provider::IsLensSupported() &&
          base::FeatureList::IsEnabled(kEnableLensInOmniboxCopiedImage) &&
          self.searchEngineSupportsLens;
+}
+
+#pragma mark - VIVALDI
+- (void)searchEngineShortcutActivatedForURL:(TemplateURL*)templateURL {
+  if (!_templateURLService)
+    return;
+  _templateURLService->VivaldiSetDefaultOverride(templateURL);
+}
+
+- (void)resetActivatedSearchEngineShortcut {
+  if (!_templateURLService)
+    return;
+  _templateURLService->VivaldiResetDefaultOverride();
+  [self.consumer restorePlaceholderToDefault];
 }
 
 @end

@@ -93,7 +93,7 @@ repack("resource_pack_strings") {
     "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
   ]
 
-  if (is_chrome_branded) {
+  if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
     sources += [ "${root_gen_dir}/components/strings/components_google_chrome_strings_en-US.pak" ]
   } else {
     sources += [ "${root_gen_dir}/components/strings/components_chromium_strings_en-US.pak" ]
@@ -296,6 +296,7 @@ static_library("backend_cdp_bindings") {
   sources = get_target_outputs(":protocol_sources")
   visibility = [ ":headless_non_renderer" ]
   configs += [
+    "//build/config/compiler:wexit_time_destructors",
     ":headless_defines_config",
     ":inside_headless_component",
   ]
@@ -366,14 +367,11 @@ component("headless_non_renderer") {
     "public/util/user_agent.h",
   ]
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   if (is_mac) {
     sources += [
       "lib/browser/headless_browser_impl_mac.mm",
-      "lib/browser/headless_browser_main_parts_mac.mm",
       "lib/browser/headless_shell_application_mac.h",
       "lib/browser/headless_shell_application_mac.mm",
       "lib/headless_content_main_delegate_mac.mm",
@@ -382,10 +380,6 @@ component("headless_non_renderer") {
 
   if (is_posix) {
     sources += [ "lib/browser/headless_browser_main_parts_posix.cc" ]
-  }
-
-  if (is_win) {
-    sources += [ "lib/browser/headless_browser_main_parts_win.cc" ]
   }
 
   if (use_aura) {
@@ -424,8 +418,6 @@ component("headless_non_renderer") {
     ":backend_cdp_bindings",
     ":gen_devtools_client_api",
     "//base:base_static",
-    "//base:base_static",
-    "//build:branding_buildflags",
     "//build:branding_buildflags",
     "//build:chromeos_buildflags",
     "//components/cookie_config",
@@ -436,44 +428,34 @@ component("headless_non_renderer") {
     "//components/embedder_support:embedder_support",
     "//components/embedder_support/origin_trials",
     "//components/headless/clipboard",
+    "//components/headless/command_handler:switches",
     "//components/headless/select_file_dialog",
     "//components/keyed_service/content",
-    "//components/keyed_service/content:content",
     "//components/origin_trials:browser",
     "//components/origin_trials:common",
     "//components/os_crypt/sync",
     "//components/policy:generated",
-    "//components/policy/content:content",
+    "//components/policy/content",
     "//components/policy/core/common:common_constants",
     "//components/pref_registry",
-    "//components/pref_registry:pref_registry",
     "//components/prefs",
-    "//components/prefs:prefs",
     "//components/profile_metrics",
-    "//components/profile_metrics:profile_metrics",
     "//components/security_state/core",
     "//components/version_info",
     "//content/public/app",
-    "//content/public/app:app",
     "//content/public/browser",
-    "//content/public/browser:browser",
     "//content/public/common",
-    "//content/public/common",
-    "//content/public/renderer:renderer",
-    "//content/public/utility:utility",
-    "//printing/buildflags",
+    "//content/public/renderer",
+    "//content/public/utility",
     "//printing/buildflags",
     "//services/cert_verifier/public/mojom",
     "//services/device/public/cpp/geolocation",
-    "//services/device/public/cpp/geolocation:geolocation",
     "//services/service_manager/public/cpp",
-    "//third_party/inspector_protocol:crdtp",
     "//third_party/inspector_protocol:crdtp",
     "//ui/base",
     "//ui/compositor",
     "//ui/display",
     "//ui/events/devices",
-    "//ui/events/devices:devices",
     "//ui/gfx",
     "//url",
   ]
@@ -491,6 +473,7 @@ component("headless_non_renderer") {
       "//components/headless/policy",
       "//components/policy/content",
       "//components/policy/core/browser",
+      "//components/policy/core/common:policy_path_constants",
     ]
   }
 
@@ -749,12 +732,11 @@ test("headless_browsertests") {
   }
 
   if (is_fuchsia) {
-    # TODO(https://crbug.com/1185811): Investigate removing the requirement for
-    # job_policy_ambient_mark_vmo_exec for the sake of V8's allocator in tests.
-    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
-
     additional_manifest_fragments = [
       "//build/config/fuchsia/test/fonts.shard.test-cml",
+
+      # TODO(https://crbug.com/1185811): Investigate removing the requirement
+      # for VmexResource.
       "//build/config/fuchsia/test/mark_vmo_executable.shard.test-cml",
       "//build/config/fuchsia/test/network.shard.test-cml",
       "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
@@ -805,6 +787,7 @@ test("headless_browsertests") {
 
   if (enable_printing) {
     deps += [
+      "//components/headless/command_handler:switches",
       "//components/printing/browser",
       "//printing",
     ]
@@ -867,7 +850,10 @@ if (is_win) {
       deps += [ "//components/headless/command_handler" ]
     }
 
-    configs += [ ":headless_defines_config" ]
+    configs += [
+      ":headless_defines_config",
+      "//build/config/compiler:wexit_time_destructors",
+    ]
   }
 }
 
@@ -955,7 +941,10 @@ static_library("headless_shell_lib") {
     deps += [ "//components/crash/core/app" ]
   }
 
-  configs += [ ":headless_defines_config" ]
+  configs += [
+    ":headless_defines_config",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
 }
 
 executable("headless_shell") {
@@ -985,5 +974,8 @@ executable("headless_shell") {
     deps += [ "//sandbox/mac:seatbelt" ]
   }
 
-  configs += [ ":headless_defines_config" ]
+  configs += [
+    ":headless_defines_config",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
 }

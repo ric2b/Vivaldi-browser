@@ -187,8 +187,6 @@ by a child template that "extends" this file.
     <permission android:name="{{ manifest_package }}.permission.DEBUG"
                 android:label="Debug web pages"
                 android:protectionLevel="signature" />
-    <permission android:name="{{ manifest_package }}.permission.TRANSLATE"
-        android:protectionLevel="signature" />
 
     <!-- Vivaldi/Automotive -->
     {% if is_oem_automotive_build == 'false' %}
@@ -260,9 +258,10 @@ by a child template that "extends" this file.
     <!-- Set android:largeHeap to "true" to allow more than the default
          Java heap limit (32Mb on Nexus S, 48Mb on Xoom). -->
       <application android:name="{% block application_name %}org.chromium.chrome.browser.base.SplitChromeApplication{% endblock %}"
-        android:icon="@drawable/ic_launcher"
         {% if is_oem_lynkco_build == 'true' %}
-        android:roundIcon="@drawable/ic_launcher"
+        android:icon="@mipmap/layered_app_icon"
+        {% else %}
+        android:icon="@drawable/ic_launcher"
         {% endif %}
         android:label="{% block application_label %}@string/app_name{% endblock %}"
         android:memtagMode="async"
@@ -282,7 +281,7 @@ by a child template that "extends" this file.
         android:networkSecurityConfig="@xml/network_security_config"
         android:allowAudioPlaybackCapture="false"
         android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="@bool/vivaldiEnableOnBackInvokedCallback"
         {% if is_vivaldi == 'true' %}
         android:localeConfig="@xml/locales_config"
         {% endif %}
@@ -442,17 +441,6 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
-        </activity-alias>
-        <activity-alias android:name="com.google.android.apps.chrome.TranslateDispatcher"
-            android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
-            android:exported="true"
-            {% if channel == 'stable' %}
-            android:permission="{{ manifest_package }}.permission.TRANSLATE"
-            {% endif %} >
-            <intent-filter>
-                <action android:name="org.chromium.chrome.browser.translate.TRANSLATE_TAB" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity-alias>
 
         <activity android:name="org.chromium.chrome.browser.media.MediaLauncherActivity"
@@ -903,6 +891,21 @@ by a child template that "extends" this file.
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkFolderPickerActivity"
+            android:theme="@style/Theme.Chromium.DialogWhenLarge"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            android:label="@string/bookmark_choose_folder"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
+
+        <activity android:name="org.vivaldi.browser.bookmarks.VivaldiBookmarkFolderSelectActivity"
+            android:theme="@style/Theme.Chromium.DialogWhenLarge"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            android:label="@string/bookmark_choose_folder"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
 
         <!-- Activities for downloads. -->
         <!-- Not used by Vivaldi
@@ -963,7 +966,7 @@ by a child template that "extends" this file.
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
-        <activity android:name="org.vivaldi.browser.bookmarks.VivaldiBookmarkEditActivity"
+        <activity android:name="org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditActivity"
             android:theme="@style/NoteEditActivityTheme"
             android:windowSoftInputMode="adjustPan|stateHidden"
             android:exported="false"
@@ -974,6 +977,19 @@ by a child template that "extends" this file.
             android:theme="@style/NoteEditActivityTheme"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
+        <activity android:name="org.vivaldi.browser.bookmarks.VivaldiReadingListActivity"
+            android:theme="@style/NoteEditActivityTheme"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustPan|stateHidden"
+            android:exported="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+            <intent-filter
+                android:label="@string/add_to_reading_list">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
         <!-- Vivaldi activities -> -->
         <!--
@@ -1068,12 +1084,16 @@ by a child template that "extends" this file.
             android:process=":browser_restart_process">
         </activity>
 
-        <!-- This activity is used to show an error dialog without attempting to start up Chrome. -->
+        <!-- This activity is used to show an error dialog when Chrome fails to load the native
+             library. It must be in a separate process as when the native library fails to load an
+             exception is thrown and may crash the main process immediately. Being in a separate
+             process allows the dialog to remain visible to the user. -->
         <activity android:name="org.chromium.chrome.browser.init.LaunchFailedActivity"
             android:launchMode="singleInstance"
             android:exported="false"
             android:theme="@style/Theme.BrowserUI.Translucent.NoTitleBar"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:process=":launch_failed">
         </activity>
 
         <!-- Components for Trusted Web Activities -->
@@ -1465,6 +1485,28 @@ by a child template that "extends" this file.
         <property android:name="android.adservices.AD_SERVICES_CONFIG"
             android:resource="@xml/ad_services_config" />
         -->
+
+        {% set enable_openxr = enable_openxr|default(0) %}
+        {% if enable_openxr == "true" %}
+          <!-- launchMode is set to singleTask because there should never be multiple copies of the app running. -->
+          <!-- Theme.Black.NoTitleBar.Fullscreen gives solid black instead of a (bad stereoscopic) gradient on app transition. -->
+          <activity
+            android:name="org.chromium.components.webxr.XrHostActivity"
+            {{ self.chrome_activity_common() }}
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleTask"
+            android:exported="false"
+            android:resizeableActivity="false"
+            android:screenOrientation="landscape"
+            android:label="WebXR"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            tools:ignore="NonResizeableActivity">
+            <intent-filter>
+              <category android:name="android.intent.category.XR" />
+            </intent-filter>
+          </activity>
+        {% endif %}
 
         {% block extra_application_definitions %}
         {% endblock %}

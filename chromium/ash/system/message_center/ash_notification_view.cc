@@ -16,6 +16,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/style/icon_button.h"
@@ -48,7 +49,6 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/animation_throughput_reporter.h"
-#include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -123,14 +123,19 @@ constexpr auto kImageContainerPadding = gfx::Insets::TLBR(12, 14, 12, 12);
 constexpr auto kActionButtonsRowPadding = gfx::Insets::TLBR(4, 38, 12, 4);
 constexpr int kActionsRowHorizontalSpacing = 8;
 
-constexpr auto kContentRowPadding = gfx::Insets::TLBR(16, 0, 0, 0);
+constexpr auto kContentRowPadding = gfx::Insets::TLBR(14, 0, 0, 0);
 
 constexpr int kLeftContentVerticalSpacing = 4;
 constexpr int kTitleRowMinimumWidthWithIcon = 186;
 constexpr int kTitleRowMinimumWidth = 266;
 constexpr int kTitleRowSpacing = 6;
 
-constexpr auto kHeaderRowExpandedPadding = gfx::Insets::TLBR(4, 0, 8, 0);
+// This padding is applied in collapsed mode when there is no message in order
+// to vertically center the title.
+constexpr auto kTitleRowNoMessageCollapsedPadding =
+    gfx::Insets::TLBR(12, 0, 0, 0);
+
+constexpr auto kHeaderRowExpandedPadding = gfx::Insets::TLBR(6, 0, 8, 0);
 constexpr auto kHeaderRowCollapsedPadding = gfx::Insets::TLBR(0, 0, 8, 0);
 constexpr auto kRightContentCollapsedPadding = gfx::Insets::TLBR(12, 0, 0, 16);
 constexpr auto kRightContentExpandedPadding = gfx::Insets::TLBR(20, 0, 0, 16);
@@ -667,6 +672,9 @@ AshNotificationView::AshNotificationView(
                     gfx::Font::Weight::NORMAL),
       gfx::Insets(), true);
 
+  // This view should not be focusable since it does not act as a button.
+  header_row()->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+
   // Corner radius for popups is handled below. We do not set corner radius if
   // the view is  in the message center here. Rounded corners for message_views
   // in the message center view are handled in `UnifiedMessageListView`.
@@ -972,7 +980,7 @@ void AshNotificationView::AddGroupNotification(
   notification_view->SetGroupedChildExpanded(IsExpanded());
   notification_view->set_parent_message_view(this);
   notification_view->set_scroller(
-      scroller() ? scroller() : grouped_notifications_scroll_view_);
+      scroller() ? scroller() : grouped_notifications_scroll_view_.get());
 
   header_row()->SetTimestamp(notification.timestamp());
 
@@ -1016,7 +1024,7 @@ void AshNotificationView::PopulateGroupNotifications(
 
     notification_view->set_parent_message_view(this);
     notification_view->set_scroller(
-        scroller() ? scroller() : grouped_notifications_scroll_view_);
+        scroller() ? scroller() : grouped_notifications_scroll_view_.get());
 
     grouped_notifications_container_->AddChildView(
         std::move(notification_view));
@@ -1122,6 +1130,12 @@ void AshNotificationView::UpdateViewForExpandedState(bool expanded) {
     title_row_->UpdateVisibility(IsExpandable() && !expanded);
     title_row_->title_view()->SetMaxLines(
         expanded ? kTitleLabelExpandedMaxLines : kTitleLabelCollapsedMaxLines);
+    // Add extra padding to center the title in collapsed mode when there is no
+    // message.
+    title_row_->SetProperty(views::kMarginsKey,
+                            !message_label() && !use_expanded_padding
+                                ? kTitleRowNoMessageCollapsedPadding
+                                : gfx::Insets());
   }
 
   if (message_label()) {
@@ -1390,8 +1404,8 @@ bool AshNotificationView::IsIconViewShown() const {
   return NotificationViewBase::IsIconViewShown() && !is_grouped_child_view_;
 }
 
-void AshNotificationView::SetExpandButtonEnabled(bool enabled) {
-  expand_button_->SetVisible(enabled);
+void AshNotificationView::SetExpandButtonVisibility(bool visible) {
+  expand_button_->SetVisible(visible);
 }
 
 bool AshNotificationView::IsExpandable() const {
@@ -1448,7 +1462,8 @@ void AshNotificationView::OnThemeChanged() {
           notification_id()));
 
   if (inline_reply()) {
-    if (chromeos::features::IsJellyEnabled()) {
+    // For unittests, `GetColorProvider()` could be nullptr.
+    if (chromeos::features::IsJellyEnabled() && GetColorProvider()) {
       inline_reply()->textfield()->SetTextColor(
           GetColorProvider()->GetColor(cros_tokens::kCrosSysOnSurface));
       inline_reply()->textfield()->set_placeholder_text_color(
@@ -1677,14 +1692,17 @@ void AshNotificationView::UpdateMessageLabelInExpandedState(
 }
 
 void AshNotificationView::UpdateBackground(int top_radius, int bottom_radius) {
-  SkColor background_color;
+  SkColor background_color = gfx::kPlaceholderColor;
+  // `color_provider` might be nullptr in tests.
+  const auto* color_provider = GetColorProvider();
   if (shown_in_popup_) {
-    background_color = AshColorProvider::Get()->GetBaseLayerColor(
-        AshColorProvider::BaseLayerType::kTransparent80);
+    if (color_provider) {
+      background_color = color_provider->GetColor(kColorAshShieldAndBase80);
+    }
   } else {
     background_color =
-        chromeos::features::IsJellyEnabled() && GetColorProvider()
-            ? GetColorProvider()->GetColor(cros_tokens::kCrosSysSystemOnBase)
+        chromeos::features::IsJellyEnabled() && color_provider
+            ? color_provider->GetColor(cros_tokens::kCrosSysSystemOnBase)
             : AshColorProvider::Get()->GetControlsLayerColor(
                   AshColorProvider::ControlsLayerType::
                       kControlBackgroundColorInactive);
@@ -1783,8 +1801,11 @@ SkColor AshNotificationView::CalculateIconAndButtonsColor(
           : color_utils::kMinimumReadableContrastRatio;
 
   // Actual color is kTransparent80, but BlendForMinContrast requires opaque.
-  SkColor bg_color = AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kOpaque);
+  // GetColorProvider might be nullptr in tests.
+  const auto* color_provider = GetColorProvider();
+  const SkColor bg_color =
+      color_provider ? color_provider->GetColor(kColorAshShieldAndBaseOpaque)
+                     : gfx::kPlaceholderColor;
   return color_utils::BlendForMinContrast(
              fg_color, bg_color,
              /*high_contrast_foreground=*/absl::nullopt, minContrastRatio)
@@ -2124,8 +2145,8 @@ void AshNotificationView::PerformToggleInlineSettingsAnimation(
 }
 
 void AshNotificationView::AnimateSingleToGroupFadeIn() {
-  auto* fade_in_view = shown_in_popup_ ? grouped_notifications_scroll_view_
-                                       : grouped_notifications_container_;
+  auto fade_in_view = shown_in_popup_ ? grouped_notifications_scroll_view_
+                                      : grouped_notifications_container_;
   message_center_utils::InitLayerForAnimations(fade_in_view);
   message_center_utils::FadeInView(
       fade_in_view, /*delay_in_ms=*/0,

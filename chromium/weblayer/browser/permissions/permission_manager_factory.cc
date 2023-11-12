@@ -80,8 +80,9 @@ permissions::PermissionManager::PermissionContextMap CreatePermissionContexts(
 
   // Create default permission contexts initially.
   permissions::PermissionManager::PermissionContextMap permission_contexts =
-      embedder_support::CreateDefaultPermissionContexts(browser_context,
-                                                        std::move(delegates));
+      embedder_support::CreateDefaultPermissionContexts(
+          browser_context,
+          /*is_regular_profile=*/false, std::move(delegates));
 
   // Add additional WebLayer specific permission contexts. Please add a comment
   // when adding new contexts here explaining why it can't be shared with other
@@ -158,10 +159,11 @@ PermissionManagerFactory::PermissionManagerFactory()
 
 PermissionManagerFactory::~PermissionManagerFactory() = default;
 
-KeyedService* PermissionManagerFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+PermissionManagerFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new permissions::PermissionManager(context,
-                                            CreatePermissionContexts(context));
+  return std::make_unique<permissions::PermissionManager>(
+      context, CreatePermissionContexts(context));
 }
 
 content::BrowserContext* PermissionManagerFactory::GetBrowserContextToUse(

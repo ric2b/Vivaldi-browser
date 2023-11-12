@@ -37,6 +37,7 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
@@ -56,6 +57,8 @@ import org.chromium.chrome.browser.prefetch.settings.PreloadPagesState;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
@@ -73,6 +76,7 @@ import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.interpolators.Interpolators;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,7 +179,7 @@ class LocationBarMediator
     private final Context mContext;
     private final BackKeyBehaviorDelegate mBackKeyBehavior;
     private final WindowAndroid mWindowAndroid;
-    private String mOriginalUrl = "";
+    private GURL mOriginalUrl = GURL.emptyGURL();
     private Animator mUrlFocusChangeAnimator;
     private final ObserverList<UrlFocusChangeListener> mUrlFocusChangeListeners =
             new ObserverList<>();
@@ -205,6 +209,7 @@ class LocationBarMediator
     private ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
     private boolean mShouldClearOmniboxOnFocus = true;
+    private ObservableSupplier<TabModelSelector> mTabModelSelectorSupplier;
 
     // Vivaldi
     private boolean mIsStatusBarModified;
@@ -222,7 +227,8 @@ class LocationBarMediator
             @NonNull LensController lensController,
             @NonNull SaveOfflineButtonState saveOfflineButtonState, @NonNull OmniboxUma omniboxUma,
             @NonNull BooleanSupplier isToolbarMicEnabledSupplier,
-            @NonNull OmniboxSuggestionsDropdownEmbedderImpl dropdownEmbedder) {
+            @NonNull OmniboxSuggestionsDropdownEmbedderImpl dropdownEmbedder,
+            @Nullable ObservableSupplier<TabModelSelector> tabModelSelectorSupplier) {
         mContext = context;
         mLocationBarLayout = locationBarLayout;
         mLocationBarDataProvider = locationBarDataProvider;
@@ -245,6 +251,7 @@ class LocationBarMediator
         mOmniboxUma = omniboxUma;
         mIsToolbarMicEnabledSupplier = isToolbarMicEnabledSupplier;
         mEmbedderImpl = dropdownEmbedder;
+        mTabModelSelectorSupplier = tabModelSelectorSupplier;
     }
 
     /**
@@ -294,9 +301,10 @@ class LocationBarMediator
 
         if (hasFocus) {
             if (mNativeInitialized) RecordUserAction.record("FocusLocation");
-            UrlBarData urlBarData = mLocationBarDataProvider.getUrlBarData();
-            if (urlBarData.editingText != null) {
-                setUrlBarText(urlBarData, UrlBar.ScrollType.NO_SCROLL, SelectionState.SELECT_ALL);
+            // Don't clear Omnibox if the user just pasted text to NTP Omnibox.
+            if (mShouldClearOmniboxOnFocus) {
+                setUrlBarText(
+                        UrlBarData.EMPTY, UrlBar.ScrollType.NO_SCROLL, SelectionState.SELECT_END);
             }
         } else {
             mUrlFocusedFromFakebox = false;
@@ -324,7 +332,7 @@ class LocationBarMediator
             }
         } // Focus change caused by a closed tab may result in there not being an active tab.
         if (!hasFocus && mLocationBarDataProvider.hasTab()) {
-            setUrl(mLocationBarDataProvider.getCurrentUrl(),
+            setUrl(mLocationBarDataProvider.getCurrentGurl(),
                     mLocationBarDataProvider.getUrlBarData());
         }
 
@@ -424,9 +432,22 @@ class LocationBarMediator
                 OmniboxFocusReason.DEFAULT_WITH_HARDWARE_KEYBOARD);
     }
 
+    /**
+     * If the URL bar was previously focused on the NTP due to a connected keyboard, an navigation
+     * away from the NTP should clear this focus before filling the current tab's URL.
+     */
+    /*package */ void clearUrlBarCursorWithoutFocusAnimations() {
+        if (mUrlCoordinator.hasFocus() && mUrlFocusedWithoutAnimations) {
+            // If we did not run the focus animations, then the user has not typed any text.
+            // So, clear the focus and accept whatever URL the page is currently attempting to
+            // display, given that the current tab is not displaying the NTP.
+            setUrlBarFocus(false, null, OmniboxFocusReason.UNFOCUS);
+        }
+    }
+
     /*package */ void revertChanges() {
         if (mUrlHasFocus) {
-            String currentUrl = mLocationBarDataProvider.getCurrentUrl();
+            GURL currentUrl = mLocationBarDataProvider.getCurrentGurl();
             if (NativePage.isNativePageUrl(currentUrl, mLocationBarDataProvider.isIncognito())) {
                 setUrlBarTextEmpty();
             } else {
@@ -435,7 +456,7 @@ class LocationBarMediator
             }
             mUrlCoordinator.setKeyboardVisibility(false, false);
         } else {
-            setUrl(mLocationBarDataProvider.getCurrentUrl(),
+            setUrl(mLocationBarDataProvider.getCurrentGurl(),
                     mLocationBarDataProvider.getUrlBarData());
         }
     }
@@ -473,18 +494,21 @@ class LocationBarMediator
                 && DeviceClassManager.enablePrerendering()
                 && PreloadPagesSettingsBridge.getState() != PreloadPagesState.NO_PRELOADING
                 && mLocationBarDataProvider.hasTab()) {
-            mOmniboxPrerender.prerenderMaybe(userText, mOriginalUrl,
+            mOmniboxPrerender.prerenderMaybe(userText, mOriginalUrl.getSpec(),
                     mAutocompleteCoordinator.getCurrentNativeAutocompleteResult(),
                     mProfileSupplier.get(), mLocationBarDataProvider.getTab());
         }
+
+        mUrlCoordinator.onUrlBarSuggestionsChanged(
+                mAutocompleteCoordinator.getSuggestionCount() != 0);
     }
 
-    /* package */ void loadUrl(String url, int transition, long inputStart) {
-        loadUrlWithPostData(url, transition, inputStart, null, null);
+    /* package */ void loadUrl(String url, int transition, long inputStart, boolean openInNewTab) {
+        loadUrlWithPostData(url, transition, inputStart, null, null, openInNewTab);
     }
 
-    /* package */ void loadUrlWithPostData(
-            String url, int transition, long inputStart, String postDataType, byte[] postData) {
+    /* package */ void loadUrlWithPostData(String url, int transition, long inputStart,
+            String postDataType, byte[] postData, boolean openInNewTab) {
         assert mLocationBarDataProvider != null;
         Tab currentTab = mLocationBarDataProvider.getTab();
 
@@ -541,7 +565,13 @@ class LocationBarMediator
                 loadUrlParams.setPostData(ResourceRequestBody.createFromBytes(postData));
             }
 
-            currentTab.loadUrl(loadUrlParams);
+            if (openInNewTab && mTabModelSelectorSupplier != null
+                    && mTabModelSelectorSupplier.get() != null) {
+                mTabModelSelectorSupplier.get().openNewTab(loadUrlParams,
+                        TabLaunchType.FROM_OMNIBOX, currentTab, currentTab.isIncognito());
+            } else {
+                currentTab.loadUrl(loadUrlParams);
+            }
             RecordUserAction.record("MobileOmniboxUse");
         }
         mLocaleManager.recordLocaleBasedSearchMetrics(false, url, transition);
@@ -572,21 +602,14 @@ class LocationBarMediator
      *
      * <p>If the current tab is null, the URL text will be cleared.
      */
-    /* package */ void setUrl(String currentUrlString, UrlBarData urlBarData) {
+    /* package */ void setUrl(GURL currentUrl, UrlBarData urlBarData) {
         // If the URL is currently focused, do not replace the text they have entered with the URL.
         // Once they stop editing the URL, the current tab's URL will automatically be filled in.
         if (mUrlCoordinator.hasFocus()) {
-            if (mUrlFocusedWithoutAnimations && !UrlUtilities.isNTPUrl(currentUrlString)) {
-                // If we did not run the focus animations, then the user has not typed any text.
-                // So, clear the focus and accept whatever URL the page is currently attempting to
-                // display. If the NTP is showing, the current page's URL should not be displayed.
-                setUrlBarFocus(false, null, OmniboxFocusReason.UNFOCUS);
-            } else {
-                return;
-            }
+            return;
         }
 
-        mOriginalUrl = currentUrlString;
+        mOriginalUrl = currentUrl;
         setUrlBarText(urlBarData, UrlBar.ScrollType.SCROLL_TO_TLD, SelectionState.SELECT_ALL);
     }
 
@@ -934,12 +957,7 @@ class LocationBarMediator
 
     /* package */ void forceOnTextChanged() {
         String textWithoutAutocomplete = mUrlCoordinator.getTextWithoutAutocomplete();
-        String textWithAutocomplete = mUrlCoordinator.getTextWithAutocomplete();
-        mAutocompleteCoordinator.onTextChanged(textWithoutAutocomplete, textWithAutocomplete);
-    }
-
-    /* package */ boolean shouldClearOmniboxOnFocus() {
-        return mShouldClearOmniboxOnFocus;
+        mAutocompleteCoordinator.onTextChanged(textWithoutAutocomplete);
     }
 
     // Private methods
@@ -1137,7 +1155,7 @@ class LocationBarMediator
         // Vivaldi:
         // Should not show page action buttons when current URL is NTP.
         if (BuildConfig.IS_VIVALDI &&
-                UrlUtilities.isNTPUrl(mLocationBarDataProvider.getCurrentUrl())) return false;
+                UrlUtilities.isNTPUrl(mLocationBarDataProvider.getCurrentGurl())) return false;
 
         // There are two actions, bookmark and save offline, and they should be shown if the
         // omnibox isn't focused.
@@ -1145,7 +1163,7 @@ class LocationBarMediator
     }
 
     private void updateUrl() {
-        setUrl(mLocationBarDataProvider.getCurrentUrl(), mLocationBarDataProvider.getUrlBarData());
+        setUrl(mLocationBarDataProvider.getCurrentGurl(), mLocationBarDataProvider.getUrlBarData());
     }
 
     private void updateOmniboxPrerender() {
@@ -1202,47 +1220,6 @@ class LocationBarMediator
             // padding area. Set clip padding to false to prevent them from getting clipped.
             mLocationBarLayout.setClipToPadding(false);
         }
-    }
-
-    float getUrlBarTranslationXForToolbarAnimation(float urlExpansionPercent, boolean isOnNtp) {
-        // No offset is required if we are not showing the SE logo.
-        if (!mSearchEngineLogoUtils.shouldShowSearchEngineLogo(
-                    mLocationBarDataProvider.isIncognito())) {
-            return 0;
-        }
-
-        boolean isRtl = mLocationBarLayout.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        // The calculation here is: the difference in padding between the focused vs unfocused
-        // states and also accounts for the translation that the status icon will do. In the end,
-        // this translation will be the distance that the url bar needs to travel to arrive at the
-        // desired padding when focused.
-        float translation =
-                urlExpansionPercent * mLocationBarLayout.getEndPaddingPixelSizeOnFocusDelta();
-
-        // Vivaldi - the search engine icon is always visible on NTP; the translation X
-        // should not be modified regardless of focus state.
-        if (!BuildConfig.IS_VIVALDI) {
-        boolean scrollingOnNtp =
-                !mUrlHasFocus && mStatusCoordinator.isSearchEngineStatusIconVisible() && isOnNtp;
-        if (scrollingOnNtp) {
-            // When:
-            // 1. unfocusing the LocationBar on the NTP.
-            // 2. scrolling the fakebox to the LocationBar on the NTP.
-            // The status icon and the URL bar text overlap in the animation.
-            //
-            // This branch calculates the negative distance the URL bar needs to travel to
-            // completely overlap the status icon and end up in a state that matches the fakebox.
-            translation -= (1f - urlExpansionPercent)
-                    * (mStatusCoordinator.getStatusIconWidth()
-                            - mLocationBarLayout.getEndPaddingPixelSizeOnFocusDelta());
-        }
-        } // Vivaldi
-
-        // For LTR, the value is negative because the status icon is left of the url bar on the
-        // x/y plane.
-        // For RTL, the value is positive because the status icon is right of the url bar on the
-        // x/y plane.
-        return isRtl ? -translation : translation;
     }
 
     // LocationBarData.Observer implementation
@@ -1334,7 +1311,7 @@ class LocationBarMediator
               the restored omnibox text input.
              */
             if (reason == OmniboxFocusReason.FOLD_TRANSITION_RESTORATION) {
-                mAutocompleteCoordinator.onTextChanged(pastedText, pastedText);
+                mAutocompleteCoordinator.onTextChanged(pastedText);
             } else {
                 forceOnTextChanged();
             }
@@ -1350,7 +1327,8 @@ class LocationBarMediator
                 mTemplateUrlServiceSupplier.get().getUrlForSearchQuery(query, searchParams, postParams, TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
 
         if (!TextUtils.isEmpty(queryUrl)) {
-            loadUrlWithPostData(queryUrl, PageTransition.GENERATED, 0, postParams.contentType, postParams.postContent);
+            loadUrlWithPostData(queryUrl, PageTransition.GENERATED, 0, postParams.contentType,
+                    postParams.postContent, false);
         } else {
             setSearchQuery(query);
         }
@@ -1395,7 +1373,7 @@ class LocationBarMediator
 
     @Override
     public void loadUrlFromVoice(String url) {
-        loadUrl(url, PageTransition.TYPED, 0);
+        loadUrl(url, PageTransition.TYPED, 0, /*openInNewTab=*/false);
     }
 
     @Override
@@ -1464,14 +1442,38 @@ class LocationBarMediator
 
         setUrlBarFocus(false, null, OmniboxFocusReason.UNFOCUS);
         // Revert the URL to match the current page.
-        setUrl(mLocationBarDataProvider.getCurrentUrl(), mLocationBarDataProvider.getUrlBarData());
+        setUrl(mLocationBarDataProvider.getCurrentGurl(), mLocationBarDataProvider.getUrlBarData());
         focusCurrentTab();
     }
 
     @Override
-    public void gestureDetected(boolean isLongPress) {
-        recordOmniboxFocusReason(isLongPress ? OmniboxFocusReason.OMNIBOX_LONG_PRESS
-                                             : OmniboxFocusReason.OMNIBOX_TAP);
+    public void onFocusByTouch() {
+        recordOmniboxFocusReason(OmniboxFocusReason.OMNIBOX_TAP);
+    }
+
+    @Override
+    public void onTouchAfterFocus() {
+        // The goal of this special logic is to support the following use case:
+        // On opening the NTP, the URL bar gains focus with a blinking cursor and without showing
+        // the zero-prefix dropdown when a hardware keyboard is connected. Subsequently, if the user
+        // taps on the omnibox without typing any text into it, the zero-prefix dropdown will be
+        // shown.
+        //
+        // A touch event will be handled after the omnibox is already focused only when the
+        // following criteria are satisfied:
+        // 1. |mUrlFocusedWithoutAnimations| is true, which means that the omnibox is focused on the
+        // NTP without any focus animations while a hardware keyboard is connected.
+        // 2. The omnibox does not contain any text. It is possible that the user has typed text
+        // into the omnibox after it gains focus due to hardware keyboard availability and a
+        // subsequent tap will hide the suggestions dropdown shown for the typed text, while keeping
+        // the scrim on the web contents, which is not desirable.
+        if (!mUrlFocusedWithoutAnimations || mUrlCoordinator == null
+                || !TextUtils.isEmpty(mUrlCoordinator.getTextWithoutAutocomplete())
+                || !ChromeFeatureList.isEnabled(ChromeFeatureList.ADVANCED_PERIPHERALS_SUPPORT)) {
+            return;
+        }
+        handleUrlFocusAnimation(true);
+        recordOmniboxFocusReason(OmniboxFocusReason.TAP_AFTER_FOCUS_FROM_KEYBOARD);
     }
 
     // BackPressHandler implementation.
@@ -1491,15 +1493,17 @@ class LocationBarMediator
     // OnKeyListener implementation.
     @Override
     public boolean onKey(View view, int keyCode, KeyEvent event) {
-        boolean result = handleKeyEvent(view, keyCode, event);
-
-        if (result && mUrlHasFocus && mUrlFocusedWithoutAnimations
-                && event.getAction() == KeyEvent.ACTION_DOWN && event.isPrintingKey()
-                && event.hasNoModifiers()) {
+        // Trigger focus animations to adequately set system state before potentially handling the
+        // key event. This is required only when the intention is to trigger the suggestions
+        // dropdown after the omnibox has gained focus without animations and a valid key is
+        // pressed. All printing keys will be taken into account as long as CTRL is not pressed,
+        // since that may trigger special functionality.
+        if (mUrlFocusedWithoutAnimations && event.getAction() == KeyEvent.ACTION_DOWN
+                && event.isPrintingKey() && !event.isCtrlPressed()) {
             handleUrlFocusAnimation(/*hasFocus=*/true);
         }
 
-        return result;
+        return handleKeyEvent(view, keyCode, event);
     }
 
     // ComponentCallbacks implementation.

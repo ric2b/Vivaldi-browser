@@ -1,0 +1,638 @@
+# Copyright 2023 Vivaldi Technologies AS. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("vivaldi_appicons") {
+  deps = [
+    ":vivaldi_icons_final",
+    ":vivaldi_icons_aqua",
+    ":vivaldi_icons_blueprint",
+    ":vivaldi_icons_community",
+    ":vivaldi_icons_gradient",
+    ":vivaldi_icons_gradient1",
+    ":vivaldi_icons_gradient2",
+    ":vivaldi_icons_gradient3",
+    ":vivaldi_icons_japan",
+    ":vivaldi_icons_lgbtplus",
+    ":vivaldi_icons_mattblack",
+    ":vivaldi_icons_oldopera",
+    ":vivaldi_icons_pride",
+    ":vivaldi_icons_snapshot",
+    ":vivaldi_icons_white",
+    ":vivaldi_icons_wood",
+    ":vivaldi_icons_woodsteel",
+    ":vivaldi_icons_pink",
+    ":vivaldi_icons_camo",
+    ":vivaldi_icons_yellow",
+    ":vivaldi_icons_burgundy",
+    ":vivaldi_icons_coral",
+    ":vivaldi_icons_forestgreen",
+    ":vivaldi_icons_green",
+    ":vivaldi_icons_internal",
+    ":vivaldi_icons_sagegreen",
+    ":vivaldi_icons_sand",
+    ":vivaldi_icons_softpink",
+    ":vivaldi_icons_softpurple",
+    ":vivaldi_icons_softred"
+  ]
+}
+
+appiconset("vivaldi_icons_final") {
+  sources = [
+    "AppIcon-Final.appiconset/Contents.json",
+    "AppIcon-Final.appiconset/AppIcon-1024px.png",
+    "AppIcon-Final.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Final.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Final.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Final.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Final.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Final.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Final.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Final.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_aqua") {
+  sources = [
+    "AppIcon-Aqua.appiconset/Contents.json",
+    "AppIcon-Aqua.appiconset/AppIcon-1024px.png",
+    "AppIcon-Aqua.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Aqua.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_softred") {
+  sources = [
+    "AppIcon-SoftRed.appiconset/Contents.json",
+    "AppIcon-SoftRed.appiconset/AppIcon-1024px.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-SoftRed.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_softpurple") {
+  sources = [
+    "AppIcon-SoftPurple.appiconset/Contents.json",
+    "AppIcon-SoftPurple.appiconset/AppIcon-1024px.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-SoftPurple.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_softpink") {
+  sources = [
+    "AppIcon-SoftPink.appiconset/Contents.json",
+    "AppIcon-SoftPink.appiconset/AppIcon-1024px.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-SoftPink.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_sand") {
+  sources = [
+    "AppIcon-Sand.appiconset/Contents.json",
+    "AppIcon-Sand.appiconset/AppIcon-1024px.png",
+    "AppIcon-Sand.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Sand.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Sand.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Sand.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Sand.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Sand.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Sand.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Sand.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_sagegreen") {
+  sources = [
+    "AppIcon-SageGreen.appiconset/Contents.json",
+    "AppIcon-SageGreen.appiconset/AppIcon-1024px.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-SageGreen.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_internal") {
+  sources = [
+    "AppIcon-Internal.appiconset/Contents.json",
+    "AppIcon-Internal.appiconset/AppIcon-1024px.png",
+    "AppIcon-Internal.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Internal.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Internal.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Internal.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Internal.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Internal.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Internal.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Internal.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_green") {
+  sources = [
+    "AppIcon-Green.appiconset/Contents.json",
+    "AppIcon-Green.appiconset/AppIcon-1024px.png",
+    "AppIcon-Green.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Green.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Green.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Green.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Green.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Green.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Green.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Green.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_forestgreen") {
+  sources = [
+    "AppIcon-ForestGreen.appiconset/Contents.json",
+    "AppIcon-ForestGreen.appiconset/AppIcon-1024px.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-ForestGreen.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_coral") {
+  sources = [
+    "AppIcon-Coral.appiconset/Contents.json",
+    "AppIcon-Coral.appiconset/AppIcon-1024px.png",
+    "AppIcon-Coral.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Coral.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Coral.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Coral.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Coral.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Coral.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Coral.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Coral.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_burgundy") {
+  sources = [
+    "AppIcon-Burgundy.appiconset/Contents.json",
+    "AppIcon-Burgundy.appiconset/AppIcon-1024px.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Burgundy.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_camo") {
+  sources = [
+    "AppIcon-Camo.appiconset/Contents.json",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-1024px.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-120px-40pt@3x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-120px-60pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-152px-76pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-167px-83.5pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-180px-60pt@3x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-20px-20pt@1x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-29px-29pt@1x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-40px-20pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-40px-40pt@1x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-58px-29pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-60px-20pt@3x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-80px-40pt@2x.png",
+    "AppIcon-Camo.appiconset/AppIcon-Camo-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_yellow") {
+  sources = [
+    "AppIcon-Yellow.appiconset/Contents.json",
+    "AppIcon-Yellow.appiconset/AppIcon-1024px.png",
+    "AppIcon-Yellow.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Yellow.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_blueprint") {
+  sources = [
+    "AppIcon-Blueprint.appiconset/Contents.json",
+    "AppIcon-Blueprint.appiconset/AppIcon-1024px.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Blueprint.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_community") {
+  sources = [
+    "AppIcon-Community.appiconset/Contents.json",
+    "AppIcon-Community.appiconset/AppIcon-1024px.png",
+    "AppIcon-Community.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Community.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Community.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Community.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Community.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Community.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Community.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Community.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_gradient") {
+  sources = [
+    "AppIcon-Gradient.appiconset/Contents.json",
+    "AppIcon-Gradient.appiconset/AppIcon-1024px.png",
+    "AppIcon-Gradient.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Gradient.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_gradient1") {
+  sources = [
+    "AppIcon-Gradient1.appiconset/Contents.json",
+    "AppIcon-Gradient1.appiconset/AppIcon-1024px.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Gradient1.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_gradient2") {
+  sources = [
+    "AppIcon-Gradient2.appiconset/Contents.json",
+    "AppIcon-Gradient2.appiconset/AppIcon-1024px.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Gradient2.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_gradient3") {
+  sources = [
+    "AppIcon-Gradient3.appiconset/Contents.json",
+    "AppIcon-Gradient3.appiconset/AppIcon-1024px.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Gradient3.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_japan") {
+  sources = [
+    "AppIcon-Japan.appiconset/Contents.json",
+    "AppIcon-Japan.appiconset/AppIcon-1024px.png",
+    "AppIcon-Japan.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Japan.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Japan.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Japan.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Japan.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Japan.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Japan.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Japan.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_lgbtplus") {
+  sources = [
+    "AppIcon-LGBTPlus.appiconset/Contents.json",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-1024px.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-LGBTPlus.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_mattblack") {
+  sources = [
+    "AppIcon-MatteBlack.appiconset/Contents.json",
+    "AppIcon-MatteBlack.appiconset/AppIcon-1024px.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-MatteBlack.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_oldopera") {
+  sources = [
+    "AppIcon-OldOpera.appiconset/Contents.json",
+    "AppIcon-OldOpera.appiconset/AppIcon-1024px.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-OldOpera.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_pink") {
+  sources = [
+    "AppIcon-Pink.appiconset/Contents.json",
+    "AppIcon-Pink.appiconset/AppIcon-1024px.png",
+    "AppIcon-Pink.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Pink.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Pink.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Pink.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Pink.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Pink.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Pink.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Pink.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_pride") {
+  sources = [
+    "AppIcon-Pride.appiconset/Contents.json",
+    "AppIcon-Pride.appiconset/AppIcon-1024px.png",
+    "AppIcon-Pride.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Pride.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Pride.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Pride.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Pride.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Pride.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Pride.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Pride.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_snapshot") {
+  sources = [
+    "AppIcon-Snapshot.appiconset/Contents.json",
+    "AppIcon-Snapshot.appiconset/AppIcon-1024px.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Snapshot.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_white") {
+  sources = [
+    "AppIcon-White.appiconset/Contents.json",
+    "AppIcon-White.appiconset/AppIcon-1024px.png",
+    "AppIcon-White.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-White.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-White.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-White.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-White.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-White.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-White.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-White.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_wood") {
+  sources = [
+    "AppIcon-Wood.appiconset/Contents.json",
+    "AppIcon-Wood.appiconset/AppIcon-1024px.png",
+    "AppIcon-Wood.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-Wood.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-Wood.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-Wood.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-Wood.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-Wood.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-Wood.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-Wood.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}
+
+appiconset("vivaldi_icons_woodsteel") {
+  sources = [
+    "AppIcon-WoodSteel.appiconset/Contents.json",
+    "AppIcon-WoodSteel.appiconset/AppIcon-1024px.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-120px-40pt@3x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-120px-60pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-152px-76pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-167px-83.5pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-180px-60pt@3x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-20px-20pt@1x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-29px-29pt@1x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-40px-20pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-40px-40pt@1x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-58px-29pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-60px-20pt@3x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-80px-40pt@2x.png",
+    "AppIcon-WoodSteel.appiconset/AppIcon-87px-29pt@3x.png",
+  ]
+}

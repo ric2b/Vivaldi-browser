@@ -1,7 +1,6 @@
 # Copyright 2022-2023 Vivaldi Technologies. All rights reserved.
 
 source_set("vivaldi_sync_settings_table_view_cells") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "vivaldi_table_view_link_and_button_item.h",
     "vivaldi_table_view_link_and_button_item.mm",

@@ -14,13 +14,12 @@ source_set("session_state") {
     "web_session_state_tab_helper.mm",
   ]
 
-  configs += [ "//build/config/compiler:enable_arc" ]
-
   deps = [
     "//build:branding_buildflags",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/strings",
+    "//ios/chrome/browser/sessions:session_constants",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/url:constants",
@@ -43,11 +42,10 @@ source_set("unit_tests") {
     "web_session_state_tab_helper_unittest.mm",
   ]
 
-  configs += [ "//build/config/compiler:enable_arc" ]
-
   deps = [
     ":session_state",
     "//base/test:test_support",
+    "//ios/chrome/browser/sessions:session_constants",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
     "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/web",

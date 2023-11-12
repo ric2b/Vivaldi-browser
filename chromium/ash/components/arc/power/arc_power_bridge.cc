@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/shell.h"
@@ -15,8 +14,8 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
+#include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "content/public/browser/device_service.h"
@@ -32,26 +31,12 @@ namespace {
 // order to prevent spammy brightness updates.
 constexpr base::TimeDelta kNotifyBrightnessDelay = base::Milliseconds(200);
 
-// Singleton factory for ArcPowerBridge.
-class ArcPowerBridgeFactory
-    : public internal::ArcBrowserContextKeyedServiceFactoryBase<
-          ArcPowerBridge,
-          ArcPowerBridgeFactory> {
- public:
-  // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
-  static constexpr const char* kName = "ArcPowerBridgeFactory";
-
-  static ArcPowerBridgeFactory* GetInstance() {
-    return base::Singleton<ArcPowerBridgeFactory>::get();
-  }
-
- private:
-  friend base::DefaultSingletonTraits<ArcPowerBridgeFactory>;
-  ArcPowerBridgeFactory() = default;
-  ~ArcPowerBridgeFactory() override = default;
-};
-
 }  // namespace
+
+// static
+ArcPowerBridgeFactory* ArcPowerBridgeFactory::GetInstance() {
+  return base::Singleton<ArcPowerBridgeFactory>::get();
+}
 
 // WakeLockRequestor requests a wake lock from the device service in response
 // to wake lock requests of a given type from Android. A count is kept of
@@ -137,6 +122,9 @@ ArcPowerBridge::ArcPowerBridge(content::BrowserContext* context,
 }
 
 ArcPowerBridge::~ArcPowerBridge() {
+  for (auto& observer : observer_list_) {
+    observer.OnWillDestroyArcPowerBridge();
+  }
   arc_bridge_service_->power()->RemoveObserver(this);
   arc_bridge_service_->power()->SetHost(nullptr);
 }
@@ -171,8 +159,13 @@ void ArcPowerBridge::FlushWakeLocksForTesting() {
 
 void ArcPowerBridge::OnConnectionReady() {
   // ash::Shell may not exist in tests.
-  if (ash::Shell::HasInstance())
+  if (ash::Shell::HasInstance()) {
     ash::Shell::Get()->display_configurator()->AddObserver(this);
+    // Whether display is on is the same signal as whether Android is interactive
+    // or not.
+    IsDisplayOn(base::BindOnce(&ArcPowerBridge::NotifyAndroidInteractiveState,
+                              arc_bridge_service_));
+  }
   chromeos::PowerManagerClient::Get()->AddObserver(this);
   chromeos::PowerManagerClient::Get()->GetScreenBrightnessPercent(
       base::BindOnce(&ArcPowerBridge::OnGetScreenBrightnessPercent,
@@ -255,6 +248,9 @@ void ArcPowerBridge::OnConciergeResumeVmResponse(
     LOG(ERROR) << "Failed to resume arcvm: " << reply.value().failure_reason();
     return;
   }
+  for (auto& observer : observer_list_) {
+    observer.OnVmResumed();
+  }
   DispatchAndroidResume();
 }
 
@@ -314,13 +310,23 @@ void ArcPowerBridge::OnPowerStateChanged(
   if (android_idle_control_disabled_)
     return;
 
+  bool enabled = (power_state != chromeos::DISPLAY_POWER_ALL_OFF);
+  NotifyAndroidInteractiveState(arc_bridge_service_, enabled);
+}
+
+void ArcPowerBridge::NotifyAndroidInteractiveState(ArcBridgeService* bridge,
+                                                   bool enabled) {
+  if (!bridge) {
+    return;
+  }
   mojom::PowerInstance* power_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->power(), SetInteractive);
+      ARC_GET_INSTANCE_FOR_METHOD(bridge->power(), SetInteractive);
   if (!power_instance)
     return;
-
-  bool enabled = (power_state != chromeos::DISPLAY_POWER_ALL_OFF);
   power_instance->SetInteractive(enabled);
+  // Display power state is the same signal as Android interactive state. When
+  // power state changes, notify Android interactive state change as well.
+  ash::PatchPanelClient::Get()->NotifyAndroidInteractiveState(enabled);
 }
 
 void ArcPowerBridge::OnAcquireDisplayWakeLock(mojom::DisplayWakeLockType type) {

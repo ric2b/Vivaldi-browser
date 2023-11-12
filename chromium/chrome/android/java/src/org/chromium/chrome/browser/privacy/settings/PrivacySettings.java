@@ -103,8 +103,6 @@ public class PrivacySettings extends PreferenceFragmentCompat
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        PrivacyPreferencesManagerImpl privacyPrefManager =
-                PrivacyPreferencesManagerImpl.getInstance();
         getActivity().setTitle(R.string.prefs_privacy_security);
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4)) {
@@ -115,24 +113,24 @@ public class PrivacySettings extends PreferenceFragmentCompat
 
         if (!ChromeApplicationImpl.isVivaldi()) {
         Preference sandboxPreference = findPreference(PREF_PRIVACY_SANDBOX);
-        if (PrivacySandboxBridge.isPrivacySandboxRestricted()
-                && !PrivacySandboxBridge.isRestrictedNoticeEnabled()) {
-            // Hide the Privacy Sandbox if it is restricted and ad-measurement is not
-            // available to restricted users.
-            getPreferenceScreen().removePreference(sandboxPreference);
-        } else {
+        // Overwrite the click listener to pass a correct referrer to the fragment.
+        sandboxPreference.setOnPreferenceClickListener(preference -> {
+            PrivacySandboxSettingsBaseFragment.launchPrivacySandboxSettings(getContext(),
+                    new SettingsLauncherImpl(), PrivacySandboxReferrer.PRIVACY_SETTINGS);
+            return true;
+        });
+
+        if (PrivacySandboxBridge.isPrivacySandboxRestricted()) {
             if (PrivacySandboxBridge.isRestrictedNoticeEnabled()) {
                 // Update the summary to one that describes only ad measurement if ad-measurement
                 // is available to restricted users.
                 sandboxPreference.setSummary(getContext().getString(
                         R.string.settings_ad_privacy_restricted_link_row_sub_label));
+            } else {
+                // Hide the Privacy Sandbox if it is restricted and ad-measurement is not
+                // available to restricted users.
+                getPreferenceScreen().removePreference(sandboxPreference);
             }
-            // Overwrite the click listener to pass a correct referrer to the fragment.
-            sandboxPreference.setOnPreferenceClickListener(preference -> {
-                PrivacySandboxSettingsBaseFragment.launchPrivacySandboxSettings(getContext(),
-                        new SettingsLauncherImpl(), PrivacySandboxReferrer.PRIVACY_SETTINGS);
-                return true;
-            });
         }
         } // Vivaldi
 
@@ -173,8 +171,6 @@ public class PrivacySettings extends PreferenceFragmentCompat
 
         ChromeSwitchPreference httpsFirstModePref =
                 (ChromeSwitchPreference) findPreference(PREF_HTTPS_FIRST_MODE);
-        httpsFirstModePref.setVisible(
-                ChromeFeatureList.isEnabled(ChromeFeatureList.HTTPS_FIRST_MODE));
         httpsFirstModePref.setOnPreferenceChangeListener(this);
         httpsFirstModePref.setManagedPreferenceDelegate(new ChromeManagedPreferenceDelegate() {
             @Override

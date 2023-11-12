@@ -272,7 +272,6 @@
 <translation id="5431318178759467895">Farbe</translation>
 <translation id="5485102783864353244">App hinzufügen</translation>
 <translation id="5486561344817861625">Browser-Neustart simulieren</translation>
-<translation id="5487521232677179737">Daten löschen</translation>
 <translation id="5509693895992845810">Speichern &amp;unter...</translation>
 <translation id="5521078259930077036">Ist dies Ihre erwartete Startseite?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -298,7 +297,6 @@
 <translation id="583281660410589416">Unbekannt</translation>
 <translation id="5851868085455377790">Aussteller</translation>
 <translation id="5860491529813859533">Aktivieren</translation>
-<translation id="5867841422488265304">Suche oder URL eingeben</translation>
 <translation id="5910363049092958439">Bi&amp;ld speichern unter...</translation>
 <translation id="5914724413750400082">Modulo (<ph name="MODULUS_NUM_BITS" /> Bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -371,7 +369,6 @@
 <translation id="7186088072322679094">In der Symbolleiste behalten</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="73786666777299047">Chrome Web Store öffnen</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">&amp;Seitenquelltext anzeigen</translation>

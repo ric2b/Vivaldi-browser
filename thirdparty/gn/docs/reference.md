@@ -5881,6 +5881,10 @@
   of targets, and public_configs are always propagated across public deps of
   all types of targets.
 
+  For Rust targets, deps ensures that Rust code can refer to the dependency
+  target. If the dependency is a C/C++ target, the path to that target will
+  be made available to Rust for `#[link]` directives.
+
   Data dependencies are propagated differently. See "gn help data_deps" and
   "gn help runtime_deps".
 

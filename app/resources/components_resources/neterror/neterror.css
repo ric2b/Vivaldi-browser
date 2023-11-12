@@ -1057,3 +1057,31 @@ html[dir='rtl'].offline .icon-offline {
     background: var(--google-blue-300);
   }
 }
+
+.vivaldia-section {
+  float: left;
+  font-size: 16px;
+  color: #ef3939;
+  font-weight: bold;
+  background: #fff3f3;
+  padding: 12px;
+  border-radius: 12px;
+
+  .link-button {
+    border-radius: 6px;
+    font-size: 13px;
+    color: white;
+    background: #ef3939;
+    font-weight:normal;
+    margin-top: 40px;
+    padding: 8px;
+    float:left;
+    cursor: pointer;
+    text-transform: none;
+  }
+
+  .logo-holder {
+    float:right;
+  }
+
+}

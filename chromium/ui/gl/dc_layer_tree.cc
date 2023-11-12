@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -15,16 +16,17 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/color_space_win.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gl/direct_composition_child_surface_win.h"
 #include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
+#include "ui/gl/gl_switches.h"
 #include "ui/gl/swap_chain_presenter.h"
 
 namespace gl {
 namespace {
-bool SizeContains(const gfx::Size& a, const gfx::Size& b) {
-  return gfx::Rect(a).Contains(gfx::Rect(b));
-}
+
+constexpr size_t kVideoProcessorDimensionsWindowSize = 100;
 
 bool NeedSwapChainPresenter(const DCLayerOverlayParams* overlay) {
   if (overlay->background_color.has_value()) {
@@ -35,10 +37,62 @@ bool NeedSwapChainPresenter(const DCLayerOverlayParams* overlay) {
          DCLayerOverlayType::kDCompVisualContent;
 }
 
-// TODO(http://crbug.com/1380822): Implement dcomp visual tree optimization.
-BASE_FEATURE(kDCVisualTreeOptimization,
-             "DCVisualTreeOptimization",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+// Unconditionally get a IDCompositionVisual2 as a IDCompositionVisual3.
+//
+// |IDCompositionVisual3| should be available since Windows 8.1, but we noticed
+// crashes due to unconditionally casting to the interface on the earliest
+// versions of Windows 10. This should only be used for features that are
+// conditionally run above those versions of Windows.
+//
+// See: https://crbug.com/1455666
+Microsoft::WRL::ComPtr<IDCompositionVisual3> CheckedCastToVisual3(
+    const Microsoft::WRL::ComPtr<IDCompositionVisual2>& visual2) {
+  Microsoft::WRL::ComPtr<IDCompositionVisual3> visual3;
+  HRESULT hr = visual2.As(&visual3);
+  CHECK_EQ(hr, S_OK);
+  CHECK(visual3);
+  return visual3;
+}
+
+D2D_MATRIX_3X2_F TransformToD2D_MATRIX_3X2_F(const gfx::Transform& transform) {
+  DCHECK(transform.Is2dTransform());
+  // See |TransformToD2D_MATRIX_4X4_F| for notes.
+  return D2D1::Matrix3x2F(transform.rc(0, 0), transform.rc(1, 0),
+                          transform.rc(0, 1), transform.rc(1, 1),
+                          transform.rc(0, 3), transform.rc(1, 3));
+}
+
+D2D_MATRIX_4X4_F TransformToD2D_MATRIX_4X4_F(const gfx::Transform& transform) {
+  // D2D matrices are stored with the translation portion in the last row,
+  // whereas Skia matrices are stored with the translation in the last column.
+  // We need to transpose the matrix during the conversion to account for this
+  // difference.
+  const gfx::Transform& t = transform;
+  return D2D1::Matrix4x4F(t.rc(0, 0), t.rc(1, 0), t.rc(2, 0), t.rc(3, 0),
+                          t.rc(0, 1), t.rc(1, 1), t.rc(2, 1), t.rc(3, 1),
+                          t.rc(0, 2), t.rc(1, 2), t.rc(2, 2), t.rc(3, 2),
+                          t.rc(0, 3), t.rc(1, 3), t.rc(2, 3), t.rc(3, 3));
+}
+
+// The size the surfaces in the pool. Used in |VisualSubtree::Update| to
+// determine how to scale the background color visual. This can be any size
+// since we need a non-empty surface to display the background fill, so 1x1
+// is fine.
+constexpr gfx::Size kSolidColorSurfaceSize = gfx::Size(1, 1);
+
+#if DCHECK_IS_ON()
+bool VisualTreeValid(
+    std::vector<absl::optional<size_t>>& subtree_index_to_overlay,
+    const std::vector<bool>& prev_subtree_is_attached_to_root) {
+  for (size_t i = 0; i < subtree_index_to_overlay.size(); i++) {
+    // Unused subtrees must be removed from the root.
+    if (!subtree_index_to_overlay[i] && prev_subtree_is_attached_to_root[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+#endif  // DCHECK_IS_ON()
 }  // namespace
 
 VideoProcessorWrapper::VideoProcessorWrapper() = default;
@@ -48,30 +102,230 @@ VideoProcessorWrapper::VideoProcessorWrapper(VideoProcessorWrapper&& other) =
 VideoProcessorWrapper& VideoProcessorWrapper::operator=(
     VideoProcessorWrapper&& other) = default;
 
+// Owns a |IDCompositionSurface| filled with a solid color.
+class SolidColorSurface final {
+ public:
+  SolidColorSurface() = delete;
+  SolidColorSurface(SolidColorSurface&&) = default;
+  SolidColorSurface& operator=(SolidColorSurface&&) = default;
+  ~SolidColorSurface() = default;
+
+  IDCompositionSurface* surface() const { return surface_.Get(); }
+
+ private:
+  friend class SolidColorSurfacePool;
+
+  explicit SolidColorSurface(
+      Microsoft::WRL::ComPtr<IDCompositionSurface> surface)
+      : surface_(std::move(surface)) {
+    CHECK(surface_);
+  }
+
+  // Fill the surface with the opaque part of |color|.
+  bool FillColor(ID3D11Device* d3d11_device, SkColor4f color) {
+    HRESULT hr = S_OK;
+    RECT update_rect = D2D1::Rect(0, 0, kSolidColorSurfaceSize.width(),
+                                  kSolidColorSurfaceSize.height());
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> draw_texture;
+    POINT update_offset;
+    hr = surface_->BeginDraw(&update_rect, IID_PPV_ARGS(&draw_texture),
+                             &update_offset);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "BeginDraw failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return false;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+    hr =
+        d3d11_device->CreateRenderTargetView(draw_texture.Get(), nullptr, &rtv);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "CreateRenderTargetView failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return false;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate_context;
+    d3d11_device->GetImmediateContext(&immediate_context);
+    immediate_context->ClearRenderTargetView(rtv.Get(),
+                                             color.makeOpaque().vec());
+
+    hr = surface_->EndDraw();
+    if (FAILED(hr)) {
+      LOG(ERROR) << "EndDraw failed: " << logging::SystemErrorCodeToString(hr);
+      return false;
+    }
+
+    color_ = color;
+
+    return true;
+  }
+
+  // A surface with |DXGI_ALPHA_MODE_IGNORE|, filled with the opaque parts of
+  // |color_|.
+  Microsoft::WRL::ComPtr<IDCompositionSurface> surface_;
+
+  // Only set if |surface_| was successfully filled to this color.
+  absl::optional<SkColor4f> color_;
+};
+
+SolidColorSurfacePool::SolidColorSurfacePool(
+    Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
+    Microsoft::WRL::ComPtr<IDCompositionDevice3> dcomp_device)
+    : d3d11_device_(std::move(d3d11_device)),
+      dcomp_device_(std::move(dcomp_device)) {
+  CHECK(d3d11_device_);
+  CHECK(dcomp_device_);
+}
+SolidColorSurfacePool::~SolidColorSurfacePool() = default;
+
+IDCompositionSurface* SolidColorSurfacePool::GetSolidColorSurface(
+    const SkColor4f& color) {
+  stats_since_last_trim_.num_surfaces_requested += 1;
+
+  HRESULT hr = S_OK;
+
+  auto first_unused_surface_it =
+      std::next(tracked_surfaces_.begin(), num_used_this_frame_);
+
+  if (auto found_color_it = base::ranges::find(tracked_surfaces_, color,
+                                               &SolidColorSurface::color_);
+      found_color_it != tracked_surfaces_.end()) {
+    // We found an existing surface in the pool that already has the requested
+    // color.
+
+    if (found_color_it >= first_unused_surface_it) {
+      // If the surface is in the "unused" portion of |tracked_surfaces_|, make
+      // it be tracked now.
+      std::swap(*first_unused_surface_it, *found_color_it);
+      found_color_it = first_unused_surface_it;
+      num_used_this_frame_++;
+    } else {
+      // The surface is already used by another overlay in this frame, so we can
+      // just share it with no extra work.
+    }
+
+    return found_color_it->surface();
+  }
+
+  // There is no surface that already contains the requested |color|, so we'll
+  // need to fill one.
+  auto surface_to_fill_it = first_unused_surface_it;
+  if (surface_to_fill_it == tracked_surfaces_.end()) {
+    // If there are no existing allocations, we'll need to create a new one.
+    Microsoft::WRL::ComPtr<IDCompositionSurface> dcomp_surface;
+    hr = dcomp_device_->CreateSurface(
+        kSolidColorSurfaceSize.width(), kSolidColorSurfaceSize.height(),
+        gfx::ColorSpaceWin::GetDXGIFormat(gfx::ColorSpace::CreateSRGB()),
+        DXGI_ALPHA_MODE_IGNORE, &dcomp_surface);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "CreateSurface failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return nullptr;
+    }
+
+    surface_to_fill_it = tracked_surfaces_.insert(
+        first_unused_surface_it, SolidColorSurface(std::move(dcomp_surface)));
+  }
+
+  // The surface we want to use doesn't have the right color at this point.
+  if (!surface_to_fill_it->FillColor(d3d11_device_.Get(), color)) {
+    LOG(ERROR) << "Failed to fill solid color surface with color.";
+    return nullptr;
+  }
+
+  // Update the partitioning index after |FillColor| succeeds. In the case of
+  // failure, |tracked_surfaces_[num_used_this_frame_]| will still have a valid
+  // surface, just not filled to any color yet.
+  num_used_this_frame_++;
+
+  stats_since_last_trim_.num_surfaces_recolored += 1;
+
+  return surface_to_fill_it->surface();
+}
+
+void SolidColorSurfacePool::TrimAfterCommit() {
+  // The is the maximum number of solid color surfaces (both in use and not in
+  // use) that we will retain between frames. If we are actively using more than
+  // this, this value will be ignored.
+  //
+  // The value is copied from gbm_surfaceless_wayland.cc's
+  // |kMaxSolidColorBuffers|, which picks this value based on observationally
+  // seeing max 9 in-flight buffers + some margin. However, this can be any
+  // value. If the value is smaller than the number of overlays commonly seen
+  // in a frame, we may thrash on allocations. If the value is too large, we
+  // will end up wasting space.
+  static constexpr size_t kMaxSolidColorSurfacesToRetain = 12;
+
+  // Preserve up to |kMaxSolidColorSurfacesToRetain| surfaces, even if they
+  // aren't used this frame.
+  size_t trim_target_size =
+      std::max(num_used_this_frame_, kMaxSolidColorSurfacesToRetain);
+  // Protect against the case where there are fewer tracked surfaces than
+  // |kMaxSolidColorSurfacesToRetain|.
+  trim_target_size = std::min(trim_target_size, tracked_surfaces_.size());
+
+  DVLOG(1) << "SolidColorSurfacePool stats before trim: "
+           << "requested=" << stats_since_last_trim_.num_surfaces_requested
+           << ", "
+           << "recolored=" << stats_since_last_trim_.num_surfaces_recolored
+           << ", "
+           << "in-use/total=" << num_used_this_frame_ << "/"
+           << tracked_surfaces_.size()
+           << (num_used_this_frame_ > kMaxSolidColorSurfacesToRetain
+                   ? " (in-use exceeds kMaxSolidColorSurfacesToRetain)"
+                   : "")
+           << ", will trim to " << trim_target_size;
+
+  auto first_surface_to_remove =
+      std::next(tracked_surfaces_.begin(), trim_target_size);
+  tracked_surfaces_.erase(first_surface_to_remove, tracked_surfaces_.end());
+
+  // Reset for the next frame.
+  num_used_this_frame_ = 0;
+  stats_since_last_trim_ = {};
+}
+
+size_t SolidColorSurfacePool::GetNumSurfacesInPoolForTesting() const {
+  CHECK_IS_TEST();
+  return tracked_surfaces_.size();
+}
+
 DCLayerTree::DCLayerTree(bool disable_nv12_dynamic_textures,
+                         bool disable_vp_auto_hdr,
                          bool disable_vp_scaling,
                          bool disable_vp_super_resolution,
                          bool force_dcomp_triple_buffer_video_swap_chain,
                          bool no_downscaled_overlay_promotion)
     : disable_nv12_dynamic_textures_(disable_nv12_dynamic_textures),
+      disable_vp_auto_hdr_(disable_vp_auto_hdr),
       disable_vp_scaling_(disable_vp_scaling),
       disable_vp_super_resolution_(disable_vp_super_resolution),
       force_dcomp_triple_buffer_video_swap_chain_(
           force_dcomp_triple_buffer_video_swap_chain),
       no_downscaled_overlay_promotion_(no_downscaled_overlay_promotion),
+      max_video_processor_input_height_(kVideoProcessorDimensionsWindowSize),
+      max_video_processor_input_width_(kVideoProcessorDimensionsWindowSize),
+      max_video_processor_output_height_(kVideoProcessorDimensionsWindowSize),
+      max_video_processor_output_width_(kVideoProcessorDimensionsWindowSize),
       ink_renderer_(std::make_unique<DelegatedInkRenderer>()) {}
 
 DCLayerTree::~DCLayerTree() = default;
 
-bool DCLayerTree::Initialize(HWND window) {
+bool DCLayerTree::Initialize(
+    HWND window,
+    Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device) {
   window_ = window;
   DCHECK(window_);
 
-  d3d11_device_ = QueryD3D11DeviceObjectFromANGLE();
+  d3d11_device_ = std::move(d3d11_device);
   DCHECK(d3d11_device_);
 
   dcomp_device_ = GetDirectCompositionDevice();
   DCHECK(dcomp_device_);
+
+  solid_color_surface_pool_ =
+      std::make_unique<SolidColorSurfacePool>(d3d11_device_, dcomp_device_);
 
   Microsoft::WRL::ComPtr<IDCompositionDesktopDevice> desktop_device;
   dcomp_device_.As(&desktop_device);
@@ -86,6 +340,27 @@ bool DCLayerTree::Initialize(HWND window) {
 
   hr = dcomp_device_->CreateVisual(&dcomp_root_visual_);
   CHECK_EQ(hr, S_OK);
+
+  if (base::FeatureList::IsEnabled(features::kDCompDebugVisualization)) {
+    Microsoft::WRL::ComPtr<IDCompositionDeviceDebug> debug_device;
+    hr = dcomp_device_.As(&debug_device);
+    CHECK_EQ(hr, S_OK);
+    CHECK(debug_device);
+    DLOG(WARNING) << "DComp debug counters enabled, visible in the top right.";
+    DLOG(WARNING) << "  - left: The composition engine FPS, averaged over the "
+                     "last 60 composition frames";
+    DLOG(WARNING) << "  - right: The overall CPU usage of the composition "
+                     "thread, in milliseconds";
+    hr = debug_device->EnableDebugCounters();
+    CHECK_EQ(hr, S_OK);
+
+    Microsoft::WRL::ComPtr<IDCompositionVisualDebug> debug_visual;
+    hr = dcomp_root_visual_.As(&debug_visual);
+    CHECK_EQ(hr, S_OK);
+    CHECK(debug_visual);
+    hr = debug_visual->EnableRedrawRegions();
+    CHECK_EQ(hr, S_OK);
+  }
 
   dcomp_target_->SetRoot(dcomp_root_visual_.Get());
   // A visual inherits the interpolation mode of the parent visual by default.
@@ -102,40 +377,52 @@ bool DCLayerTree::Initialize(HWND window) {
 
 VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
     const gfx::Size& input_size,
-    const gfx::Size& output_size,
-    bool is_hdr_output) {
-  VideoProcessorWrapper& video_processor_wrapper =
-      GetOrCreateVideoProcessor(is_hdr_output);
-
-  if (!video_processor_wrapper.video_device) {
+    const gfx::Size& output_size) {
+  if (!video_processor_wrapper_.video_device) {
     // This can fail if the D3D device is "Microsoft Basic Display Adapter".
-    if (FAILED(d3d11_device_.As(&video_processor_wrapper.video_device))) {
+    if (FAILED(d3d11_device_.As(&video_processor_wrapper_.video_device))) {
       DLOG(ERROR) << "Failed to retrieve video device from D3D11 device";
       DCHECK(false);
       DisableDirectCompositionOverlays();
       return nullptr;
     }
-    DCHECK(video_processor_wrapper.video_device);
+    DCHECK(video_processor_wrapper_.video_device);
 
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
     d3d11_device_->GetImmediateContext(&context);
     DCHECK(context);
-    context.As(&video_processor_wrapper.video_context);
-    DCHECK(video_processor_wrapper.video_context);
+    context.As(&video_processor_wrapper_.video_context);
+    DCHECK(video_processor_wrapper_.video_context);
   }
 
-  if (video_processor_wrapper.video_processor &&
-      SizeContains(video_processor_wrapper.video_input_size, input_size) &&
-      SizeContains(video_processor_wrapper.video_output_size, output_size))
-    return &video_processor_wrapper;
+  // Calculate input and output size to be maximum in a sliding window.
+  max_video_processor_input_width_.Put(input_size.width());
+  max_video_processor_input_height_.Put(input_size.height());
+  max_video_processor_output_width_.Put(output_size.width());
+  max_video_processor_output_height_.Put(output_size.height());
+  gfx::Size effective_input_size(max_video_processor_input_width_.Max(),
+                                 max_video_processor_input_height_.Max());
+  gfx::Size effective_output_size(max_video_processor_output_width_.Max(),
+                                  max_video_processor_output_height_.Max());
+
+  // Reuse existing video processor only if it has exactly the computed size.
+  // Even if it may have bigger dimensions and may be reusable for requested
+  // sizes we will recreate it to reduce resource usage. Sliding window max
+  // above guarantees that this reduction will only happen after prolonged usage
+  // with smaller texture sizes.
+  if (video_processor_wrapper_.video_processor &&
+      video_processor_wrapper_.video_input_size == effective_input_size &&
+      video_processor_wrapper_.video_output_size == effective_output_size) {
+    return &video_processor_wrapper_;
+  }
 
   TRACE_EVENT2("gpu", "DCLayerTree::InitializeVideoProcessor", "input_size",
                input_size.ToString(), "output_size", output_size.ToString());
-  video_processor_wrapper.video_input_size = input_size;
-  video_processor_wrapper.video_output_size = output_size;
 
-  video_processor_wrapper.video_processor.Reset();
-  video_processor_wrapper.video_processor_enumerator.Reset();
+  video_processor_wrapper_.video_input_size = effective_input_size;
+  video_processor_wrapper_.video_output_size = effective_output_size;
+  video_processor_wrapper_.video_processor.Reset();
+  video_processor_wrapper_.video_processor_enumerator.Reset();
   D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc = {};
   desc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
   desc.InputFrameRate.Numerator = 60;
@@ -148,8 +435,8 @@ VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
   desc.OutputHeight = output_size.height();
   desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
   HRESULT hr =
-      video_processor_wrapper.video_device->CreateVideoProcessorEnumerator(
-          &desc, &video_processor_wrapper.video_processor_enumerator);
+      video_processor_wrapper_.video_device->CreateVideoProcessorEnumerator(
+          &desc, &video_processor_wrapper_.video_processor_enumerator);
   if (FAILED(hr)) {
     DLOG(ERROR) << "CreateVideoProcessorEnumerator failed with error 0x"
                 << std::hex << hr;
@@ -158,9 +445,9 @@ VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
     DisableDirectCompositionOverlays();
     return nullptr;
   }
-  hr = video_processor_wrapper.video_device->CreateVideoProcessor(
-      video_processor_wrapper.video_processor_enumerator.Get(), 0,
-      &video_processor_wrapper.video_processor);
+  hr = video_processor_wrapper_.video_device->CreateVideoProcessor(
+      video_processor_wrapper_.video_processor_enumerator.Get(), 0,
+      &video_processor_wrapper_.video_processor);
   if (FAILED(hr)) {
     DLOG(ERROR) << "CreateVideoProcessor failed with error 0x" << std::hex
                 << hr;
@@ -170,22 +457,15 @@ VideoProcessorWrapper* DCLayerTree::InitializeVideoProcessor(
     return nullptr;
   }
   // Auto stream processing (the default) can hurt power consumption.
-  video_processor_wrapper.video_context
+  video_processor_wrapper_.video_context
       ->VideoProcessorSetStreamAutoProcessingMode(
-          video_processor_wrapper.video_processor.Get(), 0, FALSE);
-  return &video_processor_wrapper;
-}
-
-VideoProcessorWrapper& DCLayerTree::GetOrCreateVideoProcessor(bool is_hdr) {
-  VideoProcessorType video_processor_type =
-      is_hdr ? VideoProcessorType::kHDR : VideoProcessorType::kSDR;
-  return video_processor_map_
-      .try_emplace(video_processor_type, VideoProcessorWrapper())
-      .first->second;
+          video_processor_wrapper_.video_processor.Get(), 0, FALSE);
+  return &video_processor_wrapper_;
 }
 
 Microsoft::WRL::ComPtr<IDXGISwapChain1>
 DCLayerTree::GetLayerSwapChainForTesting(size_t index) const {
+  CHECK_IS_TEST();
   if (index < video_swap_chains_.size())
     return video_swap_chains_[index]->swap_chain();
   return nullptr;
@@ -196,6 +476,7 @@ void DCLayerTree::GetSwapChainVisualInfoForTesting(size_t index,
                                                    gfx::Transform* transform,
                                                    gfx::Point* offset,
                                                    gfx::Rect* clip_rect) const {
+  CHECK_IS_TEST();
   if (visual_tree_) {
     visual_tree_->GetSwapChainVisualInfoForTesting(index, transform,  // IN-TEST
                                                    offset, clip_rect);
@@ -210,8 +491,9 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     Microsoft::WRL::ComPtr<IUnknown> dcomp_visual_content,
     uint64_t dcomp_surface_serial,
     const gfx::Size& image_size,
-    absl::optional<SkColor4f> content_tint_color,
-    const gfx::Rect& content_rect,
+    const gfx::RectF& content_rect,
+    Microsoft::WRL::ComPtr<IDCompositionSurface> background_color_surface,
+    const SkColor4f& background_color,
     const gfx::Rect& quad_rect,
     bool nearest_neighbor_filter,
     const gfx::Transform& quad_to_root_transform,
@@ -220,15 +502,58 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     const absl::optional<gfx::Rect>& clip_rect_in_root) {
   bool needs_commit = false;
 
+  // Helper function to set |field| to |parameter| and return whether it
+  // changed.
+  auto SetField = [&needs_commit](auto& field, auto& parameter) -> bool {
+    const bool changed = field != parameter;
+    if (changed) {
+      field = std::move(parameter);
+
+      // We assume that any change to the input of |Update| will result in some
+      // visual property change that requires a commit. If this is not true, an
+      // input is not needed.
+      needs_commit = true;
+    }
+    return changed;
+  };
+
+  // Fields on |VisualSubtree| should map 1:1 with parameters to |Update| (with
+  // the exception of the DComp device pointer, DComp visuals, and Z-order). To
+  // avoid issues with incremental computation, set fields to input parameters
+  // here with the helper function and read the member fields below only if
+  // guarded by the corresponding |*_changed| variable.
+  const bool dcomp_visual_content_changed =
+      SetField(dcomp_visual_content_, dcomp_visual_content);
+  const bool dcomp_surface_serial_changed =
+      SetField(dcomp_surface_serial_, dcomp_surface_serial);
+  const bool image_size_changed = SetField(image_size_, image_size);
+  const bool content_rect_changed = SetField(content_rect_, content_rect);
+  const bool background_color_surface_changed =
+      SetField(background_color_surface_, background_color_surface);
+  const bool background_color_changed =
+      SetField(background_color_, background_color);
+  const bool quad_rect_changed = SetField(quad_rect_, quad_rect);
+  const bool nearest_neighbor_filter_changed =
+      SetField(nearest_neighbor_filter_, nearest_neighbor_filter);
+  const bool quad_to_root_transform_changed =
+      SetField(quad_to_root_transform_, quad_to_root_transform);
+  const bool rounded_corner_bounds_changed =
+      SetField(rounded_corner_bounds_, rounded_corner_bounds);
+  const bool opacity_changed = SetField(opacity_, opacity);
+  const bool clip_rect_in_root_changed =
+      SetField(clip_rect_in_root_, clip_rect_in_root);
+
   // Methods that update the visual tree can only fail with OOM. We'll assert
   // success in this function to aid in debugging.
   HRESULT hr = S_OK;
 
+  // All the visual are created together on the first |Update|.
   if (!clip_visual_) {
     needs_commit = true;
 
-    // All the visual are created together on the first |Update|.
+    CHECK(!rounded_corners_visual_);
     CHECK(!transform_visual_);
+    CHECK(!background_color_visual_);
     CHECK(!content_visual_);
 
     hr = dcomp_device->CreateVisual(&clip_visual_);
@@ -236,6 +561,8 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     hr = dcomp_device->CreateVisual(&rounded_corners_visual_);
     CHECK_EQ(hr, S_OK);
     hr = dcomp_device->CreateVisual(&transform_visual_);
+    CHECK_EQ(hr, S_OK);
+    hr = dcomp_device->CreateVisual(&background_color_visual_);
     CHECK_EQ(hr, S_OK);
     hr = dcomp_device->CreateVisual(&content_visual_);
     CHECK_EQ(hr, S_OK);
@@ -245,24 +572,24 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     hr = rounded_corners_visual_->AddVisual(transform_visual_.Get(), FALSE,
                                             nullptr);
     CHECK_EQ(hr, S_OK);
+    hr = transform_visual_->AddVisual(background_color_visual_.Get(), FALSE,
+                                      nullptr);
+    CHECK_EQ(hr, S_OK);
     hr = transform_visual_->AddVisual(content_visual_.Get(), FALSE, nullptr);
     CHECK_EQ(hr, S_OK);
 
     // The default state for the border mode is INHERIT, so we need to force it
     // to HARD.
-    hr = content_visual_->SetBorderMode(DCOMPOSITION_BORDER_MODE_HARD);
+    hr = transform_visual_->SetBorderMode(DCOMPOSITION_BORDER_MODE_HARD);
     CHECK_EQ(hr, S_OK);
   }
 
-  if (clip_rect_ != clip_rect_in_root) {
-    clip_rect_ = clip_rect_in_root;
-    needs_commit = true;
-
-    if (clip_rect_.has_value()) {
+  if (clip_rect_in_root_changed) {
+    if (clip_rect_in_root_.has_value()) {
       // DirectComposition clips happen in the pre-transform visual space, while
       // cc/ clips happen post-transform. So the clip needs to go on a separate
       // parent visual that's untransformed.
-      gfx::Rect clip_rect = clip_rect_.value();
+      const gfx::Rect& clip_rect = clip_rect_in_root_.value();
       hr = clip_visual_->SetClip(D2D1::RectF(
           clip_rect.x(), clip_rect.y(), clip_rect.right(), clip_rect.bottom()));
       CHECK_EQ(hr, S_OK);
@@ -272,24 +599,9 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     }
   }
 
-  if (opacity_ != opacity) {
-    opacity_ = opacity;
-    needs_commit = true;
-
-    // |IDCompositionVisual3| should be available since Windows 8.1, but we
-    // noticed crashes due to unconditionally casting to the interface on very
-    // early versions of Windows 10. Here, we only attempt the cast when the
-    // opacity changes, which should only happen for features that we don't
-    // intend to run unconditionally. If this cast fails, we may need to exclude
-    // some Windows versions from these features.
-    // See: https://crbug.com/1455666
-    Microsoft::WRL::ComPtr<IDCompositionVisual3> clip_visual_opacity;
-    hr = clip_visual_.As(&clip_visual_opacity);
-    CHECK_EQ(hr, S_OK);
-    CHECK(clip_visual_opacity);
-
+  if (opacity_changed) {
     if (opacity_ != 1) {
-      hr = clip_visual_opacity->SetOpacity(opacity_);
+      hr = CheckedCastToVisual3(clip_visual_)->SetOpacity(opacity_);
       CHECK_EQ(hr, S_OK);
 
       // Let all of this subtree's visuals blend as one, instead of
@@ -297,17 +609,14 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
       hr = clip_visual_->SetOpacityMode(DCOMPOSITION_OPACITY_MODE_LAYER);
       CHECK_EQ(hr, S_OK);
     } else {
-      hr = clip_visual_opacity->SetOpacity(1.0);
+      hr = CheckedCastToVisual3(clip_visual_)->SetOpacity(1.0);
       CHECK_EQ(hr, S_OK);
       hr = clip_visual_->SetOpacityMode(DCOMPOSITION_OPACITY_MODE_MULTIPLY);
       CHECK_EQ(hr, S_OK);
     }
   }
 
-  if (rounded_corner_bounds_ != rounded_corner_bounds) {
-    rounded_corner_bounds_ = rounded_corner_bounds;
-    needs_commit = true;
-
+  if (rounded_corner_bounds_changed) {
     if (!rounded_corner_bounds_.IsEmpty()) {
       Microsoft::WRL::ComPtr<IDCompositionRectangleClip> clip;
       hr = dcomp_device->CreateRectangleClip(&clip);
@@ -368,25 +677,22 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     }
   }
 
-  if (transform_ != quad_to_root_transform) {
-    transform_ = quad_to_root_transform;
-    needs_commit = true;
-
-    DCHECK(transform_.IsFlat());
-    D2D_MATRIX_3X2_F matrix =
-        // D2D_MATRIX_3x2_F is row-major.
-        D2D1::Matrix3x2F(transform_.rc(0, 0), transform_.rc(1, 0),  //
-                         transform_.rc(0, 1), transform_.rc(1, 1),  //
-                         transform_.rc(0, 3), transform_.rc(1, 3));
-    hr = Microsoft::WRL::ComPtr<IDCompositionVisual>(transform_visual_)
-             ->SetTransform(matrix);
-    CHECK_EQ(hr, S_OK);
+  if (quad_to_root_transform_changed) {
+    if (quad_to_root_transform_.Is2dTransform()) {
+      const D2D_MATRIX_3X2_F matrix =
+          TransformToD2D_MATRIX_3X2_F(quad_to_root_transform_);
+      hr = Microsoft::WRL::ComPtr<IDCompositionVisual>(transform_visual_)
+               ->SetTransform(matrix);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      const D2D_MATRIX_4X4_F matrix =
+          TransformToD2D_MATRIX_4X4_F(quad_to_root_transform_);
+      hr = CheckedCastToVisual3(transform_visual_)->SetTransform(matrix);
+      CHECK_EQ(hr, S_OK);
+    }
   }
 
-  if (nearest_neighbor_filter_ != nearest_neighbor_filter) {
-    nearest_neighbor_filter_ = nearest_neighbor_filter;
-    needs_commit = true;
-
+  if (nearest_neighbor_filter_changed) {
     hr = transform_visual_->SetBitmapInterpolationMode(
         nearest_neighbor_filter_
             ? DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
@@ -394,14 +700,8 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     CHECK_EQ(hr, S_OK);
   }
 
-  if (image_size_ != image_size || content_rect_ != content_rect ||
-      quad_rect_ != quad_rect) {
-    image_size_ = image_size;
-    content_rect_ = content_rect;
-    quad_rect_ = quad_rect;
-    needs_commit = true;
-
-    if (content_rect_.Contains(gfx::Rect(image_size_))) {
+  if (image_size_changed || content_rect_changed || quad_rect_changed) {
+    if (content_rect_.Contains(gfx::RectF(image_size_))) {
       // No need to set clip to content if the whole image is inside the content
       // rect region.
       hr = content_visual_->SetClip(nullptr);
@@ -418,13 +718,14 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     // Transform the (clipped) content so that it fills |quad_rect_|'s bounds.
     // |quad_rect_|'s offset is handled below, so we exclude it from the matrix.
     const bool needs_offset = !content_rect_.OffsetFromOrigin().IsZero();
-    const bool needs_scale = quad_rect_.width() != content_rect_.width() ||
-                             quad_rect_.height() != content_rect_.height();
+    const bool needs_scale =
+        static_cast<float>(quad_rect_.width()) != content_rect_.width() ||
+        static_cast<float>(quad_rect_.height()) != content_rect_.height();
     if (needs_offset || needs_scale) {
-      const float scale_x = static_cast<float>(quad_rect_.width()) /
-                            static_cast<float>(content_rect_.width());
-      const float scale_y = static_cast<float>(quad_rect_.height()) /
-                            static_cast<float>(content_rect_.height());
+      const float scale_x =
+          static_cast<float>(quad_rect_.width()) / content_rect_.width();
+      const float scale_y =
+          static_cast<float>(quad_rect_.height()) / content_rect_.height();
       const D2D_MATRIX_3X2_F matrix =
           D2D1::Matrix3x2F::Translation(-content_rect_.x(),
                                         -content_rect_.y()) *
@@ -446,68 +747,54 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     CHECK_EQ(hr, S_OK);
   }
 
-  if (content_tint_color_ != content_tint_color) {
-    content_tint_color_ = content_tint_color;
-    needs_commit = true;
-
-    SkColor4f color = content_tint_color_.value_or(SkColors::kWhite);
-
-    if (color == SkColors::kWhite) {
-      // White-colored tint is the same as no effect.
-      hr = content_visual_->SetEffect(nullptr);
-      CHECK_EQ(hr, S_OK);
-    } else {
-      // Transforms an opaque white color to the background color.
-      D2D_MATRIX_5X4_F white_to_color = D2D1::Matrix5x4F();
-      white_to_color._11 = color.fR;
-      white_to_color._22 = color.fG;
-      white_to_color._33 = color.fB;
-      white_to_color._44 = color.fA;
-
-      Microsoft::WRL::ComPtr<IDCompositionColorMatrixEffect> effect;
-      hr = dcomp_device->CreateColorMatrixEffect(&effect);
-      CHECK_EQ(hr, S_OK);
-      hr = effect->SetMatrix(white_to_color);
-      CHECK_EQ(hr, S_OK);
-      hr = content_visual_->SetEffect(effect.Get());
-      CHECK_EQ(hr, S_OK);
-    }
-  }
-
-  if (dcomp_visual_content_ != dcomp_visual_content) {
-    dcomp_visual_content_ = std::move(dcomp_visual_content);
-    needs_commit = true;
-
+  if (dcomp_visual_content_changed) {
     hr = content_visual_->SetContent(dcomp_visual_content_.Get());
     CHECK_EQ(hr, S_OK);
   }
 
-  if (dcomp_surface_serial_ != dcomp_surface_serial) {
-    dcomp_surface_serial_ = dcomp_surface_serial;
-    needs_commit = true;
-
+  if (dcomp_surface_serial_changed) {
     // The DComp surface has been drawn to and needs a commit to show its
     // update. No visual changes are needed in this case.
   }
 
-  // Properties that derive from multiple other properties can only change if
-  // something else in the subtree has changed, so we can guard recalculating
-  // these behind |needs_commit|.
-  if (needs_commit) {
-    const float kNeedsSoftBorderTolerance = 0.001;
-    const bool content_soft_borders =
-        !transform_.Preserves2dAxisAlignment() ||
-        !gfx::IsNearestRectWithinDistance(
-            transform_.MapRect(gfx::RectF(quad_rect_)),
-            kNeedsSoftBorderTolerance);
-    if (content_soft_borders_ != content_soft_borders) {
-      content_soft_borders_ = content_soft_borders;
+  if (quad_rect_changed || background_color_surface_changed ||
+      background_color_changed) {
+    if (!background_color_surface_ || background_color.fA == 0.0) {
+      // A fully transparent color is the same as no background fill.
+      hr = background_color_visual_->SetContent(nullptr);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      const D2D_MATRIX_3X2_F matrix =
+          TransformToD2D_MATRIX_3X2_F(gfx::TransformBetweenRects(
+              gfx::RectF(kSolidColorSurfaceSize), gfx::RectF(quad_rect_)));
+      hr = Microsoft::WRL::ComPtr<IDCompositionVisual>(background_color_visual_)
+               ->SetTransform(matrix);
+      CHECK_EQ(hr, S_OK);
 
-      hr = content_visual_->SetBorderMode(content_soft_borders_
-                                              ? DCOMPOSITION_BORDER_MODE_SOFT
-                                              : DCOMPOSITION_BORDER_MODE_HARD);
+      hr =
+          background_color_visual_->SetContent(background_color_surface_.Get());
+      CHECK_EQ(hr, S_OK);
+
+      hr = CheckedCastToVisual3(background_color_visual_)
+               ->SetOpacity(background_color.fA);
       CHECK_EQ(hr, S_OK);
     }
+  }
+
+  if (quad_to_root_transform_changed || quad_rect_changed) {
+    const float kNeedsSoftBorderTolerance = 0.001;
+    const bool content_soft_borders =
+        !quad_to_root_transform_.Preserves2dAxisAlignment() ||
+        !gfx::IsNearestRectWithinDistance(
+            quad_to_root_transform_.MapRect(gfx::RectF(quad_rect_)),
+            kNeedsSoftBorderTolerance);
+    // The border mode of the transform visual is set (instead of the content
+    // visual), so this setting can affect both the content and the background
+    // color, since both are are children of the transform visual.
+    hr = transform_visual_->SetBorderMode(content_soft_borders
+                                              ? DCOMPOSITION_BORDER_MODE_SOFT
+                                              : DCOMPOSITION_BORDER_MODE_HARD);
+    CHECK_EQ(hr, S_OK);
   }
 
   return needs_commit;
@@ -517,9 +804,10 @@ void DCLayerTree::VisualTree::VisualSubtree::GetSwapChainVisualInfoForTesting(
     gfx::Transform* transform,
     gfx::Point* offset,
     gfx::Rect* clip_rect) const {
-  *transform = transform_;
+  CHECK_IS_TEST();
+  *transform = quad_to_root_transform_;
   *offset = quad_rect_.origin();
-  *clip_rect = clip_rect_.value_or(gfx::Rect());
+  *clip_rect = clip_rect_in_root_.value_or(gfx::Rect());
 }
 
 DCLayerTree::VisualTree::VisualTree(DCLayerTree* dc_layer_tree)
@@ -527,9 +815,11 @@ DCLayerTree::VisualTree::VisualTree(DCLayerTree* dc_layer_tree)
 
 DCLayerTree::VisualTree::~VisualTree() = default;
 
-bool DCLayerTree::VisualTree::UpdateTree(
+bool DCLayerTree::VisualTree::BuildTreeDefault(
     const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays,
     bool needs_rebuild_visual_tree) {
+  DCHECK(!base::FeatureList::IsEnabled(features::kDCompVisualTreeOptimization));
+  CHECK(subtree_map_.empty());
   // Grow or shrink list of visual subtrees to match pending overlays.
   size_t old_visual_subtrees_size = visual_subtrees_.size();
   if (old_visual_subtrees_size != overlays.size()) {
@@ -552,7 +842,9 @@ bool DCLayerTree::VisualTree::UpdateTree(
     }
 
     IUnknown* dcomp_visual_content =
-        overlays[i]->overlay_image->dcomp_visual_content();
+        overlays[i]->overlay_image
+            ? overlays[i]->overlay_image->dcomp_visual_content()
+            : nullptr;
     // Find matching subtree for each overlay. If subtree is found, move it
     // from visual subtrees of previous frame to visual subtrees of this frame.
     auto it = std::find_if(
@@ -578,19 +870,41 @@ bool DCLayerTree::VisualTree::UpdateTree(
         needs_rebuild_visual_tree = true;
       }
     }
+
+    const uint64_t dcomp_surface_serial =
+        overlays[i]->overlay_image.has_value()
+            ? overlays[i]->overlay_image->dcomp_surface_serial()
+            : 0;
+    const gfx::Size image_size = overlays[i]->overlay_image.has_value()
+                                     ? overlays[i]->overlay_image->size()
+                                     : gfx::Size();
+
+    // Only get a background color surface if we have a non-transparent
+    // background color.
+    IDCompositionSurface* background_color_surface = nullptr;
+    if (overlays[i]->background_color &&
+        overlays[i]->background_color->fA != 0.0) {
+      background_color_surface =
+          dc_layer_tree_->solid_color_surface_pool_->GetSolidColorSurface(
+              overlays[i]->background_color.value());
+      if (!background_color_surface) {
+        DLOG(ERROR) << "Could not get solid color surface.";
+        return false;
+      }
+    }
+
     // We don't need to set |needs_rebuild_visual_tree| here since that is only
     // needed when the root visual's children need to be reordered. |Update|
     // only affects the subtree for each child, so only a commit is needed in
     // this case.
     needs_commit |= visual_subtrees[i]->Update(
-        dc_layer_tree_->dcomp_device_.Get(),
-        overlays[i]->overlay_image->dcomp_visual_content(),
-        overlays[i]->overlay_image->dcomp_surface_serial(),
-        overlays[i]->overlay_image->size(), overlays[i]->background_color,
-        overlays[i]->content_rect, overlays[i]->quad_rect,
-        overlays[i]->nearest_neighbor_filter, overlays[i]->transform,
-        overlays[i]->rounded_corner_bounds, overlays[i]->opacity,
-        overlays[i]->clip_rect);
+        dc_layer_tree_->dcomp_device_.Get(), dcomp_visual_content,
+        dcomp_surface_serial, image_size, overlays[i]->content_rect,
+        background_color_surface,
+        overlays[i]->background_color.value_or(SkColors::kTransparent),
+        overlays[i]->quad_rect, overlays[i]->nearest_neighbor_filter,
+        overlays[i]->transform, overlays[i]->rounded_corner_bounds,
+        overlays[i]->opacity, overlays[i]->clip_rect);
 
     // Zero z_order represents root layer.
     if (overlays[i]->z_order == 0) {
@@ -640,11 +954,338 @@ bool DCLayerTree::VisualTree::UpdateTree(
   return true;
 }
 
+bool DCLayerTree::VisualTree::BuildTreeOptimized(
+    const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays,
+    bool needs_rebuild_visual_tree) {
+  DCHECK(base::FeatureList::IsEnabled(features::kDCompVisualTreeOptimization));
+  // For optimized tree |needs_rebuild_visual_tree| means that we may need to
+  // add/re-add a delegated ink visual into the root surface's visual.
+  // TODO(http://crbug.com/1380822): Clean up needs_rebuild_visual_tree
+  // and use dedicated add_delegated_ink_visual flag instead.
+  const bool add_delegated_ink_visual = needs_rebuild_visual_tree;
+
+  // Index into the subtree from the previous frame that is being reused in the
+  // current frame for the given overlay index.
+  // |overlay_index_to_reused_subtree| has an entry for every overlay in the
+  // current frame. Each entry indexes into |visual_subtrees_|, which are the
+  // subtrees for the previous frame. Initialized with absl::nullopt,
+  // meaning not reused.
+  std::vector<absl::optional<size_t>> overlay_index_to_reused_subtree(
+      overlays.size(), absl::nullopt);
+
+  // Index into the current frame overlay that uses the subtree of the previous
+  // frame for the given subtree index. |subtree_index_to_overlay| has an entry
+  // for every subtree in the previous frame. Each entry indexes into |overlays|
+  // of the current frame. Initialized with absl::nullopt, meaning the subtree
+  // is not being reused in the current frame.
+  std::vector<absl::optional<size_t>> subtree_index_to_overlay(
+      visual_subtrees_.size(), absl::nullopt);
+
+  // |visual_subtrees| will become |visual_subtrees_| of the current frame;
+  std::vector<std::unique_ptr<VisualSubtree>> visual_subtrees;
+  visual_subtrees.resize(overlays.size());
+
+  // Populate the map with visual content and assign matching subtrees to the
+  // overlays.
+  VisualSubtreeMap subtree_map = BuildMapAndAssignMatchingSubtrees(
+      overlays, visual_subtrees, overlay_index_to_reused_subtree,
+      subtree_index_to_overlay);
+
+  // Assign unused subtrees to the overlays that don't have a match.
+  const size_t first_prev_frame_subtree_unused_index =
+      ReuseUnmatchedSubtrees(visual_subtrees, overlay_index_to_reused_subtree,
+                             subtree_index_to_overlay);
+
+  // Status for each subtree of the previous frame if it's attached to the root.
+  // Initialized with true, meaning attached.
+  std::vector<bool> prev_subtree_is_attached_to_root(visual_subtrees_.size(),
+                                                     true);
+
+  bool needs_commit = DetachUnusedSubtreesFromRoot(
+      first_prev_frame_subtree_unused_index, prev_subtree_is_attached_to_root);
+
+  // Remove unused subtrees from the root that need repositioning.
+  needs_commit |= DetachReusedSubtreesThatNeedRepositioningFromRoot(
+      visual_subtrees, overlay_index_to_reused_subtree,
+      subtree_index_to_overlay, prev_subtree_is_attached_to_root);
+
+#if DCHECK_IS_ON()
+  VisualTreeValid(subtree_index_to_overlay, prev_subtree_is_attached_to_root);
+#endif  // DCHECK_IS_ON()
+
+  // Visual for root surface. Cache it to add DelegatedInk visual if needed.
+  Microsoft::WRL::ComPtr<IDCompositionVisual2> root_surface_visual;
+  IDCompositionVisual2* left_sibling_visual = nullptr;
+
+  // This loop walks the overlays and builds or updates the visual subtree for
+  // each overlay. |left_sibling_visual| is required to properly stack visual
+  // subtrees that are detached from the root visual.
+  for (unsigned int i = 0; i < overlays.size(); i++) {
+    const bool is_root_plane = overlays[i]->z_order == 0;
+    if (!is_root_plane && overlays[i]->overlay_image) {
+      TRACE_EVENT2(
+          "gpu", "DCLayerTree::VisualTree::UpdateOverlay", "image_type",
+          DCLayerOverlayTypeToString(overlays[i]->overlay_image->type()),
+          "size", overlays[i]->content_rect.size().ToString());
+    }
+
+    bool subtree_attached_to_root = false;
+    if (visual_subtrees[i]) {
+      DCHECK(overlay_index_to_reused_subtree[i]);
+      subtree_attached_to_root =
+          prev_subtree_is_attached_to_root[overlay_index_to_reused_subtree[i]
+                                               .value()];
+    } else {
+      // This overlay does not reuse a subtree from the previous frame.
+      // Instantiate a new one.
+      visual_subtrees[i] = std::make_unique<VisualSubtree>();
+    }
+
+    const uint64_t dcomp_surface_serial =
+        overlays[i]->overlay_image.has_value()
+            ? overlays[i]->overlay_image->dcomp_surface_serial()
+            : 0;
+    const gfx::Size image_size = overlays[i]->overlay_image.has_value()
+                                     ? overlays[i]->overlay_image->size()
+                                     : gfx::Size();
+
+    // Only get a background color surface if we have a non-transparent
+    // background color.
+    IDCompositionSurface* background_color_surface = nullptr;
+    if (overlays[i]->background_color &&
+        overlays[i]->background_color->fA != 0.0) {
+      background_color_surface =
+          dc_layer_tree_->solid_color_surface_pool_->GetSolidColorSurface(
+              overlays[i]->background_color.value());
+      if (!background_color_surface) {
+        DLOG(ERROR) << "Could not get solid color surface.";
+        // TODO(http://crbug.com/1380822): Refactor to remove early exits. They
+        // may leave visual_subtrees_ corrupted.
+        return false;
+      }
+    }
+
+    VisualSubtree* visual_subtree = visual_subtrees[i].get();
+    visual_subtree->set_z_order(overlays[i]->z_order);
+    IUnknown* dcomp_visual_content =
+        overlays[i]->overlay_image
+            ? overlays[i]->overlay_image->dcomp_visual_content()
+            : nullptr;
+
+    needs_commit |= visual_subtrees[i]->Update(
+        dc_layer_tree_->dcomp_device_.Get(), dcomp_visual_content,
+        dcomp_surface_serial, image_size, overlays[i]->content_rect,
+        background_color_surface,
+        overlays[i]->background_color.value_or(SkColors::kTransparent),
+        overlays[i]->quad_rect, overlays[i]->nearest_neighbor_filter,
+        overlays[i]->transform, overlays[i]->rounded_corner_bounds,
+        overlays[i]->opacity, overlays[i]->clip_rect);
+
+    if (!subtree_attached_to_root) {
+      HRESULT hr = dc_layer_tree_->dcomp_root_visual_.Get()->AddVisual(
+          visual_subtree->container_visual(), TRUE, left_sibling_visual);
+      CHECK_EQ(hr, S_OK);
+      needs_commit = true;
+    }
+    left_sibling_visual = visual_subtree->container_visual();
+
+    // Zero z_order represents root layer.
+    if (visual_subtree->z_order() == 0) {
+      // Verify we have single root visual layer.
+      DCHECK(!root_surface_visual);
+      root_surface_visual = visual_subtree->content_visual();
+    }
+  }
+
+  // Update subtree_map_ and visual_subtrees_ with new values.
+  subtree_map_ = std::move(subtree_map);
+  visual_subtrees_ = std::move(visual_subtrees);
+
+  if (add_delegated_ink_visual) {
+    needs_commit |= dc_layer_tree_->AddDelegatedInkVisualToTreeIfNeeded(
+        root_surface_visual.Get());
+  }
+  if (needs_commit) {
+    TRACE_EVENT0("gpu", "DCLayerTree::CommitAndClearPendingOverlays::Commit");
+    HRESULT hr = dc_layer_tree_->dcomp_device_->Commit();
+    if (FAILED(hr)) {
+      DLOG(ERROR) << "Commit failed with error 0x" << std::hex << hr;
+      return false;
+    }
+  }
+  return true;
+}
+
+DCLayerTree::VisualTree::VisualSubtreeMap
+DCLayerTree::VisualTree::BuildMapAndAssignMatchingSubtrees(
+    const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays,
+    std::vector<std::unique_ptr<VisualSubtree>>& new_visual_subtrees,
+    std::vector<absl::optional<size_t>>& overlay_index_to_reused_subtree,
+    std::vector<absl::optional<size_t>>& subtree_index_to_overlay) {
+  CHECK_EQ(overlay_index_to_reused_subtree.size(), overlays.size());
+  CHECK_EQ(new_visual_subtrees.size(), overlays.size());
+  CHECK_EQ(subtree_index_to_overlay.size(), visual_subtrees_.size());
+
+  // Contains {visual content, overlay index} pairs for this frame overlays.
+  // This structure has entries for overlays that have visual content.
+  // No entry is inserted for the overlays with no visual content.
+  std::vector<std::pair<raw_ptr<IUnknown>, size_t>> map_results;
+  // For each overlay populate |map_results| with visual content and indices
+  // of overlays from this frame and find the matching subtree from the
+  // previous frame.
+  for (size_t i = 0; i < overlays.size(); i++) {
+    if (!overlays[i]->overlay_image) {
+      continue;
+    }
+    IUnknown* dcomp_visual_content =
+        overlays[i]->overlay_image->dcomp_visual_content();
+    if (!dcomp_visual_content) {
+      continue;
+    }
+    map_results.emplace_back(dcomp_visual_content, i);
+
+    // Find matching visual content from the previous frame.
+    auto it = subtree_map_.find(dcomp_visual_content);
+    if (it == subtree_map_.end()) {
+      continue;
+    }
+    size_t matched_index = it->second;
+    if (visual_subtrees_[matched_index]) {
+      // Assign the matched index to the corresponding overlay.
+      overlay_index_to_reused_subtree[i] = matched_index;
+      // Assign overlay index to the matched subtree.
+      subtree_index_to_overlay[matched_index] = i;
+      // Move visual subtree from the old subtrees to new subtrees.
+      new_visual_subtrees[i] = std::move(visual_subtrees_[matched_index]);
+    }
+  }
+  // This converts to a flat_map on returning. We're doing this on purpose to
+  // go from O(N^2) to O(N*logN) for building the map.
+  return map_results;
+}
+
+size_t DCLayerTree::VisualTree::ReuseUnmatchedSubtrees(
+    std::vector<std::unique_ptr<VisualSubtree>>& new_visual_subtrees,
+    std::vector<absl::optional<size_t>>& overlay_index_to_reused_subtree,
+    std::vector<absl::optional<size_t>>& subtree_index_to_overlay) {
+  CHECK_EQ(new_visual_subtrees.size(), overlay_index_to_reused_subtree.size());
+  CHECK_EQ(subtree_index_to_overlay.size(), visual_subtrees_.size());
+
+  // No further actions are needed if the previous frame is empty.
+  if (visual_subtrees_.empty()) {
+    return 0;
+  }
+  // Index into |visual_subtrees_|.
+  size_t prev_frame_subtree_index = 0;
+  // Assign unused subtrees from previous frames to overlays that don't have
+  // a match.
+  for (size_t i = 0; i < new_visual_subtrees.size() &&
+                     prev_frame_subtree_index < visual_subtrees_.size();
+       i++) {
+    if (new_visual_subtrees[i]) {
+      // Skip overlay that has a match.
+      continue;
+    }
+    // Find next unused subtree and assign it to the overlay at index |i|.
+    for (; prev_frame_subtree_index < visual_subtrees_.size();
+         prev_frame_subtree_index++) {
+      if (!visual_subtrees_[prev_frame_subtree_index]) {
+        continue;
+      }
+      // Assign the found index to the corresponding overlay.
+      overlay_index_to_reused_subtree[i] = prev_frame_subtree_index;
+      // Assign the overlay index to the found subtree.
+      subtree_index_to_overlay[prev_frame_subtree_index] = i;
+      // Move visual subtree from the old subtrees to new subtrees.
+      new_visual_subtrees[i] =
+          std::move(visual_subtrees_[prev_frame_subtree_index]);
+      prev_frame_subtree_index++;
+      break;
+    }
+  }
+  return prev_frame_subtree_index;
+}
+
+bool DCLayerTree::VisualTree::DetachUnusedSubtreesFromRoot(
+    size_t first_prev_frame_subtree_unused_index,
+    std::vector<bool>& prev_subtree_is_attached_to_root) {
+  CHECK_EQ(prev_subtree_is_attached_to_root.size(), visual_subtrees_.size());
+  bool needs_commit = false;
+  // Detach the remaining unused subtrees from the root.
+  for (size_t i = first_prev_frame_subtree_unused_index;
+       i < visual_subtrees_.size(); i++) {
+    if (!visual_subtrees_[i]) {
+      continue;
+    }
+    DetachSubtreeFromRoot(visual_subtrees_[i].get());
+    prev_subtree_is_attached_to_root[i] = false;
+    needs_commit = true;
+  }
+  return needs_commit;
+}
+
+bool DCLayerTree::VisualTree::DetachReusedSubtreesThatNeedRepositioningFromRoot(
+    const std::vector<std::unique_ptr<VisualSubtree>>& new_visual_subtrees,
+    const std::vector<absl::optional<size_t>>& overlay_index_to_reused_subtree,
+    const std::vector<absl::optional<size_t>>& subtree_index_to_overlay,
+    std::vector<bool>& prev_subtree_is_attached_to_root) {
+  CHECK_EQ(new_visual_subtrees.size(), overlay_index_to_reused_subtree.size());
+  CHECK_EQ(subtree_index_to_overlay.size(), visual_subtrees_.size());
+  CHECK_EQ(prev_subtree_is_attached_to_root.size(), visual_subtrees_.size());
+
+  // No further actions are needed if the previous frame is empty.
+  if (visual_subtrees_.empty()) {
+    return false;
+  }
+  bool needs_commit = false;
+  // Index into |visual_subtrees_|.
+  size_t prev_frame_subtree_index = 0;
+  // This loop walks the overlay indices and detaches from the root any
+  // subtrees that need repositioning in the current frame.
+  for (size_t i = 0; i < overlay_index_to_reused_subtree.size(); i++) {
+    if (!overlay_index_to_reused_subtree[i]) {
+      continue;
+    }
+    size_t reused_subtree_index = overlay_index_to_reused_subtree[i].value();
+    DCHECK_EQ(i, subtree_index_to_overlay[reused_subtree_index].value());
+    // If the overlay at index |i| has a match, detach from the root any
+    // subtrees that appear before the matching subtree and the previous match.
+    for (; prev_frame_subtree_index < reused_subtree_index;
+         prev_frame_subtree_index++) {
+      if (!prev_subtree_is_attached_to_root[prev_frame_subtree_index]) {
+        continue;
+      }
+      VisualSubtree* subtree =
+          new_visual_subtrees[subtree_index_to_overlay[prev_frame_subtree_index]
+                                  .value()]
+              .get();
+      DetachSubtreeFromRoot(subtree);
+      prev_subtree_is_attached_to_root[prev_frame_subtree_index] = false;
+      needs_commit = true;
+    }
+    if (reused_subtree_index == prev_frame_subtree_index) {
+      ++prev_frame_subtree_index;
+    }
+#if DCHECK_IS_ON()
+    new_visual_subtrees[i]->attached_to_root_from_previous_frame_ =
+        prev_subtree_is_attached_to_root[reused_subtree_index];
+#endif  // DCHECK_IS_ON()
+  }
+  return needs_commit;
+}
+
+void DCLayerTree::VisualTree::DetachSubtreeFromRoot(VisualSubtree* subtree) {
+  HRESULT hr = dc_layer_tree_->dcomp_root_visual_.Get()->RemoveVisual(
+      subtree->container_visual());
+  CHECK_EQ(hr, S_OK);
+}
+
 void DCLayerTree::VisualTree::GetSwapChainVisualInfoForTesting(
     size_t index,
     gfx::Transform* transform,
     gfx::Point* offset,
     gfx::Rect* clip_rect) const {
+  CHECK_IS_TEST();
   for (size_t i = 0, swapchain_i = 0; i < visual_subtrees_.size(); ++i) {
     // Skip root layer.
     if (visual_subtrees_[i]->z_order() == 0) {
@@ -686,7 +1327,8 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
       root_params->overlay_image = DCLayerOverlayImage(
           root_surface->GetSize(), std::move(root_visual_content),
           root_surface->dcomp_surface_serial());
-      root_params->content_rect = gfx::Rect(root_params->overlay_image->size());
+      root_params->content_rect =
+          gfx::RectF(root_params->overlay_image->size());
       root_params->quad_rect = gfx::Rect(root_params->overlay_image->size());
       ScheduleDCLayer(std::move(root_params));
     } else {
@@ -756,7 +1398,7 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
         // TODO(sunnyps): Try to find a matching swap chain based on size, type
         // of swap chain, gl image, etc.
         video_swap_chain = std::make_unique<SwapChainPresenter>(
-            this, window_, d3d11_device_, dcomp_device_);
+            this, d3d11_device_, dcomp_device_);
         if (frame_rate_ > 0) {
           video_swap_chain->SetFrameRate(frame_rate_);
         }
@@ -772,34 +1414,21 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
       // rect, e.g. to present to a swap chain exactly the size of the display
       // rect when the source video is larger.
       overlay->transform = transform;
-      overlay->content_rect = gfx::Rect(video_swap_chain->content_size());
       overlay->quad_rect.set_size(video_swap_chain->content_size());
       if (overlay->clip_rect.has_value()) {
         overlay->clip_rect = clip_rect;
       }
       overlay->overlay_image = DCLayerOverlayImage(
           video_swap_chain->content_size(), video_swap_chain->content());
-    } else if (overlay->background_color.has_value()) {
-      CHECK(!overlay->overlay_image.has_value());
-
-      gfx::Size content_size;
-      Microsoft::WRL::ComPtr<IDCompositionSurface> solid_color_surface =
-          GetOrCreateSolidWhiteTexture(content_size).get();
-      if (!solid_color_surface) {
-        DLOG(ERROR) << "Could not get solid color surface.";
-        return false;
-      }
-
-      // Solid color overlay case is special-cased in DCLayerTree as a shared
-      // opaque white surface that's tinted to the desired color.
-      overlay->overlay_image =
-          DCLayerOverlayImage(content_size, std::move(solid_color_surface));
-      overlay->content_rect = gfx::Rect(content_size);
+      overlay->content_rect = gfx::RectF(video_swap_chain->content_size());
     }
   }
 
   bool status = BuildVisualTreeHelper(overlays, needs_rebuild_visual_tree_);
   needs_rebuild_visual_tree_ = false;
+
+  // Clean up excess surfaces so the pool will not grow unbounded.
+  solid_color_surface_pool_->TrimAfterCommit();
 
   return status;
 }
@@ -807,33 +1436,19 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
 bool DCLayerTree::BuildVisualTreeHelper(
     const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays,
     bool needs_rebuild_visual_tree) {
-  // TODO(http://crbug.com/1380822): Enable optimization when delegated ink
-  // trails is active.
-  bool use_visual_tree_optimization =
-      base::FeatureList::IsEnabled(kDCVisualTreeOptimization) &&
-      !ink_renderer_->HasBeenInitialized();
-
-  // Optimized and not optimized trees are incompatible and cannot be reused
-  // for incremental updates. Rebuild visual tree if switching between optimized
-  // and not optimized trees or vice versa. It will be removed once delegated
-  // ink trails work with optimized DCOMP trees.
-  if (visual_tree_ &&
-      use_visual_tree_optimization != visual_tree_->tree_optimized()) {
-    visual_tree_ = nullptr;
-  }
-
-  // TODO(http://crbug.com/1380822): Implement tree optimization where the
-  // tree is built incrementally and does not require full rebuild.
-  if (use_visual_tree_optimization) {
-    NOTREACHED();
-    return false;
-  }
+  const bool use_visual_tree_optimization =
+      base::FeatureList::IsEnabled(features::kDCompVisualTreeOptimization);
 
   if (!visual_tree_) {
     visual_tree_ = std::make_unique<VisualTree>(this);
   }
 
-  return visual_tree_->UpdateTree(overlays, needs_rebuild_visual_tree);
+  if (use_visual_tree_optimization) {
+    return visual_tree_->BuildTreeOptimized(overlays,
+                                            needs_rebuild_visual_tree);
+  } else {
+    return visual_tree_->BuildTreeDefault(overlays, needs_rebuild_visual_tree);
+  }
 }
 
 bool DCLayerTree::ScheduleDCLayer(
@@ -841,6 +1456,24 @@ bool DCLayerTree::ScheduleDCLayer(
   pending_overlays_.push_back(std::move(params));
   return true;
 }
+
+size_t DCLayerTree::GetNumSurfacesInPoolForTesting() const {
+  CHECK_IS_TEST();
+  return solid_color_surface_pool_
+      ->GetNumSurfacesInPoolForTesting();  // IN-TEST
+}
+
+#if DCHECK_IS_ON()
+bool DCLayerTree::GetAttachedToRootFromPreviousFrameForTesting(
+    size_t index) const {
+  CHECK_IS_TEST();
+  return visual_tree_
+             ? visual_tree_
+                   ->GetAttachedToRootFromPreviousFrameForTesting(  // IN-TEST
+                       index)
+             : false;
+}
+#endif  // DCHECK_IS_ON()
 
 void DCLayerTree::SetFrameRate(float frame_rate) {
   frame_rate_ = frame_rate;
@@ -856,7 +1489,7 @@ bool DCLayerTree::InitializeInkRenderer() {
   return ink_renderer_->Initialize(dcomp_device_, root_swap_chain_);
 }
 
-void DCLayerTree::AddDelegatedInkVisualToTreeIfNeeded(
+bool DCLayerTree::AddDelegatedInkVisualToTreeIfNeeded(
     IDCompositionVisual2* root_surface_visual) {
   // Only add the ink visual to the tree if it has already been initialized.
   // It will only have been initialized if delegated ink has been used, so
@@ -865,13 +1498,13 @@ void DCLayerTree::AddDelegatedInkVisualToTreeIfNeeded(
   // changed the ink visual and delegated ink object can be updated
   // accordingly.
   if (!ink_renderer_->HasBeenInitialized()) {
-    return;
+    return false;
   }
 
   // Reinitialize the ink renderer in case the root swap chain or dcomp
   // device changed since initialization.
   if (!InitializeInkRenderer()) {
-    return;
+    return false;
   }
 
   DCHECK(SupportsDelegatedInk());
@@ -879,6 +1512,7 @@ void DCLayerTree::AddDelegatedInkVisualToTreeIfNeeded(
   // Adding the ink visual to a new visual tree invalidates all previously set
   // properties. Therefore, force update.
   ink_renderer_->SetNeedsDcompPropertiesUpdate();
+  return true;
 }
 
 void DCLayerTree::SetDelegatedInkTrailStartPoint(
@@ -905,59 +1539,4 @@ void DCLayerTree::InitDelegatedInkPointRendererReceiver(
   ink_renderer_->InitMessagePipeline(std::move(pending_receiver));
 }
 
-raw_ptr<IDCompositionSurface> DCLayerTree::GetOrCreateSolidWhiteTexture(
-    gfx::Size& resource_size_in_pixels) {
-  resource_size_in_pixels = gfx::Size(1, 1);
-
-  if (!solid_color_texture_) {
-    Microsoft::WRL::ComPtr<IDCompositionSurface> solid_color_texture;
-
-    HRESULT hr = S_OK;
-    hr = dcomp_device_->CreateSurface(
-        resource_size_in_pixels.width(), resource_size_in_pixels.height(),
-        gfx::ColorSpaceWin::GetDXGIFormat(gfx::ColorSpace::CreateSRGB()),
-        DXGI_ALPHA_MODE_IGNORE, &solid_color_texture);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "CreateSurface failed: "
-                 << logging::SystemErrorCodeToString(hr);
-      return nullptr;
-    }
-
-    RECT update_rect = D2D1::Rect(0, 0, resource_size_in_pixels.width(),
-                                  resource_size_in_pixels.height());
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> draw_texture;
-    POINT update_offset;
-    hr = solid_color_texture->BeginDraw(
-        &update_rect, IID_PPV_ARGS(&draw_texture), &update_offset);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "BeginDraw failed: "
-                 << logging::SystemErrorCodeToString(hr);
-      return nullptr;
-    }
-
-    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
-    hr = d3d11_device_->CreateRenderTargetView(draw_texture.Get(), nullptr,
-                                               &rtv);
-    if (FAILED(hr)) {
-      LOG(ERROR) << "CreateRenderTargetView failed: "
-                 << logging::SystemErrorCodeToString(hr);
-      return nullptr;
-    }
-
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate_context;
-    d3d11_device_->GetImmediateContext(&immediate_context);
-    FLOAT white[4] = {1.0, 1.0, 1.0, 1.0};
-    immediate_context->ClearRenderTargetView(rtv.Get(), white);
-
-    hr = solid_color_texture->EndDraw();
-    if (FAILED(hr)) {
-      LOG(ERROR) << "EndDraw failed: " << logging::SystemErrorCodeToString(hr);
-      return nullptr;
-    }
-
-    solid_color_texture_ = std::move(solid_color_texture);
-  }
-
-  return solid_color_texture_.Get();
-}
 }  // namespace gl

@@ -18,6 +18,7 @@
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "components/metrics/structured/structured_metrics_prefs.h"
 #include "components/metrics/structured/structured_metrics_recorder.h"
+#include "components/metrics/structured/test/test_key_data_provider.h"
 #include "components/metrics/test/test_metrics_service_client.h"
 #include "components/metrics/unsent_log_store.h"
 #include "components/metrics/unsent_log_store_metrics_impl.h"
@@ -91,8 +92,10 @@ class StructuredMetricsServiceTest : public testing::Test {
 
   void Init() {
     auto recorder = std::unique_ptr<StructuredMetricsRecorder>(
-        new StructuredMetricsRecorder(DeviceKeyFilePath(), base::Seconds(0),
+        new StructuredMetricsRecorder(base::Seconds(0),
                                       system_profile_provider_.get()));
+    recorder->InitializeKeyDataProvider(std::make_unique<TestKeyDataProvider>(
+        DeviceKeyFilePath(), ProfileKeyFilePath()));
     recorder->OnProfileAdded(temp_dir_.GetPath());
     service_ = std::unique_ptr<StructuredMetricsService>(
         new StructuredMetricsService(&client_, &prefs_, std::move(recorder)));
@@ -177,10 +180,10 @@ class StructuredMetricsServiceTest : public testing::Test {
 
  protected:
   std::unique_ptr<StructuredMetricsService> service_;
+  metrics::TestMetricsServiceClient client_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  metrics::TestMetricsServiceClient client_;
   TestingPrefServiceSimple prefs_;
 
   std::unique_ptr<TestSystemProfileProvider> system_profile_provider_;
@@ -242,6 +245,26 @@ TEST_F(StructuredMetricsServiceTest, RotateLogs) {
 
   const auto uma_proto = GetPersistedLog();
   EXPECT_THAT(uma_proto.structured_data().events().size(), 2);
+}
+
+TEST_F(StructuredMetricsServiceTest, SystemProfileFilled) {
+  Init();
+
+  EnableRecording();
+  EnableReporting();
+
+  TestEventOne().SetTestMetricTwo(1).Record();
+  TestEventSeven().SetTestMetricSeven(1).Record();
+
+  service_->Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+
+  const auto uma_proto = GetPersistedLog();
+  EXPECT_THAT(uma_proto.structured_data().events().size(), 2);
+  EXPECT_TRUE(uma_proto.has_system_profile());
+
+  const SystemProfileProto& system_profile = uma_proto.system_profile();
+  EXPECT_EQ(system_profile.channel(), client_.GetChannel());
+  EXPECT_EQ(system_profile.app_version(), client_.GetVersionString());
 }
 
 TEST_F(StructuredMetricsServiceTest, DoesNotRecordWhenRecordingDisabled) {

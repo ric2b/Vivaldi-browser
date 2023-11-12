@@ -88,13 +88,19 @@ public class StartSurfaceConfiguration {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.START_SURFACE_RETURN_TIME,
                     START_SURFACE_RETURN_TIME_USE_MODEL_PARAM, false);
 
-    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_OMNIBOX_SIZE =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.SURFACE_POLISH, "polish_omnibox_size", false);
-
     public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_OMNIBOX_COLOR =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.SURFACE_POLISH, "polish_omnibox_color", false);
+
+    private static final String SURFACE_POLISH_MOVE_DOWN_LOGO_PARAM = "move_down_logo";
+    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_MOVE_DOWN_LOGO =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_MOVE_DOWN_LOGO_PARAM, false);
+
+    private static final String SURFACE_POLISH_LESS_BRAND_SPACE_PARAM = "less_brand_space";
+    public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_LESS_BRAND_SPACE =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.SURFACE_POLISH, SURFACE_POLISH_LESS_BRAND_SPACE_PARAM, false);
 
     public static final BooleanCachedFieldTrialParameter SURFACE_POLISH_USE_MAGIC_SPACE =
             new BooleanCachedFieldTrialParameter(
@@ -153,7 +159,6 @@ public class StartSurfaceConfiguration {
         return false;
     }
 
-    @VisibleForTesting
     static void setFeedVisibilityForTesting(boolean isVisible) {
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE, isVisible);

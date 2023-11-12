@@ -5,10 +5,7 @@
 #ifndef COMPONENTS_OMNIBOX_COMMON_OMNIBOX_FEATURES_H_
 #define COMPONENTS_OMNIBOX_COMMON_OMNIBOX_FEATURES_H_
 
-#include <string>
-
 #include "base/feature_list.h"
-#include "base/metrics/field_trial_params.h"
 
 namespace omnibox {
 
@@ -23,7 +20,6 @@ BASE_DECLARE_FEATURE(kOmniboxRemoveSuggestionsFromClipboard);
 // deduping or `SortAndCull()`.
 BASE_DECLARE_FEATURE(kGroupingFrameworkForZPS);
 BASE_DECLARE_FEATURE(kGroupingFrameworkForNonZPS);
-BASE_DECLARE_FEATURE(kIgnoreIntermediateResults);
 BASE_DECLARE_FEATURE(kOmniboxDemoteByType);
 BASE_DECLARE_FEATURE(kPreferNonShortcutMatchesWhenDeduping);
 BASE_DECLARE_FEATURE(kPreferTailOverHistoryClusterSuggestions);
@@ -43,7 +39,6 @@ BASE_DECLARE_FEATURE(kOmniboxMaxURLMatches);
 BASE_DECLARE_FEATURE(kDynamicMaxAutocomplete);
 
 // Entity suggestion disambiguation.
-BASE_DECLARE_FEATURE(kDisambiguateEntitySuggestions);
 BASE_DECLARE_FEATURE(kDisambiguateTabMatchingForEntitySuggestions);
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
@@ -76,7 +71,12 @@ BASE_DECLARE_FEATURE(kStoreTitleInContentsAndUrlInDescription);
 
 // Document provider and domain suggestions
 BASE_DECLARE_FEATURE(kDocumentProvider);
+BASE_DECLARE_FEATURE(kDocumentProviderNoSetting);
+BASE_DECLARE_FEATURE(kDocumentProviderNoSyncRequirement);
 BASE_DECLARE_FEATURE(kDomainSuggestions);
+
+// Consent helper types
+BASE_DECLARE_FEATURE(kPrefBasedDataCollectionConsentHelper);
 
 // Suggestions UI - these affect the UI or function of the suggestions popup.
 BASE_DECLARE_FEATURE(kAdaptiveSuggestionsCount);
@@ -86,12 +86,14 @@ BASE_DECLARE_FEATURE(kCr2023ActionChips);
 BASE_DECLARE_FEATURE(kCr2023ActionChipsIcons);
 BASE_DECLARE_FEATURE(kSuggestionAnswersColorReverse);
 BASE_DECLARE_FEATURE(kMostVisitedTiles);
+BASE_DECLARE_FEATURE(kMostVisitedTilesHorizontalRenderGroup);
 BASE_DECLARE_FEATURE(kRichAutocompletion);
 BASE_DECLARE_FEATURE(kNtpRealboxPedals);
+BASE_DECLARE_FEATURE(kOmniboxActionsUISimplification);
 BASE_DECLARE_FEATURE(kOmniboxFuzzyUrlSuggestions);
 BASE_DECLARE_FEATURE(kOmniboxMatchToolbarAndStatusBarColor);
-BASE_DECLARE_FEATURE(kOmniboxMostVisitedTilesAddRecycledViewPool);
 BASE_DECLARE_FEATURE(kOmniboxMostVisitedTilesOnSrp);
+BASE_DECLARE_FEATURE(kSearchReadyOmniboxAllowQueryEdit);
 BASE_DECLARE_FEATURE(kSquareSuggestIcons);
 BASE_DECLARE_FEATURE(kUniformRowHeight);
 BASE_DECLARE_FEATURE(kWebUIOmniboxPopup);
@@ -108,24 +110,11 @@ BASE_DECLARE_FEATURE(kOmniboxAssistantVoiceSearch);
 
 BASE_DECLARE_FEATURE(kOmniboxCR23SteadyStateIcons);
 BASE_DECLARE_FEATURE(kOmniboxSteadyStateBackgroundColor);
-// These feature params are located here, as opposed to omnibox_field_trial.h,
-// in order to permit inclusion into (non-Omnibox) color mixer code.
-extern const base::FeatureParam<std::string> kOmniboxDarkBackgroundColor;
-extern const base::FeatureParam<std::string> kOmniboxDarkBackgroundColorHovered;
-extern const base::FeatureParam<std::string> kOmniboxLightBackgroundColor;
-extern const base::FeatureParam<std::string>
-    kOmniboxLightBackgroundColorHovered;
 
 BASE_DECLARE_FEATURE(kOmniboxSteadyStateHeight);
 BASE_DECLARE_FEATURE(kOmniboxSteadyStateTextStyle);
 
 BASE_DECLARE_FEATURE(kOmniboxSteadyStateTextColor);
-// These feature params are located here, as opposed to omnibox_field_trial.h,
-// in order to permit inclusion into (non-Omnibox) color mixer code.
-extern const base::FeatureParam<std::string> kOmniboxTextColorDarkMode;
-extern const base::FeatureParam<std::string> kOmniboxTextColorDimmedDarkMode;
-extern const base::FeatureParam<std::string> kOmniboxTextColorLightMode;
-extern const base::FeatureParam<std::string> kOmniboxTextColorDimmedLightMode;
 
 BASE_DECLARE_FEATURE(kDiscardTemporaryInputOnTabSwitch);
 BASE_DECLARE_FEATURE(kRedoCurrentMatch);
@@ -136,7 +125,9 @@ BASE_DECLARE_FEATURE(kUseExistingAutocompleteClient);
 // popup.
 BASE_DECLARE_FEATURE(kOmniboxModernizeVisualUpdate);
 
-// Experiment to introduce new security indicators for HTTPS.
+// Android only flag that controls whether the new security indicator should be
+// used, on non-Android platforms this is controlled through the
+// ChromeRefresh2023 flag.
 BASE_DECLARE_FEATURE(kUpdatedConnectionSecurityIndicators);
 
 // Navigation experiments.
@@ -161,6 +152,16 @@ BASE_DECLARE_FEATURE(kActionsInSuggest);
 
 // Adds support for categorical suggestion type.
 BASE_DECLARE_FEATURE(kCategoricalSuggestions);
+BASE_DECLARE_FEATURE(kMergeSubtypes);
+
+// Returns true if the Omnibox CR23 `feature`, which depends on customize
+// chrome, should be enabled.
+bool IsOmniboxCr23CustomizeGuardedFeatureEnabled(const base::Feature& feature);
+
+// Allows for touch down events to send a signal to |SearchPrefetchService| to
+// start prefetching the suggestion. The feature only applies to search
+// suggestions and only controls whether the signal is sent.
+BASE_DECLARE_FEATURE(kOmniboxTouchDownTriggerForPrefetch);
 
 }  // namespace omnibox
 

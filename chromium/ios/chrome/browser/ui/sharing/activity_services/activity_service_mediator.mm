@@ -6,7 +6,7 @@
 
 #import <MobileCoreServices/MobileCoreServices.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/string_number_conversions.h"
@@ -42,10 +42,6 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/activity_services/share_text_data.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface ActivityServiceMediator ()
 

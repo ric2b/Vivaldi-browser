@@ -101,6 +101,7 @@ class ChromeMetricsServiceClient
   bool IsExtendedStableChannel() override;
   std::string GetVersionString() override;
   void OnEnvironmentUpdate(std::string* serialized_environment) override;
+  void MergeSubprocessHistograms() override;
   void CollectFinalMetricsForLog(base::OnceClosure done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       const GURL& server_url,
@@ -213,8 +214,7 @@ class ChromeMetricsServiceClient
   static bool IsWebstoreExtension(base::StringPiece id);
 
   // Resets client state (i.e. client id) if MSBB or App-sync consent
-  // is changed from on to off. NOOP when kAppMetricsOnlyRelyOnAppSync is
-  // disabled.
+  // is changed from on to off. For non-ChromeOS platforms, this will no-op.
   void ResetClientStateWhenMsbbOrAppConsentIsRevoked(
       ukm::UkmConsentState previous_consent_state);
 

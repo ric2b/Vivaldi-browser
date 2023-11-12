@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/autofill/update_address_profile_view.h"
 
+#include <utility>
+
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/autofill/save_update_address_profile_bubble_controller.h"
@@ -44,8 +46,10 @@ class MockSaveUpdateAddressProfileBubbleController
               (const, override));
   MOCK_METHOD(void,
               OnUserDecision,
-              (AutofillClient::SaveAddressProfileOfferUserDecision decision),
+              (AutofillClient::SaveAddressProfileOfferUserDecision,
+               AutofillProfile),
               (override));
+  MOCK_METHOD(void, OnUserCanceledEditing, (), (override));
   MOCK_METHOD(void, OnEditButtonClicked, (), (override));
   MOCK_METHOD(void, OnBubbleClosed, (), (override));
 };
@@ -66,8 +70,9 @@ class UpdateAddressProfileViewTest : public ChromeViewsTestBase {
   }
 
   void TearDown() override {
-    view_->GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kCloseButtonClicked);
+    std::exchange(view_, nullptr)
+        ->GetWidget()
+        ->CloseWithReason(views::Widget::ClosedReason::kCloseButtonClicked);
     anchor_widget_.reset();
 
     ChromeViewsTestBase::TearDown();
@@ -93,7 +98,7 @@ class UpdateAddressProfileViewTest : public ChromeViewsTestBase {
   content::RenderViewHostTestEnabler test_render_host_factories_;
   std::unique_ptr<content::WebContents> test_web_contents_;
   std::unique_ptr<views::Widget> anchor_widget_;
-  raw_ptr<UpdateAddressProfileView, DanglingUntriaged> view_;
+  raw_ptr<UpdateAddressProfileView> view_ = nullptr;
   testing::NiceMock<MockSaveUpdateAddressProfileBubbleController>
       mock_controller_;
 };
@@ -131,7 +136,8 @@ TEST_F(UpdateAddressProfileViewTest, AcceptInvokesTheController) {
   EXPECT_CALL(
       *mock_controller(),
       OnUserDecision(
-          AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted));
+          AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted,
+          address_profile_to_save()));
   view()->AcceptDialog();
 }
 
@@ -140,7 +146,8 @@ TEST_F(UpdateAddressProfileViewTest, CancelInvokesTheController) {
   EXPECT_CALL(
       *mock_controller(),
       OnUserDecision(
-          AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined));
+          AutofillClient::SaveAddressProfileOfferUserDecision::kDeclined,
+          address_profile_to_save()));
   view()->CancelDialog();
 }
 

@@ -22,9 +22,19 @@ extern NSString* const kPasswordsAddPasswordCancelButtonId;
 // The accessibility identifier of the password issues table view.
 extern NSString* const kPasswordIssuesTableViewId;
 
+// The accessibility identifier of the "Dismissed Warnings" cell in the password
+// issues table view.
+extern NSString* const kDismissedWarningsCellId;
+
 // The accessibility identifier of the large "Add Password..." button when
 // displayed in the table.
 extern NSString* const kAddPasswordButtonId;
+
+// Username text field accessibility identifier for Password Details.
+extern NSString* const kUsernameTextfieldForPasswordDetailsId;
+
+// Password text field accessibility identifier for Password Details.
+extern NSString* const kPasswordTextfieldForPasswordDetailsId;
 
 // Delete button accessibility identifier for Password Details.
 extern NSString* const kDeleteButtonForPasswordDetailsId;

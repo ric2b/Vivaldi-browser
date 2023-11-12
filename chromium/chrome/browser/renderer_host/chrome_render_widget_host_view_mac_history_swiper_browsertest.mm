@@ -4,9 +4,9 @@
 
 #include <Cocoa/Cocoa.h>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -25,10 +25,6 @@
 #import "third_party/ocmock/ocmock_extensions.h"
 #include "ui/events/base_event_utils.h"
 #include "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -150,8 +146,9 @@ class ChromeRenderWidgetHostViewMacHistorySwiperTest
 
   // Creates a mock scroll wheel event that is backed by a real CGEvent.
   id MockScrollWheelEvent(NSPoint delta, NSEventType type) {
-    base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateScrollWheelEvent(
-        nullptr, kCGScrollEventUnitLine, 2, 0, 0));
+    base::apple::ScopedCFTypeRef<CGEventRef> cg_event(
+        CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitLine, 2, 0,
+                                      0));
     CGEventSetIntegerValueField(cg_event, kCGScrollWheelEventIsContinuous, 1);
     CGEventSetIntegerValueField(
         cg_event, kCGScrollWheelEventPointDeltaAxis2, delta.x);

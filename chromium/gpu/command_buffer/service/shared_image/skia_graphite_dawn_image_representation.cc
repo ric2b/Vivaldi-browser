@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
@@ -21,7 +22,9 @@ namespace gpu {
 namespace {
 wgpu::TextureView CreatePlaneView(const wgpu::Texture& texture,
                                   int plane_index) {
-  CHECK_EQ(texture.GetFormat(), wgpu::TextureFormat::R8BG8Biplanar420Unorm);
+  CHECK(texture.GetFormat() == wgpu::TextureFormat::R8BG8Biplanar420Unorm ||
+        texture.GetFormat() ==
+            wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm);
   wgpu::TextureViewDescriptor view_desc;
   if (plane_index == 0) {
     view_desc.aspect = wgpu::TextureAspect::Plane0Only;
@@ -81,7 +84,8 @@ SkiaGraphiteDawnImageRepresentation::CreateBackendTextures(
     wgpu::Texture texture) {
   std::vector<skgpu::graphite::BackendTexture> backend_textures;
   CHECK(plane_views_.empty());
-  if (format() == viz::MultiPlaneFormat::kNV12) {
+  if (format() == viz::MultiPlaneFormat::kNV12 ||
+      format() == viz::MultiPlaneFormat::kP010) {
     backend_textures.reserve(format().NumberOfPlanes());
     plane_views_.reserve(format().NumberOfPlanes());
     for (int plane_index = 0; plane_index < format().NumberOfPlanes();
@@ -117,9 +121,11 @@ SkiaGraphiteDawnImageRepresentation::BeginWriteAccess(
     const gfx::Rect& update_rect) {
   CHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CHECK(!dawn_scoped_access_);
+  bool is_dcomp_surface = usage() & SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
+  wgpu::TextureUsage wgpu_usage =
+      GetSupportedDawnTextureUsage(format(), is_yuv_plane_, is_dcomp_surface);
   dawn_scoped_access_ = dawn_representation_->BeginScopedAccess(
-      GetSupportedWGPUTextureUsage(format(), is_yuv_plane_),
-      AllowUnclearedAccess::kYes);
+      wgpu_usage, AllowUnclearedAccess::kYes, update_rect);
   if (!dawn_scoped_access_) {
     DLOG(ERROR) << "Could not create DawnImageRepresentation::ScopedAccess";
     return {};
@@ -159,8 +165,9 @@ SkiaGraphiteDawnImageRepresentation::BeginWriteAccess() {
   CHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CHECK(!dawn_scoped_access_);
 
+  bool is_dcomp_surface = usage() & SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
   dawn_scoped_access_ = dawn_representation_->BeginScopedAccess(
-      GetSupportedWGPUTextureUsage(format(), is_yuv_plane_),
+      GetSupportedDawnTextureUsage(format(), is_yuv_plane_, is_dcomp_surface),
       AllowUnclearedAccess::kYes);
   if (!dawn_scoped_access_) {
     DLOG(ERROR) << "Could not create DawnImageRepresentation::ScopedAccess";
@@ -183,8 +190,9 @@ SkiaGraphiteDawnImageRepresentation::BeginReadAccess() {
   CHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CHECK(!dawn_scoped_access_);
 
+  bool is_dcomp_surface = usage() & SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
   dawn_scoped_access_ = dawn_representation_->BeginScopedAccess(
-      GetSupportedWGPUTextureUsage(format(), is_yuv_plane_),
+      GetSupportedDawnTextureUsage(format(), is_yuv_plane_, is_dcomp_surface),
       AllowUnclearedAccess::kNo);
 
   if (!dawn_scoped_access_) {

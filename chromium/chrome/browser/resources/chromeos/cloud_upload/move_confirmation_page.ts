@@ -4,11 +4,11 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
-import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.js';
+import 'chrome://resources/cros_components/lottie_renderer/lottie-renderer.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import type {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
-import type {CrLottieElement} from 'chrome://resources/cr_elements/cr_lottie/cr_lottie.js';
+import type {LottieRenderer} from 'chrome://resources/cros_components/lottie_renderer/lottie-renderer.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {MetricsRecordedSetupPage, OperationType, UserAction} from './cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from './cloud_upload_browser_proxy.js';
 import {getTemplate} from './move_confirmation_page.html.js';
@@ -27,6 +27,7 @@ export class MoveConfirmationPageElement extends HTMLElement {
   private proxy: CloudUploadBrowserProxy =
       CloudUploadBrowserProxy.getInstance();
   private cloudProvider: CloudProvider|undefined;
+  private animationPlayer: LottieRenderer|undefined;
   private playPauseButton: HTMLElement|undefined;
 
   constructor() {
@@ -66,34 +67,36 @@ export class MoveConfirmationPageElement extends HTMLElement {
 
     this.cloudProvider = cloudProvider;
 
-    const operationTypeText =
-        operationType === OperationType.kCopy ? 'Copy' : 'Move';
-    const filesText = numFiles > 1 ? 'files' : 'file';
-    const name = this.getProviderName(this.cloudProvider);
+    const isCopyOperation = operationType === OperationType.kCopy;
+    const isPlural = numFiles > 1;
+    const providerName = this.getProviderName(this.cloudProvider);
 
     // Animation.
-    this.updateAnimation(
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
-    window.matchMedia('(prefers-color-scheme: dark)')
-        .addEventListener('change', event => {
-          this.updateAnimation(event.matches);
-        });
+    this.updateAnimation();
 
     // Title.
     const titleElement = this.$<HTMLElement>('#title')!;
-    titleElement.innerText = `${operationTypeText} ${numFiles.toString()} ${
-        filesText} to ${name} to open?`;
+    if (isCopyOperation) {
+      titleElement.innerText = loadTimeData.getStringF(
+          isPlural ? 'moveConfirmationCopyTitlePlural' :
+                     'moveConfirmationCopyTitle',
+          providerName,
+          numFiles.toString(),
+      );
+    } else {
+      titleElement.innerText = loadTimeData.getStringF(
+          isPlural ? 'moveConfirmationMoveTitlePlural' :
+                     'moveConfirmationMoveTitle',
+          providerName, numFiles.toString());
+    }
 
     // Checkbox and Body.
     const bodyText = this.$('#body-text');
     const checkbox = this.$<CrCheckboxElement>('#always-copy-or-move-checkbox');
-    checkbox.innerText = 'Don\'t ask again';
+    checkbox.innerText = loadTimeData.getString('moveConfirmationAlwaysMove');
     if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
       bodyText.innerText =
-          'Microsoft 365 requires files to be stored in OneDrive. ' +
-          'Local files will move and files from other locations will copy. ' +
-          'Your files can be found in the Microsoft OneDrive folder in the ' +
-          'Files app.';
+          loadTimeData.getString('moveConfirmationOneDriveBodyText');
 
       // Only show checkbox if the confirmation has been shown before for
       // OneDrive.
@@ -104,10 +107,7 @@ export class MoveConfirmationPageElement extends HTMLElement {
       }
     } else {
       bodyText.innerText =
-          'Google Docs, Sheets, and Slides require files to be stored in ' +
-          'Google Drive. Local files will move and files from other ' +
-          'locations will copy. Your files can be found in the Google Drive ' +
-          'folder in the Files app.';
+          loadTimeData.getStringF('moveConfirmationGoogleDriveBodyText');
 
       // Only show checkbox if the confirmation has been shown before for
       // Drive.
@@ -120,24 +120,38 @@ export class MoveConfirmationPageElement extends HTMLElement {
 
     // Action button.
     const actionButton = this.$<HTMLElement>('.action-button')!;
-    actionButton.innerText = `${operationTypeText} and open`;
+    actionButton.innerText =
+        loadTimeData.getString(isCopyOperation ? 'copyAndOpen' : 'moveAndOpen');
   }
 
   private getProviderName(cloudProvider: CloudProvider) {
     if (cloudProvider === CloudProvider.ONE_DRIVE) {
-      return 'Microsoft OneDrive';
+      return loadTimeData.getString('oneDrive');
     }
-    return 'Google Drive';
+    return loadTimeData.getString('googleDrive');
   }
 
-  private updateAnimation(isDarkMode: boolean) {
+  private createAnimation(animationUrl: string) {
+    this.animationPlayer = document.createElement('cros-lottie-renderer');
+    this.animationPlayer.id = 'animation';
+    this.animationPlayer.setAttribute('asset-url', animationUrl);
+    this.animationPlayer.setAttribute('dynamic', 'true');
+    this.animationPlayer.setAttribute('aria-hidden', 'true');
+    this.animationPlayer.autoplay = true;
+    const animationWrapper = this.$<HTMLElement>('.animation-wrapper')!;
+    const playPauseIcon = this.$<HTMLElement>('#playPauseIcon')!;
+    animationWrapper.insertBefore(this.animationPlayer, playPauseIcon);
+  }
+
+  private updateAnimation() {
     const provider =
         this.cloudProvider === CloudProvider.ONE_DRIVE ? 'onedrive' : 'drive';
-    const colorScheme = isDarkMode ? 'dark' : 'light';
-    const animationUrl =
-        `animations/move_confirmation_${provider}_${colorScheme}.json`;
-    this.shadowRoot!.querySelector('cr-lottie')!.setAttribute(
-        'animation-url', animationUrl);
+    const animationUrl = `animations/move_confirmation_${provider}.json`;
+    if (!this.animationPlayer) {
+      this.createAnimation(animationUrl);
+    } else {
+      this.animationPlayer.setAttribute('asset-url', animationUrl);
+    }
   }
 
   private onActionButtonClick(): void {
@@ -158,24 +172,27 @@ export class MoveConfirmationPageElement extends HTMLElement {
     if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
       this.proxy.handler.recordCancel(
           MetricsRecordedSetupPage.kMoveConfirmationOneDrive);
+      this.proxy.handler.respondWithUserActionAndClose(
+          UserAction.kCancelOneDrive);
     } else {
       this.proxy.handler.recordCancel(
           MetricsRecordedSetupPage.kMoveConfirmationGoogleDrive);
+      this.proxy.handler.respondWithUserActionAndClose(
+          UserAction.kCancelGoogleDrive);
     }
-    this.proxy.handler.respondWithUserActionAndClose(UserAction.kCancel);
   }
 
   private onPlayPauseButtonClick(): void {
-    const animation = this.$<CrLottieElement>('#animation')!;
+    const animation = this.$<LottieRenderer>('#animation')!;
     const shouldPlay = this.playPauseButton!.className === 'play';
     if (shouldPlay) {
-      animation.setPlay(true);
+      animation.play();
       // Update button to Pause.
       this.playPauseButton!.className = 'pause';
       this.playPauseButton!.ariaLabel =
           loadTimeData.getString('animationPauseText');
     } else {
-      animation.setPlay(false);
+      animation.pause();
       // Update button to Play.
       this.playPauseButton!.className = 'play';
       this.playPauseButton!.ariaLabel =

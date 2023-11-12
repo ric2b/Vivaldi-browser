@@ -15,10 +15,11 @@
 #import "components/omnibox/browser/omnibox_edit_model.h"
 #import "components/omnibox/browser/omnibox_view.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/prefs/pref_service.h"
 #import "components/profile_metrics/browser_profile_type.h"
 #import "components/search_engines/util.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
+#import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
 #import "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
@@ -29,7 +30,7 @@
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
+#import "ios/chrome/browser/shared/coordinator/default_browser_promo/default_browser_promo_scene_agent_utils.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -79,16 +80,11 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/sharing/activity_services/canonical_url_retriever.h"
-#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_view_controller.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 BASE_FEATURE(kEnableFocusOmniboxWorkaround,
              "EnableFocusOmniboxWorkaround",
@@ -138,19 +134,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 // Handler for URL drag interactions.
 @property(nonatomic, strong) URLDragDropHandler* dragDropHandler;
 
-// Vivaldi
-@property(nonatomic, strong) VivaldiATBManager* adblockManager;
-@property(nonatomic, assign) NSString* currentHost;
-// End Vivaldi
-
 @end
 
 @implementation LocationBarCoordinator
-
-// Vivaldi
-@synthesize adblockManager = _adblockManager;
-@synthesize currentHost = _currentHost;
-// End Vivaldi
 
 #pragma mark - Accessors
 
@@ -188,6 +174,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   BOOL isIncognito = self.browserState->IsOffTheRecord();
 
+  PrefService* prefs =
+      ChromeBrowserState::FromBrowserState(self.browser->GetBrowserState())
+          ->GetPrefs();
   self.viewController = [[LocationBarViewController alloc] init];
   self.viewController.incognito = isIncognito;
   self.viewController.delegate = self;
@@ -202,6 +191,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       ios::provider::IsVoiceSearchEnabled();
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
+  self.viewController.prefService = prefs;
 
   _locationBar = std::make_unique<WebLocationBarImpl>(self, self.delegate);
   _locationBar->SetURLLoader(self);
@@ -272,11 +262,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   _omniboxFullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
       fullscreenController, self.viewController);
 
-  // Vivaldi
-  [self initialiseAdblockManager];
-  [self observeSiteSettingChanges];
-  // End Vivaldi
-
   self.started = YES;
 
   [self setUpDragAndDrop];
@@ -294,8 +279,13 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   self.viewController = nil;
   [self.mediator disconnect];
+  self.mediator.templateURLService = nil;
+  self.mediator.consumer = nil;
   self.mediator = nil;
   [self.steadyViewMediator disconnect];
+  self.steadyViewMediator.webStateList = nullptr;
+  self.steadyViewMediator.webContentAreaOverlayPresenter = nil;
+  self.steadyViewMediator.consumer = nil;
   self.steadyViewMediator = nil;
 
   _locationBarModel = nullptr;
@@ -303,14 +293,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   _badgeFullscreenUIUpdater = nullptr;
   _omniboxFullscreenUIUpdater = nullptr;
-
-  // Vivaldi
-  if (!self.adblockManager)
-    return;
-  self.adblockManager.consumer = nil;
-  [self.adblockManager disconnect];
-  [self removeSiteSettingChangeObserver];
-  // End Vivaldi
 
   self.started = NO;
 }
@@ -337,6 +319,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (UIResponder<UITextInput>*)omniboxScribbleForwardingTarget {
   return self.omniboxCoordinator.scribbleInput;
+}
+
+// Returns the toolbar omnibox consumer.
+- (id<ToolbarOmniboxConsumer>)toolbarOmniboxConsumer {
+  return self.omniboxCoordinator.toolbarOmniboxConsumer;
 }
 
 #pragma mark - LoadQueryCommands
@@ -474,8 +461,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  [[NonModalDefaultBrowserPromoSchedulerSceneAgent agentFromScene:sceneState]
-      logUserPastedInOmnibox];
+  NotifyDefaultBrowserPromoUserPastedInOmnibox(sceneState);
   LogToFETUserPastedURLIntoOmnibox(
       feature_engagement::TrackerFactory::GetForBrowserState(
           self.browser->GetBrowserState()));
@@ -635,38 +621,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 
 #pragma mark - VIVALDI
-
-- (void)initialiseAdblockManager {
-  if (!self.browser)
-    return;
-  self.adblockManager =
-    [[VivaldiATBManager alloc] initWithBrowser:self.browser];
-}
-
-- (void)observeSiteSettingChanges {
-  [self removeSiteSettingChangeObserver];
-
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(handleSiteSettingChangeNotification:)
-             name:vATBSiteSettingsDidChange
-           object:nil];
-}
-
-- (void)removeSiteSettingChangeObserver {
-  [[NSNotificationCenter defaultCenter]
-     removeObserver:self
-               name:vATBSiteSettingsDidChange
-             object:nil];
-}
-
-- (void)handleSiteSettingChangeNotification:(NSNotification*)notification {
-  NSString *hostString = notification.userInfo[vATBHostKey];
-  if ([hostString isEqualToString:_currentHost]) {
-    [self reloadCurrentWebState];
-  }
-}
-
 - (void)showTrackerBlockerManager {
 
   web::WebState* currentWebState =
@@ -690,7 +644,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     NSString* host = [nsURL host];
     if (!host)
       return;
-    weakSelf.currentHost = host;
     [weakSelf presentTrackerBlockerManagerWithHost:host];
   }));
 }
@@ -711,16 +664,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.viewController presentViewController:navController
                      animated:YES
                    completion:nil];
-}
-
-- (void)reloadCurrentWebState {
-  web::WebState* currentWebState =
-      self.browser->GetWebStateList()->GetActiveWebState();
-  if (!currentWebState)
-    return;
-
-  currentWebState->GetNavigationManager()->Reload(
-      web::ReloadType::ORIGINAL_REQUEST_URL, true /* check_for_repost */);
 }
 
 - (id<SharingPositioner>)vivaldiPositioner {

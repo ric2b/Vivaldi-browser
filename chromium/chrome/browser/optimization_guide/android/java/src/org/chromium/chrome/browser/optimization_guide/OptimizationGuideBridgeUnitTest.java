@@ -31,7 +31,6 @@ import org.chromium.base.test.util.JniMocker;
 import org.chromium.components.optimization_guide.OptimizationGuideDecision;
 import org.chromium.components.optimization_guide.proto.CommonTypesProto.RequestContext;
 import org.chromium.components.optimization_guide.proto.HintsProto.OptimizationType;
-import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.url.GURL;
 
 import java.util.Arrays;
@@ -72,7 +71,9 @@ public class OptimizationGuideBridgeUnitTest {
         bridge.registerOptimizationTypes(Arrays.asList(new OptimizationType[] {
                 OptimizationType.PERFORMANCE_HINTS, OptimizationType.DEFER_ALL_SCRIPT}));
         verify(mOptimizationGuideBridgeJniMock, times(1))
-                .registerOptimizationTypes(eq(1L), aryEq(new int[] {6, 5}));
+                .registerOptimizationTypes(eq(1L),
+                        aryEq(new int[] {OptimizationType.PERFORMANCE_HINTS_VALUE,
+                                OptimizationType.DEFER_ALL_SCRIPT_VALUE}));
     }
 
     @Test
@@ -126,46 +127,8 @@ public class OptimizationGuideBridgeUnitTest {
         bridge.canApplyOptimization(gurl, OptimizationType.PERFORMANCE_HINTS, mCallbackMock);
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
-                .canApplyOptimization(eq(1L), eq(gurl), eq(6), eq(mCallbackMock));
-    }
-
-    @Test
-    @SmallTest
-    @UiThreadTest
-    @Feature({"OptimizationHints"})
-    public void testCanApplyOptimizationAsync_withoutNativeBridge() {
-        GURL gurl = new GURL(TEST_URL);
-        OptimizationGuideBridge bridge = new OptimizationGuideBridge(0);
-        NavigationHandle navHandle = NavigationHandle.createForTesting(new GURL(TEST_URL),
-                false /* isRendererInitiated */, 0 /* pageTransition */,
-                false /* hasUserGesture */);
-
-        bridge.canApplyOptimizationAsync(
-                navHandle, OptimizationType.PERFORMANCE_HINTS, mCallbackMock);
-
-        verify(mOptimizationGuideBridgeJniMock, never())
-                .canApplyOptimization(anyLong(), any(), anyInt(),
-                        any(OptimizationGuideBridge.OptimizationGuideCallback.class));
-        verify(mCallbackMock)
-                .onOptimizationGuideDecision(eq(OptimizationGuideDecision.UNKNOWN), isNull());
-    }
-
-    @Test
-    @SmallTest
-    @UiThreadTest
-    @Feature({"OptimizationHints"})
-    public void testCanApplyOptimizationAsync() {
-        GURL gurl = new GURL(TEST_URL);
-        OptimizationGuideBridge bridge = new OptimizationGuideBridge(1);
-        NavigationHandle navHandle =
-                NavigationHandle.createForTesting(gurl, false /* isRendererInitiated */,
-                        0 /* pageTransition */, false /* hasUserGesture */);
-
-        bridge.canApplyOptimizationAsync(
-                navHandle, OptimizationType.PERFORMANCE_HINTS, mCallbackMock);
-
-        verify(mOptimizationGuideBridgeJniMock, times(1))
-                .canApplyOptimizationAsync(eq(1L), eq(gurl), eq(6), eq(mCallbackMock));
+                .canApplyOptimization(eq(1L), eq(gurl),
+                        eq(OptimizationType.PERFORMANCE_HINTS_VALUE), eq(mCallbackMock));
     }
 
     @Test
@@ -177,11 +140,10 @@ public class OptimizationGuideBridgeUnitTest {
         GURL gurl2 = new GURL(TEST_URL2);
         OptimizationGuideBridge bridge = new OptimizationGuideBridge(0);
 
-        bridge.canApplyOptimizationOnDemand(
-                Arrays.asList(new GURL[] {gurl, gurl2}),
+        bridge.canApplyOptimizationOnDemand(Arrays.asList(new GURL[] {gurl, gurl2}),
                 Arrays.asList(new OptimizationType[] {
                         OptimizationType.PERFORMANCE_HINTS, OptimizationType.DEFER_ALL_SCRIPT}),
-                RequestContext.CONTEXT_NEW_TAB_PAGE, mOnDemandCallbackMock);
+                RequestContext.CONTEXT_PAGE_INSIGHTS_HUB, mOnDemandCallbackMock);
 
         verify(mOptimizationGuideBridgeJniMock, never())
                 .canApplyOptimizationOnDemand(anyLong(), any(), any(), anyInt(),
@@ -213,14 +175,16 @@ public class OptimizationGuideBridgeUnitTest {
         GURL gurl2 = new GURL(TEST_URL2);
         OptimizationGuideBridge bridge = new OptimizationGuideBridge(1);
 
-        bridge.canApplyOptimizationOnDemand(
-                Arrays.asList(new GURL[] {gurl, gurl2}),
+        bridge.canApplyOptimizationOnDemand(Arrays.asList(new GURL[] {gurl, gurl2}),
                 Arrays.asList(new OptimizationType[] {
                         OptimizationType.PERFORMANCE_HINTS, OptimizationType.DEFER_ALL_SCRIPT}),
-                RequestContext.CONTEXT_NEW_TAB_PAGE, mOnDemandCallbackMock);
+                RequestContext.CONTEXT_PAGE_INSIGHTS_HUB, mOnDemandCallbackMock);
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(eq(1L), aryEq(new GURL[] {gurl, gurl2}),
-                        aryEq(new int[] {6, 5}), eq(9), eq(mOnDemandCallbackMock));
+                        aryEq(new int[] {OptimizationType.PERFORMANCE_HINTS_VALUE,
+                                OptimizationType.DEFER_ALL_SCRIPT_VALUE}),
+                        eq(RequestContext.CONTEXT_PAGE_INSIGHTS_HUB_VALUE),
+                        eq(mOnDemandCallbackMock));
     }
 }

@@ -19,6 +19,7 @@
 #include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_uuids.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
@@ -166,20 +167,17 @@ base::Uuid GetPermanentFolderUuidForServerDefinedUniqueTag(
   // WARNING: Keep this logic consistent with the analogous in
   // GetPermanentFolderForServerDefinedUniqueTag().
   if (server_defined_unique_tag == kBookmarkBarTag) {
-    return base::Uuid::ParseLowercase(
-        bookmarks::BookmarkNode::kBookmarkBarNodeUuid);
+    return base::Uuid::ParseLowercase(bookmarks::kBookmarkBarNodeUuid);
   }
   if (server_defined_unique_tag == kOtherBookmarksTag) {
-    return base::Uuid::ParseLowercase(
-        bookmarks::BookmarkNode::kOtherBookmarksNodeUuid);
+    return base::Uuid::ParseLowercase(bookmarks::kOtherBookmarksNodeUuid);
   }
   if (server_defined_unique_tag == kMobileBookmarksTag) {
-    return base::Uuid::ParseLowercase(
-        bookmarks::BookmarkNode::kMobileBookmarksNodeUuid);
+    return base::Uuid::ParseLowercase(bookmarks::kMobileBookmarksNodeUuid);
   }
   if (server_defined_unique_tag == kTrashBookmarksTag) {
     return base::Uuid::ParseLowercase(
-        bookmarks::BookmarkNode::kVivaldiTrashNodeUuid);
+        bookmarks::kVivaldiTrashNodeUuid);
   }
 
   return base::Uuid();

@@ -442,9 +442,9 @@ void SiteInstanceImpl::ReuseExistingProcessIfPossible(
 
 void SiteInstanceImpl::SetProcessInternal(RenderProcessHost* process) {
   if (!site_instance_group_) {
-    site_instance_group_ =
-        browsing_instance_->site_instance_group_manager()
-            .GetOrCreateGroupForNewSiteInstance(this, process);
+    site_instance_group_ = base::WrapRefCounted(
+        new SiteInstanceGroup(browsing_instance(), process));
+    site_instance_group_->AddSiteInstance(this);
   }
 
   LockProcessIfNeeded();
@@ -514,7 +514,7 @@ void SiteInstanceImpl::SetSiteInfoToDefault(
   original_url_ = GetDefaultSiteURL();
   SetSiteInfoInternal(SiteInfo::CreateForDefaultSiteInstance(
       GetIsolationContext(), storage_partition_config,
-      browsing_instance_->web_exposed_isolation_info()));
+      GetWebExposedIsolationInfo()));
 }
 
 void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
@@ -1200,6 +1200,12 @@ bool SiteInstanceImpl::DoesSiteInfoForURLMatch(const UrlInfo& url_info) {
   // WebExposedIsolationInfo must be compatible.
   if (!WebExposedIsolationInfo::AreCompatible(
           url_info.web_exposed_isolation_info, GetWebExposedIsolationInfo())) {
+    return false;
+  }
+
+  // Similarly, the common_coop_origin in the UrlInfo and in this
+  // SiteInstance's BrowsingInstance must be compatible.
+  if (url_info.common_coop_origin != GetCommonCoopOrigin()) {
     return false;
   }
 

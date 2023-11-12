@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include "base/allocator/partition_allocator/pointers/raw_ptr.h"
+#include "base/memory/raw_ptr.h"
 #include "components/enterprise/browser/reporting/browser_report_generator.h"
 #include "components/enterprise/browser/reporting/profile_report_generator.h"
 #include "components/enterprise/browser/reporting/real_time_report_controller.h"
@@ -33,25 +33,25 @@ class ReportingDelegateFactoryDesktop : public ReportingDelegateFactory {
   ~ReportingDelegateFactoryDesktop() override = default;
 
   std::unique_ptr<BrowserReportGenerator::Delegate>
-  GetBrowserReportGeneratorDelegate() override;
+  GetBrowserReportGeneratorDelegate() const override;
 
   std::unique_ptr<ProfileReportGenerator::Delegate>
-  GetProfileReportGeneratorDelegate() override;
+  GetProfileReportGeneratorDelegate() const override;
 
   std::unique_ptr<ReportGenerator::Delegate> GetReportGeneratorDelegate()
-      override;
+      const override;
 
   std::unique_ptr<ReportScheduler::Delegate> GetReportSchedulerDelegate()
-      override;
+      const override;
 
   std::unique_ptr<RealTimeReportGenerator::Delegate>
-  GetRealTimeReportGeneratorDelegate() override;
+  GetRealTimeReportGeneratorDelegate() const override;
 
   std::unique_ptr<RealTimeReportController::Delegate>
-  GetRealTimeReportControllerDelegate() override;
+  GetRealTimeReportControllerDelegate() const override;
 
   std::unique_ptr<ReportScheduler::Delegate> GetReportSchedulerDelegate(
-      Profile* profile);
+      Profile* profile) const;
 
   void SetProfileForRealTimeController(Profile* profile);
 

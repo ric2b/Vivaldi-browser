@@ -96,9 +96,9 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
     active_browser_ = nullptr;
     ContentAutofillDriverFactory::FromWebContents(web_contents)
         ->DriverForFrame(web_contents->GetPrimaryMainFrame())
-        ->autofill_manager()
-        ->client()
-        ->HideAutofillPopup(PopupHidingReason::kTabGone);
+        ->GetAutofillManager()
+        .client()
+        .HideAutofillPopup(PopupHidingReason::kTabGone);
     test::ReenableSystemServices();
   }
 
@@ -206,18 +206,15 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
   void GetAutocompleteSuggestions(const std::string& input_name,
                                   const std::string& prefix,
                                   MockSuggestionsHandler& handler) {
-    FormFieldData field;
-    AutofillClient* autofill_client =
+    AutofillClient& autofill_client =
         ContentAutofillDriverFactory::FromWebContents(web_contents())
             ->DriverForFrame(web_contents()->GetPrimaryMainFrame())
-            ->autofill_manager()
-            ->client();
-    DCHECK(autofill_client);
-    test::CreateTestFormField(/*label=*/"", input_name.c_str(), prefix.c_str(),
-                              "input", &field);
+            ->GetAutofillManager()
+            .client();
     EXPECT_TRUE(autocomplete_history_manager()->OnGetSingleFieldSuggestions(
-        AutofillSuggestionTriggerSource::kFormControlElementClicked, field,
-        *autofill_client, handler.GetWeakPtr(), SuggestionsContext()));
+        AutofillSuggestionTriggerSource::kFormControlElementClicked,
+        test::CreateTestFormField(/*label=*/"", input_name, prefix, "input"),
+        autofill_client, handler.GetWeakPtr(), SuggestionsContext()));
 
     // Make sure the DB task gets executed.
     WaitForDBTasks();

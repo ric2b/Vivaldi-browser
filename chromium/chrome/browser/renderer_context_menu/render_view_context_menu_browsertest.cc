@@ -42,6 +42,7 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sessions/session_restore.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -52,13 +53,14 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/web_app_install_finalizer.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
@@ -69,6 +71,8 @@
 #include "components/lens/lens_testing_utils.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/scoped_privacy_sandbox_attestations.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/supervised_user/core/common/buildflags.h"
@@ -109,6 +113,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "pdf/buildflags.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -131,10 +136,14 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/test/supervised_user/embedded_test_server_setup_mixin.h"
+#include "chrome/test/supervised_user/supervision_mixin.h"
+#include "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/test_support/kids_chrome_management_test_utils.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -166,9 +175,15 @@ namespace {
 const char kAppUrl1[] = "https://www.google.com/";
 const char kAppUrl2[] = "https://docs.google.com/";
 
-class ContextMenuBrowserTest : public InProcessBrowserTest {
+class AllowPreCommitInputFlagMixin : public InProcessBrowserTestMixin {
  public:
-  ContextMenuBrowserTest() {}
+  AllowPreCommitInputFlagMixin() = delete;
+  explicit AllowPreCommitInputFlagMixin(InProcessBrowserTestMixinHost& host)
+      : InProcessBrowserTestMixin(&host) {}
+  AllowPreCommitInputFlagMixin(const AllowPreCommitInputFlagMixin&) = delete;
+  AllowPreCommitInputFlagMixin& operator=(const AllowPreCommitInputFlagMixin&) =
+      delete;
+  ~AllowPreCommitInputFlagMixin() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Tests in this suite make use of documents with no significant
@@ -176,7 +191,9 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     // unless we allow it.
     command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
   }
+};
 
+class ContextMenuBrowserTest : public MixinBasedInProcessBrowserTest {
  protected:
   std::unique_ptr<TestRenderViewContextMenu> CreateContextMenuMediaTypeNone(
       const GURL& unfiltered_url,
@@ -284,7 +301,7 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
   AppId InstallTestWebApp(const GURL& start_url,
                           web_app::mojom::UserDisplayMode display_mode =
                               web_app::mojom::UserDisplayMode::kStandalone) {
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
+    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url;
     web_app_info->title = u"Test app 🐐";
@@ -392,6 +409,7 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
  private:
   web_app::OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
   base::test::ScopedFeatureList scoped_feature_list_{features::kReadAnything};
+  AllowPreCommitInputFlagMixin allow_pre_commit_input_flag_mixin_{mixin_host_};
 };
 
 class ContextMenuWithProfileLinksBrowserTest : public ContextMenuBrowserTest {
@@ -413,12 +431,9 @@ class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
   ~PdfPluginContextMenuBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
-    guest_view::GuestViewManager::set_factory_for_testing(&factory_);
-    test_guest_view_manager_ = static_cast<guest_view::TestGuestViewManager*>(
-        guest_view::GuestViewManager::CreateWithDelegate(
-            browser()->profile(),
-            extensions::ExtensionsAPIClient::Get()
-                ->CreateGuestViewManagerDelegate(browser()->profile())));
+    test_guest_view_manager_ = factory_.GetOrCreateTestGuestViewManager(
+        browser()->profile(), extensions::ExtensionsAPIClient::Get()
+                                  ->CreateGuestViewManagerDelegate());
   }
 
  protected:
@@ -525,10 +540,10 @@ class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
   content::RenderFrameHost* extension_frame() { return extension_frame_; }
 
  private:
-  raw_ptr<content::RenderFrameHost, DanglingUntriaged> extension_frame_ =
-      nullptr;
+  raw_ptr<content::RenderFrameHost, AcrossTasksDanglingUntriaged>
+      extension_frame_ = nullptr;
   guest_view::TestGuestViewManagerFactory factory_;
-  raw_ptr<guest_view::TestGuestViewManager, DanglingUntriaged>
+  raw_ptr<guest_view::TestGuestViewManager, AcrossTasksDanglingUntriaged>
       test_guest_view_manager_;
 };
 
@@ -576,34 +591,51 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 }
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+class ContextMenuForSupervisedUsersBrowserTest : public ContextMenuBrowserTest {
+ public:
+  ContextMenuForSupervisedUsersBrowserTest() {
+    supervision_mixin_.InitFeatures();
+  }
+
+  supervised_user::SupervisedUserService* GetSupervisedUserService() {
+    return SupervisedUserServiceFactory::GetForProfile(browser()->profile());
+  }
+
+ protected:
+  // Supervision mixin hooks kids management api (including ClassifyUrl) onto
+  // given embedded test server. This server is run in separate process and is
+  // responding to all requests as configured in this mixin.
+  // MUST be declared after scoped_feature_list_ due to Init/dtor order.
+  supervised_user::SupervisionMixin supervision_mixin_{
+      mixin_host_,
+      this,
+      embedded_test_server(),
+      {
+          .sign_in_mode =
+              supervised_user::SupervisionMixin::SignInMode::kSupervised,
+      }};
+};
+
 class ContextMenuWithoutFilteringForSupervisedUsersBrowserTest
-    : public ContextMenuBrowserTest {
+    : public ContextMenuForSupervisedUsersBrowserTest {
  public:
   ContextMenuWithoutFilteringForSupervisedUsersBrowserTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{supervised_user::kEnableProtoApiForClassifyUrl},
+        /*disabled_features=*/{
+            supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS});
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(
-    ContextMenuWithoutFilteringForSupervisedUsersBrowserTest,
-    SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChildWithoutFiltering) {
-  // Set up child user profile.
-  Profile* profile = browser()->profile();
-  browser()->profile()->GetPrefs()->SetString(
-      prefs::kSupervisedUserId, supervised_user::kChildAccountSUID);
-
+IN_PROC_BROWSER_TEST_F(ContextMenuWithoutFilteringForSupervisedUsersBrowserTest,
+                       SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChild) {
   // Block access to http://www.google.com/ in the URL filter.
-  supervised_user::SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForProfile(profile);
-  supervised_user::SupervisedUserURLFilter* url_filter =
-      supervised_user_service->GetURLFilter();
   std::map<std::string, bool> hosts;
   hosts["www.google.com"] = false;
-  url_filter->SetManualHosts(std::move(hosts));
+  GetSupervisedUserService()->GetURLFilter()->SetManualHosts(std::move(hosts));
 
   base::RunLoop().RunUntilIdle();
 
@@ -614,18 +646,123 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
 
   // The entry is only disabled for platforms on which URL filtering is enabled.
-  if (supervised_user_service->IsURLFilteringEnabled()) {
+  if (GetSupervisedUserService()->IsURLFilteringEnabled()) {
     EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
   } else {
     EXPECT_TRUE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
   }
 }
 
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithoutFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsDisabledForUrlsBlockedByAsyncCheckerForChild) {
+  ContextMenuWaiter menu_observer;
+
+  base::RunLoop().RunUntilIdle();
+
+  if (GetSupervisedUserService()->IsURLFilteringEnabled()) {
+    supervision_mixin_.embedded_test_server_setup_mixin()
+        .GetApiMock()
+        .QueueRestrictedUrlClassification();
+  }
+
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/download-anchor-same-origin.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  // Open a context menu.
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(15, 15);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  std::u16string suggested_filename = menu_observer.params().suggested_filename;
+  // The save link as action is only blocked for platforms on which URL
+  // filtering is enabled.
+  if (GetSupervisedUserService()->IsURLFilteringEnabled()) {
+    const std::string kSuggestedFilename("");
+    ASSERT_EQ(kSuggestedFilename,
+              base::UTF16ToUTF8(suggested_filename).c_str());
+  } else {
+    const std::string kSuggestedFilename("test_filename.png");
+    ASSERT_EQ(kSuggestedFilename,
+              base::UTF16ToUTF8(suggested_filename).c_str());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithoutFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsEnabledForUrlsAllowedByAsyncCheckerForChild) {
+  ContextMenuWaiter menu_observer;
+
+  if (GetSupervisedUserService()->IsURLFilteringEnabled()) {
+    supervision_mixin_.embedded_test_server_setup_mixin()
+        .GetApiMock()
+        .QueueAllowedUrlClassification();
+  }
+
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/download-anchor-same-origin.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  // Open a context menu.
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(15, 15);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  const std::string kSuggestedFilename("test_filename.png");
+  std::u16string suggested_filename = menu_observer.params().suggested_filename;
+  ASSERT_EQ(kSuggestedFilename, base::UTF16ToUTF8(suggested_filename).c_str());
+}
+
 class ContextMenuWithFilteringForSupervisedUsersBrowserTest
-    : public ContextMenuBrowserTest {
+    : public ContextMenuForSupervisedUsersBrowserTest {
+ public:
+  ContextMenuWithFilteringForSupervisedUsersBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/
+        {supervised_user::kEnableProtoApiForClassifyUrl,
+         supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS},
+        /*disabled_features=*/{});
+  }
+
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(
@@ -633,8 +770,6 @@ IN_PROC_BROWSER_TEST_F(
     SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChildWithFiltering) {
   // Set up child user profile.
   Profile* profile = browser()->profile();
-  browser()->profile()->GetPrefs()->SetString(
-      prefs::kSupervisedUserId, supervised_user::kChildAccountSUID);
 
   // Block access to http://www.google.com/ in the URL filter.
   supervised_user::SupervisedUserService* supervised_user_service =
@@ -654,6 +789,90 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
 }
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsDisabledForUrlsBlockedByAsyncCheckerForChild) {
+  ContextMenuWaiter menu_observer;
+
+  supervision_mixin_.embedded_test_server_setup_mixin()
+      .GetApiMock()
+      .QueueRestrictedUrlClassification();
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/download-anchor-same-origin.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  // Open a context menu.
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(15, 15);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  const std::string kSuggestedFilename("");
+  std::u16string suggested_filename = menu_observer.params().suggested_filename;
+  ASSERT_EQ(kSuggestedFilename, base::UTF16ToUTF8(suggested_filename).c_str());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsEnabledForUrlsAllowedByAsyncCheckerForChild) {
+  ContextMenuWaiter menu_observer;
+
+  supervision_mixin_.embedded_test_server_setup_mixin()
+      .GetApiMock()
+      .QueueAllowedUrlClassification();
+
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/download-anchor-same-origin.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  // Open a context menu.
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(15, 15);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  const std::string kSuggestedFilename("test_filename.png");
+  std::u16string suggested_filename = menu_observer.params().suggested_filename;
+  ASSERT_EQ(kSuggestedFilename, base::UTF16ToUTF8(suggested_filename).c_str());
+}
+
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -754,7 +973,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
     base::RunLoop run_loop;
 
     ASSERT_TRUE(provider->registrar_unsafe().CanUserUninstallWebApp(app_id));
-    provider->install_finalizer().UninstallWebApp(
+    provider->scheduler().UninstallWebApp(
         app_id, webapps::WebappUninstallSource::kAppMenu,
         base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
           EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
@@ -974,7 +1193,13 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, CopyLinkTextTouchTextImage) {
 }
 
 // Opens a link in a new tab via a "real" context menu.
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, RealMenu) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_RealMenu DISABLED_RealMenu
+#else
+#define MAYBE_RealMenu RealMenu
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_RealMenu) {
   ContextMenuNotificationObserver menu_observer(
       IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
   ui_test_utils::AllBrowserTabAddedWaiter add_tab;
@@ -1174,6 +1399,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInNewTabReferrer) {
   // Set up menu with link URL.
   content::ContextMenuParams params;
   params.page_url = kReferrerWithFragment;
+  params.frame_url = params.page_url;
   params.link_url = echoheader;
 
   // Select "Open Link in New Tab" and wait for the new tab to be added.
@@ -1741,11 +1967,10 @@ class InterestGroupContentBrowserClient : public ChromeContentBrowserClient {
   // ChromeContentBrowserClient overrides:
   // This is needed so that the interest group related APIs can run without
   // failing with the result AuctionResult::kSellerRejected.
-  bool IsInterestGroupAPIAllowed(
-      content::RenderFrameHost* render_frame_host,
-      content::ContentBrowserClient::InterestGroupApiOperation operation,
-      const url::Origin& top_frame_origin,
-      const url::Origin& api_origin) override {
+  bool IsInterestGroupAPIAllowed(content::RenderFrameHost* render_frame_host,
+                                 content::InterestGroupApiOperation operation,
+                                 const url::Origin& top_frame_origin,
+                                 const url::Origin& api_origin) override {
     return true;
   }
 };
@@ -1799,8 +2024,16 @@ class ContextMenuFencedFrameTest : public ContextMenuBrowserTest {
 
 // Check which commands are present after opening the context menu for a
 // fencedframe.
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_MenuContentsVerification_Fencedframe \
+  DISABLED_MenuContentsVerification_Fencedframe
+#else
+#define MAYBE_MenuContentsVerification_Fencedframe \
+  MenuContentsVerification_Fencedframe
+#endif
 IN_PROC_BROWSER_TEST_F(ContextMenuFencedFrameTest,
-                       MenuContentsVerification_Fencedframe) {
+                       MAYBE_MenuContentsVerification_Fencedframe) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   auto initial_url = embedded_test_server()->GetURL("/empty.html");
@@ -1845,6 +2078,13 @@ IN_PROC_BROWSER_TEST_F(ContextMenuFencedFrameTest,
 // from a contextual menu inside of a fenced frame.
 IN_PROC_BROWSER_TEST_F(ContextMenuFencedFrameTest,
                        AutomaticBeaconSentAfterContextMenuNavigation) {
+  privacy_sandbox::ScopedPrivacySandboxAttestations scoped_attestations(
+      privacy_sandbox::PrivacySandboxAttestations::CreateForTesting());
+  // Mark all Privacy Sandbox APIs as attested since the test case is testing
+  // behaviors not related to attestations.
+  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+      ->SetAllPrivacySandboxAttestedForTesting(true);
+
   constexpr char kReportingURL[] = "/_report_event_server.html";
   constexpr char kBeaconMessage[] = "this is the message";
 
@@ -2570,12 +2810,24 @@ class LoadImageBrowserTest : public InProcessBrowserTest {
   size_t request_attempts_ = 0u;
 };
 
-IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, LoadImage) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LoadImage DISABLED_LoadImage
+#else
+#define MAYBE_LoadImage LoadImage
+#endif
+IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, MAYBE_LoadImage) {
   SetupAndLoadImagePage("/load_image/image.html", "/load_image/image.png");
   AttemptLoadImage();
 }
 
-IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, LoadImageWithMap) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LoadImageWithMap DISABLED_LoadImageWithMap
+#else
+#define MAYBE_LoadImageWithMap LoadImageWithMap
+#endif
+IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, MAYBE_LoadImageWithMap) {
   SetupAndLoadImagePage("/load_image/image_with_map.html",
                         "/load_image/image.png");
   AttemptLoadImage();
@@ -2668,49 +2920,93 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, BrowserlessWebContentsCrash) {
       blink::mojom::ContextMenuDataMediaType::kNone, ui::MENU_SOURCE_MOUSE);
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, GifImageShare) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_GifImageShare DISABLED_GifImageShare
+#else
+#define MAYBE_GifImageShare GifImageShare
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_GifImageShare) {
   OpenImagePageAndContextMenu("/google/logo.gif");
   RequestImageAndVerifyResponse(
       gfx::Size(2048, 2048), chrome::mojom::ImageFormat::ORIGINAL,
       gfx::Size(276, 110), gfx::Size(276, 110), ".gif");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, GifImageDownscaleToJpeg) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_GifImageDownscaleToJpeg DISABLED_GifImageDownscaleToJpeg
+#else
+#define MAYBE_GifImageDownscaleToJpeg GifImageDownscaleToJpeg
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_GifImageDownscaleToJpeg) {
   OpenImagePageAndContextMenu("/google/logo.gif");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::ORIGINAL,
       gfx::Size(276, 110), gfx::Size(100, /* 100 / 480 * 320 =  */ 39), ".jpg");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, RequestPngForGifImage) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_RequestPngForGifImage DISABLED_RequestPngForGifImage
+#else
+#define MAYBE_RequestPngForGifImage RequestPngForGifImage
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_RequestPngForGifImage) {
   OpenImagePageAndContextMenu("/google/logo.gif");
   RequestImageAndVerifyResponse(
       gfx::Size(2048, 2048), chrome::mojom::ImageFormat::PNG,
       gfx::Size(276, 110), gfx::Size(276, 110), ".png");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, PngImageDownscaleToPng) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_PngImageDownscaleToPng DISABLED_PngImageDownscaleToPng
+#else
+#define MAYBE_PngImageDownscaleToPng PngImageDownscaleToPng
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_PngImageDownscaleToPng) {
   OpenImagePageAndContextMenu("/image_search/valid.png");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::PNG, gfx::Size(200, 100),
       gfx::Size(100, 50), ".png");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, PngImageOriginalDownscaleToPng) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_PngImageOriginalDownscaleToPng \
+  DISABLED_PngImageOriginalDownscaleToPng
+#else
+#define MAYBE_PngImageOriginalDownscaleToPng PngImageOriginalDownscaleToPng
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       MAYBE_PngImageOriginalDownscaleToPng) {
   OpenImagePageAndContextMenu("/image_search/valid.png");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::ORIGINAL,
       gfx::Size(200, 100), gfx::Size(100, 50), ".png");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, JpgImageDownscaleToJpg) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_JpgImageDownscaleToJpg DISABLED_JpgImageDownscaleToJpg
+#else
+#define MAYBE_JpgImageDownscaleToJpg JpgImageDownscaleToJpg
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_JpgImageDownscaleToJpg) {
   OpenImagePageAndContextMenu("/android/watch.jpg");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::ORIGINAL,
       gfx::Size(480, 320), gfx::Size(100, /* 100 / 480 * 320 =  */ 66), ".jpg");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, JpgImageDownscaleToWebp) {
+// TODO(crbug.com/1462760): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_JpgImageDownscaleToWebp DISABLED_JpgImageDownscaleToWebp
+#else
+#define MAYBE_JpgImageDownscaleToWebp JpgImageDownscaleToWebp
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_JpgImageDownscaleToWebp) {
   OpenImagePageAndContextMenu("/android/watch.jpg");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::WEBP,
@@ -2718,14 +3014,26 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, JpgImageDownscaleToWebp) {
       ".webp");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, PngImageDownscaleToWebp) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_PngImageDownscaleToWebp DISABLED_PngImageDownscaleToWebp
+#else
+#define MAYBE_PngImageDownscaleToWebp PngImageDownscaleToWebp
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_PngImageDownscaleToWebp) {
   OpenImagePageAndContextMenu("/image_search/valid.png");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::WEBP,
       gfx::Size(200, 100), gfx::Size(100, 50), ".webp");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, GifImageDownscaleToWebp) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_GifImageDownscaleToWebp DISABLED_GifImageDownscaleToWebp
+#else
+#define MAYBE_GifImageDownscaleToWebp GifImageDownscaleToWebp
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_GifImageDownscaleToWebp) {
   OpenImagePageAndContextMenu("/google/logo.gif");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::WEBP,
@@ -2733,7 +3041,13 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, GifImageDownscaleToWebp) {
       ".webp");
 }
 
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, WebpImageDownscaleToWebp) {
+// TODO(crbug.com/1457589): Enable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_WebpImageDownscaleToWebp DISABLED_WebpImageDownscaleToWebp
+#else
+#define MAYBE_WebpImageDownscaleToWebp WebpImageDownscaleToWebp
+#endif
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_WebpImageDownscaleToWebp) {
   OpenImagePageAndContextMenu("/banners/webp-icon.webp");
   RequestImageAndVerifyResponse(
       gfx::Size(100, 100), chrome::mojom::ImageFormat::WEBP,

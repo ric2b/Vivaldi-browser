@@ -29,10 +29,4 @@ bool IsBetaOrFinal() {
 #endif
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-std::string GetVivaldiMailVersionString() {
-  return VIVALDI_MAIL_VERSION;
-}
-#endif
-
 }  // namespace vivaldi

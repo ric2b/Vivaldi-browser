@@ -4,9 +4,9 @@
 
 #import "ios/web/navigation/crw_wk_navigation_handler.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
 #import "base/ios/ns_error_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
@@ -48,10 +48,6 @@
 #import "net/cert/x509_util_apple.h"
 #import "net/http/http_content_disposition.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using web::wk_navigation_util::kReferrerHeaderName;
 using web::wk_navigation_util::IsRestoreSessionUrl;
@@ -444,6 +440,10 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   GURL responseURL = net::GURLWithNSURL(WKResponse.response.URL);
   if ([CRWErrorPageHelper isErrorPageFileURL:responseURL]) {
     handler(WKNavigationResponsePolicyAllow);
+    // Set the mime type for error pages. This allows them to be treated as
+    // HTML.
+    [self updatePendingNavigationInfoFromNavigationResponse:WKResponse
+                                                HTTPHeaders:nullptr];
     return;
   }
 
@@ -1027,8 +1027,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   }
 
   SecTrustRef trust = challenge.protectionSpace.serverTrust;
-  base::ScopedCFTypeRef<SecTrustRef> scopedTrust(trust,
-                                                 base::scoped_policy::RETAIN);
+  base::apple::ScopedCFTypeRef<SecTrustRef> scopedTrust(
+      trust, base::scoped_policy::RETAIN);
   __weak CRWWKNavigationHandler* weakSelf = self;
   [self.certVerificationController
       decideLoadPolicyForTrust:scopedTrust
@@ -1660,20 +1660,20 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
     // iOS 15.
     scoped_refptr<net::X509Certificate> leafCert = nil;
     if (@available(iOS 15.0, *)) {
-      base::ScopedCFTypeRef<CFArrayRef> certificateChain(
+      base::apple::ScopedCFTypeRef<CFArrayRef> certificateChain(
           SecTrustCopyCertificateChain(trust));
       SecCertificateRef secCertificate =
-          base::mac::CFCastStrict<SecCertificateRef>(
+          base::apple::CFCastStrict<SecCertificateRef>(
               CFArrayGetValueAtIndex(certificateChain, 0));
       leafCert = net::x509_util::CreateX509CertificateFromSecCertificate(
-          base::ScopedCFTypeRef<SecCertificateRef>(secCertificate,
-                                                   base::scoped_policy::RETAIN),
+          base::apple::ScopedCFTypeRef<SecCertificateRef>(
+              secCertificate, base::scoped_policy::RETAIN),
           {});
     }
 #if __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_15_0
     else {
       leafCert = net::x509_util::CreateX509CertificateFromSecCertificate(
-          base::ScopedCFTypeRef<SecCertificateRef>(
+          base::apple::ScopedCFTypeRef<SecCertificateRef>(
               SecTrustGetCertificateAtIndex(trust, 0),
               base::scoped_policy::RETAIN),
           {});
@@ -1892,7 +1892,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   self.navigationManagerImpl->AddPendingItem(
       blockedURL, web::Referrer(), transition,
       web::NavigationInitiationType::BROWSER_INITIATED,
-      /*is_post_navigation=*/false, web::HttpsUpgradeType::kNone);
+      /*is_post_navigation=*/false, /*is_error_navigation=*/true,
+      web::HttpsUpgradeType::kNone);
 
   // Create context.
   std::unique_ptr<web::NavigationContextImpl> context =
@@ -1902,6 +1903,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
           /*is_renderer_initiated=*/false);
   std::unique_ptr<web::NavigationItemImpl> item =
       self.navigationManagerImpl->ReleasePendingItem();
+  CHECK(item);
+
   context->SetNavigationItemUniqueID(item->GetUniqueID());
   context->SetItem(std::move(item));
   context->SetError(error);
@@ -2066,6 +2069,10 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
       self.webStateImpl, failingURL, error, context->IsPost(),
       self.webStateImpl->GetBrowserState()->IsOffTheRecord(), ssl_info,
       context->GetNavigationId(), base::BindOnce(^(NSString* errorHTML) {
+        if (self.navigationStates.lastAddedNavigation != navigation) {
+          // Do not show the stale error page if the page has since navigated.
+          return;
+        }
         if (errorHTML) {
           CRWErrorPageHelper* errorPageHelper =
               [[CRWErrorPageHelper alloc] initWithError:context->GetError()];

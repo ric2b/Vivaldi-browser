@@ -37,6 +37,12 @@ using ReportSuccessfulUploadCallback =
 using EncryptionKeyAttachedCallback =
     base::RepeatingCallback<void(SignedEncryptionInfo)>;
 
+// UpdateConfigInMissiveCallback is called if the configuration file obtained
+// from the server is different from the one that was sent previously using
+// this callback.
+using UpdateConfigInMissiveCallback =
+    base::RepeatingCallback<void(ListOfBlockedDestinations)>;
+
 // Successful response consists of Sequence information that may be
 // accompanied with force_confirm flag.
 struct SuccessfulUploadResponse {
@@ -114,11 +120,8 @@ class DmServerUploader : public TaskRunnerContext<CompletionResponse> {
   // to upload to DmServer.
   void HandleRecords();
 
-  // Processes |completion_response| and call |Response|.
+  // Processes |completion_response| and calls |Response|.
   void Finalize(CompletionResponse completion_response);
-
-  // Complete schedules |Finalize| with the provided |completion_response|.
-  void Complete(CompletionResponse completion_response);
 
   // Helper function for determining if an EncryptedRecord is valid.
   Status IsRecordValid(const EncryptedRecord& encrypted_record,

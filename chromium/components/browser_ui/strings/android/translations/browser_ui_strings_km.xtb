@@ -4,6 +4,7 @@
 <translation id="1006017844123154345">បើកលើអ៊ីនធឺណិត</translation>
 <translation id="1036348656032585052">បិទ</translation>
 <translation id="1044891598689252897">គេហទំព័រនឹងដំណើរការធម្មតា</translation>
+<translation id="1073417869336441572">ជួយយើង​ក្នុងការកែលម្អ Chrome ដោយប្រាប់យើង​អំពីមូលហេតុ​ដែលអ្នក​បានអនុញ្ញាត​ខូគី​ភាគីទីបី។ <ph name="BEGIN_LINK" />ផ្ញើមតិកែលម្អ<ph name="END_LINK" /></translation>
 <translation id="1124090076051167250">សកម្មភាពនេះនឹង​សម្អាតទិន្នន័យ និងខូគីទំហំ <ph name="DATASIZE" /> ដែលគេហទំព័រ ឬកម្មវិធី​បានរក្សាទុក​នៅលើ​អេក្រង់ដើម​របស់អ្នក។</translation>
 <translation id="1178581264944972037">ផ្អាក</translation>
 <translation id="1181037720776840403">ដកចេញ</translation>
@@ -19,7 +20,6 @@
 <translation id="1371239764779356792">អនុញ្ញាត​ឱ្យ​គេហទំព័រ​រក្សាទុក​ទិន្នន័យ​នៅលើ​ឧបករណ៍​របស់​អ្នក</translation>
 <translation id="1383876407941801731">ស្វែងរក</translation>
 <translation id="1384959399684842514">បានផ្អាកការទាញយក</translation>
-<translation id="1409426117486808224">ទិដ្ឋភាព​សាមញ្ញ​សម្រាប់​ផ្ទាំង​បើក</translation>
 <translation id="1415402041810619267">បានបង្រួម URL</translation>
 <translation id="1426410128494586442">បាទ/ចាស</translation>
 <translation id="1446450296470737166">អនុញ្ញាតឲ្យមានការគ្រប់គ្រងពេញលេញលើឧបករណ៍ MIDI</translation>
@@ -67,6 +67,7 @@
 <translation id="2238944249568001759">ការស្វែងរក​ដែលបានណែនាំ​ផ្អែកលើ​ផ្ទាំង​ចុងក្រោយ​របស់អ្នក</translation>
 <translation id="2241634353105152135">ម្តងប៉ុណ្ណោះ</translation>
 <translation id="2253414712144136228">ដក <ph name="NAME_OF_LIST_ITEM" /> ចេញ</translation>
+<translation id="2253989982043948086">{NUM_SELECTED,plural, =1{បានទប់ស្កាត់គេហទំព័រ​ចំនួន 1}other{បានទប់ស្កាត់គេហទំព័រ​ចំនួន #}}</translation>
 <translation id="228293613124499805">គេហទំព័រ​ភាគ​ច្រើន​ដែល​អ្នក​ចូលមើល​ប្រហែលជា​រក្សាទុក​ទិន្នន័យ​ទៅ​ក្នុង​ឧបករណ៍​របស់​អ្នក ជារឿយៗដើម្បី​កែលម្អ​បទពិសោធន៍​របស់​អ្នក ដោយ​រក្សាទុក​ចំណូលចិត្ត​របស់​អ្នក ឬ​ព័ត៌មាន​ដែល​អ្នក​ចែករំលែក​ជា​មួយ​គេហទំព័រ។ យើង​សូមណែនាំ​ឱ្យ​បន្ត​បើក​ការ​កំណត់នេះ។</translation>
 <translation id="2289270750774289114">សួរនៅពេលគេហទំព័រ​ចង់ស្វែងរកឧបករណ៍​ប៊្លូធូសដែលនៅជិត (បានណែនាំ)</translation>
 <translation id="2315043854645842844">ការជ្រើសរើសវិញ្ញាបនបត្រសម្រាប់ម៉ាស៊ីនកូនមិនគាំទ្រដោយប្រព័ន្ធដំណើរការនេះទេ។</translation>
@@ -98,6 +99,7 @@
 <translation id="2621115761605608342">អនុញ្ញាត JavaScript សម្រាប់គេហទំព័រជាក់លាក់។</translation>
 <translation id="2653659639078652383">ដាក់ស្នើ</translation>
 <translation id="2677748264148917807">ចាកចេញ</translation>
+<translation id="2678468611080193228">សាកល្បង​អនុញ្ញាត​ខូគី​ភាគីទីបី​ជាបណ្ដោះអាសន្ត ដែលមានន័យថា​មានការការពារតិចជាងមុន ប៉ុន្តែ​មុខងារ​គេហទំព័រ​កាន់តែទំនងជាដំណើរការ</translation>
 <translation id="2687403674020088961">ទប់ស្កាត់ខូគីទាំងអស់ (មិនណែនាំ)</translation>
 <translation id="2713106313042589954">បិទកាមេរ៉ា</translation>
 <translation id="2717722538473713889">អាសយដ្ឋានអ៊ីមែល</translation>
@@ -116,6 +118,7 @@
 <translation id="3008272652534848354">កំណត់​ការអនុញ្ញាត​ឡើងវិញ</translation>
 <translation id="301521992641321250">បាន​ទប់ស្កាត់ដោយ​ស្វ័យ​ប្រវត្តិ</translation>
 <translation id="3069226013421428034">អនុញ្ញាត​ការចូល​របស់ភាគីទីបី​សម្រាប់​គេហទំព័រ​ជាក់លាក់។</translation>
+<translation id="3082992102194421695">{COUNT,plural, =1{ផុតកំណត់​ថ្ងៃស្អែក}other{ផុតកំណត់​ក្នុងរយៈពេល # ថ្ងៃ}}</translation>
 <translation id="310297983047869047">ស្លាយ​មុន</translation>
 <translation id="3109724472072898302">បានបង្រួមចូល</translation>
 <translation id="3114012059975132928">កម្មវិធី​ចាក់​វីដេអូ</translation>
@@ -137,6 +140,8 @@
 <translation id="3362437373201486687">កំពុងស្កេនរកឧបករណ៍ប៊្លូធូស</translation>
 <translation id="3386292677130313581">សួរមុនពេលអនុញ្ញាតឲ្យគេហទំព័រស្គាល់ទីតាំងរបស់អ្នក (បានណែនាំ)</translation>
 <translation id="3403537308306431953"><ph name="ZOOM_LEVEL" /> %%</translation>
+<translation id="344449859752187052">បានទប់ស្កាត់​ខូគី​ភាគីទីបី</translation>
+<translation id="3465378418721443318">{DAYS,plural, =1{Chrome នឹង​ទប់ស្កាត់​ខូគីម្ដងទៀត​នៅថ្ងៃស្អែក}other{នៅសល់ # ថ្ងៃទៀត​ទើប Chrome ទប់ស្កាត់​ខូគីម្ដងទៀត}}</translation>
 <translation id="3521663503435878242">គេហទំព័រ​នៅក្រោម <ph name="DOMAIN" /></translation>
 <translation id="3538390592868664640">ទប់ស្កាត់គេហទំព័រមិនឱ្យបង្កើតផែនទី 3D នៃមជ្ឈដ្ឋានជុំវិញរបស់អ្នក ឬតាមដានទីតាំងកាមេរ៉ា</translation>
 <translation id="3544058026430919413">ក្រុមហ៊ុន​អាច​កំណត់​ក្រុម​គេហទំព័រ​ដែល​អាច​ប្រើប្រាស់​ខូគី ដើម្បី​ចែករំលែក​សកម្មភាព​របស់​អ្នក​នៅ​ក្នុងក្រុមនេះ។ ជម្រើសនេះត្រូវ​បានបិទ​នៅ​ក្នុង​មុខងារឯកជន។</translation>
@@ -159,6 +164,7 @@
 <translation id="381841723434055211">លេខទូរសព្ទ</translation>
 <translation id="3826050100957962900">ការចូលគណនីភាគីទីបី</translation>
 <translation id="3835233591525155343">ការប្រើប្រាស់​ឧបករណ៍របស់អ្នក</translation>
+<translation id="3843916486309149084">Chrome នឹង​ទប់ស្កាត់​ខូគីម្ដងទៀត​នៅថ្ងៃនេះ</translation>
 <translation id="385051799172605136">ថយក្រោយ</translation>
 <translation id="3859306556332390985">ស្វែងរក​ទៅ​មុខ</translation>
 <translation id="3895926599014793903">បង្ខំបើកដំណើរការពង្រីក</translation>
@@ -172,6 +178,7 @@
 <translation id="4002066346123236978">ចំណងជើង</translation>
 <translation id="4008040567710660924">អនុញ្ញាតខូគី​សម្រាប់គេហទំព័រ​ជាក់លាក់។</translation>
 <translation id="4046123991198612571">បទ​បន្ទាប់</translation>
+<translation id="4053720452172726777">កែសម្រួល និងគ្រប់គ្រង Google Chrome</translation>
 <translation id="4149994727733219643">ទិដ្ឋភាព​សាមញ្ញ​សម្រាប់​ទំព័របណ្ដាញ</translation>
 <translation id="4151930093518524179">ការពង្រីកបង្រួម​លំនាំដើម</translation>
 <translation id="4165986682804962316">ការកំណត់គេហទំព័រ</translation>
@@ -211,6 +218,7 @@
 <translation id="4962975101802056554">ដក​ការអនុញ្ញាត​ទាំងអស់​សម្រាប់​ឧបករណ៍</translation>
 <translation id="497421865427891073">ទៅមុខ</translation>
 <translation id="4976702386844183910">បានចូល​មើល​លើកចុង​ក្រោយនៅថ្ងៃទី <ph name="DATE" /></translation>
+<translation id="4985206706500620449">អ្នក​បានអនុញ្ញាត​ខូគី​ភាគីទីបី​សម្រាប់​គេហទំព័រនេះ</translation>
 <translation id="4994033804516042629">រកមិនឃើញ​ទំនាក់ទំនង​ទេ</translation>
 <translation id="4996978546172906250">ចែករំលែកតាមរយៈ</translation>
 <translation id="5001526427543320409">ខូគី​ភាគីទីបី</translation>
@@ -249,12 +257,12 @@
 <translation id="5545693483061321551">គេហទំព័រមិន​អាចប្រើ​ខូគីរបស់អ្នក ដើម្បីមើលសកម្មភាព​រុករក​តាមអ៊ីនធឺណិត​របស់អ្នក​នៅលើ​គេហទំព័រ​ផ្សេងៗ ឧទាហរណ៍ ដើម្បីកំណត់​ការផ្សាយ​ពាណិជ្ជកម្ម​ឱ្យ​ស្របនឹងអ្នកបានទេ។ មុខងារ​នៅលើ​គេហទំព័រ​មួយចំនួន​អាចនឹងមិនដំណើរការទេ។</translation>
 <translation id="5553374991681107062">ថ្មី​បំផុត</translation>
 <translation id="5556459405103347317">ដំណើរការឡើងវិញ</translation>
-<translation id="5596627076506792578">ជម្រើសច្រើនទៀត</translation>
 <translation id="5649053991847567735">ទាញយកស្វ័យប្រវត្តិ</translation>
 <translation id="5668404140385795438">បដិសេធសំណើរគេហទំព័រដើម្បីបង្ការការពង្រីក</translation>
 <translation id="5677928146339483299">បានរារាំង</translation>
 <translation id="5689516760719285838">ទីតាំង</translation>
 <translation id="5690795753582697420">កាមេរ៉ាត្រូវបានបិទនៅក្នុងការកំណត់ Android</translation>
+<translation id="5700761515355162635">បានអនុញ្ញាត​ខូគី​ភាគីទីបី</translation>
 <translation id="5706552988683188916">សកម្មភាពនេះ​លុប​ខូគី និង​ទិន្នន័យ​គេហទំព័រ​ផ្សេងទៀត​សម្រាប់ <ph name="WEBSITE" /></translation>
 <translation id="5719847187258001597">សកម្មភាពនេះនឹង​សម្អាត​ទិន្នន័យ និងខូគីទាំងអស់​ដែល <ph name="ORIGIN" /> ឬកម្មវិធីរបស់ខ្លួនបានរក្សាទុក នៅលើ​អេក្រង់ដើម​របស់អ្នក។</translation>
 <translation id="5723967018671998714">បានទប់ស្កាត់ខូគី​ភាគទីបីនៅក្នុងមុខងារឯកជន</translation>
@@ -296,11 +304,14 @@
 <translation id="6367753977865761591">ទប់ស្កាត់​ការចូល​របស់​ភាគីទីបី​សម្រាប់​គេហទំព័រ​ជាក់លាក់។</translation>
 <translation id="6388207532828177975">ជម្រះ និងកំណត់ឡើងវិញ</translation>
 <translation id="6398765197997659313">ចាកចេញពីអេក្រង់ពេញ</translation>
+<translation id="640163077447496506">ផុតកំណត់​ថ្ងៃនេះ</translation>
 <translation id="6405650995156823521"><ph name="FIRST_PART" /> • <ph name="SECOND_PART" /></translation>
 <translation id="6439114592976064011">ទប់ស្កាត់​គេហទំព័រ​មិនឱ្យ​ប្រើទិន្នន័យ និង​ឧបករណ៍ VR របស់អ្នក</translation>
 <translation id="6447842834002726250">ខុកឃី</translation>
 <translation id="6467852467360539617">សម្អាតទិន្នន័យ និងកំណត់ការអនុញ្ញាតឡើងវិញ</translation>
+<translation id="6500423977866688905">នៅពេល​វិនដូ​មានភាពចង្អៀត សូមស្នើសុំ​ទិដ្ឋភាពលើ​ទូរសព្ទ</translation>
 <translation id="6527303717912515753">ចែករំលែក</translation>
+<translation id="652937045869844725">សាកល្បង​អនុញ្ញាត​ខូគី​ភាគីទីបី ដែលមានន័យថា​មានការការពារតិចជាងមុន ប៉ុន្តែ​មុខងារ​គេហទំព័រ​កាន់តែទំនងជាដំណើរការ</translation>
 <translation id="6545864417968258051">ការស្កេនប៊្លូធូស</translation>
 <translation id="6552800053856095716">{PERMISSIONS_SUMMARY_BLOCKED,plural, =1{បានទប់ស្កាត់ <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> និង <ph name="NUM_MORE" /> ទៀត}other{បានទប់ស្កាត់ <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> និង <ph name="NUM_MORE" /> ទៀត}}</translation>
 <translation id="6554732001434021288">បានចូលមើល​លើកចុងក្រោយ​កាលពី <ph name="NUM_DAYS" /> ថ្ងៃមុន</translation>
@@ -329,7 +340,6 @@
 <translation id="7000754031042624318">បានបិទនៅក្នុងការកំណត់ Android</translation>
 <translation id="7016516562562142042">បានអនុញ្ញាត​សម្រាប់​ម៉ាស៊ីន​ស្វែងរក​​បច្ចុប្បន្ន</translation>
 <translation id="702275896380648118">គេហទំព័រ​នេះ​កំណត់​អ្វី​ៗ​ដែល​អ្នក​ចូលចិត្ត រួច​ណែនាំ​ការផ្សាយពាណិជ្ជកម្ម​ដល់​គេហទំព័រ​ផ្សេងទៀត។ គេហទំព័រ​នេះ​ក៏​ប្រមូល​ប្រធានបទនៃការផ្សាយពាណិជ្ជកម្ម​របស់​អ្នក​ពី Chrome ផងដែរ ដើម្បី​បង្ហាញ​ការផ្សាយពាណិជ្ជកម្ម​កាន់តែ​ពាក់ព័ន្ធ​ដល់​អ្នក។</translation>
-<translation id="702463548815491781">បានណែនាំ នៅពេល​បើកកម្មវិធីតបវិញ ឬមុខងារ​ប្រើប៊ូតុងចុច​</translation>
 <translation id="7053983685419859001">ទប់ស្កាត់</translation>
 <translation id="7066151586745993502">{NUM_SELECTED,plural, =1{បានជ្រើសរើស 1}other{បានជ្រើសរើស #}}</translation>
 <translation id="7087918508125750058">បានជ្រើស​រើស <ph name="ITEM_COUNT" />។ ជម្រើស​មាននៅក្បែរ​ផ្នែកខាងលើ​អេក្រង់</translation>
@@ -383,11 +393,13 @@
 <translation id="8068648041423924542">មិនអាចជ្រើសរើសវិញ្ញាបនបត្រទេ</translation>
 <translation id="8077120325605624147">គ្រប់គេហទំព័រដែល​អ្នក​ចូលមើល អាច​បង្ហាញ​ការ​ផ្សាយពាណិជ្ជកម្ម​ណាក៏បាន​ដល់​អ្នក</translation>
 <translation id="8087000398470557479">មាតិកានេះបានពី <ph name="DOMAIN_NAME" /> ដែលចែកចាយដោយ Google។</translation>
+<translation id="8088603949666785339">ជម្រើសច្រើនទៀតនៅក្នុង <ph name="BANNER_TITLE" /></translation>
 <translation id="8116925261070264013">បានបិទសំឡេង</translation>
 <translation id="813082847718468539">មើលព័ត៌មានគេហទំព័រ</translation>
 <translation id="8131740175452115882">អះអាង</translation>
 <translation id="8154912474061769055">មុខងារ​នៅលើ​គេហទំព័រ​ជាច្រើន​អាចនឹងមិនដំណើរការទេ</translation>
 <translation id="8168435359814927499">មាតិកា</translation>
+<translation id="8186479265534291036">គេហទំព័រ​មិន​ដំណើរការ​ឬ? បានទប់ស្កាត់​ខូគី​ភាគីទីបី</translation>
 <translation id="8197286292360124385">បាន​អនុញ្ញាត <ph name="PERMISSION_1" /></translation>
 <translation id="8200772114523450471">បន្ត</translation>
 <translation id="8206354486702514201">ការកំណត់នេះត្រូវបានអនុវត្តដោយអ្នកគ្រប់គ្រងរបស់អ្នក។</translation>
@@ -429,8 +441,10 @@
 <translation id="8719283222052720129">បើកការអនុញ្ញាត​សម្រាប់ <ph name="APP_NAME" /> នៅក្នុង​<ph name="BEGIN_LINK" />ការកំណត់ Android<ph name="END_LINK" />។</translation>
 <translation id="8725066075913043281">ព្យាយាមម្តងទៀត</translation>
 <translation id="8730621377337864115">រួចរាល់</translation>
+<translation id="8736193154595564524">{NUM_SELECTED,plural, =1{បានអនុញ្ញាតគេហទំព័រ​ចំនួន 1}other{បានអនុញ្ញាតគេហទំព័រ​ចំនួន #}}</translation>
 <translation id="8737217482364735741">សកម្មភាព​នេះនឹងសម្អាត​ទិន្នន័យ និងខូគីទាំងអស់​ដែល <ph name="ORIGIN" /> បានរក្សាទុក។</translation>
 <translation id="8751914237388039244">ជ្រើសរើស​រូបភាព</translation>
+<translation id="8800034312320686233">គេហទំព័រ​មិន​ដំណើរការ​?</translation>
 <translation id="8801436777607969138">ទប់ស្កាត់ JavaScript សម្រាប់គេហទំព័រជាក់លាក់។</translation>
 <translation id="8803526663383843427">នៅពេលបើក</translation>
 <translation id="8805385115381080995">ការរុករក​មានលក្ខណៈកាន់តែ​លឿន ដោយសារ​គេហទំព័រ​មិន​សូវទំនង​ជា​សុំ​ឱ្យ​អ្នក​ផ្ទៀងផ្ទាត់​ថា អ្នក​ជាមនុស្ស​ពិត​ប្រាកដ​ទេ</translation>

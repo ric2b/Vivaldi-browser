@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/installer/metrics_util.h"
 #include "chrome/browser/enterprise/connectors/device_trust/test/test_constants.h"
 #include "chrome/browser/enterprise/connectors/test/test_constants.h"
 #include "chrome/browser/ui/browser.h"
@@ -36,6 +37,13 @@ constexpr char kLatencySuccessHistogramName[] =
     "Enterprise.DeviceTrust.Attestation.ResponseLatency.Success";
 constexpr char kLatencyFailureHistogramName[] =
     "Enterprise.DeviceTrust.Attestation.ResponseLatency.Failure";
+constexpr char kAttestationPolicyLevelHistogramName[] =
+    "Enterprise.DeviceTrust.Attestation.PolicyLevel";
+
+constexpr char kKeyRotationStatusHistogramFormat[] =
+    "Enterprise.DeviceTrust.RotateSigningKey.%s.Status";
+constexpr char kWithNonceVariant[] = "WithNonce";
+constexpr char kNoNonceVariant[] = "NoNonce";
 
 constexpr char kChallenge[] =
     "{"
@@ -157,7 +165,8 @@ std::string DeviceTrustBrowserTestBase::GetChallengeResponseHeader() {
 }
 
 void DeviceTrustBrowserTestBase::VerifyAttestationFlowSuccessful(
-    DTAttestationResult success_result) {
+    DTAttestationResult success_result,
+    absl::optional<DTAttestationPolicyLevel> policy_level) {
   std::string challenge_response = GetChallengeResponseHeader();
   // TODO(crbug.com/1241857): Add challenge-response validation.
   EXPECT_TRUE(!challenge_response.empty());
@@ -167,6 +176,11 @@ void DeviceTrustBrowserTestBase::VerifyAttestationFlowSuccessful(
                                         1);
   histogram_tester_->ExpectTotalCount(kLatencySuccessHistogramName, 1);
   histogram_tester_->ExpectTotalCount(kLatencyFailureHistogramName, 0);
+
+  if (policy_level) {
+    histogram_tester_->ExpectUniqueSample(kAttestationPolicyLevelHistogramName,
+                                          policy_level.value(), 1);
+  }
 }
 
 void DeviceTrustBrowserTestBase::VerifyAttestationFlowFailure(
@@ -190,6 +204,13 @@ void DeviceTrustBrowserTestBase::VerifyNoInlineFlowOccurred() {
   histogram_tester_->ExpectTotalCount(kResultHistogramName, 0);
   histogram_tester_->ExpectTotalCount(kLatencySuccessHistogramName, 0);
   histogram_tester_->ExpectTotalCount(kLatencyFailureHistogramName, 0);
+}
+
+void DeviceTrustBrowserTestBase::VerifyKeyRotationSuccess(bool with_nonce) {
+  const char* nonce_string = with_nonce ? kWithNonceVariant : kNoNonceVariant;
+  histogram_tester_->ExpectUniqueSample(
+      base::StringPrintf(kKeyRotationStatusHistogramFormat, nonce_string),
+      enterprise_connectors::RotationStatus::SUCCESS, 1);
 }
 
 content::WebContents* DeviceTrustBrowserTestBase::web_contents(

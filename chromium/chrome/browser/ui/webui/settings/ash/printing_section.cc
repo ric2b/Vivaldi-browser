@@ -5,10 +5,10 @@
 #include "chrome/browser/ui/webui/settings/ash/printing_section.h"
 
 #include "ash/constants/ash_features.h"
+#include "ash/webui/settings/public/constants/routes.mojom-forward.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/ash/cups_printers_handler.h"
-#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
@@ -63,9 +63,12 @@ const std::vector<SearchConcept>& GetSavedPrintersSearchConcepts() {
 }
 
 const std::vector<SearchConcept>& GetPrintingManagementSearchConcepts() {
+  const char* url_path = ash::features::IsOsSettingsRevampWayfindingEnabled()
+                             ? mojom::kPrintingDetailsSubpagePath
+                             : mojom::kPrintingSectionPath;
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_PRINT_MANAGEMENT,
-       mojom::kPrintingSectionPath,
+       url_path,
        mojom::SearchResultIcon::kPrinter,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -114,9 +117,16 @@ PrintingSection::~PrintingSection() {
 }
 
 void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
-  static constexpr webui::LocalizedString kLocalizedStrings[] = {
+  const bool kIsRevampEnabled =
+      ash::features::IsOsSettingsRevampWayfindingEnabled();
+
+  webui::LocalizedString kLocalizedStrings[] = {
       {"printingPageTitle", IDS_SETTINGS_PRINT_AND_SCAN},
-      {"cupsPrintersTitle", IDS_SETTINGS_PRINTING_CUPS_PRINTERS},
+      {"cupsPrintTitle", kIsRevampEnabled
+                             ? IDS_OS_SETTINGS_REVAMP_PRINTING_CUPS_PRINT_TITLE
+                             : IDS_SETTINGS_PRINTING_CUPS_PRINTERS},
+      {"cupsPrintDescription",
+       IDS_OS_SETTINGS_REVAMP_PRINTING_CUPS_PRINT_DESCRIPTION},
       {"cupsPrintersLearnMoreLabel",
        IDS_SETTINGS_PRINTING_CUPS_PRINTERS_LEARN_MORE_LABEL},
       {"addCupsPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER},
@@ -127,10 +137,7 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"removePrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_REMOVE},
       {"cupsPrintersViewPpd", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_VIEW_PPD},
       {"setupPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTER_SETUP_BUTTON},
-      {"setupPrinterAria",
-       IDS_SETTINGS_PRINTING_CUPS_PRINTER_SETUP_BUTTON_ARIA},
       {"savePrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTER_SAVE_BUTTON},
-      {"savePrinterAria", IDS_SETTINGS_PRINTING_CUPS_PRINTER_SAVE_BUTTON_ARIA},
       {"searchLabel", IDS_SETTINGS_PRINTING_CUPS_SEARCH_LABEL},
       {"noSearchResults", IDS_SEARCH_NO_RESULTS},
       {"printJobsTitle",
@@ -309,6 +316,7 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"printerStatusStopped", IDS_SETTINGS_PRINTING_PRINTER_STATUS_STOPPED},
       {"printerStatusTrayMissing",
        IDS_SETTINGS_PRINTING_PRINTER_STATUS_TRAY_MISSING},
+      {"printerEntryAriaLabel", IDS_SETTINGS_PRINTING_PRINTER_ENTRY_ARIA_LABEL},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -321,6 +329,8 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           features::IsPrinterSettingsRevampEnabled());
   html_source->AddBoolean("isPrinterSettingsPrinterStatusEnabled",
                           features::IsPrinterSettingsPrinterStatusEnabled());
+  html_source->AddBoolean("isPrintPreviewDiscoveredPrintersEnabled",
+                          features::IsPrintPreviewDiscoveredPrintersEnabled());
 }
 
 void PrintingSection::AddHandlers(content::WebUI* web_ui) {
@@ -340,7 +350,7 @@ mojom::SearchResultIcon PrintingSection::GetSectionIcon() const {
   return mojom::SearchResultIcon::kPrinter;
 }
 
-std::string PrintingSection::GetSectionPath() const {
+const char* PrintingSection::GetSectionPath() const {
   return mojom::kPrintingSectionPath;
 }
 

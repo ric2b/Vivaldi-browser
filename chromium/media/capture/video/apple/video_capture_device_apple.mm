@@ -28,10 +28,6 @@
 #include "media/capture/video/mac/uvc_control_mac.h"
 #endif
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @implementation DeviceNameAndTransportType {
   NSString* __strong _deviceName;
   // The transport type of the device (USB, PCI, etc), values are defined in
@@ -254,7 +250,8 @@ void VideoCaptureDeviceApple::ReceiveFrame(
     const gfx::ColorSpace color_space,
     int aspect_numerator,
     int aspect_denominator,
-    base::TimeDelta timestamp) {
+    base::TimeDelta timestamp,
+    int rotation) {
   if (capture_format_.frame_size != frame_format.frame_size) {
     ReceiveError(VideoCaptureError::kMacReceivedFrameWithUnexpectedResolution,
                  FROM_HERE,
@@ -263,10 +260,10 @@ void VideoCaptureDeviceApple::ReceiveFrame(
     return;
   }
 
-  client_->OnIncomingCapturedData(video_frame, video_frame_length, frame_format,
-                                  color_space, 0 /* clockwise_rotation */,
-                                  false /* flip_y */, base::TimeTicks::Now(),
-                                  timestamp);
+  client_->OnIncomingCapturedData(
+      video_frame, video_frame_length, frame_format, color_space,
+      rotation /* clockwise_rotation */, false /* flip_y */,
+      base::TimeTicks::Now(), timestamp);
 }
 
 void VideoCaptureDeviceApple::ReceiveExternalGpuMemoryBufferFrame(

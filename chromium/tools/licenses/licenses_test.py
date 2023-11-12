@@ -5,6 +5,8 @@
 """Unit tests for //tools/licenses/licenses.py.
 """
 
+import csv
+import io
 import os
 import pathlib
 import sys
@@ -28,42 +30,70 @@ class LicensesTest(unittest.TestCase):
         os.path.join('third_party', 'lib1'): {
             'Name': 'lib1',
             'Shipped': 'yes',
-            'License File': os.path.join('third_party', 'lib1', 'LICENSE'),
+            'License': 'MIT',
+            'License File': [os.path.join('third_party', 'lib1', 'LICENSE')],
         },
         os.path.join('third_party', 'lib2'): {
-            'Name': 'lib2',
-            'Shipped': 'yes',
-            'License File': os.path.join('third_party', 'lib2', 'LICENSE'),
+            'Name':
+            'lib2',
+            'Shipped':
+            'yes',
+            'License':
+            'MIT, Apache 2.0',
+            'License File': [
+                os.path.join('third_party', 'lib2', 'LICENSE-A'),
+                os.path.join('third_party', 'lib2', 'LICENSE-B'),
+            ],
         },
         'ignored': {
             'Name': 'ignored',
             'Shipped': 'no',
-            'License File': licenses.NOT_SHIPPED,
+            'License File': [],
         },
         os.path.join('third_party', 'lib_unshipped'): {
-            'Name': 'lib_unshipped',
-            'Shipped': 'no',
-            'License File': os.path.join('third_party', 'lib_unshipped',
-                                         'LICENSE'),
+            'Name':
+            'lib_unshipped',
+            'Shipped':
+            'no',
+            'License':
+            '',
+            'License File': [
+                os.path.join('third_party', 'lib_unshipped', 'LICENSE'),
+            ],
         },
         os.path.join('third_party', 'lib3'): {
             'Name': 'lib3',
             'Shipped': 'yes',
-            'License File': os.path.join('third_party', 'lib3', 'LICENSE'),
+            'License': '',
+            'License File': [os.path.join('third_party', 'lib3', 'LICENSE')],
         },
         os.path.join('third_party', 'lib3-v1'): {
             # Test SPDX license file dedup. (different name, same license file)
             'Name': 'lib3-v1',
             'Shipped': 'yes',
-            'License File': os.path.join('third_party', 'lib3', 'LICENSE'),
+            'License': 'Apache 2.0',
+            'License File': [os.path.join('third_party', 'lib3', 'LICENSE')],
         },
         os.path.join('third_party', 'lib3-v2'): {
             # Test SPDX id dedup. (same name, different license file)
             'Name': 'lib3',
             'Shipped': 'yes',
-            'License File': os.path.join('third_party', 'lib3-v2', 'LICENSE'),
+            'License': 'BSD',
+            'License File': [os.path.join('third_party', 'lib3-v2', 'LICENSE')],
         },
     }
+
+  def test_parse_dir(self):
+    test_path = os.path.join('tools', 'licenses', 'test_dir')
+    metadata = licenses.ParseDir(test_path, REPOSITORY_ROOT)
+    expected = {
+        'License File': [os.path.join(REPOSITORY_ROOT, test_path, 'LICENSE')],
+        'Name': 'License tools directory parsing test',
+        'URL': 'https://chromium.tools.licenses.test/src.git',
+        'License': 'FAKE',
+        'Shipped': 'no',
+    }
+    self.assertDictEqual(metadata, expected)
 
   def test_get_third_party_deps_from_gn_deps_output(self):
     prune_path = next(iter(licenses.PRUNE_PATHS))
@@ -108,11 +138,84 @@ class LicensesTest(unittest.TestCase):
             os.path.join('external', 'somelib'),
         ]))
 
+  def test_generate_license_file_csv(self):
+    # This is the same for all the links and prevents wildly long strings.
+    prefix = "https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/"
+
+    csv_file = io.StringIO(licenses.GenerateLicenseFileCsv(
+        self._get_metadata()))
+    csv_rows = [row for row in csv.DictReader(csv_file)]
+
+    expected = [{
+        'Library Name': 'Chromium',
+        'Link to LICENSE file': f'{prefix}LICENSE',
+        'License Name': 'Chromium',
+        'Binary which uses library': 'Chromium',
+        'License text for library included?': 'Yes',
+        'Source code for library includes the mirrored source?': 'Yes',
+        'Authorization date': 'N/A'
+    }, {
+        'Library Name': 'lib1',
+        'Link to LICENSE file':
+        f'{prefix}tools/licenses/third_party/lib1/LICENSE',
+        'License Name': 'MIT',
+        'Binary which uses library': 'Chromium',
+        'License text for library included?': 'Yes',
+        'Source code for library includes the mirrored source?': 'Yes',
+        'Authorization date': 'N/A'
+    }, {
+        'Library Name':
+        'lib2',
+        'Link to LICENSE file':
+        (f'{prefix}tools/licenses/third_party/lib2/LICENSE-A, '
+         f'{prefix}tools/licenses/third_party/lib2/LICENSE-B'),
+        'License Name':
+        'MIT, Apache 2.0',
+        'Binary which uses library':
+        'Chromium',
+        'License text for library included?':
+        'Yes',
+        'Source code for library includes the mirrored source?':
+        'Yes',
+        'Authorization date':
+        'N/A'
+    }, {
+        'Library Name': 'lib3',
+        'Link to LICENSE file':
+        f'{prefix}tools/licenses/third_party/lib3/LICENSE',
+        'License Name': 'UNKNOWN',
+        'Binary which uses library': 'Chromium',
+        'License text for library included?': 'Yes',
+        'Source code for library includes the mirrored source?': 'Yes',
+        'Authorization date': 'N/A'
+    }, {
+        'Library Name': 'lib3-v1',
+        'Link to LICENSE file':
+        f'{prefix}tools/licenses/third_party/lib3/LICENSE',
+        'License Name': 'Apache 2.0',
+        'Binary which uses library': 'Chromium',
+        'License text for library included?': 'Yes',
+        'Source code for library includes the mirrored source?': 'Yes',
+        'Authorization date': 'N/A'
+    }, {
+        'Library Name': 'lib3',
+        'Link to LICENSE file':
+        f'{prefix}tools/licenses/third_party/lib3-v2/LICENSE',
+        'License Name': 'BSD',
+        'Binary which uses library': 'Chromium',
+        'License text for library included?': 'Yes',
+        'Source code for library includes the mirrored source?': 'Yes',
+        'Authorization date': 'N/A'
+    }]
+
+    self.assertEqual(csv_rows, expected)
+
   def test_generate_license_file_txt(self):
     read_file_vals = [
         'root license text\n',
         'lib1 license text\n',
-        'lib2 license text\n',
+        'lib2-a license text\n',
+        'lib2-b license text\n',
         'lib3 license text\n',
         'lib3 license text\n',
         'lib3-v2 license text\n',
@@ -132,7 +235,9 @@ class LicensesTest(unittest.TestCase):
         '--------------------',
         'lib2',
         '--------------------',
-        'lib2 license text',
+        'lib2-a license text',
+        '',
+        'lib2-b license text',
         '',
         '--------------------',
         'lib3',
@@ -145,7 +250,7 @@ class LicensesTest(unittest.TestCase):
         'lib3 license text',
         '',
         '--------------------',
-        'lib3-v2',
+        'lib3',
         '--------------------',
         'lib3-v2 license text',
     ]) + '\n'  # extra new line to account for join not adding one to the end
@@ -155,7 +260,8 @@ class LicensesTest(unittest.TestCase):
     read_file_vals = [
         'root\nlicense text\n',
         'lib1\nlicense text\n',
-        'lib2\nlicense text\n',
+        'lib2-a\nlicense text\n',
+        'lib2-b\nlicense text\n',
         'lib3\nlicense text\n',
         'lib3-v2\nlicense text\n',
     ]
@@ -200,6 +306,11 @@ class LicensesTest(unittest.TestCase):
             "licenseConcluded": "LicenseRef-lib2"
         },
         {
+            "SPDXID": "SPDXRef-Package-lib2-1",
+            "name": "lib2",
+            "licenseConcluded": "LicenseRef-lib2-1"
+        },
+        {
             "SPDXID": "SPDXRef-Package-lib3",
             "name": "lib3",
             "licenseConcluded": "LicenseRef-lib3"
@@ -239,10 +350,20 @@ class LicensesTest(unittest.TestCase):
         {
             "name": "lib2",
             "licenseId": "LicenseRef-lib2",
-            "extractedText": "lib2\\nlicense text\\n",
+            "extractedText": "lib2-a\\nlicense text\\n",
             "crossRefs": [
                 {
-                    "url": "http://google.com/third_party/lib2/LICENSE"
+                    "url": "http://google.com/third_party/lib2/LICENSE-A"
+                }
+            ]
+        },
+        {
+            "name": "lib2",
+            "licenseId": "LicenseRef-lib2-1",
+            "extractedText": "lib2-b\\nlicense text\\n",
+            "crossRefs": [
+                {
+                    "url": "http://google.com/third_party/lib2/LICENSE-B"
                 }
             ]
         },
@@ -277,6 +398,11 @@ class LicensesTest(unittest.TestCase):
             "spdxElementId": "SPDXRef-Package-Chromium",
             "relationshipType": "CONTAINS",
             "relatedSpdxElement": "SPDXRef-Package-lib2"
+        },
+        {
+            "spdxElementId": "SPDXRef-Package-Chromium",
+            "relationshipType": "CONTAINS",
+            "relatedSpdxElement": "SPDXRef-Package-lib2-1"
         },
         {
             "spdxElementId": "SPDXRef-Package-Chromium",

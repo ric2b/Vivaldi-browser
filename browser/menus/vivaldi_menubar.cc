@@ -80,7 +80,6 @@ void Menubar::Populate(int id) {
   // Menu models are owned by the delegate
   views::MenuItemView* root = new views::MenuItemView(this);
   id_to_menu_map_[id] = root;
-  root->set_has_icons(true);
   ui::MenuModel* menu_model = nullptr;
   params_->delegate->PopulateModel(id, IsDarkTextColor(root), &menu_model);
   DCHECK(menu_model);

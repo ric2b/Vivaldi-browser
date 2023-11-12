@@ -6,28 +6,33 @@
 
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreText/CoreText.h>
-#include "third_party/blink/public/common/font_access/font_enumeration_table.pb.h"
 
 #include <string>
 
+#include "base/apple/bridging.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/font_access/font_enumeration_table.pb.h"
 
 namespace content {
 
 namespace {
 
-base::ScopedCFTypeRef<CFStringRef> GetLocalizedString(CTFontDescriptorRef fd,
-                                                      CFStringRef attribute) {
-  return base::ScopedCFTypeRef<CFStringRef>(base::mac::CFCast<CFStringRef>(
-      CTFontDescriptorCopyLocalizedAttribute(fd, attribute, nullptr)));
+base::apple::ScopedCFTypeRef<CFStringRef> GetLocalizedString(
+    CTFontDescriptorRef fd,
+    CFStringRef attribute) {
+  return base::apple::ScopedCFTypeRef<CFStringRef>(
+      base::apple::CFCast<CFStringRef>(CTFontDescriptorCopyLocalizedAttribute(
+          fd, attribute, /*language=*/nullptr)));
 }
 
-base::ScopedCFTypeRef<CFStringRef> GetString(CTFontDescriptorRef fd,
-                                             CFStringRef attribute) {
-  return base::ScopedCFTypeRef<CFStringRef>(base::mac::CFCast<CFStringRef>(
-      CTFontDescriptorCopyAttribute(fd, attribute)));
+base::apple::ScopedCFTypeRef<CFStringRef> GetString(CTFontDescriptorRef fd,
+                                                    CFStringRef attribute) {
+  return base::apple::ScopedCFTypeRef<CFStringRef>(
+      base::apple::CFCast<CFStringRef>(
+          CTFontDescriptorCopyAttribute(fd, attribute)));
 }
 
 }  // namespace
@@ -42,13 +47,13 @@ FontEnumerationDataSourceMac::~FontEnumerationDataSourceMac() {
 
 bool FontEnumerationDataSourceMac::IsValidFontMac(
     const CTFontDescriptorRef& fd) {
-  base::ScopedCFTypeRef<CFStringRef> cf_postscript_name =
+  base::apple::ScopedCFTypeRef<CFStringRef> cf_postscript_name =
       GetString(fd, kCTFontNameAttribute);
-  base::ScopedCFTypeRef<CFStringRef> cf_full_name =
+  base::apple::ScopedCFTypeRef<CFStringRef> cf_full_name =
       GetLocalizedString(fd, kCTFontDisplayNameAttribute);
-  base::ScopedCFTypeRef<CFStringRef> cf_family =
+  base::apple::ScopedCFTypeRef<CFStringRef> cf_family =
       GetString(fd, kCTFontFamilyNameAttribute);
-  base::ScopedCFTypeRef<CFStringRef> cf_style =
+  base::apple::ScopedCFTypeRef<CFStringRef> cf_style =
       GetString(fd, kCTFontStyleNameAttribute);
 
   if (!cf_postscript_name || !cf_full_name || !cf_family || !cf_style) {
@@ -70,24 +75,22 @@ blink::FontEnumerationTable FontEnumerationDataSourceMac::GetFonts(
   blink::FontEnumerationTable font_enumeration_table;
 
   @autoreleasepool {
-    CFTypeRef values[1] = {kCFBooleanTrue};
-    base::ScopedCFTypeRef<CFDictionaryRef> options(CFDictionaryCreate(
-        kCFAllocatorDefault,
-        (const void**)kCTFontCollectionRemoveDuplicatesOption,
-        (const void**)&values,
-        /*numValues=*/1, &kCFTypeDictionaryKeyCallBacks,
-        &kCFTypeDictionaryValueCallBacks));
-    base::ScopedCFTypeRef<CTFontCollectionRef> collection(
-        CTFontCollectionCreateFromAvailableFonts(options));
+    NSDictionary* options = @{
+      base::apple::CFToNSPtrCast(kCTFontCollectionRemoveDuplicatesOption) : @YES
+    };
 
-    base::ScopedCFTypeRef<CFArrayRef> font_descs(
+    base::apple::ScopedCFTypeRef<CTFontCollectionRef> collection(
+        CTFontCollectionCreateFromAvailableFonts(
+            base::apple::NSToCFPtrCast(options)));
+
+    base::apple::ScopedCFTypeRef<CFArrayRef> font_descs(
         CTFontCollectionCreateMatchingFontDescriptors(collection));
 
     // Used to filter duplicates.
     std::set<std::string> fonts_seen;
 
     for (CFIndex i = 0; i < CFArrayGetCount(font_descs); ++i) {
-      CTFontDescriptorRef fd = base::mac::CFCast<CTFontDescriptorRef>(
+      CTFontDescriptorRef fd = base::apple::CFCast<CTFontDescriptorRef>(
           CFArrayGetValueAtIndex(font_descs, i));
       if (!IsValidFontMac(fd)) {
         // Skip invalid fonts.

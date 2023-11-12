@@ -27,10 +27,7 @@
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/geometry/outsets.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/background.h"
 #include "ui/views/highlight_border.h"
@@ -138,7 +135,7 @@ void SplitViewDividerView::Layout() {
 
   SetBoundsRect(GetLocalBounds());
   divider_handler_view_->Refresh(
-      split_view_controller_->is_resizing_with_divider());
+      split_view_controller_->IsResizingWithDivider());
 
   if (IsSnapGroupEnabledInClamshellMode()) {
     const gfx::Size kebab_button_size = kebab_button_->GetPreferredSize();
@@ -148,14 +145,6 @@ void SplitViewDividerView::Layout() {
         kebab_button_size.width(), kebab_button_size.height());
     kebab_button_->SetBoundsRect(kebab_button_bounds);
   }
-}
-
-void SplitViewDividerView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-
-  background()->SetNativeControlColor(
-      AshColorProvider::Get()->GetBaseLayerColor(
-          AshColorProvider::BaseLayerType::kOpaque));
 }
 
 void SplitViewDividerView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -182,7 +171,7 @@ void SplitViewDividerView::OnMouseExited(const ui::MouseEvent& event) {
 bool SplitViewDividerView::OnMousePressed(const ui::MouseEvent& event) {
   gfx::Point location(event.location());
   views::View::ConvertPointToScreen(this, &location);
-  split_view_controller_->StartResizeWithDivider(location);
+  divider_->StartResizeWithDivider(location);
   OnResizeStatusChanged();
   return true;
 }
@@ -190,14 +179,14 @@ bool SplitViewDividerView::OnMousePressed(const ui::MouseEvent& event) {
 bool SplitViewDividerView::OnMouseDragged(const ui::MouseEvent& event) {
   gfx::Point location(event.location());
   views::View::ConvertPointToScreen(this, &location);
-  split_view_controller_->ResizeWithDivider(location);
+  divider_->ResizeWithDivider(location);
   return true;
 }
 
 void SplitViewDividerView::OnMouseReleased(const ui::MouseEvent& event) {
   gfx::Point location(event.location());
   views::View::ConvertPointToScreen(this, &location);
-  split_view_controller_->EndResizeWithDivider(location);
+  divider_->EndResizeWithDivider(location);
   OnResizeStatusChanged();
   if (event.GetClickCount() == 2) {
     split_view_controller_->SwapWindows(
@@ -217,14 +206,14 @@ void SplitViewDividerView::OnGestureEvent(ui::GestureEvent* event) {
       break;
     case ui::ET_GESTURE_TAP_DOWN:
     case ui::ET_GESTURE_SCROLL_BEGIN:
-      split_view_controller_->StartResizeWithDivider(location);
+      divider_->StartResizeWithDivider(location);
       OnResizeStatusChanged();
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      split_view_controller_->ResizeWithDivider(location);
+      divider_->ResizeWithDivider(location);
       break;
     case ui::ET_GESTURE_END:
-      split_view_controller_->EndResizeWithDivider(location);
+      divider_->EndResizeWithDivider(location);
       OnResizeStatusChanged();
       break;
     default:
@@ -257,7 +246,7 @@ void SplitViewDividerView::OnResizeStatusChanged() {
   const gfx::Rect old_bounds =
       divider_->GetDividerBoundsInScreen(/*is_dragging=*/false);
   const gfx::Rect new_bounds = divider_->GetDividerBoundsInScreen(
-      split_view_controller_->is_resizing_with_divider());
+      split_view_controller_->IsResizingWithDivider());
   gfx::Transform transform;
   transform.Translate(new_bounds.x() - old_bounds.x(),
                       new_bounds.y() - old_bounds.y());
@@ -273,7 +262,7 @@ void SplitViewDividerView::OnResizeStatusChanged() {
   SetTransform(transform);
 
   divider_handler_view_->Refresh(
-      split_view_controller_->is_resizing_with_divider());
+      split_view_controller_->IsResizingWithDivider());
 }
 
 void SplitViewDividerView::OnKebabButtonPressed() {
@@ -288,8 +277,7 @@ void SplitViewDividerView::OnKebabButtonPressed() {
     snap_group_expanded_menu_widget_ = std::make_unique<views::Widget>();
     snap_group_expanded_menu_widget_->Init(CreateWidgetInitParams(
         split_view_controller_->root_window(), "SnapGroupExpandedMenuWidget"));
-    SnapGroupController* snap_group_controller =
-        Shell::Get()->snap_group_controller();
+    SnapGroupController* snap_group_controller = SnapGroupController::Get();
     SnapGroup* snap_group = snap_group_controller->GetSnapGroupForGivenWindow(
         split_view_controller_->primary_window());
     CHECK(snap_group);

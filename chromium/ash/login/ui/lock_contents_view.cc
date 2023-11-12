@@ -21,6 +21,7 @@
 #include "ash/login/ui/lock_contents_view_constants.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/lock_screen_media_controls_view.h"
+#include "ash/login/ui/lock_screen_media_view.h"
 #include "ash/login/ui/login_auth_user_view.h"
 #include "ash/login/ui/login_big_user_view.h"
 #include "ash/login/ui/login_camera_timeout_view.h"
@@ -70,7 +71,9 @@
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/known_user.h"
+#include "components/user_manager/multi_user/multi_user_sign_in_policy.h"
 #include "components/user_manager/user_type.h"
+#include "media/base/media_switches.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -282,8 +285,9 @@ class UserAddingScreenIndicator : public views::View {
     label_->SetText(message);
 
     SetPaintToLayer();
-    layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
     layer()->SetFillsBoundsOpaquely(false);
+    layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
+    layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
 
     SetBackground(views::CreateThemedRoundedRectBackground(
         kColorAshShieldAndBase80, kBubbleBorderRadius));
@@ -386,13 +390,6 @@ LockContentsView::LockContentsView(
       AddChildView(std::make_unique<LoginErrorBubble>());
   detachable_base_error_bubble_->set_persistent(true);
 
-  tooltip_bubble_ = AddChildView(std::make_unique<LoginTooltipView>(
-      u"" /*message*/, nullptr /*anchor_view*/));
-  tooltip_bubble_->set_positioning_strategy(
-      LoginBaseBubbleView::PositioningStrategy::kTryBeforeThenAfter);
-  tooltip_bubble_->SetPadding(kHorizontalPaddingLoginTooltipViewDp,
-                              kVerticalPaddingLoginTooltipViewDp);
-
   management_bubble_ = AddChildView(std::make_unique<ManagementBubble>(
       l10n_util::GetStringFUTF16(IDS_ASH_LOGIN_ENTERPRISE_MANAGED_POP_UP,
                                  ui::GetChromeOSDeviceName(),
@@ -445,6 +442,13 @@ LockContentsView::~LockContentsView() {
   }
 
   chromeos::PowerManagerClient::Get()->RemoveObserver(this);
+
+  if (widget_) {
+    views::FocusManager* focus_manager = widget_->GetFocusManager();
+    if (focus_manager) {
+      focus_manager->RemoveFocusChangeListener(this);
+    }
+  }
 }
 
 void LockContentsView::FocusNextUser() {
@@ -598,10 +602,32 @@ void LockContentsView::Layout() {
 void LockContentsView::AddedToWidget() {
   DoLayout();
 
+  views::Widget* widget = GetWidget();
+  CHECK(widget);
+  widget_ = widget->GetWeakPtr();
+
+  views::FocusManager* focus_manager = widget->GetFocusManager();
+  if (focus_manager) {
+    focus_manager->AddFocusChangeListener(this);
+  } else {
+    LOG(ERROR) << "LockContentsView attached to Widget without FocusManager";
+  }
+
   // Focus the primary user when showing the UI. This will focus the password.
   if (primary_big_view_) {
     primary_big_view_->RequestFocus();
   }
+}
+
+void LockContentsView::RemovedFromWidget() {
+  if (!widget_) {
+    return;
+  }
+  views::FocusManager* focus_manager = widget_->GetFocusManager();
+  if (focus_manager) {
+    focus_manager->RemoveFocusChangeListener(this);
+  }
+  widget_ = nullptr;
 }
 
 void LockContentsView::OnFocus() {
@@ -651,9 +677,20 @@ bool LockContentsView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 void LockContentsView::OnUsersChanged(const std::vector<LoginUserInfo>& users) {
   if (Shell::Get()->login_screen_controller()->IsAuthenticating()) {
     // TODO(b/276246832): We should avoid re-layouting during Authentication.
-    LOG(WARNING)
-        << "LockContentsView::OnUsersChanged called during Authentication.";
+    LOG(WARNING) << "LockContentsView::OnUsersChanged called during "
+                    "Authentication. We are postponing the re-layout.";
+    pending_users_change_ = users;
+    return;
   }
+  ApplyUserChanges(users);
+}
+
+void LockContentsView::ApplyUserChanges(
+    const std::vector<LoginUserInfo>& users) {
+  CHECK(!Shell::Get()->login_screen_controller()->IsAuthenticating() ||
+        Shell::Get()
+            ->login_screen_controller()
+            ->IsAuthenticationCallbackExecuting());
   AuthEventsRecorder::Get()->OnLockContentsViewUpdate();
   // The debug view will potentially call this method many times. Make sure to
   // invalidate any child references.
@@ -662,7 +699,9 @@ void LockContentsView::OnUsersChanged(const std::vector<LoginUserInfo>& users) {
   users_list_ = nullptr;
   middle_spacing_view_ = nullptr;
   media_controls_view_ = nullptr;
+  media_view_ = nullptr;
   layout_actions_.clear();
+  pending_users_change_.reset();
   // Removing child views can change focus, which may result in LockContentsView
   // getting focused. Make sure to clear internal references before that happens
   // so there is not stale-pointer usage. See crbug.com/884402.
@@ -974,26 +1013,6 @@ void LockContentsView::OnSetTpmLockedState(const AccountId& user,
   }
 }
 
-void LockContentsView::OnTapToUnlockEnabledForUserChanged(const AccountId& user,
-                                                          bool enabled) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp)) {
-    return;
-  }
-
-  UserState* state = FindStateForUser(user);
-  if (!state) {
-    LOG(ERROR) << "Unable to find user enabling click to auth";
-    return;
-  }
-  state->enable_tap_auth = enabled;
-
-  LoginBigUserView* big_user =
-      TryToFindBigUser(user, true /*require_auth_active*/);
-  if (big_user && big_user->auth_user()) {
-    LayoutAuth(big_user, nullptr /*opt_to_hide*/, true /*animate*/);
-  }
-}
-
 void LockContentsView::OnForceOnlineSignInForUser(const AccountId& user) {
   UserState* state = FindStateForUser(user);
   if (!state) {
@@ -1006,40 +1025,6 @@ void LockContentsView::OnForceOnlineSignInForUser(const AccountId& user) {
       TryToFindBigUser(user, true /*require_auth_active*/);
   if (big_user && big_user->auth_user()) {
     LayoutAuth(big_user, nullptr /*opt_to_hide*/, true /*animate*/);
-  }
-}
-
-void LockContentsView::OnShowEasyUnlockIcon(
-    const AccountId& user,
-    const EasyUnlockIconInfo& icon_info) {
-  if (base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp)) {
-    return;
-  }
-
-  UserState* state = FindStateForUser(user);
-  if (!state) {
-    return;
-  }
-
-  state->easy_unlock_icon_info = icon_info;
-  UpdateEasyUnlockIconForUser(user);
-
-  // Show tooltip only if the user is actively showing auth.
-  LoginBigUserView* big_user =
-      TryToFindBigUser(user, true /*require_auth_active*/);
-  if (!big_user || !big_user->auth_user()) {
-    return;
-  }
-
-  if (tooltip_bubble_->GetVisible()) {
-    tooltip_bubble_->Hide();
-  }
-
-  if (icon_info.autoshow_tooltip) {
-    tooltip_bubble_->SetAnchorView(big_user->auth_user()->GetActiveInputView());
-    tooltip_bubble_->set_text(icon_info.tooltip);
-    tooltip_bubble_->Show();
-    tooltip_bubble_->SetVisible(true);
   }
 }
 
@@ -1266,7 +1251,7 @@ void LockContentsView::OnOobeDialogStateChanged(OobeDialogState state) {
   UpdateBottomStatusIndicatorVisibility();
 
   if (main_dialog_closed && CurrentBigUserView()) {
-    CurrentBigUserView()->RequestFocus();
+    OnBigUserChanged();
   } else if (oobe_dialog_closed && login_camera_timeout_view_) {
     login_camera_timeout_view_->RequestFocus();
   }
@@ -1400,14 +1385,14 @@ void LockContentsView::ToggleManagementForUserForDebug(const AccountId& user) {
   }
 }
 
-void LockContentsView::SetMultiprofilePolicyForUserForDebug(
+void LockContentsView::SetMultiUserSignInPolicyForUserForDebug(
     const AccountId& user,
-    const MultiProfileUserBehavior& multiprofile_policy) {
-  auto replace = [multiprofile_policy](const LoginUserInfo& user_info) {
+    user_manager::MultiUserSignInPolicy policy) {
+  auto replace = [policy](const LoginUserInfo& user_info) {
     auto changed = user_info;
-    changed.multiprofile_policy = multiprofile_policy;
-    changed.is_multiprofile_allowed =
-        multiprofile_policy == MultiProfileUserBehavior::UNRESTRICTED;
+    changed.multi_user_sign_in_policy = policy;
+    changed.is_multi_user_sign_in_allowed =
+        policy == user_manager::MultiUserSignInPolicy::kUnrestricted;
     return changed;
   };
 
@@ -1434,6 +1419,25 @@ void LockContentsView::ToggleForceOnlineSignInForUserForDebug(
     return;
   }
   state->force_online_sign_in = !state->force_online_sign_in;
+
+  LoginBigUserView* big_user =
+      TryToFindBigUser(user, true /*require_auth_active*/);
+  if (big_user && big_user->auth_user()) {
+    LayoutAuth(big_user, nullptr /*opt_to_hide*/, true /*animate*/);
+  }
+}
+
+void LockContentsView::ToggleDisableTpmForUserForDebug(const AccountId& user) {
+  UserState* state = FindStateForUser(user);
+  if (!state) {
+    LOG(ERROR) << "Unable to find user to toggle TPM disabled message";
+    return;
+  }
+  if (state->time_until_tpm_unlock.has_value()) {
+    state->time_until_tpm_unlock = absl::nullopt;
+  } else {
+    state->time_until_tpm_unlock = base::Minutes(5);
+  }
 
   LoginBigUserView* big_user =
       TryToFindBigUser(user, true /*require_auth_active*/);
@@ -1497,9 +1501,19 @@ void LockContentsView::SetLowDensitySpacing(views::View* spacing_middle,
 
 void LockContentsView::SetMediaControlsSpacing(bool landscape) {
   int total_width = GetPreferredSize().width();
+
+  auto get_media_view_width = [&media_controls_view = media_controls_view_,
+                               &media_view = media_view_]() {
+    if (media_controls_view) {
+      return media_controls_view->GetPreferredSize().width();
+    }
+    CHECK(media_view);
+    return media_view->GetPreferredSize().width();
+  };
+
   int available_width =
-      total_width - (primary_big_view_->GetPreferredSize().width() +
-                     media_controls_view_->GetPreferredSize().width());
+      total_width -
+      (primary_big_view_->GetPreferredSize().width() + get_media_view_width());
   if (available_width <= 0) {
     SetPreferredWidthForView(middle_spacing_view_, 0);
     return;
@@ -1522,10 +1536,15 @@ bool LockContentsView::AreMediaControlsEnabled() const {
 }
 
 void LockContentsView::HideMediaControlsLayout() {
-  DCHECK(middle_spacing_view_);
-  DCHECK(media_controls_view_);
+  CHECK(middle_spacing_view_);
   middle_spacing_view_->SetVisible(false);
-  media_controls_view_->SetVisible(false);
+
+  if (media_controls_view_) {
+    media_controls_view_->SetVisible(false);
+  } else {
+    CHECK(media_view_);
+    media_view_->SetVisible(false);
+  }
 
   // Don't allow media keys to be used on lock screen since controls are hidden.
   Shell::Get()->media_controller()->SetMediaControlsDismissed(true);
@@ -1534,16 +1553,86 @@ void LockContentsView::HideMediaControlsLayout() {
 }
 
 void LockContentsView::CreateMediaControlsLayout() {
-  DCHECK(middle_spacing_view_);
-  DCHECK(media_controls_view_);
-  media_controls_view_->SetVisible(true);
+  CHECK(middle_spacing_view_);
   middle_spacing_view_->SetVisible(true);
+
+  if (media_controls_view_) {
+    media_controls_view_->SetVisible(true);
+  } else {
+    CHECK(media_view_);
+    media_view_->SetVisible(true);
+  }
 
   // Set |spacing_middle|.
   AddDisplayLayoutAction(base::BindRepeating(
       &LockContentsView::SetMediaControlsSpacing, base::Unretained(this)));
 
   Layout();
+}
+
+void LockContentsView::OnWillChangeFocus(View* focused_before,
+                                         View* focused_now) {}
+
+void LockContentsView::OnDidChangeFocus(View* focused_before,
+                                        View* focused_now) {
+  if (!focused_before || !focused_now) {
+    return;
+  }
+
+  if (!auth_error_bubble_ || !auth_error_bubble_->GetVisible()) {
+    return;
+  }
+  views::View* anchor = auth_error_bubble_->GetAnchorView();
+  if (!anchor) {
+    return;
+  }
+
+  if (!widget_) {
+    LOG(ERROR) << "Focus change event without widget";
+    return;
+  }
+  views::FocusManager* focus_manager = widget_->GetFocusManager();
+  if (!focus_manager) {
+    LOG(ERROR) << "Widget misses FocusManager";
+    return;
+  }
+
+  if (focus_manager->focus_change_reason() !=
+      views::FocusManager::FocusChangeReason::kFocusTraversal) {
+    return;
+  }
+
+  const bool before_in_anchor = anchor->Contains(focused_before);
+  if (!before_in_anchor) {
+    return;
+  }
+
+  LoginBigUserView* big_user = CurrentBigUserView();
+  if (!big_user) {
+    return;
+  }
+  LoginAuthUserView* auth_user = big_user->auth_user();
+  if (!auth_user) {
+    return;
+  }
+  LoginUserView* user_view = auth_user->user_view();
+  if (!user_view) {
+    return;
+  }
+
+  views::View* dropdown_button = user_view->GetDropdownButton();
+  const bool now_in_dropdown_button =
+      dropdown_button && dropdown_button->Contains(focused_now);
+
+  views::View* pin_password_toggle = auth_user->pin_password_toggle();
+  const bool now_in_pin_password_toggle =
+      pin_password_toggle && pin_password_toggle->Contains(focused_now);
+
+  if (!now_in_dropdown_button && !now_in_pin_password_toggle) {
+    return;
+  }
+
+  FocusFirstOrLastFocusableChild(auth_error_bubble_.get(), /*reverse=*/false);
 }
 
 void LockContentsView::CreateLowDensityLayout(
@@ -1553,27 +1642,36 @@ void LockContentsView::CreateLowDensityLayout(
 
   primary_big_view_ = main_view_->AddChildView(std::move(primary_big_view));
 
-  // Build media controls view. Using base::Unretained(this) is safe here
-  // because these callbacks are used by |media_controls_view_|, which is
-  // owned by |this|.
-  LockScreenMediaControlsView::Callbacks media_controls_callbacks;
-  media_controls_callbacks.media_controls_enabled = base::BindRepeating(
-      &LockContentsView::AreMediaControlsEnabled, base::Unretained(this));
-  media_controls_callbacks.hide_media_controls = base::BindRepeating(
-      &LockContentsView::HideMediaControlsLayout, base::Unretained(this));
-  media_controls_callbacks.show_media_controls = base::BindRepeating(
-      &LockContentsView::CreateMediaControlsLayout, base::Unretained(this));
-
   // Space between primary user and media controls.
   middle_spacing_view_ =
       main_view_->AddChildView(std::make_unique<NonAccessibleView>());
-
-  // Media controls view.
-  media_controls_view_ = main_view_->AddChildView(
-      std::make_unique<LockScreenMediaControlsView>(media_controls_callbacks));
-
-  media_controls_view_->SetVisible(false);
   middle_spacing_view_->SetVisible(false);
+
+  // Build the view for media controls. Using base::Unretained(this) is safe
+  // here because these callbacks are used by a media view owned by |this|.
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsCrOSUpdatedUI)) {
+    media_view_ =
+        main_view_->AddChildView(std::make_unique<LockScreenMediaView>(
+            base::BindRepeating(&LockContentsView::AreMediaControlsEnabled,
+                                base::Unretained(this)),
+            base::BindRepeating(&LockContentsView::CreateMediaControlsLayout,
+                                base::Unretained(this)),
+            base::BindRepeating(&LockContentsView::HideMediaControlsLayout,
+                                base::Unretained(this))));
+    media_view_->SetVisible(false);
+  } else {
+    LockScreenMediaControlsView::Callbacks media_controls_callbacks;
+    media_controls_callbacks.media_controls_enabled = base::BindRepeating(
+        &LockContentsView::AreMediaControlsEnabled, base::Unretained(this));
+    media_controls_callbacks.hide_media_controls = base::BindRepeating(
+        &LockContentsView::HideMediaControlsLayout, base::Unretained(this));
+    media_controls_callbacks.show_media_controls = base::BindRepeating(
+        &LockContentsView::CreateMediaControlsLayout, base::Unretained(this));
+    media_controls_view_ =
+        main_view_->AddChildView(std::make_unique<LockScreenMediaControlsView>(
+            media_controls_callbacks));
+    media_controls_view_->SetVisible(false);
+  }
 
   if (users.size() > 1) {
     // Space between primary user and secondary user.
@@ -1852,6 +1950,14 @@ void LockContentsView::OnAuthenticate(bool auth_success,
     if (authenticated_by_pin) {
       ++pin_unlock_attempt_by_user_[account_id];
     }
+    if (pending_users_change_.has_value()) {
+      const std::vector<LoginUserInfo> pending_users_change(
+          std::move(*pending_users_change_));
+      pending_users_change_.reset();
+      LOG(WARNING) << "Running the postponed re-layout.";
+      ApplyUserChanges(pending_users_change);
+    }
+
     if (display_error_messages) {
       ShowAuthErrorMessage();
     }
@@ -2016,10 +2122,6 @@ void LockContentsView::OnBigUserChanged() {
 
   Shell::Get()->login_screen_controller()->OnFocusPod(big_user_account_id);
 
-  if (!base::FeatureList::IsEnabled(ash::features::kSmartLockUIRevamp)) {
-    UpdateEasyUnlockIconForUser(big_user_account_id);
-  }
-
   // The new auth user might have different last used detachable base - make
   // sure the detachable base pairing error is updated if needed.
   OnDetachableBasePairingStatusChanged(
@@ -2028,36 +2130,6 @@ void LockContentsView::OnBigUserChanged() {
   if (!detachable_base_error_bubble_->GetVisible()) {
     CurrentBigUserView()->RequestFocus();
   }
-}
-
-void LockContentsView::UpdateEasyUnlockIconForUser(const AccountId& user) {
-  // Try to find an big view for |user|. If there is none, there is no state to
-  // update.
-  LoginBigUserView* big_view =
-      TryToFindBigUser(user, false /*require_auth_active*/);
-  if (!big_view || !big_view->auth_user()) {
-    return;
-  }
-
-  UserState* state = FindStateForUser(user);
-  DCHECK(state);
-
-  // Hide easy unlock icon if there is no data available.
-  if (!state->easy_unlock_icon_info) {
-    big_view->auth_user()->SetEasyUnlockIcon(EasyUnlockIconState::NONE,
-                                             std::u16string());
-    return;
-  }
-
-  // TODO(jdufault): Make easy unlock backend always send aria_label, right now
-  // it is only sent if there is no tooltip.
-  std::u16string accessibility_label = state->easy_unlock_icon_info->aria_label;
-  if (accessibility_label.empty()) {
-    accessibility_label = state->easy_unlock_icon_info->tooltip;
-  }
-
-  big_view->auth_user()->SetEasyUnlockIcon(
-      state->easy_unlock_icon_info->icon_state, accessibility_label);
 }
 
 LoginBigUserView* LockContentsView::CurrentBigUserView() {
@@ -2201,24 +2273,6 @@ void LockContentsView::HideAuthErrorMessage() {
   }
 }
 
-void LockContentsView::OnEasyUnlockIconHovered() {
-  LoginBigUserView* big_view = CurrentBigUserView();
-  if (!big_view->auth_user()) {
-    return;
-  }
-
-  UserState* state =
-      FindStateForUser(big_view->GetCurrentUser().basic_user_info.account_id);
-  DCHECK(state);
-  DCHECK(state->easy_unlock_icon_info);
-
-  if (!state->easy_unlock_icon_info->tooltip.empty()) {
-    tooltip_bubble_->SetAnchorView(big_view->auth_user()->GetActiveInputView());
-    tooltip_bubble_->set_text(state->easy_unlock_icon_info->tooltip);
-    tooltip_bubble_->Show();
-  }
-}
-
 void LockContentsView::OnParentAccessValidationFinished(
     const AccountId& account_id,
     bool access_granted) {
@@ -2303,8 +2357,6 @@ std::unique_ptr<LoginBigUserView> LockContentsView::AllocateLoginBigUserView(
                           base::Unretained(this), is_primary);
   auth_user_callbacks.on_remove = base::BindRepeating(
       &LockContentsView::RemoveUser, base::Unretained(this), is_primary);
-  auth_user_callbacks.on_easy_unlock_icon_hovered = base::BindRepeating(
-      &LockContentsView::OnEasyUnlockIconHovered, base::Unretained(this));
   auth_user_callbacks.on_auth_factor_is_hiding_password_changed =
       base::BindRepeating(
           &LockContentsView::OnAuthFactorIsHidingPasswordChanged,

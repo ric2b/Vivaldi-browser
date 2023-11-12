@@ -22,6 +22,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/task_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
@@ -42,6 +43,9 @@ namespace scheduler {
 namespace page_scheduler_impl_unittest {
 
 namespace {
+
+constexpr base::TimeDelta kEpsilon = base::Milliseconds(1);
+
 void IncrementCounter(int* counter) {
   ++*counter;
 }
@@ -191,8 +195,6 @@ class PageSchedulerImplTest : public testing::Test {
   scoped_refptr<MainThreadTaskQueue> UnpausableTaskQueue() {
     return GetTaskQueue(FrameSchedulerImpl::UnpausableTaskQueueTraits());
   }
-
-  bool ShouldFreezePage() { return page_scheduler_->ShouldFreezePage(); }
 
   // Verifies that freezing the PageScheduler prevents tasks from running. Then
   // set the page as visible or unfreezes it while still hidden (depending on
@@ -422,7 +424,9 @@ TEST_F(PageSchedulerImplTest, IsLoadingTest) {
 
   // 2nd page finishes loading.
   frame_scheduler2->OnFirstContentfulPaintInMainFrame();
-  frame_scheduler2->OnFirstMeaningfulPaint();
+  frame_scheduler2->OnFirstMeaningfulPaint(
+      base::TimeTicks::Now() -
+      GetLoadingPhaseBufferTimeAfterFirstMeaningfulPaint());
 
   // Both pages are loaded.
   EXPECT_FALSE(page_scheduler_->IsLoading());
@@ -1403,16 +1407,12 @@ TEST_F(PageSchedulerImplTest, FreezingRecentlyAudiblePage) {
   page_scheduler_->SetPageFrozen(true);
   EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
   EXPECT_TRUE(page_scheduler_->IsFrozen());
-  EXPECT_EQ(page_scheduler_->GetPageLifecycleState(),
-            PageLifecycleState::kFrozen);
 
   // Fast-forwarding past the recent audio delay should not affect the state.
   test_task_runner_->FastForwardBy(recent_audio_delay() +
                                    base::Milliseconds(10));
   EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
   EXPECT_TRUE(page_scheduler_->IsFrozen());
-  EXPECT_EQ(page_scheduler_->GetPageLifecycleState(),
-            PageLifecycleState::kFrozen);
 }
 
 // Regression test for crbug.com/1431695. Test freezing and state changes work
@@ -1425,8 +1425,6 @@ TEST_F(PageSchedulerImplTest, FreezingAudiblePage) {
   page_scheduler_->SetPageVisible(false);
   page_scheduler_->SetPageFrozen(true);
   EXPECT_TRUE(page_scheduler_->IsFrozen());
-  EXPECT_EQ(page_scheduler_->GetPageLifecycleState(),
-            PageLifecycleState::kFrozen);
 
   EXPECT_TRUE(page_scheduler_->IsAudioPlaying());
   page_scheduler_->AudioStateChanged(false);
@@ -1434,16 +1432,12 @@ TEST_F(PageSchedulerImplTest, FreezingAudiblePage) {
   EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
   // And the page should still be frozen.
   EXPECT_TRUE(page_scheduler_->IsFrozen());
-  EXPECT_EQ(page_scheduler_->GetPageLifecycleState(),
-            PageLifecycleState::kFrozen);
 
   // Fast-forwarding past the recent audio delay should not affect the state.
   test_task_runner_->FastForwardBy(recent_audio_delay() +
                                    base::Milliseconds(10));
   EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
   EXPECT_TRUE(page_scheduler_->IsFrozen());
-  EXPECT_EQ(page_scheduler_->GetPageLifecycleState(),
-            PageLifecycleState::kFrozen);
 }
 
 TEST_F(PageSchedulerImplTest, BudgetBasedThrottlingForPageScheduler) {
@@ -1505,24 +1499,22 @@ TEST_F(PageSchedulerImplTest, PageFrozenOnlyWhileAudioSilent) {
   page_scheduler_->AudioStateChanged(true);
   page_scheduler_->SetPageVisible(false);
   EXPECT_TRUE(page_scheduler_->IsAudioPlaying());
-  EXPECT_FALSE(ShouldFreezePage());
   EXPECT_FALSE(page_scheduler_->IsFrozen());
 
   page_scheduler_->AudioStateChanged(false);
   // We are audible for a certain period after raw signal disappearing. The page
   // should not be eligible to freeze until after this delay.
   EXPECT_TRUE(page_scheduler_->IsAudioPlaying());
-  EXPECT_FALSE(ShouldFreezePage());
-
-  test_task_runner_->FastForwardBy(recent_audio_delay() +
-                                   base::Milliseconds(100));
-  // Audio is finally silent. The page should be eligible for freezing.
-  EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
-  EXPECT_TRUE(ShouldFreezePage());
   EXPECT_FALSE(page_scheduler_->IsFrozen());
 
-  test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() +
-                                   base::Milliseconds(100));
+  test_task_runner_->FastForwardBy(recent_audio_delay());
+  // Audio is finally silent. The page should be eligible for freezing.
+  EXPECT_FALSE(page_scheduler_->IsAudioPlaying());
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
+  test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() -
+                                   kEpsilon);
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
+  test_task_runner_->FastForwardBy(kEpsilon);
   EXPECT_TRUE(page_scheduler_->IsFrozen());
 
   // Page should unfreeze if audio starts playing.
@@ -1532,14 +1524,14 @@ TEST_F(PageSchedulerImplTest, PageFrozenOnlyWhileAudioSilent) {
 
 TEST_F(PageSchedulerImplTest, PageFrozenOnlyWhileNotVisible) {
   page_scheduler_->SetPageVisible(true);
-  EXPECT_FALSE(ShouldFreezePage());
   EXPECT_FALSE(page_scheduler_->IsFrozen());
 
   // Page should freeze after delay.
   page_scheduler_->SetPageVisible(false);
-  EXPECT_TRUE(ShouldFreezePage());
-  test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() +
-                                   base::Milliseconds(100));
+  test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() -
+                                   kEpsilon);
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
+  test_task_runner_->FastForwardBy(kEpsilon);
   EXPECT_TRUE(page_scheduler_->IsFrozen());
 
   // Page should unfreeze when it becomes visible.
@@ -1549,13 +1541,12 @@ TEST_F(PageSchedulerImplTest, PageFrozenOnlyWhileNotVisible) {
   // If the page becomes visible before the freezing delay expires, it should
   // not freeze after the delay elapses.
   page_scheduler_->SetPageVisible(false);
-  EXPECT_TRUE(ShouldFreezePage());
   test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() -
-                                   base::Milliseconds(100));
+                                   kEpsilon);
   EXPECT_FALSE(page_scheduler_->IsFrozen());
   page_scheduler_->SetPageVisible(true);
   test_task_runner_->FastForwardBy(delay_for_background_tab_freezing() +
-                                   base::Milliseconds(100));
+                                   kEpsilon);
   EXPECT_FALSE(page_scheduler_->IsFrozen());
 }
 

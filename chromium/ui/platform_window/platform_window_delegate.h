@@ -146,6 +146,9 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowDelegate {
   // Sets the immersive mode for the window. This will only have an effect on
   // ChromeOS platforms.
   virtual void OnImmersiveModeChanged(bool immersive) {}
+
+  // Lets the window know that ChromeOS overview mode has changed.
+  virtual void OnOverviewModeChanged(bool in_overview) {}
 #endif
 
   enum RotateDirection {
@@ -174,6 +177,9 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowDelegate {
   // Requests size constraints for the PlatformWindow in DIP.
   virtual absl::optional<gfx::Size> GetMinimumSizeForWindow();
   virtual absl::optional<gfx::Size> GetMaximumSizeForWindow();
+
+  virtual bool CanMaximize();
+  virtual bool CanFullscreen();
 
   // Returns a mask to be used to clip the window for the size of
   // |WindowTreeHost::GetBoundsInPixels|.

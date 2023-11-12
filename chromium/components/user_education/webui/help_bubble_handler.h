@@ -9,16 +9,13 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_piece.h"
 #include "components/user_education/common/help_bubble_params.h"
 #include "components/user_education/webui/tracked_element_webui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -57,10 +54,8 @@ class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
   // it is probably good to check for null.
   content::WebContents* GetWebContents();
 
-  // Returns the RenderWidgetHost associated with the controller. This is a
-  // convenience method. A host should be associated with the controller but it
-  // is probably good to check for null.
-  content::RenderWidgetHost* GetRenderWidgetHost();
+  // Returns whether a help bubble is showing for a given element.
+  bool IsHelpBubbleShowingForTesting(ui::ElementIdentifier id) const;
 
  protected:
   // Provides reliable access to a HelpBubbleClient. Derived classes should
@@ -95,7 +90,7 @@ class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
     // treated as "not visible" for most purposes).
     //
     // This method may lazily instantiate some visibility-tracking logic.
-    virtual absl::optional<bool> CheckIsVisible() const = 0;
+    virtual absl::optional<bool> CheckIsVisible() = 0;
 
    protected:
     HelpBubbleHandlerBase* handler() const { return handler_; }

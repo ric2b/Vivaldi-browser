@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Restableix els ajustos</translation>
 <translation id="4478664379124702289">Desa l'&amp;enllaç com a...</translation>
 <translation id="4520385623207007473">Galetes en ús</translation>
+<translation id="456449593072900590">Suprimeix en sortir</translation>
 <translation id="4580596421317071374">Les contrasenyes es desen a <ph name="GOOGLE_PASSWORD_MANAGER" /> en aquest dispositiu.</translation>
 <translation id="4593021220803146968">&amp;Vés a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Només el gestor (<ph name="CUSTODIAN_NAME" />) pot modificar les aplicacions i complements.</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Color</translation>
 <translation id="5485102783864353244">Afegeix l'aplicació</translation>
 <translation id="5486561344817861625">Simula el reinici del navegador</translation>
-<translation id="5487521232677179737">Suprimeix les dades</translation>
 <translation id="5509693895992845810">Desa &amp;com a...</translation>
 <translation id="5521078259930077036">Aquesta pàgina d'inici és la que esperaves?</translation>
 <translation id="5542132724887566711">Perfil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Desconegut</translation>
 <translation id="5851868085455377790">Emissor</translation>
 <translation id="5860491529813859533">Activa</translation>
-<translation id="5867841422488265304">Cerca o escriu l'adreça web</translation>
 <translation id="5910363049092958439">De&amp;sa la imatge com a...</translation>
 <translation id="5914724413750400082">Mòdul (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Accés denegat.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7339785458027436441">Comprova l'ortografia mentre escric</translation>
-<translation id="73786666777299047">Obre la botiga web de Chrome</translation>
 <translation id="7385854874724088939">S'ha produït un problema en intentar imprimir. Comprova la impressora i torna-ho a provar.</translation>
 <translation id="7412226954991670867">Memòria de la GPU</translation>
 <translation id="7421925624202799674">&amp;Visualitza el codi de la pàgina</translation>
@@ -442,6 +440,7 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="8382913212082956454">Copia l'&amp;adreça electrònica</translation>
 <translation id="8434480141477525001">Port de depuració NaCI</translation>
 <translation id="8449008133205184768">Enganxa i ajusta l'estil</translation>
+<translation id="8477178913400731244">Suprimeix les dades</translation>
 <translation id="8477384620836102176">&amp;General</translation>
 <translation id="8496717697661868878">Executa aquest complement</translation>
 <translation id="8512476990829870887">Finalitza el procés</translation>

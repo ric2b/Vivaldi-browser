@@ -7,7 +7,6 @@
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/mojom/power.mojom.h"
-#include "ash/components/arc/power/arc_power_bridge.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -16,6 +15,7 @@
 #include "chrome/browser/ash/arc/idle_manager/arc_display_power_observer.h"
 #include "chrome/browser/ash/arc/idle_manager/arc_on_battery_observer.h"
 #include "chrome/browser/ash/arc/idle_manager/arc_window_observer.h"
+#include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 
 namespace arc {
 
@@ -32,15 +32,7 @@ class DefaultDelegateImpl : public ArcIdleManager::Delegate {
 
   // ArcIdleManager::Delegate:
   void SetInteractiveMode(ArcBridgeService* bridge, bool enable) override {
-    auto* const power =
-        ARC_GET_INSTANCE_FOR_METHOD(bridge->power(), SetInteractive);
-    if (!power)
-      return;
-    // When enable=false,
-    // the code below is equivalent to pressing the power button on
-    // a smartphone, which turns its screen off and kicks off a gradual
-    // power state transition, ultimately leading to doze mode.
-    power->SetInteractive(enable);
+    ArcPowerBridge::NotifyAndroidInteractiveState(bridge, enable);
   }
 };
 
@@ -59,7 +51,7 @@ class ArcIdleManagerFactory
  private:
   friend class base::NoDestructor<ArcIdleManagerFactory>;
 
-  ArcIdleManagerFactory() = default;
+  ArcIdleManagerFactory() { DependsOn(ArcPowerBridgeFactory::GetInstance()); }
   ~ArcIdleManagerFactory() override = default;
 };
 
@@ -95,8 +87,10 @@ ArcIdleManager::ArcIdleManager(content::BrowserContext* context,
   auto* const power_bridge = ArcPowerBridge::GetForBrowserContext(context);
 
   // This maybe null in unit tests.
-  if (power_bridge)
+  if (power_bridge) {
     power_bridge->DisableAndroidIdleControl();
+    powerbridge_observation_.Observe(power_bridge);
+  }
 
   DCHECK(bridge_);
   bridge_->power()->AddObserver(this);
@@ -115,6 +109,9 @@ void ArcIdleManager::EnsureFactoryBuilt() {
 void ArcIdleManager::Shutdown() {
   // After this is done, we will no longer get connection notifications.
   bridge_->power()->RemoveObserver(this);
+
+  // No more notifications about VM resumed.
+  powerbridge_observation_.Reset();
 
   // Safeguard against resource leak by observers.
   OnConnectionClosed();
@@ -159,6 +156,21 @@ void ArcIdleManager::ThrottleInstance(bool should_throttle) {
   first_idle_happened_ = true;
   LogScreenOffTimer(/*toggle_timer*/ should_throttle);
   delegate_->SetInteractiveMode(bridge_, !should_throttle);
+}
+
+void ArcIdleManager::OnVmResumed() {
+  if (!should_throttle()) {
+    // A resume happens because there was a prior suspend.
+    // That earlier suspend counts as first-idle.
+    first_idle_happened_ = true;
+
+    ThrottleInstance(false);
+  }
+}
+
+void ArcIdleManager::OnWillDestroyArcPowerBridge() {
+  // No more notifications about VM resumed.
+  powerbridge_observation_.Reset();
 }
 
 void ArcIdleManager::LogScreenOffTimer(bool toggle_timer) {

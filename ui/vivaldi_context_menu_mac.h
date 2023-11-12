@@ -14,7 +14,6 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/mac/scoped_nsobject.h"
 #include "ui/vivaldi_context_menu.h"
 
 namespace vivaldi {
@@ -51,7 +50,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
  private:
   NSView* GetActiveNativeView();
   // The Cocoa menu controller for this menu.
-  base::scoped_nsobject<MenuControllerCocoa> menu_controller_;
+  MenuControllerCocoa* __strong menu_controller_;
   content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
   gfx::Rect rect_;

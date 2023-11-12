@@ -24,8 +24,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/path_service.h"
@@ -455,38 +453,30 @@ class IsPinnedToTaskbarHelper {
   IsPinnedToTaskbarHelper(const IsPinnedToTaskbarHelper&) = delete;
   IsPinnedToTaskbarHelper& operator=(const IsPinnedToTaskbarHelper&) = delete;
 
-  static void GetState(ErrorCallback error_callback,
-                       ResultCallback result_callback);
+  static void GetState(ResultCallback result_callback);
 
  private:
-  IsPinnedToTaskbarHelper(ErrorCallback error_callback,
-                          ResultCallback result_callback);
+  IsPinnedToTaskbarHelper(ResultCallback result_callback);
 
   void OnConnectionError();
   void OnIsPinnedToTaskbarResult(bool succeeded, bool is_pinned_to_taskbar);
 
   mojo::Remote<chrome::mojom::UtilWin> remote_util_win_;
 
-  ErrorCallback error_callback_;
   ResultCallback result_callback_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
 // static
-void IsPinnedToTaskbarHelper::GetState(ErrorCallback error_callback,
-                                       ResultCallback result_callback) {
+void IsPinnedToTaskbarHelper::GetState(ResultCallback result_callback) {
   // Self-deleting when the ShellHandler completes.
-  new IsPinnedToTaskbarHelper(std::move(error_callback),
-                              std::move(result_callback));
+  new IsPinnedToTaskbarHelper(std::move(result_callback));
 }
 
-IsPinnedToTaskbarHelper::IsPinnedToTaskbarHelper(ErrorCallback error_callback,
-                                                 ResultCallback result_callback)
+IsPinnedToTaskbarHelper::IsPinnedToTaskbarHelper(ResultCallback result_callback)
     : remote_util_win_(LaunchUtilWinServiceInstance()),
-      error_callback_(std::move(error_callback)),
       result_callback_(std::move(result_callback)) {
-  DCHECK(error_callback_);
   DCHECK(result_callback_);
 
   // |remote_util_win_| owns the callbacks and is guaranteed to be destroyed
@@ -500,7 +490,6 @@ IsPinnedToTaskbarHelper::IsPinnedToTaskbarHelper(ErrorCallback error_callback,
 
 void IsPinnedToTaskbarHelper::OnConnectionError() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::move(error_callback_).Run();
   delete this;
 }
 
@@ -524,8 +513,6 @@ class UnpinShortcutsHelper {
                       base::OnceClosure completion_callback);
 
  private:
-  static void RecordUnpinShortcutProcessError(bool error);
-
   UnpinShortcutsHelper(const std::vector<base::FilePath>& shortcuts,
                        base::OnceClosure completion_callback);
 
@@ -538,11 +525,6 @@ class UnpinShortcutsHelper {
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
-
-// static
-void UnpinShortcutsHelper::RecordUnpinShortcutProcessError(bool error) {
-  base::UmaHistogramBoolean("Windows.UnpinShortcut.ProcessError", error);
-}
 
 // static
 void UnpinShortcutsHelper::DoUnpin(const std::vector<base::FilePath>& shortcuts,
@@ -569,7 +551,6 @@ UnpinShortcutsHelper::UnpinShortcutsHelper(
 
 void UnpinShortcutsHelper::OnConnectionError() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RecordUnpinShortcutProcessError(true);
   std::move(completion_callback_).Run();
   delete this;
 }
@@ -577,7 +558,6 @@ void UnpinShortcutsHelper::OnConnectionError() {
 void UnpinShortcutsHelper::OnUnpinShortcutResult() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  RecordUnpinShortcutProcessError(false);
   std::move(completion_callback_).Run();
   delete this;
 }
@@ -878,9 +858,11 @@ void MigrateTaskbarPins(base::OnceClosure completion_callback) {
   // BEST_EFFORT means it will be scheduled after higher-priority tasks, but
   // MUST_USE_FOREGROUND means that when it is scheduled it will run in the
   // foregound.
+  // SKIP_ON_SHUTDOWN means the task won't start after shutdown has started.
   base::ThreadPool::CreateCOMSTATaskRunner(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-       base::ThreadPolicy::MUST_USE_FOREGROUND})
+       base::ThreadPolicy::MUST_USE_FOREGROUND,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
       ->PostTaskAndReply(
           FROM_HERE, base::BindOnce([]() {
             base::FilePath taskbar_path;
@@ -917,10 +899,8 @@ void MigrateTaskbarPinsCallback(const base::FilePath& taskbar_path,
   }
 }
 
-void GetIsPinnedToTaskbarState(ConnectionErrorCallback on_error_callback,
-                               IsPinnedToTaskbarCallback result_callback) {
-  IsPinnedToTaskbarHelper::GetState(std::move(on_error_callback),
-                                    std::move(result_callback));
+void GetIsPinnedToTaskbarState(IsPinnedToTaskbarCallback result_callback) {
+  IsPinnedToTaskbarHelper::GetState(std::move(result_callback));
 }
 
 int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,

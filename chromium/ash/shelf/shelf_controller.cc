@@ -75,6 +75,12 @@ void SetShelfAlignmentFromPrefs() {
   if (!prefs || !session_controller->IsActiveUserSessionStarted())
     return;
 
+  // Tablet mode uses bottom aligned shelf, don't override it if the shelf
+  // prefs change.
+  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    return;
+  }
+
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     if (Shelf* shelf = GetShelfForDisplay(display.id()))
       shelf->SetAlignment(GetShelfAlignmentPref(prefs, display.id()));
@@ -201,7 +207,11 @@ void ShelfController::OnActiveUserPrefServiceChanged(
   AccountId account_id =
       Shell::Get()->session_controller()->GetActiveAccountId();
   cache_ = apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
-  Observe(cache_);
+
+  app_registry_cache_observer_.Reset();
+  if (cache_) {
+    app_registry_cache_observer_.Observe(cache_);
+  }
 
   // Resetting the recorded pref forces the next call to
   // UpdateAppNotificationBadging() to update notification badging for every
@@ -261,7 +271,7 @@ void ShelfController::OnAppUpdate(const apps::AppUpdate& update) {
 
 void ShelfController::OnAppRegistryCacheWillBeDestroyed(
     apps::AppRegistryCache* cache) {
-  Observe(nullptr);
+  app_registry_cache_observer_.Reset();
 }
 
 void ShelfController::ShelfItemAdded(int index) {

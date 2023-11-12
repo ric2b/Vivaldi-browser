@@ -36,6 +36,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/intranet_redirector_state.h"
+#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/page_classification_functions.h"
@@ -568,6 +569,37 @@ void AutocompleteResult::TrimOmniboxActions(bool is_zero_suggest) {
       if (index < ACTIONS_IN_SUGGEST_CUTOFF_THRESHOLD) {
         matches_[index].FilterAndSortActionsInSuggest();
       }
+    }
+  }
+}
+
+void AutocompleteResult::SplitActionsToSuggestions(
+    const AutocompleteInput& input) {
+  size_t size_before = size();
+  for (size_t i = 0; i < matches_.size(); i++) {
+    for (size_t j = 0; j < matches_[i].actions.size(); j++) {
+      if (matches_[i].actions[j]->ActionId() == OmniboxActionId::PEDAL) {
+        AutocompleteMatch& action_match =
+            *matches_.insert(matches_.begin() + i + 1, matches_[i]);
+        action_match.actions.clear();
+        action_match.takeover_action = matches_[i].actions[j];
+        action_match.ConvertFromTakeoverAction();
+
+        // Remove this action from the primary match and repeat checking at this
+        // same index, which will hence be the next action.
+        matches_[i].actions.erase(matches_[i].actions.begin() + j);
+        j--;
+      }
+    }
+  }
+  if (size() > size_before &&
+      OmniboxFieldTrial::kActionsUISimplificationTrimExtra.Get()) {
+    CompareWithDemoteByType<AutocompleteMatch> comparing_object(
+        input.current_page_classification());
+    const size_t limit =
+        CalculateNumMatches(input.IsZeroSuggest(), matches_, comparing_object);
+    if (size() > limit) {
+      matches_.resize(limit);
     }
   }
 }
@@ -1413,6 +1445,11 @@ void AutocompleteResult::GroupSuggestionsBySearchVsURL(iterator begin,
 #endif  // !BUILDFLAG(IS_IOS)
     if (AutocompleteMatch::IsSearchType(m.type))
       return 1;
+    // Group boosted shortcuts with searches.
+    if (omnibox_feature_configs::ShortcutBoosting::Get().group_with_searches &&
+        m.shortcut_boosted) {
+      return 1;
+    }
     return 2;
   });
 }

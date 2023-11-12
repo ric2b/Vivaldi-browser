@@ -46,7 +46,7 @@ class RequestFilterManager : public KeyedService {
   // An interface which is held by ProxySet defined below.
   class Proxy {
    public:
-    virtual ~Proxy() {}
+    virtual ~Proxy() = default;
   };
 
   // A ProxySet is a set of proxies used by the filter manager: It holds Proxy

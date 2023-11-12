@@ -22,7 +22,7 @@ import {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../externs/files_ap
 import {State} from '../../externs/ts/state.js';
 import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
-import {changeDirectory} from '../../state/actions/current_directory.js';
+import {changeDirectory} from '../../state/ducks/current_directory.js';
 import {getFileData, getStore} from '../../state/store.js';
 import {XfTree} from '../../widgets/xf_tree.js';
 import {XfTreeItem} from '../../widgets/xf_tree_item.js';
@@ -1239,22 +1239,22 @@ CommandHandler.COMMANDS_['toggle-hidden-android-folders'] =
 CommandHandler.COMMANDS_['drive-sync-settings'] =
     new (class extends FilesCommand {
       execute(event, fileManager) {
-        // If checked, the sync is disabled.
-        const nowCellularDisabled =
+        const nowDriveSyncEnabledOnMeteredNetwork =
             fileManager.ui.gearMenu.syncButton.hasAttribute('checked');
-        const changeInfo = {cellularDisabled: !nowCellularDisabled};
+        const changeInfo = {
+          driveSyncEnabledOnMeteredNetwork:
+              !nowDriveSyncEnabledOnMeteredNetwork,
+        };
         chrome.fileManagerPrivate.setPreferences(changeInfo);
         CommandHandler.recordMenuItemSelected(
-            nowCellularDisabled ?
-                CommandHandler.MenuCommandsForUMA.MOBILE_DATA_OFF :
-                CommandHandler.MenuCommandsForUMA.MOBILE_DATA_ON);
+            nowDriveSyncEnabledOnMeteredNetwork ?
+                CommandHandler.MenuCommandsForUMA.MOBILE_DATA_ON :
+                CommandHandler.MenuCommandsForUMA.MOBILE_DATA_OFF);
       }
 
       /** @override */
       canExecute(event, fileManager) {
-        event.canExecute = fileManager.directoryModel.isOnDrive() &&
-            fileManager.volumeManager.getDriveConnectionState()
-                .hasCellularNetworkAccess;
+        event.canExecute = fileManager.directoryModel.isOnDrive();
         event.command.setHidden(!event.canExecute);
       }
     })();
@@ -1588,14 +1588,11 @@ CommandHandler.COMMANDS_['empty-trash'] = new (class extends FilesCommand {
 
   /** @override */
   canExecute(event, fileManager) {
-    // Always allow execute regardless of which files are selected to allow the
-    // trash toolbar action to run even if no files are selected.
-    event.canExecute = true;
-
     const entries = CommandUtil.getCommandEntries(fileManager, event.target);
-    const visible = entries.length === 1 && util.isTrashRoot(entries[0]) &&
+    const isTrashRoot = entries.length === 1 && util.isTrashRoot(entries[0]) &&
         fileManager.trashEnabled;
-    event.command.setHidden(!visible);
+    event.canExecute = isTrashRoot || CommandUtil.isOnTrashRoot(fileManager);
+    event.command.setHidden(!isTrashRoot);
   }
 })();
 
@@ -2096,6 +2093,9 @@ CommandHandler.COMMANDS_['open-with'] = new (class extends FilesCommand {
 CommandHandler.COMMANDS_['invoke-sharesheet'] =
     new (class extends FilesCommand {
       execute(event, fileManager) {
+        if (CommandUtil.isOnTrashRoot(fileManager)) {
+          return;
+        }
         const entries = fileManager.selectionHandler.selection.entries;
         const launchSource = CommandUtil.getSharesheetLaunchSource(event);
         const dlpSourceUrls =
@@ -2113,6 +2113,11 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] =
 
       /** @override */
       canExecute(event, fileManager) {
+        if (CommandUtil.isOnTrashRoot(fileManager)) {
+          event.canExecute = false;
+          event.command.setHidden(true);
+          return;
+        }
         const entries = fileManager.selectionHandler.selection.entries;
 
         if (!entries || entries.length === 0 ||
@@ -2617,8 +2622,17 @@ CommandHandler.COMMANDS_['zip-selection'] = new (class extends FilesCommand {
     // TODO(crbug/1226915) Make it work with MTP.
     const isOnEligibleLocation = fileManager.directoryModel.isOnNative();
 
+    // Hide if any encrypted files are selected, as we can't read them.
+    const hasEncryptedFile =
+        fileManager.metadataModel
+            .getCache(selection.entries, ['contentMimeType'])
+            .some(
+                (metadata, i) => FileType.isEncrypted(
+                    selection.entries[i], metadata.contentMimeType));
+
     event.canExecute = dirEntry && !fileManager.directoryModel.isReadOnly() &&
-        isOnEligibleLocation && selection && selection.totalCount > 0;
+        isOnEligibleLocation && selection && selection.totalCount > 0 &&
+        !hasEncryptedFile;
   }
 })();
 

@@ -139,6 +139,15 @@ bool OneTimePermissionProvider::SetWebsiteSetting(
   return false;
 }
 
+bool OneTimePermissionProvider::UpdateLastUsedTime(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType content_type,
+    const base::Time time) {
+  // Last used time is not tracked for one-time permissions.
+  return false;
+}
+
 bool OneTimePermissionProvider::ResetLastVisitTime(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
@@ -152,6 +161,15 @@ bool OneTimePermissionProvider::UpdateLastVisitTime(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type) {
   // LastVisit time is not tracked for one-time permissions.
+  return false;
+}
+
+bool OneTimePermissionProvider::RenewContentSetting(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType type,
+    absl::optional<ContentSetting> setting_to_match) {
+  // Setting renewal is not supported for one-time permissions.
   return false;
 }
 

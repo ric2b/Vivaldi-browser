@@ -8,6 +8,7 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "net/base/cronet_buildflags.h"
 #include "net/net_buildflags.h"
 
 namespace net::features {
@@ -64,6 +65,14 @@ const base::FeatureParam<base::TimeDelta> kUseDnsHttpsSvcbSecureExtraTimeMin{
 
 BASE_FEATURE(kUseDnsHttpsSvcbAlpn,
              "UseDnsHttpsSvcbAlpn",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+const base::FeatureParam<int> kAlternativePortForGloballyReachableCheck{
+    &kUseAlternativePortForGloballyReachableCheck,
+    "AlternativePortForGloballyReachableCheck", 443};
+
+BASE_FEATURE(kUseAlternativePortForGloballyReachableCheck,
+             "UseAlternativePortForGloballyReachableCheck",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSHA1ServerSignature,
@@ -126,6 +135,12 @@ BASE_FEATURE(kPartitionNelAndReportingByNetworkIsolationKey,
 BASE_FEATURE(kEnableCrossSiteFlagNetworkIsolationKey,
              "EnableCrossSiteFlagNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kEnableFrameSiteSharedOpaqueNetworkIsolationKey,
+             "EnableFrameSiteSharedOpaqueNetworkIsolationKey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kHttpCacheKeyingExperimentControlGroup,
+             "HttpCacheKeyingExperimentControlGroup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTLS13KeyUpdate,
              "TLS13KeyUpdate",
@@ -162,7 +177,12 @@ BASE_FEATURE(kCertDualVerificationTrialFeature,
 #if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 BASE_FEATURE(kChromeRootStoreUsed,
              "ChromeRootStoreUsed",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 #endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(USE_NSS_CERTS) || BUILDFLAG(IS_WIN)
@@ -227,10 +247,6 @@ BASE_FEATURE(kCookieSameSiteConsidersRedirectChain,
              "CookieSameSiteConsidersRedirectChain",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSamePartyAttributeEnabled,
-             "SamePartyAttributeEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kWaitForFirstPartySetsInit,
              "WaitForFirstPartySetsInit",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -243,8 +259,8 @@ BASE_FEATURE(kNoncedPartitionedCookies,
              "NoncedPartitionedCookies",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kClampCookieExpiryTo400Days,
-             "ClampCookieExpiryTo400Days",
+BASE_FEATURE(kBlockTruncatedCookies,
+             "BlockTruncatedCookies",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kStaticKeyPinningEnforcement,
@@ -255,10 +271,6 @@ BASE_FEATURE(kCookieDomainRejectNonASCII,
              "CookieDomainRejectNonASCII",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kBlockSetCookieHeader,
-             "BlockSetCookieHeader",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables partitioning of third party storage (IndexedDB, CacheStorage, etc.)
 // by the top level site to reduce fingerprinting.
 BASE_FEATURE(kThirdPartyStoragePartitioning,
@@ -267,10 +279,16 @@ BASE_FEATURE(kThirdPartyStoragePartitioning,
 // Whether to use the new code paths needed to support partitioning Blob URLs.
 // This exists as a kill-switch in case an issue is identified with the Blob
 // URL implementation that causes breakage.
-// TODO(https://crbug.com/1407944): Kill-switch activated - investigate cause of
-// increased renderer hangs.
 BASE_FEATURE(kSupportPartitionedBlobUrl,
              "SupportPartitionedBlobUrl",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTpcdSupportSettings,
+             "TpcdSupportSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTpcdMetadataGrants,
+             "TpcdMetadataGrants",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAlpsParsing, "AlpsParsing", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -303,12 +321,12 @@ BASE_FEATURE(kBlockNewForbiddenHeaders,
 BASE_FEATURE(kPlatformKeyProbeSHA256,
              "PlatformKeyProbeSHA256",
              base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
-// Enable support for HTTP extensible priorities (RFC 9218)
-BASE_FEATURE(kPriorityIncremental,
-             "PriorityIncremental",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// Disabled because of https://crbug.com/1489696.
+BASE_FEATURE(kEnableGetNetworkConnectivityHintAPI,
+             "EnableGetNetworkConnectivityHintAPI",
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi VB-100514
+#endif
 
 // Prefetch to follow normal semantics instead of 5-minute rule
 // https://crbug.com/1345207
@@ -328,7 +346,20 @@ BASE_FEATURE(kKerberosInBrowserRedirect,
 // A flag to use asynchronous session creation for new QUIC sessions.
 BASE_FEATURE(kAsyncQuicSession,
              "AsyncQuicSession",
+#if BUILDFLAG(IS_WIN)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+// A flag to make multiport context creation asynchronous.
+BASE_FEATURE(kAsyncMultiPortPath,
+             "AsyncMultiPortPath",
+#if !BUILDFLAG(CRONET_BUILD) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID))
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // IP protection experiment configuration settings
 BASE_FEATURE(kEnableIpProtectionProxy,
@@ -339,9 +370,43 @@ const base::FeatureParam<std::string> kIpPrivacyProxyServer{
     &kEnableIpProtectionProxy, /*name=*/"IpPrivacyProxyServer",
     /*default_value=*/""};
 
-const base::FeatureParam<std::string> kIpPrivacyProxyAllowlist{
-    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyProxyAllowlist",
-    /*default_value=*/""};
+const base::FeatureParam<std::string> kIpPrivacyTokenServer{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyTokenServer",
+    /*default_value=*/"https://autopush-phosphor-pa.sandbox.googleapis.com"};
+
+const base::FeatureParam<std::string> kIpPrivacyTokenServerGetInitialDataPath{
+    &kEnableIpProtectionProxy,
+    /*name=*/"IpPrivacyTokenServerGetInitialDataPath",
+    /*default_value=*/"/v1/getInitialData"};
+
+const base::FeatureParam<std::string> kIpPrivacyTokenServerGetTokensPath{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyTokenServerGetTokensPath",
+    /*default_value=*/"/v1/authWithHeaderCreds"};
+
+const base::FeatureParam<std::string> kIpPrivacyTokenServerGetProxyConfigPath{
+    &kEnableIpProtectionProxy,
+    /*name=*/"IpPrivacyTokenServerGetProxyConfigPath",
+    /*default_value=*/"/v1/ipblinding/getProxyConfig"};
+
+const base::FeatureParam<int> kIpPrivacyAuthTokenCacheBatchSize{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyAuthTokenCacheBatchSize",
+    /*default_value=*/64};
+
+const base::FeatureParam<int> kIpPrivacyAuthTokenCacheLowWaterMark{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyAuthTokenCacheLowWaterMark",
+    /*default_value=*/16};
+
+const base::FeatureParam<base::TimeDelta> kIpPrivacyProxyListFetchInterval{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyProxyListFetchInterval",
+    /*default_value=*/base::Hours(1)};
+
+const base::FeatureParam<base::TimeDelta> kIpPrivacyProxyListMinFetchInterval{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyProxyMinListFetchInterval",
+    /*default_value=*/base::Minutes(1)};
+
+const base::FeatureParam<bool> kIpPrivacyDirectOnly{
+    &kEnableIpProtectionProxy, /*name=*/"IpPrivacyDirectOnly",
+    /*default_value=*/false};
 
 // Network-change migration requires NetworkHandle support, which are currently
 // only supported on Android (see
@@ -356,6 +421,10 @@ inline constexpr auto kMigrateSessionsOnNetworkChangeV2Default =
 BASE_FEATURE(kMigrateSessionsOnNetworkChangeV2,
              "MigrateSessionsOnNetworkChangeV2",
              kMigrateSessionsOnNetworkChangeV2Default);
+
+BASE_FEATURE(kDisableBlackholeOnNoNewNetwork,
+             "DisableBlackHoleOnNoNewNetwork",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_LINUX)
 BASE_FEATURE(kAddressTrackerLinuxIsProxied,
@@ -387,6 +456,30 @@ BASE_FEATURE(kAsyncCacheLock,
 
 BASE_FEATURE(kEnableEarlyHintsOnHttp11,
              "EnableEarlyHintsOnHttp11",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableWebTransportDraft07,
+             "EnableWebTransportDraft07",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kZstdContentEncoding,
+             "ZstdContentEncoding",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDigestAuthEnableSecureAlgorithms,
+             "DigestAuthEnableSecureAlgorithms",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled, partitioned storage will be allowed even if third-party cookies
+// are disabled by default. Partitioned storage will not be allowed if
+// third-party cookies are disabled due to a specific rule.
+// TODO(crbug.com/1468277): Default enable when UI work is complete.
+BASE_FEATURE(kThirdPartyPartitionedStorageAllowedByDefault,
+             "ThirdPartyPartitionedStorageAllowedByDefault",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCookieDeprecationFacilitatedTestingLabels,
+             "CookieDeprecationFacilitatedTestingLabels",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace net::features

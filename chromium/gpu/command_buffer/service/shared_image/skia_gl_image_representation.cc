@@ -6,7 +6,6 @@
 
 #include "base/check_op.h"
 #include "base/memory/ptr_util.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
@@ -50,11 +49,16 @@ std::unique_ptr<SkiaGLImageRepresentation> SkiaGLImageRepresentation::Create(
 
   if (format.is_single_plane() || format.PrefersExternalSampler()) {
     GrBackendTexture backend_texture;
+    GLFormatDesc gl_format_desc =
+        format.PrefersExternalSampler()
+            ? ToGLFormatDescExternalSampler(format)
+            : ToGLFormatDesc(format, /*plane_index=*/0,
+                             angle_rgbx_internal_format);
     if (!GetGrBackendTexture(
             context_state->feature_info(),
             gl_representation->GetTextureBase()->target(), backing->size(),
             gl_representation->GetTextureBase()->service_id(),
-            TextureStorageFormat(format, angle_rgbx_internal_format),
+            gl_format_desc.storage_internal_format,
             context_state->gr_context()->threadSafeProxy(), &backend_texture)) {
       return nullptr;
     }
@@ -67,15 +71,15 @@ std::unique_ptr<SkiaGLImageRepresentation> SkiaGLImageRepresentation::Create(
          plane_index++) {
       GrBackendTexture backend_texture;
       // Use the format and size per plane for multiplanar formats.
-      GLenum plane_gl_storage_format =
-          TextureStorageFormat(format, angle_rgbx_internal_format, plane_index);
+      GLFormatDesc format_desc =
+          ToGLFormatDesc(format, plane_index, angle_rgbx_internal_format);
       gfx::Size plane_size = format.GetPlaneSize(plane_index, backing->size());
       if (!GetGrBackendTexture(
               context_state->feature_info(),
               gl_representation->GetTextureBase(plane_index)->target(),
               plane_size,
               gl_representation->GetTextureBase(plane_index)->service_id(),
-              plane_gl_storage_format,
+              format_desc.storage_internal_format,
               context_state->gr_context()->threadSafeProxy(),
               &backend_texture)) {
         return nullptr;
@@ -127,7 +131,7 @@ std::vector<sk_sp<SkSurface>> SkiaGLImageRepresentation::BeginWriteAccess(
     const gfx::Rect& update_rect,
     std::vector<GrBackendSemaphore>* begin_semaphores,
     std::vector<GrBackendSemaphore>* end_semaphores,
-    std::unique_ptr<GrBackendSurfaceMutableState>* end_state) {
+    std::unique_ptr<skgpu::MutableTextureState>* end_state) {
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CheckContext();
 
@@ -168,7 +172,7 @@ std::vector<sk_sp<GrPromiseImageTexture>>
 SkiaGLImageRepresentation::BeginWriteAccess(
     std::vector<GrBackendSemaphore>* begin_semaphores,
     std::vector<GrBackendSemaphore>* end_semaphores,
-    std::unique_ptr<GrBackendSurfaceMutableState>* end_state) {
+    std::unique_ptr<skgpu::MutableTextureState>* end_state) {
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CheckContext();
 
@@ -193,7 +197,7 @@ std::vector<sk_sp<GrPromiseImageTexture>>
 SkiaGLImageRepresentation::BeginReadAccess(
     std::vector<GrBackendSemaphore>* begin_semaphores,
     std::vector<GrBackendSemaphore>* end_semaphores,
-    std::unique_ptr<GrBackendSurfaceMutableState>* end_state) {
+    std::unique_ptr<skgpu::MutableTextureState>* end_state) {
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   CheckContext();
 

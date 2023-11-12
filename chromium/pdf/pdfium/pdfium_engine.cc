@@ -559,6 +559,10 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client,
 }
 
 PDFiumEngine::~PDFiumEngine() {
+  // Clear all the containers that can prevent unloading.
+  find_results_.clear();
+  selection_.clear();
+
   for (auto& page : pages_)
     page->Unload();
 
@@ -2616,6 +2620,11 @@ std::vector<AccessibilityImageInfo> PDFiumEngine::GetImageInfo(
     uint32_t text_run_count) {
   DCHECK(PageIndexInBounds(page_index));
   return pages_[page_index]->GetImageInfo(text_run_count);
+}
+
+SkBitmap PDFiumEngine::GetImageForOcr(int page_index, int image_index) {
+  DCHECK(PageIndexInBounds(page_index));
+  return pages_[page_index]->GetImageForOcr(image_index);
 }
 
 std::vector<AccessibilityHighlightInfo> PDFiumEngine::GetHighlightInfo(

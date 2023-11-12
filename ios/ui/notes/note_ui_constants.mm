@@ -67,9 +67,12 @@ NSString* const kToolsMenuAddToNotes = @"kToolsMenuAddToNotes";
 #endif
 
 #pragma mark - ICONS
-// TODO - @karianne@vivaldi.com FIX ICONS
+// Image name for the note icon.
+NSString* vNotesIcon = @"single_note_icon";
 // Image name for the note folder icon.
 NSString* vNotesFolderIcon = @"vivaldi_bookmarks_folder";
+// Image name for trash folder icon
+NSString* vNotesTrashFolderIcon = @"vivaldi_trash_folder";
 // Image name for the folder selection chevron.
 NSString* vNoteFolderSelectionChevron =
   @"vivaldi_bookmark_folder_selection_chevron";

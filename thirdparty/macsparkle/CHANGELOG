@@ -1,3 +1,62 @@
+# 2.5.0
+
+* Add ability to adapt release notes based on the currently installed version (#2373) (Nathan Manceaux-Panot)
+* Allow developers to use custom URL schemes in the release notes view (#2393) (Zorg)
+* Adopt cooperative app activation APIs in macOS 14 Sonoma (#2409) (Zorg)
+* Improve permission prompt layout (#2420) (Zorg)
+* Remove hyphenation in "You're up to date" message (#2425) (Zorg, Dom Neill)
+* Pre-warm installs before relaunch and resolve sporadic failures in CI (#2421) (Zorg)
+* Fix make release not building distribution successfully (#2430) (Zorg)
+* Fix Updater app not starting when running Sparkle as root (e.g. from CLI with sudo or a daemon) on macOS 14 Sonoma (#2432) (Zorg)
+* Fix KVO usage for updaterController.updater.* (#2404) (Zorg)
+* Replace CFUUID* with NSUUID (#2395) (Eitot)
+* Report an error when detecting duplicate updates in generate_appcast (#2407) (Zorg)
+* Improve error for rejecting xattr based code signing for delta updates (#2408) (Zorg)
+* Fail gracefully when auxiliary tool cannot be located (#2436) (Zorg)
+
+# 2.4.2
+
+* Ignore release notes download when we shouldn't show release notes (#2381) (Zorg)
+* Fix NSKeyedUnarchiver warning for not specifying keyed NSString class (#2381) (Zorg)
+* Harden verification of Sparkle update download (#2392) (Zorg)
+
+# 2.4.1
+
+* Remove auxiliary apps and relocate symbols in SPM package to resolve missing AvailableLibraries warnings (#2356) (Zorg)
+* Add -Wno-declaration-after-statement to silence warnings that only apply to pre-C99 (#2345) (Kent Sutherland)
+* Fix compile error when setting SPARKLE_EMBED_DOWNLOADER_XPC_SERVICE=0 (#2346) (Zorg)
+* Improve how downloaded update is passed to the installer (#2359) (Zorg)
+
+# 2.4.0
+
+* Reduce code size
+  * Enable deployment postprocessing in Release to properly strip debug symbols and strip all non-global symbols (#2286, #2305) (Zorg)
+  * Remove duplicate Sparkle localization strings in Updater app (#2288) (Zorg)
+  * Optimize codebase for generated code size (less properties, direct methods, etc) (#2305) (Zorg)
+  * Add additional settings to `ConfigCommon.xcconfig` for disabling features
+* Ask permission for automatically downloading and installing new updates (#2285) (Zorg)
+* Add support for plain text release notes view that does not use web view (#2315) (Zorg)
+* Update `SUVersionDisplay` to better customize and display how versions are shown (#2321) (Zorg)
+* Add deprecations/warnings for incorrect background update checking usage (#2295) (Zorg)
+* Deprecate `-[SPUUpdater setFeedURL:]` API and add `-[SPUUpdater clearFeedURLFromUserDefaults]` for migrating away from `-[SPUUpdater setFeedURL:]` (#2295)
+* Trigger a new update check in `-[SPUUpdater resetUpdateCycle]` if the updater's feed or allowed channels have changed (#2324) (Zorg)
+* Exit with an error if generate_appcast cannot sign an update that must be signed (#2322) (Zorg)
+* Remove a redundant Apple code signing check when verifying new updates (#2341) (Zorg)
+* Turn off auto-linking for XPC targets to alleviate circular dependency issues (#2332) (Daniel Jalkut)
+
+# 2.3.2
+
+* Fix potential crash during download if appcast item includes invalid enclosure URL (#2317) (Zorg)
+* Add delegate method to hide showing version history option (#2303) (Zorg)
+* Finnish localization grammar fixes (#2311) (Lauri-Matti Parppei)
+
+# 2.3.1
+
+* Fix update permission alert title text overlapping with question text in some languages (#2284) (Zorg)
+* Log the URL that failed to download correctly (#2296) (Zorg)
+* Update Czech translation (#2275) (Sam)
+* Add zh_HK (Chinese, Hong Kong) localization (#2273) (Bing Zheung)
+
 # 2.3.0
 
 * Bump minimum deployment target to macOS 10.13 (#2196) (Zorg)

@@ -7,7 +7,7 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 
 mojom("mojom") {
   sources = [
-    "registration_type.mojom",
+    "registration_eligibility.mojom",
     "source_registration_error.mojom",
     "source_registration_time_config.mojom",
     "trigger_registration_error.mojom",
@@ -18,6 +18,8 @@ mojom("mojom") {
   # Used by Blink, so requires legacy JS bindings.
   generate_legacy_js_bindings = true
   generate_java = true
+
+  disallow_interfaces = true
 }
 
 component("attribution_reporting") {
@@ -33,6 +35,8 @@ component("attribution_reporting") {
     "constants.h",
     "destination_set.cc",
     "destination_set.h",
+    "event_report_windows.cc",
+    "event_report_windows.h",
     "event_trigger_data.cc",
     "event_trigger_data.h",
     "features.cc",
@@ -52,6 +56,8 @@ component("attribution_reporting") {
     "trigger_registration.cc",
     "trigger_registration.h",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   public_deps = [
     ":mojom",
@@ -73,6 +79,8 @@ component("is_origin_suitable") {
     "is_origin_suitable.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   deps = [
     "//services/network/public/cpp",
     "//url",
@@ -90,6 +98,7 @@ source_set("unit_tests") {
     "aggregatable_values_unittest.cc",
     "aggregation_keys_unittest.cc",
     "destination_set_unittest.cc",
+    "event_report_windows_unittest.cc",
     "event_trigger_data_unittest.cc",
     "filters_unittest.cc",
     "os_registration_unittest.cc",
@@ -170,6 +179,7 @@ mojom("registration_mojom") {
   generate_java = true
   webui_module_path = "/"
   use_typescript_sources = true
+  disallow_interfaces = true
 
   # Used by Blink, so requires legacy JS bindings.
   generate_legacy_js_bindings = true
@@ -282,6 +292,12 @@ mojom("registration_mojom") {
           mojom = "attribution_reporting.mojom.OsRegistrationItem"
           cpp = "::attribution_reporting::OsRegistrationItem"
         },
+        {
+          mojom = "attribution_reporting.mojom.EventReportWindows"
+          cpp = "::attribution_reporting::EventReportWindows"
+          forward_declaration =
+              "namespace attribution_reporting { class EventReportWindows; }"
+        },
       ]
       traits_headers = [ "registration_mojom_traits.h" ]
       traits_public_deps = [ ":registration_mojom_traits" ]
@@ -296,6 +312,8 @@ component("registration_mojom_traits") {
     "registration_mojom_traits.cc",
     "registration_mojom_traits.h",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   defines = [ "IS_ATTRIBUTION_REPORTING_REGISTRATION_MOJOM_TRAITS_IMPL" ]
 
@@ -315,4 +333,6 @@ mojom("source_type_mojom") {
   sources = [ "source_type.mojom" ]
   webui_module_path = "/"
   use_typescript_sources = true
+  disallow_interfaces = true
+  generate_java = false
 }

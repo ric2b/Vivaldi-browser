@@ -25,6 +25,7 @@
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -44,6 +45,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/device/public/cpp/test/fake_usb_device_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -58,6 +60,9 @@
 namespace site_settings {
 
 namespace {
+
+using PermissionStatus = blink::mojom::PermissionStatus;
+
 constexpr ContentSettingsType kContentType = ContentSettingsType::GEOLOCATION;
 constexpr ContentSettingsType kContentTypeCookies =
     ContentSettingsType::COOKIES;
@@ -65,7 +70,7 @@ constexpr ContentSettingsType kContentTypeFileSystem =
     ContentSettingsType::FILE_SYSTEM_WRITE_GUARD;
 constexpr ContentSettingsType kContentTypeNotifications =
     ContentSettingsType::NOTIFICATIONS;
-}
+}  // namespace
 
 class SiteSettingsHelperTest : public testing::Test {
  public:
@@ -97,17 +102,9 @@ class SiteSettingsHelperTest : public testing::Test {
         ContentSettingsPattern::Wildcard(), kContentType, setting);
   }
 
-  void RecordNotification(permissions::NotificationsEngagementService* service,
-                          GURL url,
-                          int daily_average_count) {
-    // This many notifications were recorded during the past week in total.
-    int total_count = daily_average_count * 7;
-    service->RecordNotificationDisplayed(url, total_count);
-  }
-
-  base::Time GetReferenceTime() {
+  static base::Time GetReferenceTime() {
     base::Time time;
-    EXPECT_TRUE(base::Time::FromString("Sat, 1 Sep 2018 11:00:00 GMT", &time));
+    EXPECT_TRUE(base::Time::FromString("Sat, 1 Sep 2018 11:00:00", &time));
     return time;
   }
 
@@ -171,11 +168,11 @@ TEST_F(SiteSettingsHelperTest, ExceptionListShowsIncognitoEmbargoed) {
     }
 
     // Check that origin is under embargo.
-    ASSERT_EQ(CONTENT_SETTING_BLOCK,
+    ASSERT_EQ(PermissionStatus::DENIED,
               auto_blocker
                   ->GetEmbargoResult(GURL(kOriginToEmbargo),
                                      kContentTypeNotifications)
-                  ->content_setting);
+                  ->status);
   }
 
   // Check there is 1 embargoed origin for a non-incognito profile.
@@ -229,11 +226,11 @@ TEST_F(SiteSettingsHelperTest, ExceptionListShowsIncognitoEmbargoed) {
       incognito_auto_blocker->RecordDismissAndEmbargo(
           GURL(kOriginToEmbargoIncognito), kContentTypeNotifications, false);
     }
-    EXPECT_EQ(CONTENT_SETTING_BLOCK,
+    EXPECT_EQ(PermissionStatus::DENIED,
               incognito_auto_blocker
                   ->GetEmbargoResult(GURL(kOriginToEmbargoIncognito),
                                      kContentTypeNotifications)
-                  ->content_setting);
+                  ->status);
   }
 
   // Check there are 2 blocked or embargoed origins for an incognito profile.
@@ -286,10 +283,10 @@ TEST_F(SiteSettingsHelperTest, ExceptionListShowsEmbargoed) {
   }
 
   // Check that origin is under embargo.
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+  EXPECT_EQ(PermissionStatus::DENIED,
             auto_blocker
                 ->GetEmbargoResult(origin_to_embargo, kContentTypeNotifications)
-                ->content_setting);
+                ->status);
 
   // Check there are 2 blocked origins.
   {
@@ -601,6 +598,66 @@ TEST_F(SiteSettingsHelperTest, CookieExceptions) {
   }
 }
 
+TEST_F(SiteSettingsHelperTest, GetExpirationDescription) {
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &SiteSettingsHelperTest::GetReferenceTime,
+      /*time_ticks_override=*/nullptr, /*thread_ticks_override=*/nullptr);
+
+  auto description =
+      GetExpirationDescription(GetReferenceTime() + base::Days(0));
+
+  EXPECT_EQ(description, l10n_util::GetPluralStringFUTF16(
+                             IDS_SETTINGS_EXPIRES_AFTER_TIME_LABEL, 0));
+}
+
+TEST_F(SiteSettingsHelperTest, GetExpirationDescription_Tomorrow) {
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &SiteSettingsHelperTest::GetReferenceTime,
+      /*time_ticks_override=*/nullptr, /*thread_ticks_override=*/nullptr);
+
+  auto description =
+      GetExpirationDescription(GetReferenceTime() + base::Days(1));
+
+  EXPECT_EQ(description, l10n_util::GetPluralStringFUTF16(
+                             IDS_SETTINGS_EXPIRES_AFTER_TIME_LABEL, 1));
+}
+
+TEST_F(SiteSettingsHelperTest,
+       GetExpirationDescription_Tomorrow_LessThan24_AfterMidnight) {
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &SiteSettingsHelperTest::GetReferenceTime,
+      /*time_ticks_override=*/nullptr, /*thread_ticks_override=*/nullptr);
+
+  auto description =
+      GetExpirationDescription(GetReferenceTime() + base::Hours(14));
+
+  EXPECT_EQ(description, l10n_util::GetPluralStringFUTF16(
+                             IDS_SETTINGS_EXPIRES_AFTER_TIME_LABEL, 1));
+}
+
+TEST_F(SiteSettingsHelperTest,
+       GetExpirationDescription_Tomorrow_LessThan24_BeforeMidnight) {
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &SiteSettingsHelperTest::GetReferenceTime,
+      /*time_ticks_override=*/nullptr, /*thread_ticks_override=*/nullptr);
+
+  auto description =
+      GetExpirationDescription(GetReferenceTime() + base::Hours(12));
+  EXPECT_EQ(description, l10n_util::GetPluralStringFUTF16(
+                             IDS_SETTINGS_EXPIRES_AFTER_TIME_LABEL, 0));
+}
+
+TEST_F(SiteSettingsHelperTest, GetExpirationDescription_Expired) {
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &SiteSettingsHelperTest::GetReferenceTime,
+      /*time_ticks_override=*/nullptr, /*thread_ticks_override=*/nullptr);
+
+  auto description =
+      GetExpirationDescription(GetReferenceTime() - base::Days(4));
+  EXPECT_EQ(description, l10n_util::GetPluralStringFUTF16(
+                             IDS_SETTINGS_EXPIRES_AFTER_TIME_LABEL, 0));
+}
+
 namespace {
 
 void ExpectValidChooserExceptionObject(
@@ -772,89 +829,6 @@ TEST_F(SiteSettingsHelperTest, CreateChooserExceptionObject) {
         /*source=*/kPreferenceSource,
         /*incognito=*/false);
   }
-}
-
-TEST_F(SiteSettingsHelperTest, PopulateNotificationPermissionReviewData) {
-  TestingProfile profile;
-  base::test::ScopedFeatureList scoped_feature;
-  scoped_feature.InitAndEnableFeature(
-      ::features::kSafetyCheckNotificationPermissions);
-
-  // Add a couple of notification permission and check they appear in review
-  // list.
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(&profile);
-  GURL urls[] = {GURL("https://google.com:443"),
-                 GURL("https://www.youtube.com:443"),
-                 GURL("https://www.example.com:443")};
-
-  map->SetContentSettingDefaultScope(urls[0], GURL(),
-                                     ContentSettingsType::NOTIFICATIONS,
-                                     CONTENT_SETTING_ALLOW);
-  map->SetContentSettingDefaultScope(urls[1], GURL(),
-                                     ContentSettingsType::NOTIFICATIONS,
-                                     CONTENT_SETTING_ALLOW);
-  map->SetContentSettingDefaultScope(urls[2], GURL(),
-                                     ContentSettingsType::NOTIFICATIONS,
-                                     CONTENT_SETTING_ALLOW);
-
-  // Record initial display date to enable comparing dictionaries for
-  // NotificationEngagementService.
-  auto* notification_engagement_service =
-      NotificationsEngagementServiceFactory::GetForProfile(&profile);
-  std::string displayedDate =
-      notification_engagement_service->GetBucketLabel(base::Time::Now());
-
-  auto* site_engagement_service =
-      site_engagement::SiteEngagementServiceFactory::GetForProfile(&profile);
-
-  // Set a host to have minimum engagement. This should be in review list.
-  RecordNotification(notification_engagement_service, urls[0], 1);
-  site_engagement::SiteEngagementScore score =
-      site_engagement_service->CreateEngagementScore(urls[0]);
-  score.Reset(0.5, GetReferenceTime());
-  score.Commit();
-  EXPECT_EQ(blink::mojom::EngagementLevel::MINIMAL,
-            site_engagement_service->GetEngagementLevel(urls[0]));
-
-  // Set a host to have large number of notifications, but low engagement. This
-  // should be in review list.
-  RecordNotification(notification_engagement_service, urls[1], 5);
-  site_engagement_service->AddPointsForTesting(urls[1], 1.0);
-  EXPECT_EQ(blink::mojom::EngagementLevel::LOW,
-            site_engagement_service->GetEngagementLevel(urls[1]));
-
-  // Set a host to have medium engagement and high notification count. This
-  // should not be in review list.
-  RecordNotification(notification_engagement_service, urls[2], 5);
-  site_engagement_service->AddPointsForTesting(urls[2], 50.0);
-  EXPECT_EQ(blink::mojom::EngagementLevel::MEDIUM,
-            site_engagement_service->GetEngagementLevel(urls[2]));
-
-  const auto& notification_permissions =
-      PopulateNotificationPermissionReviewData(&profile);
-  // Check if resulting list contains only the expected URLs. They should be in
-  // descending order of notification count.
-  EXPECT_EQ(2UL, notification_permissions.size());
-  EXPECT_EQ("https://www.youtube.com:443",
-            *notification_permissions[0].GetDict().FindString(
-                site_settings::kOrigin));
-  EXPECT_EQ("https://google.com:443",
-            *notification_permissions[1].GetDict().FindString(
-                site_settings::kOrigin));
-
-  // Increasing notification count also promotes host in the list.
-  RecordNotification(notification_engagement_service,
-                     GURL("https://google.com:443"), 10);
-  const auto& updated_notification_permissions =
-      PopulateNotificationPermissionReviewData(&profile);
-  EXPECT_EQ(2UL, updated_notification_permissions.size());
-  EXPECT_EQ("https://google.com:443",
-            *updated_notification_permissions[0].GetDict().FindString(
-                site_settings::kOrigin));
-  EXPECT_EQ("https://www.youtube.com:443",
-            *updated_notification_permissions[1].GetDict().FindString(
-                site_settings::kOrigin));
 }
 
 namespace {
@@ -1081,8 +1055,11 @@ TEST_F(PersistentPermissionsSiteSettingsHelperTest,
   // Initialize and populate the `grants` object with permissions.
   ChromeFileSystemAccessPermissionContext* context =
       FileSystemAccessPermissionContextFactory::GetForProfile(&profile);
-  auto empty_grants = context->GetPermissionGrants(kTestOrigin);
+  auto empty_grants =
+      context->ConvertObjectsToGrants(context->GetGrantedObjects(kTestOrigin));
   EXPECT_TRUE(empty_grants.file_write_grants.empty());
+
+  context->SetOriginHasExtendedPermissionForTesting(kTestOrigin);
 
   auto file_write_grant = context->GetWritePermissionGrant(
       kTestOrigin, kTestPath,
@@ -1092,7 +1069,9 @@ TEST_F(PersistentPermissionsSiteSettingsHelperTest,
       kTestOrigin, kTestPath2,
       ChromeFileSystemAccessPermissionContext::HandleType::kFile,
       ChromeFileSystemAccessPermissionContext::UserAction::kSave);
-  auto populated_grants = context->GetPermissionGrants(kTestOrigin);
+
+  auto populated_grants =
+      context->ConvertObjectsToGrants(context->GetGrantedObjects(kTestOrigin));
   EXPECT_FALSE(populated_grants.file_write_grants.empty());
 
   base::Value::List exceptions;

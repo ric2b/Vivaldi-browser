@@ -29,6 +29,4 @@ source_set("cells") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

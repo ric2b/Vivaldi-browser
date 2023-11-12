@@ -23,6 +23,7 @@ ci.defaults.set(
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
+    shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
 )
 
 consoles.console_view(
@@ -163,6 +164,10 @@ ci.builder(
         short_name = "32",
     ),
     cq_mirrors_console_view = "mirrors",
+    # TODO(crbug/1473182): Remove once the bug is closed.
+    reclient_bootstrap_env = {
+        "RBE_v": "3",
+    },
 )
 
 ci.builder(

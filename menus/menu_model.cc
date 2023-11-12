@@ -136,6 +136,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
           // Remove old content
           target_parent = target->parent();
           int target_index = target_parent->GetIndexOf(target).value();
+          // Note that this invalidates the target_menu.
           target_parent->Remove(target_index);
           // Add new content
           Menu_Node* loaded_parent = loaded->parent();
@@ -157,7 +158,7 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
           // top element so that JS can use this to select the element.
           for (auto& observer : observers_)
             observer.MenuModelChanged(this, loaded->id(),
-                                      target_menu->action());
+                                      loaded_menu->action());
         }
       }
     }

@@ -24,6 +24,14 @@ CSSAnimation::CSSAnimation(ExecutionContext* execution_context,
   owning_element_ = To<KeyframeEffect>(effect())->EffectTarget();
 }
 
+bool CSSAnimation::IsEventDispatchAllowed() const {
+  // If there is no owning element, CSS animation events are not dispatched:
+  // https://drafts.csswg.org/css-animations-2/#event-dispatch
+  return (!RuntimeEnabledFeatures::UnownedAnimationsSkipCSSEventsEnabled() ||
+          OwningElement()) &&
+         Animation::IsEventDispatchAllowed();
+}
+
 String CSSAnimation::playState() const {
   FlushStyles();
   return Animation::playState();

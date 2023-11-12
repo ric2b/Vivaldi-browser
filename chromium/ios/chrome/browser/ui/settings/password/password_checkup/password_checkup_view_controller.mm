@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_checkup/password_checkup_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/string_number_conversions.h"
 #import "components/google/core/common/google_util.h"
@@ -24,10 +24,6 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using password_manager::InsecurePasswordCounts;
 using password_manager::WarningType;
@@ -189,6 +185,9 @@ void SetUpTrailingIconAndAccessoryType(
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  self.tableView.accessibilityIdentifier =
+      password_manager::kPasswordCheckupTableViewId;
+
   self.title = l10n_util::GetNSString(IDS_IOS_PASSWORD_CHECKUP);
 
   _headerImageView = [self createHeaderImageView];
@@ -294,6 +293,8 @@ void SetUpTrailingIconAndAccessoryType(
   compromisedPasswordsItem.enabled = YES;
   compromisedPasswordsItem.indicatorHidden = YES;
   compromisedPasswordsItem.infoButtonHidden = YES;
+  compromisedPasswordsItem.accessibilityIdentifier =
+      password_manager::kPasswordCheckupCompromisedPasswordsItemId;
   return compromisedPasswordsItem;
 }
 
@@ -303,6 +304,8 @@ void SetUpTrailingIconAndAccessoryType(
   reusedPasswordsItem.enabled = YES;
   reusedPasswordsItem.indicatorHidden = YES;
   reusedPasswordsItem.infoButtonHidden = YES;
+  reusedPasswordsItem.accessibilityIdentifier =
+      password_manager::kPasswordCheckupReusedPasswordsItemId;
   return reusedPasswordsItem;
 }
 
@@ -312,6 +315,8 @@ void SetUpTrailingIconAndAccessoryType(
   weakPasswordsItem.enabled = YES;
   weakPasswordsItem.indicatorHidden = YES;
   weakPasswordsItem.infoButtonHidden = YES;
+  weakPasswordsItem.accessibilityIdentifier =
+      password_manager::kPasswordCheckupWeakPasswordsItemId;
   return weakPasswordsItem;
 }
 
@@ -415,6 +420,7 @@ void SetUpTrailingIconAndAccessoryType(
   [self updatePasswordCheckupTimestampDetailText];
 }
 
+// TODO(crbug.com/1453276): Make the coordinator present the alert instead.
 - (void)showErrorDialogWithMessage:(NSString*)message {
   NSString* title = l10n_util::GetNSString(
       IDS_IOS_PASSWORD_CHECKUP_HOMEPAGE_ERROR_DIALOG_TITLE);
@@ -427,6 +433,10 @@ void SetUpTrailingIconAndAccessoryType(
       [UIAlertAction actionWithTitle:l10n_util::GetNSString(IDS_OK)
                                style:UIAlertActionStyleDefault
                              handler:nil];
+  // TODO(crbug.com/1453276): Once fixed, setting the accessibilityIdentifier
+  // will no longer be neeeded since it will be handled by the AlertCoordinator.
+  okAction.accessibilityIdentifier =
+      [l10n_util::GetNSString(IDS_OK) stringByAppendingString:@"AlertAction"];
   [alert addAction:okAction];
 
   [self presentViewController:alert animated:YES completion:nil];
@@ -443,14 +453,20 @@ void SetUpTrailingIconAndAccessoryType(
       static_cast<ItemType>([model itemTypeForIndexPath:indexPath]);
   switch (itemType) {
     case ItemTypeCompromisedPasswords:
+      base::RecordAction(
+          base::UserMetricsAction("MobilePasswordIssuesCompromisedOpen"));
       [self showPasswordIssuesWithWarningType:WarningType::
                                                   kCompromisedPasswordsWarning];
       break;
     case ItemTypeReusedPasswords:
+      base::RecordAction(
+          base::UserMetricsAction("MobilePasswordIssuesReusedOpen"));
       [self showPasswordIssuesWithWarningType:WarningType::
                                                   kReusedPasswordsWarning];
       break;
     case ItemTypeWeakPasswords:
+      base::RecordAction(
+          base::UserMetricsAction("MobilePasswordIssuesWeakOpen"));
       [self
           showPasswordIssuesWithWarningType:WarningType::kWeakPasswordsWarning];
       break;
@@ -504,7 +520,7 @@ void SetUpTrailingIconAndAccessoryType(
       [self.tableViewModel footerForSectionIndex:section]) {
     // Attach self as delegate to handle clicks in page footer.
     TableViewLinkHeaderFooterView* footerView =
-        base::mac::ObjCCastStrict<TableViewLinkHeaderFooterView>(view);
+        base::apple::ObjCCastStrict<TableViewLinkHeaderFooterView>(view);
     footerView.delegate = self;
   }
 
@@ -524,6 +540,8 @@ void SetUpTrailingIconAndAccessoryType(
   UIImageView* headerImageView = [[UIImageView alloc] init];
   headerImageView.contentMode = UIViewContentModeScaleAspectFill;
   headerImageView.frame = CGRectMake(0, 0, 0, kHeaderImageHeight);
+  headerImageView.accessibilityIdentifier =
+      password_manager::kPasswordCheckupHeaderImageViewId;
   return headerImageView;
 }
 

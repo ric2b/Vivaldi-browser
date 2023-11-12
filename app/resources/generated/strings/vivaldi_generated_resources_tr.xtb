@@ -259,7 +259,6 @@
 <translation id="5431318178759467895">Renk</translation>
 <translation id="5485102783864353244">Uygulama ekle</translation>
 <translation id="5486561344817861625">Tarayıcının Yeniden Başlamasını Simüle Et</translation>
-<translation id="5487521232677179737">Veriyi temizle</translation>
 <translation id="5509693895992845810">Farklı &amp;Kaydet...</translation>
 <translation id="5521078259930077036">Bu beklediğiniz ana sayfa mı?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -284,7 +283,6 @@
 <translation id="5828633471261496623">Yazdırılıyor...</translation>
 <translation id="583281660410589416">Bilinmiyor</translation>
 <translation id="5860491529813859533">Aç</translation>
-<translation id="5867841422488265304">Web adresini arayın veya yazın</translation>
 <translation id="5910363049092958439">Resmi Farklı Ka&amp;ydet...</translation>
 <translation id="5956585768868398362">Bu beklediğiniz arama sayfası mı?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (en yüksek <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -352,7 +350,6 @@
 <translation id="7186088072322679094">Araç Çubuğunda Tut</translation>
 <translation id="7287143125007575591">Erişim reddedildi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="73786666777299047">Chrome Web Mağazası'nı Aç</translation>
 <translation id="7385854874724088939">Yazdırmaya çalışırken bir sorun oluştu. Lütfen yazıcınızı kontrol edin ve tekrar deneyin.</translation>
 <translation id="7412226954991670867">GPU Belleği</translation>
 <translation id="7421925624202799674">&amp;Sayfa Kaynağını Görüntüle</translation>

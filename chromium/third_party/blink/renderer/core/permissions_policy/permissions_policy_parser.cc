@@ -205,8 +205,10 @@ ParsingContext::ParseFeatureName(const String& feature_name) {
     return absl::nullopt;
   }
   if (DisabledByOriginTrial(effective_feature_name, execution_context_)) {
+#if !defined(VIVALDI_BUILD)
     logger_.Warn("Origin trial controlled feature not enabled: '" +
                  effective_feature_name + "'.");
+#endif
     return absl::nullopt;
   }
   mojom::blink::PermissionsPolicyFeature feature =

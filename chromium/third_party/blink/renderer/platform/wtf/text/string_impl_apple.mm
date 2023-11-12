@@ -24,14 +24,10 @@
 
 #include "base/apple/bridging.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace WTF {
 
-base::ScopedCFTypeRef<CFStringRef> StringImpl::CreateCFString() {
-  return base::ScopedCFTypeRef<CFStringRef>(
+base::apple::ScopedCFTypeRef<CFStringRef> StringImpl::CreateCFString() {
+  return base::apple::ScopedCFTypeRef<CFStringRef>(
       Is8Bit()
           ? CFStringCreateWithBytes(
                 kCFAllocatorDefault,

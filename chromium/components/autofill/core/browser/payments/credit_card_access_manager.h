@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
+#include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/wait_for_signal_or_timeout.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -73,6 +74,7 @@ enum class CreditCardFetchResult {
   kMaxValue = kPermanentError,
 };
 
+// TODO(crbug.com/1473481): Remove CVC from CachedServerCardInfo.
 struct CachedServerCardInfo {
  public:
   // An unmasked CreditCard.
@@ -96,8 +98,7 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
    public:
     virtual ~Accessor() = default;
     virtual void OnCreditCardFetched(CreditCardFetchResult result,
-                                     const CreditCard* credit_card,
-                                     const std::u16string& cvc) = 0;
+                                     const CreditCard* credit_card) = 0;
   };
 
   CreditCardAccessManager(AutofillDriver* driver,
@@ -416,19 +417,16 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // re-auth authentication in a flow where we might fill the card after the
   // response. If it is successful, we will fill `card` and `cvc` into the form
   // using `accessor`, otherwise we will handle the error. `successful_auth` is
-  // true if the authentication waas successful, false otherwise.
+  // true if the authentication waas successful, false otherwise. Pass
+  // `authenticate_method` for logging purpose.
   // TODO(crbug.com/1447084): Move authentication logic for re-auth into
   // MandatoryReauthManager.
   void OnDeviceAuthenticationResponseForFilling(
       base::WeakPtr<Accessor> accessor,
+      payments::MandatoryReauthAuthenticationMethod authentication_method,
       const CreditCard* card,
       const std::u16string& cvc,
       bool successful_auth);
-
-  // Callback that resets `device_authenticator_` after an authentication.
-  // TODO(crbug.com/1447084): Move authentication logic for re-auth into
-  // MandatoryReauthManager.
-  void OnReauthCompleted();
 
   // The current form of authentication in progress.
   UnmaskAuthFlowType unmask_auth_flow_type_ = UnmaskAuthFlowType::kNone;
@@ -438,23 +436,21 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   bool is_authentication_in_progress_ = false;
 
   // The associated autofill driver. Weak reference.
-  const raw_ptr<AutofillDriver, DanglingUntriaged> driver_;
+  const raw_ptr<AutofillDriver> driver_;
 
   // The associated autofill client. Weak reference.
   const raw_ptr<AutofillClient> client_;
 
   // Client to interact with Payments servers.
-  raw_ptr<payments::PaymentsClient> payments_client_;
+  const raw_ptr<payments::PaymentsClient> payments_client_;
 
   // The personal data manager, used to save and load personal data to/from the
   // web database.
   // Weak reference.
-  // May be NULL. NULL indicates OTR.
-  raw_ptr<PersonalDataManager> personal_data_manager_;
+  const raw_ptr<PersonalDataManager> personal_data_manager_;
 
   // For logging metrics.
-  raw_ptr<autofill_metrics::CreditCardFormEventLogger, DanglingUntriaged>
-      form_event_logger_;
+  const raw_ptr<autofill_metrics::CreditCardFormEventLogger> form_event_logger_;
 
   // Timestamp used for preflight call metrics.
   absl::optional<base::TimeTicks> preflight_call_timestamp_;
@@ -498,12 +494,11 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   bool can_fetch_unmask_details_ = true;
 
   // The credit card being accessed.
+  // It will be set when user preview or select the card. Before authentication,
+  // the card is the masked server card which is retrieved from webdatabase.
+  // After FIDO, CVC, OTP authentication, it will be override by a new card
+  // constructed by the server response.
   std::unique_ptr<CreditCard> card_;
-
-  // When authorizing a new card, the CVC will be temporarily stored after the
-  // first CVC check, and then will be used to fill the form after FIDO
-  // authentication is complete.
-  std::u16string cvc_ = std::u16string();
 
   // Set to true only if user has a verifying platform authenticator.
   // e.g. Touch/Face ID, Windows Hello, Android fingerprint, etc., is available
@@ -525,15 +520,6 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // Cached data of cards which have been unmasked. This is cleared upon page
   // navigation. Map key is the card's server_id.
   std::unordered_map<std::string, CachedServerCardInfo> unmasked_card_cache_;
-
-  // Used to authenticate autofills when there was no interactive
-  // authentication. This class must keep this reference to
-  // `device_authenticator_` alive while an authentication is in progress. Set
-  // when we initiate a re-auth using `DeviceAuthenticator`, and reset once the
-  // authentication has finished.
-  // TODO(crbug.com/1447084): Move authentication logic for re-auth into
-  // MandatoryReauthManager.
-  scoped_refptr<device_reauth::DeviceAuthenticator> device_authenticator_;
 
   base::WeakPtrFactory<CreditCardAccessManager> weak_ptr_factory_{this};
 };

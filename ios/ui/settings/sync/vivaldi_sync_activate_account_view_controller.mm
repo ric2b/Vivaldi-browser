@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/vivaldi_sync_activate_account_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -158,7 +158,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.tableViewModel itemTypeForIndexPath:indexPath]);
   if (itemType == ItemTypeSaveButton) {
     VivaldiTableViewLinkAndButtonCell* editCell =
-        base::mac::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
+        base::apple::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
     [editCell.button
                 addTarget:self
                   action:@selector(activateButtonPressed:)
@@ -167,7 +167,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
   if (itemType == ItemTypeActivationCode) {
     VivaldiTableViewTextEditCell* editCell =
-        base::mac::ObjCCastStrict<VivaldiTableViewTextEditCell>(cell);
+        base::apple::ObjCCastStrict<VivaldiTableViewTextEditCell>(cell);
     editCell.textField.delegate = self;
   }
   return cell;

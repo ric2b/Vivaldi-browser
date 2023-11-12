@@ -39,10 +39,6 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 NSString* const kSideSwipeWillStartNotification =
     @"kSideSwipeWillStartNotification";
 NSString* const kSideSwipeDidStopNotification =
@@ -148,9 +144,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 @synthesize inSwipe = _inSwipe;
 @synthesize swipeDelegate = _swipeDelegate;
 @synthesize toolbarInteractionHandler = _toolbarInteractionHandler;
-@synthesize primaryToolbarSnapshotProvider = _primaryToolbarSnapshotProvider;
-@synthesize secondaryToolbarSnapshotProvider =
-    _secondaryToolbarSnapshotProvider;
 @synthesize snapshotDelegate = _snapshotDelegate;
 @synthesize tabStripDelegate = _tabStripDelegate;
 
@@ -178,6 +171,11 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 }
 
 - (void)dealloc {
+  // TODO(crbug.com/1466454);
+  DUMP_WILL_BE_CHECK(!_fullscreenController);
+}
+
+- (void)disconnect {
   if (self.webStateList) {
     self.webStateList->RemoveObserver(_webStateListObserver.get());
   }
@@ -222,8 +220,8 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 - (void)createGreyCache:(UISwipeGestureRecognizerDirection)direction {
   NSInteger dx = (direction == UISwipeGestureRecognizerDirectionLeft) ? -1 : 1;
   NSInteger index = _startingTabIndex + dx;
-  NSMutableArray* sessionIDs =
-      [NSMutableArray arrayWithCapacity:kIpadGreySwipeTabCount];
+  std::vector<SnapshotID> snapshotIDs;
+  snapshotIDs.reserve(kIpadGreySwipeTabCount);
   for (NSUInteger count = 0; count < kIpadGreySwipeTabCount; count++) {
     // Wrap around edges.
     if (index >= self.webStateList->count()) {
@@ -240,11 +238,12 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     web::WebState* webState = self.webStateList->GetWebStateAt(index);
     if (webState && PagePlaceholderTabHelper::FromWebState(webState)
                         ->will_add_placeholder_for_next_navigation()) {
-      [sessionIDs addObject:webState->GetStableIdentifier()];
+      snapshotIDs.push_back(
+          SnapshotTabHelper::FromWebState(webState)->GetSnapshotID());
     }
     index = index + dx;
   }
-  [_snapshotBrowserAgent->snapshot_cache() createGreyCache:sessionIDs];
+  [_snapshotBrowserAgent->snapshot_cache() createGreyCache:snapshotIDs];
 }
 
 - (void)deleteGreyCache {
@@ -288,11 +287,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 }
 
 - (void)handleiPadTabSwipe:(SideSwipeGestureRecognizer*)gesture {
-  // Don't handle swipe when tabs are sorted by recency.
-  if (IsTabGridSortedByRecency()) {
-    return;
-  }
-
   // Don't handle swipe when there are no tabs.
   int count = self.webStateList->count();
   if (count == 0) {
@@ -475,11 +469,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 // Show horizontal swipe stack view for iPhone.
 - (void)handleiPhoneTabSwipe:(SideSwipeGestureRecognizer*)gesture {
-  // Don't handle swipe when tabs are sorted by recency.
-  if (IsTabGridSortedByRecency()) {
-    return;
-  }
-
   if (gesture.state == UIGestureRecognizerStateBegan) {
     _inSwipe = YES;
 
@@ -497,10 +486,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
           [[CardSideSwipeView alloc] initWithFrame:frame
                                          topMargin:headerHeight
                                       webStateList:self.webStateList];
-      _tabSideSwipeView.topToolbarSnapshotProvider =
-          self.primaryToolbarSnapshotProvider;
-      _tabSideSwipeView.bottomToolbarSnapshotProvider =
-          self.secondaryToolbarSnapshotProvider;
+      _tabSideSwipeView.toolbarSnapshotProvider = self.toolbarSnapshotProvider;
 
       [_tabSideSwipeView setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                              UIViewAutoresizingFlexibleHeight];
@@ -688,11 +674,13 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 #pragma mark - WebStateListObserving Methods
 
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                       status:(const WebStateListStatus&)status {
+  if (!status.active_web_state_change()) {
+    return;
+  }
+
   // If there is any an ongoing swipe for the old webState, cancel it and
   // dismiss the curtain.
   [self dismissCurtain];
@@ -702,14 +690,14 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
   [_swipeGestureRecognizer setEnabled:YES];
   // Track the new active WebState for navigation events. Also remove the old if
   // there was one.
-  if (oldWebState) {
+  if (status.old_active_web_state) {
     _scopedWebStateObservation->Reset();
   }
-  if (newWebState) {
-    _scopedWebStateObservation->Observe(newWebState);
+  if (status.new_active_web_state) {
+    _scopedWebStateObservation->Observe(status.new_active_web_state);
   }
 
-  [self updateNavigationEdgeSwipeForWebState:newWebState];
+  [self updateNavigationEdgeSwipeForWebState:status.new_active_web_state];
 }
 
 #pragma mark VIVALDI

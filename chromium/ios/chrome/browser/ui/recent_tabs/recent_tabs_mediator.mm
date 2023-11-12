@@ -5,10 +5,20 @@
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_mediator.h"
 
 #import "base/debug/dump_without_crashing.h"
+#import "base/feature_list.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
 #import "components/sessions/core/tab_restore_service.h"
+#import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
+#import "components/signin/public/identity_manager/primary_account_change_event.h"
+#import "components/sync/base/features.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "components/sync_sessions/open_tabs_ui_delegate.h"
 #import "components/sync_sessions/session_sync_service.h"
 #import "components/sync_sessions/synced_session.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/net/crurl.h"
@@ -22,24 +32,84 @@
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_consumer.h"
 #import "ios/chrome/browser/ui/recent_tabs/sessions_sync_user_state.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_toolbars_mutator.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "url/gurl.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+#import "ios/ui/settings/sync/manager/vivaldi_session_simplified_state.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+namespace {
+
+// Returns whether the user needs to enter a passphrase or enable sync to make
+// tab sync work.
+bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
+  if (!sync_service->GetDisableReasons().Empty()) {
+    return true;
+  }
+
+  if (!sync_service->IsSyncFeatureEnabled() &&
+      !base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    return true;
+  }
+
+  if (!sync_service->GetUserSettings()->GetSelectedTypes().Has(
+          syncer::UserSelectableType::kTabs)) {
+    return true;
+  }
+
+  switch (sync_service->GetUserActionableError()) {
+    // No error.
+    case syncer::SyncService::UserActionableError::kNone:
+      return false;
+
+    // These errors effectively amount to disabled sync or effectively paused.
+    case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
+    case syncer::SyncService::UserActionableError::kNeedsPassphrase:
+    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
+    case syncer::SyncService::UserActionableError::
+        kNeedsTrustedVaultKeyForEverything:
+      return true;
+
+    // This error doesn't stop tab sync.
+    case syncer::SyncService::UserActionableError::
+        kNeedsTrustedVaultKeyForPasswords:
+      return false;
+
+    // These errors don't actually stop sync.
+    case syncer::SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForPasswords:
+    case syncer::SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForEverything:
+      return false;
+  }
+
+  NOTREACHED_NORETURN();
+}
+
+}  // namespace
 
 @interface RecentTabsMediator () <SyncedSessionsObserver,
+                                  IdentityManagerObserverBridgeDelegate,
+
+                                  // Vivaldi
+                                  VivaldiAccountSyncManagerConsumer,
+                                  // End Vivaldi
+
                                   WebStateListObserving> {
   std::unique_ptr<AllWebStateListObservationRegistrar> _registrar;
   std::unique_ptr<synced_sessions::SyncedSessionsObserverBridge>
       _syncedSessionsObserver;
+  std::unique_ptr<signin::IdentityManagerObserverBridge>
+      _identityManagerObserver;
   std::unique_ptr<recent_tabs::ClosedTabsObserverBridge> _closedTabsObserver;
   SessionsSyncUserState _userState;
   // The list of web state list currently processing batch operations (e.g.
@@ -49,12 +119,6 @@ using vivaldi::IsVivaldiRunning;
 
 // Return the user's current sign-in and chrome-sync state.
 - (SessionsSyncUserState)userSignedInState;
-// Utility functions for -userSignedInState so these can be mocked out
-// easily for unit tests.
-- (BOOL)hasSyncConsent;
-- (BOOL)isSyncTabsEnabled;
-- (BOOL)hasForeignSessions;
-- (BOOL)isSyncCompleted;
 // Reload the panel.
 - (void)refreshSessionsView;
 @property(nonatomic, assign)
@@ -62,8 +126,12 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, assign) signin::IdentityManager* identityManager;
 @property(nonatomic, assign) sessions::TabRestoreService* restoreService;
 @property(nonatomic, assign) FaviconLoader* faviconLoader;
-@property(nonatomic, assign) SyncSetupService* syncSetupService;
+@property(nonatomic, assign) syncer::SyncService* syncService;
 @property(nonatomic, assign) BrowserList* browserList;
+
+// Vivaldi
+@property(nonatomic, strong) VivaldiAccountSyncManager* syncManager;
+// End Vivaldi
 
 @end
 
@@ -75,7 +143,7 @@ using vivaldi::IsVivaldiRunning;
                identityManager:(signin::IdentityManager*)identityManager
                 restoreService:(sessions::TabRestoreService*)restoreService
                  faviconLoader:(FaviconLoader*)faviconLoader
-              syncSetupService:(SyncSetupService*)syncSetupService
+                   syncService:(syncer::SyncService*)syncService
                    browserList:(BrowserList*)browserList {
   self = [super init];
   if (self) {
@@ -83,7 +151,7 @@ using vivaldi::IsVivaldiRunning;
     _identityManager = identityManager;
     _restoreService = restoreService;
     _faviconLoader = faviconLoader;
-    _syncSetupService = syncSetupService;
+    _syncService = syncService;
     _browserList = browserList;
   }
   return self;
@@ -100,7 +168,12 @@ using vivaldi::IsVivaldiRunning;
   if (!_syncedSessionsObserver) {
     _syncedSessionsObserver =
         std::make_unique<synced_sessions::SyncedSessionsObserverBridge>(
-            self, self.identityManager, self.sessionSyncService);
+            self, self.sessionSyncService);
+  }
+  if (!_identityManagerObserver) {
+    _identityManagerObserver =
+        std::make_unique<signin::IdentityManagerObserverBridge>(
+            self.identityManager, self);
   }
   if (!_closedTabsObserver) {
     _closedTabsObserver =
@@ -113,6 +186,15 @@ using vivaldi::IsVivaldiRunning;
     // service.
     if (self.restoreService)
       self.restoreService->LoadTabsFromLastSession();
+
+    // Start sync and account manager.
+    if (self.browser) {
+      VivaldiAccountSyncManager* syncManager =
+          [[VivaldiAccountSyncManager alloc] initWithBrowser:self.browser];
+      _syncManager = syncManager;
+      _syncManager.consumer = self;
+      [_syncManager start];
+    }
     // End Vivaldi
 
     [self.consumer setTabRestoreService:self.restoreService];
@@ -120,8 +202,17 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)disconnect {
+
+  // Vivaldi
+  if (self.syncManager) {
+    [self.syncManager stop];
+    self.syncManager = nullptr;
+  }
+  // End Vivaldi
+
   _registrar.reset();
   _syncedSessionsObserver.reset();
+  _identityManagerObserver.reset();
 
   if (_closedTabsObserver) {
     if (self.restoreService) {
@@ -132,7 +223,7 @@ using vivaldi::IsVivaldiRunning;
     _identityManager = nullptr;
     _restoreService = nullptr;
     _faviconLoader = nullptr;
-    _syncSetupService = nullptr;
+    _syncService = nullptr;
   }
 }
 
@@ -142,12 +233,27 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - SyncedSessionsObserver
 
-- (void)reloadSessions {
+- (void)onForeignSessionsChanged {
   [self refreshSessionsView];
 }
 
-- (void)onSyncStateChanged {
-  [self refreshSessionsView];
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
+  switch (event.GetEventTypeFor(signin::ConsentLevel::kSignin)) {
+    case signin::PrimaryAccountChangeEvent::Type::kNone:
+      break;
+    case signin::PrimaryAccountChangeEvent::Type::kSet:
+    case signin::PrimaryAccountChangeEvent::Type::kCleared:
+      // Sign-in could happen without onForeignSessionsChanged (e.g. if
+      // kReplaceSyncPromosWithSignInPromos is enabled and the user signed-in
+      // without opting in to history sync; maybe also if sync ran into an
+      // encryption error). The sign-in promo must still be updated in that
+      // case, so handle it here.
+      [self refreshSessionsView];
+      break;
+  }
 }
 
 #pragma mark - ClosedTabsObserving
@@ -217,57 +323,88 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - Private
 
-- (BOOL)hasSyncConsent {
-  return _syncedSessionsObserver->HasSyncConsent();
-}
-
-- (BOOL)isSyncTabsEnabled {
-  DCHECK([self hasSyncConsent]);
-  return !self.syncSetupService->UserActionIsRequiredToHaveTabSyncWork();
-}
-
 // Returns whether this profile has any foreign sessions to sync.
 - (SessionsSyncUserState)userSignedInState {
 
-  // Vivaldi: This is a temporary solution. Google has a two level of consent
-  // system, one for SignIn and one for Sync. But, in our case its Sync only.
-  // It is quite important to find the better approach to solve this.
-  // TODO: - IMPORTANT! - @julien@vivaldi.com or @prio@vivaldi.com
-  if (!IsVivaldiRunning()) {
-  if (![self hasSyncConsent])
+  // Note: (prio@vivaldi.com) This is still a temporary fix.
+  // The proper one is to somehow fix the IdentityManager class in chromium.
+  // TODO: - IMPORTANT! - @julien@vivaldi.com
+  if (IsVivaldiRunning() && _syncManager) {
+    if (![_syncManager hasSyncConsent])
+      return SessionsSyncUserState::USER_SIGNED_OUT;
+  } else {
+  const auto requiredConsent =
+      base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos)
+          ? signin::ConsentLevel::kSignin
+          : signin::ConsentLevel::kSync;
+  if (!_identityManager->HasPrimaryAccount(requiredConsent)) {
+    // This returns "signed out" when the user is signed-in non-syncing and
+    // kReplaceSyncPromosWithSignInPromos is off. That's a pre-existing issue.
     return SessionsSyncUserState::USER_SIGNED_OUT;
+  }
   } // End Vivaldi
 
-  if (![self isSyncTabsEnabled])
+  if (UserActionIsRequiredToHaveTabSyncWork(_syncService)) {
     return SessionsSyncUserState::USER_SIGNED_IN_SYNC_OFF;
-  if (![self isSyncCompleted])
-    return SessionsSyncUserState::USER_SIGNED_IN_SYNC_IN_PROGRESS;
-  if ([self hasForeignSessions])
-    return SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS;
-  return SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_NO_SESSIONS;
-}
+  }
 
-- (BOOL)isSyncCompleted {
   DCHECK(self.sessionSyncService);
-  return self.sessionSyncService->GetOpenTabsUIDelegate() != nullptr;
-}
-
-- (BOOL)hasForeignSessions {
-  DCHECK(self.sessionSyncService);
-  sync_sessions::OpenTabsUIDelegate* openTabs =
+  sync_sessions::OpenTabsUIDelegate* delegate =
       self.sessionSyncService->GetOpenTabsUIDelegate();
-  DCHECK(openTabs);
+  if (!delegate) {
+    return SessionsSyncUserState::USER_SIGNED_IN_SYNC_IN_PROGRESS;
+  }
+
   std::vector<const sync_sessions::SyncedSession*> sessions;
-  return openTabs->GetAllForeignSessions(&sessions);
+  return delegate->GetAllForeignSessions(&sessions)
+             ? SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS
+             : SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_NO_SESSIONS;
+}
+
+// Creates and send a tab grid toolbar configuration with button that should be
+// displayed when recent grid is selected.
+- (void)configureToolbarsButtons {
+  TabGridToolbarsConfiguration* toolbarsConfiguration =
+      [[TabGridToolbarsConfiguration alloc] init];
+  toolbarsConfiguration.doneButton = YES;
+  toolbarsConfiguration.searchButton = YES;
+  [self.toolbarsMutator setToolbarConfiguration:toolbarsConfiguration];
 }
 
 #pragma mark - RecentTabsTableViewControllerDelegate
 
 - (void)refreshSessionsView {
-  // This method is called from two places: 1) when this mediator observes a
-  // change in the synced session state, and 2) when the UI layer recognizes
-  // that the signin process has completed. The latter call is necessary because
-  // it can happen much more immediately than the former call.
+  // This method is called from three places: 1) when this mediator observes a
+  // change in the synced session state,  2) when the UI layer recognizes
+  // that the signin process has completed, and 3) when the history & tabs sync
+  // opt-in screen is dismissed.
+  // The 2 latter calls are necessary because they can happen much more
+  // immediately than the former call.
+  [self.consumer refreshUserState:[self userSignedInState]];
+}
+
+#pragma mark - TabGridPageMutator
+
+- (void)currentlySelectedGrid:(BOOL)selected {
+  if (selected) {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridSelectRemotePanel"));
+    LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeAllTabs);
+
+    [self configureToolbarsButtons];
+  }
+  // TODO(crbug.com/1457146): Implement.
+}
+
+#pragma mark - VIVALDI
+- (void)enableTabsSync {
+  if (_syncManager) {
+    [_syncManager enableTabsSync];
+  }
+}
+
+#pragma mark: - VivaldiAccountSyncManagerConsumer
+- (void)onVivaldiSessionUpdated:(VivaldiSessionSimplifiedState)sessionState {
   [self.consumer refreshUserState:[self userSignedInState]];
 }
 

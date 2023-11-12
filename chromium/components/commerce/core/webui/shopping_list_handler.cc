@@ -30,7 +30,7 @@ namespace {
 
 shopping_list::mojom::ProductInfoPtr ProductInfoToMojoProduct(
     const GURL& url,
-    const absl::optional<ProductInfo>& info,
+    const absl::optional<const ProductInfo>& info,
     const std::string& locale) {
   auto product_info = shopping_list::mojom::ProductInfo::New();
 
@@ -408,6 +408,13 @@ void ShoppingListHandler::IsShoppingListEligible(
   std::move(callback).Run(shopping_service_->IsShoppingListEligible());
 }
 
+void ShoppingListHandler::GetShoppingCollectionBookmarkFolderId(
+    GetShoppingCollectionBookmarkFolderIdCallback callback) {
+  const bookmarks::BookmarkNode* collection =
+      commerce::GetShoppingCollectionBookmarkFolder(bookmark_model_);
+  std::move(callback).Run(collection ? collection->id() : -1);
+}
+
 void ShoppingListHandler::GetPriceTrackingStatusForCurrentUrl(
     GetPriceTrackingStatusForCurrentUrlCallback callback) {
   const GURL current_url = delegate_->GetCurrentTabUrl().value();
@@ -448,7 +455,7 @@ void ShoppingListHandler::ShowBookmarkEditorForCurrentUrl() {
 void ShoppingListHandler::OnFetchProductInfoForCurrentUrl(
     GetProductInfoForCurrentUrlCallback callback,
     const GURL& url,
-    const absl::optional<ProductInfo>& info) {
+    const absl::optional<const ProductInfo>& info) {
   std::move(callback).Run(ProductInfoToMojoProduct(url, info, locale_));
 }
 

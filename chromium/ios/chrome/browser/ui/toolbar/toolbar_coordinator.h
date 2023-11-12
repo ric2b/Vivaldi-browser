@@ -8,18 +8,13 @@
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_ui_updating.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
+#import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_snapshot_providing.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_coordinating.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_height_delegate.h"
 
 @protocol OmniboxPopupPresenterDelegate;
 @protocol OmniboxFocusDelegate;
-@class PrimaryToolbarCoordinator;
-@class PrimaryToolbarViewController;
 @protocol SharingPositioner;
-@class SecondaryToolbarViewController;
-@protocol SideSwipeToolbarSnapshotProviding;
-@protocol ViewRevealingAnimatee;
-@class ViewRevealingVerticalPanHandler;
 
 // Vivaldi
 @protocol LocationBarSteadyViewConsumer;
@@ -29,9 +24,11 @@
 /// view controller. This object is also an interface between multiple toolbars
 /// and the objects which want to interact with them without having to know to
 /// which one specifically send the call.
-@interface ToolbarCoordinator : ChromeCoordinator <FakeboxFocuser,
-                                                   PopupMenuUIUpdating,
-                                                   ToolbarCoordinating>
+@interface ToolbarCoordinator
+    : ChromeCoordinator <FakeboxFocuser,
+                         PopupMenuUIUpdating,
+                         SideSwipeToolbarSnapshotProviding,
+                         ToolbarCoordinating>
 
 /// Delegate for focusing omnibox in `locationBarCoordinator`.
 @property(nonatomic, weak) id<OmniboxFocusDelegate> omniboxFocusDelegate;
@@ -73,13 +70,6 @@
 /// Whether the omnibox popup is currently presented.
 - (BOOL)showingOmniboxPopup;
 
-#pragma mark SnapshotProviding
-
-/// Returns the snapshop provider of primary toolbar.
-- (id<SideSwipeToolbarSnapshotProviding>)primaryToolbarSnapshotProvider;
-/// Returns the snapshop provider of secondary toolbar.
-- (id<SideSwipeToolbarSnapshotProviding>)secondaryToolbarSnapshotProvider;
-
 #pragma mark ToolbarHeightProviding
 
 /// The minimum height of the primary toolbar.
@@ -90,16 +80,6 @@
 - (CGFloat)collapsedSecondaryToolbarHeight;
 /// The maximum height of the secondary toolbar.
 - (CGFloat)expandedSecondaryToolbarHeight;
-
-#pragma mark ViewRevealing
-
-/// A reference to the view controller that implements the view revealing
-/// vertical pan handler delegate methods.
-- (id<ViewRevealingAnimatee>)viewRevealingAnimatee;
-/// Sets the pan gesture handler for the view controller that implements the
-/// view revealing.
-- (void)setPanGestureHandler:
-    (ViewRevealingVerticalPanHandler*)panGestureHandler;
 
 // Vivaldi
 // Used to pass the location bar steady view related updates from location bar

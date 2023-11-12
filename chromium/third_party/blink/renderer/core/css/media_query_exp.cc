@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
+#include "third_party/blink/renderer/core/css/media_feature_names.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_impl.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
@@ -87,6 +88,11 @@ static inline bool FeatureWithValidIdent(const String& media_feature,
            ident == CSSValueID::kRec2020;
   }
 
+  if (RuntimeEnabledFeatures::InvertedColorsEnabled() &&
+      media_feature == media_feature_names::kInvertedColorsMediaFeature) {
+    return ident == CSSValueID::kInverted || ident == CSSValueID::kNone;
+  }
+
   if (media_feature == media_feature_names::kPrefersColorSchemeMediaFeature) {
     return ident == CSSValueID::kDark || ident == CSSValueID::kLight;
   }
@@ -112,6 +118,12 @@ static inline bool FeatureWithValidIdent(const String& media_feature,
 
   if (RuntimeEnabledFeatures::PrefersReducedDataEnabled() &&
       media_feature == media_feature_names::kPrefersReducedDataMediaFeature) {
+    return ident == CSSValueID::kNoPreference || ident == CSSValueID::kReduce;
+  }
+
+  if (RuntimeEnabledFeatures::PrefersReducedTransparencyEnabled() &&
+      media_feature ==
+          media_feature_names::kPrefersReducedTransparencyMediaFeature) {
     return ident == CSSValueID::kNoPreference || ident == CSSValueID::kReduce;
   }
 
@@ -165,6 +177,25 @@ static inline bool FeatureWithValidIdent(const String& media_feature,
         case CSSValueID::kInsetBlockEnd:
         case CSSValueID::kInsetInlineStart:
         case CSSValueID::kInsetInlineEnd:
+          return true;
+        default:
+          return false;
+      }
+    }
+
+    if (RuntimeEnabledFeatures::ScriptingMediaFeatureEnabled() &&
+        media_feature == media_feature_names::kScriptingMediaFeature) {
+      return ident == CSSValueID::kEnabled ||
+             ident == CSSValueID::kInitialOnly || ident == CSSValueID::kNone;
+    }
+  }
+
+  if (RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled()) {
+    if (media_feature == media_feature_names::kSnappedMediaFeature) {
+      switch (ident) {
+        case CSSValueID::kNone:
+        case CSSValueID::kBlock:
+        case CSSValueID::kInline:
           return true;
         default:
           return false;
@@ -229,7 +260,7 @@ static inline bool FeatureExpectingInteger(const String& media_feature) {
     return true;
   }
 
-  if (RuntimeEnabledFeatures::CSSFoldablesEnabled()) {
+  if (RuntimeEnabledFeatures::ViewportSegmentsEnabled()) {
     if (media_feature ==
             media_feature_names::kHorizontalViewportSegmentsMediaFeature ||
         media_feature ==
@@ -649,6 +680,7 @@ unsigned MediaQueryExpValue::GetUnitFlags() const {
   if (length_type_flags.test(CSSPrimitiveValue::kUnitTypeFontSize) ||
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeFontXSize) ||
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeZeroCharacterWidth) ||
+      length_type_flags.test(CSSPrimitiveValue::kUnitTypeFontCapitalHeight) ||
       length_type_flags.test(
           CSSPrimitiveValue::kUnitTypeIdeographicFullWidth) ||
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeLineHeight)) {
@@ -657,6 +689,8 @@ unsigned MediaQueryExpValue::GetUnitFlags() const {
 
   if (length_type_flags.test(CSSPrimitiveValue::kUnitTypeRootFontSize) ||
       length_type_flags.test(CSSPrimitiveValue::kUnitTypeRootFontXSize) ||
+      length_type_flags.test(
+          CSSPrimitiveValue::kUnitTypeRootFontCapitalHeight) ||
       length_type_flags.test(
           CSSPrimitiveValue::kUnitTypeRootFontZeroCharacterWidth) ||
       length_type_flags.test(
@@ -772,22 +806,24 @@ void MediaQueryFeatureExpNode::CollectExpressions(
 
 MediaQueryExpNode::FeatureFlags MediaQueryFeatureExpNode::CollectFeatureFlags()
     const {
-  FeatureFlags flags = 0;
-
-  if (exp_.IsWidthDependent()) {
-    flags |= kFeatureWidth;
+  if (exp_.MediaFeature() == media_feature_names::kStuckMediaFeature) {
+    return kFeatureSticky;
+  } else if (exp_.MediaFeature() == media_feature_names::kSnappedMediaFeature) {
+    return kFeatureSnap;
+  } else if (exp_.IsInlineSizeDependent()) {
+    return kFeatureInlineSize;
+  } else if (exp_.IsBlockSizeDependent()) {
+    return kFeatureBlockSize;
+  } else {
+    FeatureFlags flags = 0;
+    if (exp_.IsWidthDependent()) {
+      flags |= kFeatureWidth;
+    }
+    if (exp_.IsHeightDependent()) {
+      flags |= kFeatureHeight;
+    }
+    return flags;
   }
-  if (exp_.IsHeightDependent()) {
-    flags |= kFeatureHeight;
-  }
-  if (exp_.IsInlineSizeDependent()) {
-    flags |= kFeatureInlineSize;
-  }
-  if (exp_.IsBlockSizeDependent()) {
-    flags |= kFeatureBlockSize;
-  }
-
-  return flags;
 }
 
 void MediaQueryFeatureExpNode::Trace(Visitor* visitor) const {
@@ -828,9 +864,6 @@ MediaQueryExpNode::FeatureFlags MediaQueryFunctionExpNode::CollectFeatureFlags()
   FeatureFlags flags = MediaQueryUnaryExpNode::CollectFeatureFlags();
   if (name_ == AtomicString("style")) {
     flags |= kFeatureStyle;
-  }
-  if (name_ == AtomicString("state")) {
-    flags |= kFeatureState;
   }
   return flags;
 }

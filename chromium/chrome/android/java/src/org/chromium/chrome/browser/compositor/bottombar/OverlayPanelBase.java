@@ -18,9 +18,9 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSemanticColorUtils;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.ui.theme.ChromeSemanticColorUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -984,7 +984,6 @@ abstract class OverlayPanelBase {
         // Determine fading element opacities. The arrow icon needs to finish fading out before
         // the close icon starts fading in. Any other elements fading in or fading out should use
         // the same percentage.
-        float fadingOutPercentage = Math.min(percentage, .5f) / .5f;
         float fadingInPercentage = Math.max(percentage - .5f, 0.f) / .5f;
 
         // Close Icon.
@@ -1127,7 +1126,6 @@ abstract class OverlayPanelBase {
     /**
      * @param height The height of the Overlay Panel to be set.
      */
-    @VisibleForTesting
     public void setHeightForTesting(float height) {
         mHeight = height;
         mIsShowingSupplier.set(isShowing());
@@ -1137,7 +1135,6 @@ abstract class OverlayPanelBase {
      * @param offsetY The vertical offset of the Overlay Panel to be
      *            set.
      */
-    @VisibleForTesting
     public void setOffsetYForTesting(float offsetY) {
         mOffsetY = offsetY;
     }
@@ -1146,7 +1143,6 @@ abstract class OverlayPanelBase {
      * @param isMaximized The setting for whether the Overlay Panel is fully
      *            maximized.
      */
-    @VisibleForTesting
     public void setMaximizedForTesting(boolean isMaximized) {
         mIsMaximized = isMaximized;
     }
@@ -1154,7 +1150,6 @@ abstract class OverlayPanelBase {
     /**
      * @param barHeight The height of the Overlay Bar to be set.
      */
-    @VisibleForTesting
     public void setSearchBarHeightForTesting(float barHeight) {
         mBarHeight = barHeight;
     }
@@ -1164,7 +1159,6 @@ abstract class OverlayPanelBase {
      *
      * @param isFullWidthSizePanel Whether the Panel has a full width size.
      */
-    @VisibleForTesting
     public void setIsFullWidthSizePanelForTesting(boolean isFullWidthSizePanel) {
         mOverrideIsFullWidthSizePanelForTesting = true;
         mIsFullWidthSizePanelForTesting = isFullWidthSizePanel;

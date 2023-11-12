@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/field_types.h"
 
@@ -27,30 +28,29 @@ class AddressComponentWithRewriter : public AddressComponent {
       const AddressComponent& other) const override;
 };
 
+// This class represents a type that is controlled by a feature flag. It
+// overrides the SetValue method to prevent setting values to nodes for which
+// the flag is turned off.
+class FeatureGuardedAddressComponent : public AddressComponent {
+ public:
+  FeatureGuardedAddressComponent(raw_ptr<const base::Feature> feature,
+                                 ServerFieldType storage_type,
+                                 AddressComponent* parent,
+                                 unsigned int merge_mode);
+
+  // Sets the value corresponding to the storage type of this component.
+  void SetValue(std::u16string value, VerificationStatus status) override;
+
+ private:
+  // Feature guarding the rollout of this address component.
+  const raw_ptr<const base::Feature> feature_;
+};
+
 // The name of the street.
 class StreetNameNode : public AddressComponent {
  public:
   explicit StreetNameNode(AddressComponent* parent);
   ~StreetNameNode() override;
-};
-
-// In some countries, addresses use the intersection of two streets.
-// The DependentStreetName is represents the second street of the intersections.
-class DependentStreetNameNode : public AddressComponent {
- public:
-  explicit DependentStreetNameNode(AddressComponent* parent);
-  ~DependentStreetNameNode() override;
-};
-
-// Contains both the StreetName and the DependentStreetName of an address.
-class StreetAndDependentStreetNameNode : public AddressComponent {
- public:
-  explicit StreetAndDependentStreetNameNode(AddressComponent* parent);
-  ~StreetAndDependentStreetNameNode() override;
-
- private:
-  StreetNameNode thoroughfare_name_{this};
-  DependentStreetNameNode dependent_thoroughfare_name_{this};
 };
 
 // The house number. It also contains the subunit descriptor, e.g. the 'a' in
@@ -61,11 +61,15 @@ class HouseNumberNode : public AddressComponent {
   ~HouseNumberNode() override;
 };
 
-// The name of the premise.
-class PremiseNode : public AddressComponent {
+// Contains both the StreetName and the HouseNumberNode of an address.
+class StreetLocationNode : public AddressComponent {
  public:
-  explicit PremiseNode(AddressComponent* parent);
-  ~PremiseNode() override;
+  explicit StreetLocationNode(AddressComponent* parent);
+  ~StreetLocationNode() override;
+
+ private:
+  StreetNameNode street_name_{this};
+  HouseNumberNode house_number_{this};
 };
 
 // The floor the apartment is located in.
@@ -93,8 +97,30 @@ class SubPremiseNode : public AddressComponent {
   ApartmentNode apartment_{this};
 };
 
-// The StreetAddress incorporates the StreetAndDependentStreetName, the
-// HouseNumber, the PremiseName and SubPremise.
+// Stores the landmark of an address profile.
+class LandmarkNode : public FeatureGuardedAddressComponent {
+ public:
+  explicit LandmarkNode(AddressComponent* parent);
+  ~LandmarkNode() override;
+};
+
+// Stores the streets intersection of an address profile.
+class BetweenStreetsNode : public FeatureGuardedAddressComponent {
+ public:
+  explicit BetweenStreetsNode(AddressComponent* parent);
+  ~BetweenStreetsNode() override;
+};
+
+// Stores administrative area level 2. A sub-division of a state, e.g. a
+// Municipio in Brazil or Mexico.
+class AdminLevel2Node : public FeatureGuardedAddressComponent {
+ public:
+  explicit AdminLevel2Node(AddressComponent* parent);
+  ~AdminLevel2Node() override;
+};
+
+// The StreetAddress incorporates the StreetLocation, BetweenStreets, Landmark
+// and SubPremise.
 // This class inherits from AddressComponentWithRewriter to implement rewriting
 // values for comparison.
 class StreetAddressNode : public AddressComponentWithRewriter {
@@ -117,9 +143,6 @@ class StreetAddressNode : public AddressComponentWithRewriter {
 
   std::vector<const re2::RE2*> GetParseRegularExpressionsByRelevance()
       const override;
-
-  // Returns the format string to create the full name from its subcomponents.
-  std::u16string GetBestFormatString() const override;
 
   // Recalculates the address line after an assignment.
   void PostAssignSanitization() override;
@@ -148,10 +171,10 @@ class StreetAddressNode : public AddressComponentWithRewriter {
   // `type` is ADDRESS_HOME_LINE(1|2|3).
   std::u16string GetAddressLine(ServerFieldType type) const;
 
-  StreetAndDependentStreetNameNode streets_{this};
-  HouseNumberNode number_{this};
-  PremiseNode premise_{this};
+  StreetLocationNode street_location_{this};
+  BetweenStreetsNode between_streets_{this};
   SubPremiseNode sub_premise_{this};
+  LandmarkNode landmark_code_{this};
 
   // Holds the values of the individual address lines.
   // Must be recalculated if the value of the component changes.
@@ -217,28 +240,6 @@ class SortingCodeNode : public AddressComponent {
   ~SortingCodeNode() override;
 };
 
-// Stores the landmark of an address profile.
-class LandmarkNode : public AddressComponent {
- public:
-  explicit LandmarkNode(AddressComponent* parent);
-  ~LandmarkNode() override;
-};
-
-// Stores the streets intersection of an address profile.
-class BetweenStreetsNode : public AddressComponent {
- public:
-  explicit BetweenStreetsNode(AddressComponent* parent);
-  ~BetweenStreetsNode() override;
-};
-
-// Stores administrative area level 2. A sub-division of a state, e.g. a
-// Municipio in Brazil or Mexico.
-class AdminLevel2Node : public AddressComponent {
- public:
-  explicit AdminLevel2Node(AddressComponent* parent);
-  ~AdminLevel2Node() override;
-};
-
 // Stores the overall Address that contains the StreetAddress, the PostalCode
 // the City, the State and the CountryCode.
 class AddressNode : public AddressComponent {
@@ -257,15 +258,13 @@ class AddressNode : public AddressComponent {
 
  private:
   StreetAddressNode street_address_{this};
-  PostalCodeNode postal_code_{this};
-  SortingCodeNode sorting_code_{this};
-  DependentLocalityNode dependent_locality_{this};
   CityNode city_{this};
+  DependentLocalityNode dependent_locality_{this};
   StateNode state_{this};
   AdminLevel2Node admin_level_2_{this};
+  PostalCodeNode postal_code_{this};
+  SortingCodeNode sorting_code_{this};
   CountryCodeNode country_code_{this};
-  BetweenStreetsNode between_streets_{this};
-  LandmarkNode landmark_code_{this};
 };
 
 }  // namespace autofill

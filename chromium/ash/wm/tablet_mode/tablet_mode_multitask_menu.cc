@@ -10,12 +10,14 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/screen_util.h"
+#include "ash/shell.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/style/system_shadow.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_multitask_cue_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_multitask_menu_controller.h"
 #include "ash/wm/window_state.h"
+#include "base/debug/crash_logging.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_metrics.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_view.h"
@@ -211,6 +213,7 @@ TabletModeMultitaskMenu::TabletModeMultitaskMenu(
       0, -menu_size.height() - kVerticalPosition);
   menu_view_->layer()->SetTransform(initial_transform);
   menu_view_->shadow()->SetContentBounds(gfx::Rect(menu_size));
+  menu_view_->shadow()->ObserveColorProviderSource(widget_.get());
 
   // Showing the widget can change native focus (which would result in an
   // immediate closing of the menu). Only start observing after shown.
@@ -305,9 +308,19 @@ void TabletModeMultitaskMenu::UpdateDrag(float current_y, bool down) {
           kVerticalPosition + menu_view_->GetPreferredSize().height()) {
     return;
   }
+
+  ui::Layer* menu_layer = menu_view_->layer();
+  ui::LayerAnimator* animator = menu_layer->GetAnimator();
+  if (animator->IsAnimatingOnePropertyOf(
+          ui::LayerAnimationElement::TRANSFORM)) {
+    // Calling `SetTransform()` with the same target transform can end an
+    // ongoing animation and destroy `this`. Abort the animation (not stop
+    // which will call `AnimationBuilder::OnEnded()`).
+    animator->AbortAllAnimations();
+  }
+
   const float translation_y = current_y - initial_y_;
-  menu_view_->layer()->SetTransform(
-      gfx::Transform::MakeTranslation(0, translation_y));
+  menu_layer->SetTransform(gfx::Transform::MakeTranslation(0, translation_y));
 
   if (auto* cue_layer = controller_->multitask_cue_controller()->cue_layer()) {
     cue_layer->SetTransform(gfx::Transform::MakeTranslation(

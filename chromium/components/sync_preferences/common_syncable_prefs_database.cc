@@ -46,7 +46,7 @@ enum {
   kAutofillCreditCardEnabled = 1,
   kAutofillEnabledDeprecated = 2,
   kAutofillHasSeenIban = 3,
-  kAutofillIBANEnabled = 4,
+  kAutofillIbanEnabled = 4,
   kAutofillLastVersionDeduped = 5,
   kAutofillLastVersionDisusedAddressesDeleted = 6,
   kAutofillProfileEnabled = 7,
@@ -98,7 +98,7 @@ enum {
   kPrefTranslateAutoAlwaysCount = 53,
   kPrefTranslateAutoNeverCount = 54,
   kPrefTranslateDeniedCount = 55,
-  kPrefTranslateIgnoredCount = 56,
+  // kPrefTranslateIgnoredCount = 56, (no longer synced)
   kBlockedLanguages = 57,
   kOfferTranslateEnabled = 58,
   kPrefAlwaysTranslateList = 59,
@@ -106,7 +106,7 @@ enum {
   kPrefTranslateRecentTarget = 61,
   kDogfoodGroupsSyncPrefName = 62,
   kSyncableMergeableDictPrefForTesting = 63,  // For tests.
-  kAutofillPaymentCvcStorageAndFilling = 64,
+  kAutofillPaymentCvcStorage = 64,
   // See components/sync_preferences/README.md about adding new entries here.
   // vvvvv IMPORTANT! vvvvv
   // Note to the reviewer: IT IS YOUR RESPONSIBILITY to ensure that new syncable
@@ -129,8 +129,8 @@ const auto& SyncablePreferences() {
         {autofill::prefs::kAutofillHasSeenIban,
          {syncable_prefs_ids::kAutofillHasSeenIban, syncer::PREFERENCES,
           false}},
-        {autofill::prefs::kAutofillIBANEnabled,
-         {syncable_prefs_ids::kAutofillIBANEnabled, syncer::PREFERENCES,
+        {autofill::prefs::kAutofillIbanEnabled,
+         {syncable_prefs_ids::kAutofillIbanEnabled, syncer::PREFERENCES,
           false}},
         {autofill::prefs::kAutofillLastVersionDeduped,
          {syncable_prefs_ids::kAutofillLastVersionDeduped, syncer::PREFERENCES,
@@ -276,9 +276,6 @@ const auto& SyncablePreferences() {
         {translate::TranslatePrefs::kPrefTranslateDeniedCount,
          {syncable_prefs_ids::kPrefTranslateDeniedCount, syncer::PREFERENCES,
           false}},
-        {translate::TranslatePrefs::kPrefTranslateIgnoredCount,
-         {syncable_prefs_ids::kPrefTranslateIgnoredCount, syncer::PREFERENCES,
-          false}},
         {translate::prefs::kBlockedLanguages,
          {syncable_prefs_ids::kBlockedLanguages, syncer::PREFERENCES, false}},
         {translate::prefs::kOfferTranslateEnabled,
@@ -306,9 +303,9 @@ const auto& SyncablePreferences() {
         {kSyncableMergeableDictPrefForTesting,
          {syncable_prefs_ids::kSyncableMergeableDictPrefForTesting,
           syncer::PREFERENCES, false}},
-        {autofill::prefs::kAutofillPaymentCvcStorageAndFilling,
-         {syncable_prefs_ids::kAutofillPaymentCvcStorageAndFilling,
-          syncer::PREFERENCES, false}},
+        {autofill::prefs::kAutofillPaymentCvcStorage,
+         {syncable_prefs_ids::kAutofillPaymentCvcStorage, syncer::PREFERENCES,
+          false}},
   });
   return kCommonSyncablePrefsAllowlist;
 }

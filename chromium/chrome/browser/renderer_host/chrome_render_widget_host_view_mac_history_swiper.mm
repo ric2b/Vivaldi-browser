@@ -11,10 +11,6 @@
 
 #include "app/vivaldi_apptools.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // The horizontal distance required to cause the browser to perform a history

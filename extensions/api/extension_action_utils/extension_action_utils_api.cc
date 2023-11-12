@@ -110,7 +110,7 @@ std::string EncodeBitmapToPng(const SkBitmap* bitmap) {
   base::StringPiece base64_input(reinterpret_cast<const char*>(&png_data[0]),
                                  png_data.size());
   std::string base64_output;
-  Base64Encode(base64_input, &base64_output);
+  base::Base64Encode(base64_input, &base64_output);
   base64_output.insert(0, "data:image/png;base64,");
 
   return base64_output;
@@ -235,8 +235,8 @@ bool ExtensionActionUtilFactory::ServiceIsCreatedWithBrowserContext() const {
 content::BrowserContext* ExtensionActionUtilFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
-  return ExtensionsBrowserClient::Get()->GetRedirectedContextInIncognito(
-      context, /*force_guest_profile=*/true, /*force_system_profile=*/false);
+  return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
+      context, /*force_guest_profile=*/true);
 }
 // static
 void ExtensionActionUtil::SendIconLoaded(

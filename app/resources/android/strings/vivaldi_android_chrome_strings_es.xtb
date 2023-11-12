@@ -21,7 +21,7 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadores}}</translation>
 <translation id="3076631378407175873">© <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados.</translation>
-<translation id="3234355010754616171">Pestaña privada nueva</translation>
+<translation id="3234355010754616171">Nueva pestaña privada</translation>
 <translation id="3377025655491224618">Pestañas privada</translation>
 <translation id="3504699618187058974">Apilar pestañas</translation>
 <translation id="3518985090088779359">Aceptar y continuar</translation>
@@ -32,7 +32,7 @@
 <translation id="399014816462153200">Páginas leídas:</translation>
 <translation id="4121750346708795461">Al usar esta aplicación aceptas las <ph name="BEGIN_LINK1" />condiciones de servicio<ph name="END_LINK1" /> y la <ph name="BEGIN_LINK2" />política de privacidad<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma actual del dispositivo</translation>
-<translation id="4167670741834902166">Pestaña privada nueva</translation>
+<translation id="4167670741834902166">Nueva pestaña privada</translation>
 <translation id="4195643157523330669">Abrir en pestaña nueva</translation>
 <translation id="4243710787042215766">Abrir en pestaña privada</translation>
 <translation id="451872707440238414">Buscar en tus marcadores</translation>
@@ -48,14 +48,13 @@ La función tocar para buscar sólo está disponible cuando Google es el buscado
 <translation id="5079259810715830221">Cuando un sitio de Google solicita precargar privadamente enlaces en su página, Vivaldi encripta y precarga las páginas a través de los servidores de Google sin usar cookies. Esto permite ocultar tu identidad del sitio precargado.</translation>
 <translation id="5118676864324397542">Almacenamiento de <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
-<translation id="5233638681132016545">Pestaña nueva</translation>
+<translation id="5233638681132016545">Nueva pestaña</translation>
 <translation id="5375131951310889874">La función «Tocar para buscar» sólo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Ésta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
 
 Para modificar el término de la búsqueda, mantén pulsado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y después toca el cuadro de búsqueda.</translation>
 <translation id="572328651809341494">Pestañas recientes</translation>
 <translation id="6150320133806434356">Marcador guardado</translation>
-<translation id="6301525844455696527">Ponte al día con tu lista de lectura</translation>
-<translation id="6336451774241870485">Pestaña privada nueva</translation>
+<translation id="6336451774241870485">Nueva pestaña privada</translation>
 <translation id="6404511346730675251">Editar marcador</translation>
 <translation id="6585139692466700358">Ofrecer traducir páginas con el servicio de traducción de Vivaldi</translation>
 <translation id="6593061639179217415">Modo escritorio</translation>

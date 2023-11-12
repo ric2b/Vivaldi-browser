@@ -44,6 +44,10 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "media/base/mac/video_frame_mac.h"
+#endif  // BUILDFLAG(IS_MAC)
+
 namespace blink {
 
 constexpr int kMaxFirstFrameLogs = 5;
@@ -91,7 +95,7 @@ struct VideoCaptureImpl::BufferContext
         InitializeFromMailbox(std::move(buffer_handle->get_mailbox_handles()));
         break;
       case VideoFrameBufferHandleType::kGpuMemoryBufferHandle:
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_WIN)
         // On macOS, an IOSurfaces passed as a GpuMemoryBufferHandle can be
         // used by both hardware and software paths.
         // https://crbug.com/1125879
@@ -127,7 +131,7 @@ struct VideoCaptureImpl::BufferContext
   }
 
   gfx::GpuMemoryBufferHandle TakeGpuMemoryBufferHandle() {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN)
     // The same GpuMemoryBuffersHandles will be reused repeatedly by the
     // unaccelerated macOS path. Each of these uses will call this function.
     // Ensure that this function doesn't invalidate the GpuMemoryBufferHandle
@@ -353,7 +357,7 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
       break;
     }
     case VideoFrameBufferHandleType::kGpuMemoryBufferHandle: {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       // On macOS, an IOSurfaces passed as a GpuMemoryBufferHandle can be
       // used by both hardware and software paths.
       // https://crbug.com/1125879
@@ -435,6 +439,11 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::Initialize() {
 #if BUILDFLAG(IS_CHROMEOS)
       is_webgpu_compatible_ =
           buffer_handle.native_pixmap_handle.supports_zero_copy_webgpu_import;
+#endif
+
+#if BUILDFLAG(IS_MAC)
+      is_webgpu_compatible_ =
+          media::IOSurfaceIsWebGPUCompatible(buffer_handle.io_surface.get());
 #endif
       // No need to propagate shared memory region further as it's already
       // exposed by |buffer_context_->data()|.
@@ -525,36 +534,76 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
   uint32_t usage =
       gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   usage |= gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX;
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
   usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
 #endif
 
-  bool create_multiplanar_image = false;
+  // The feature flags here are a little subtle:
+  // * IsMultiPlaneFormatForHardwareVideoEnabled() controls whether Multiplanar
+  //   SI is used (i.e., whether a single SharedImage is created via passing a
+  //   viz::MultiPlaneFormat rather than the legacy codepath of passing a
+  //   GMB).
+  // * kMultiPlaneVideoCaptureSharedImages controls whether planes are sampled
+  //   individually rather than using external sampling.
+  //
+  // These two flags are orthogonal:
+  // * If both flags are true, one SharedImage with format MultiPlaneFormat::
+  //   kNV12 will be created.
+  // * If using multiplane SI without per-plane sampling, one SharedImage with
+  //   format MultiPlaneFormat::kNV12 configured to use external sampling
+  //   will be created (this is supported only on Ozone-based platforms and
+  //   not expected to be requested on other platforms).
+  // * If using per-plane sampling without multiplane SI, one SharedImage will
+  //   be created for each plane via the legacy "pass GMB" entrypoint.
+  // * If both flags are false, one SharedImage will be created via the legacy
+  //   "pass GMB" entrypoint (this uses external sampling on the other side
+  //   based on the format of the GMB).
+  bool create_multiplanar_image =
+      media::IsMultiPlaneFormatForHardwareVideoEnabled();
+  bool use_per_plane_sampling =
+      base::FeatureList::IsEnabled(media::kMultiPlaneVideoCaptureSharedImages);
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  // External sampling isn't supported on Windows/Mac with Multiplane SI (it's
+  // not supported with legacy SI either for that matter, but we restricted
+  // the CHECK here to Multiplane SI as in the case of legacy SI the flow is
+  // more nebulous and we wanted to restrict any impact here to the Multiplane
+  // SI flow).
+  // NOTE: This CHECK would ideally be done if !BUILDFLAG(IS_OZONE), but this
+  // codepath is entered in tests for Android, which does not have
+  // kMultiPlaneVideoCaptureSharedImages set. This codepath is not entered in
+  // production for Android (see
+  // https://chromium-review.googlesource.com/c/chromium/src/+/4640009/comment/29c99ef9_587e49dc/
+  // for a detailed discussion).
+  CHECK(!create_multiplanar_image || use_per_plane_sampling);
+#endif
 
-  if (base::FeatureList::IsEnabled(
-          media::kMultiPlaneVideoCaptureSharedImages) &&
-      media::IsMultiPlaneFormatForHardwareVideoEnabled()) {
-    create_multiplanar_image = true;
+  if (create_multiplanar_image || !use_per_plane_sampling) {
     planes.push_back(gfx::BufferPlane::DEFAULT);
-  } else if (base::FeatureList::IsEnabled(
-                 media::kMultiPlaneVideoCaptureSharedImages)) {
+  } else {
+    // Using per-plane sampling without multiplane SI.
     planes.push_back(gfx::BufferPlane::Y);
     planes.push_back(gfx::BufferPlane::UV);
-  } else {
-    planes.push_back(gfx::BufferPlane::DEFAULT);
   }
   CHECK(planes.size() == 1 || !create_multiplanar_image);
 
   for (size_t plane = 0; plane < planes.size(); ++plane) {
     if (should_recreate_shared_image ||
         buffer_context_->gmb_resources()->mailboxes[plane].IsZero()) {
+      auto multiplanar_si_format = viz::MultiPlaneFormat::kNV12;
+#if BUILDFLAG(IS_OZONE)
+      if (!use_per_plane_sampling) {
+        multiplanar_si_format.SetPrefersExternalSampler();
+      }
+#endif
+      CHECK_EQ(gpu_memory_buffer_->GetFormat(),
+               gfx::BufferFormat::YUV_420_BIPLANAR);
       buffer_context_->gmb_resources()->mailboxes[plane] =
           create_multiplanar_image
               ? sii->CreateSharedImage(
-                    viz::MultiPlaneFormat::kNV12, gpu_memory_buffer_->GetSize(),
+                    multiplanar_si_format, gpu_memory_buffer_->GetSize(),
                     frame_info_->color_space, kTopLeft_GrSurfaceOrigin,
                     kPremul_SkAlphaType, usage, "VideoCaptureFrameBuffer",
                     gpu_memory_buffer_->CloneHandle())
@@ -610,12 +659,14 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
   // codepath used for legacy multiplanar formats.
   if (create_multiplanar_image) {
     frame_->set_shared_image_format_type(
-        media::SharedImageFormatType::kSharedImageFormat);
+        use_per_plane_sampling
+            ? media::SharedImageFormatType::kSharedImageFormat
+            : media::SharedImageFormatType::kSharedImageFormatExternalSampler);
   }
 
   frame_->metadata().allow_overlay = true;
   frame_->metadata().read_lock_fences_enabled = true;
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
   frame_->metadata().is_webgpu_compatible = is_webgpu_compatible_;
 #endif
   return true;
@@ -765,6 +816,10 @@ void VideoCaptureImpl::StartCapture(
       state_update_cb.Run(
           blink::VIDEO_CAPTURE_STATE_ERROR_SYSTEM_PERMISSIONS_DENIED);
       return;
+    case VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY:
+      OnLog("VideoCaptureImpl is in camera busy error state.");
+      state_update_cb.Run(blink::VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY);
+      return;
     case VIDEO_CAPTURE_STATE_PAUSED:
     case VIDEO_CAPTURE_STATE_RESUMED:
       // The internal |state_| is never set to PAUSED/RESUMED since
@@ -844,6 +899,12 @@ void VideoCaptureImpl::OnStateChanged(
       OnLog(
           "VideoCaptureImpl changing state to "
           "VIDEO_CAPTURE_STATE_ERROR_SYSTEM_PERMISSIONS_DENIED");
+    } else if (result->get_error_code() ==
+               media::VideoCaptureError::kWinMediaFoundationCameraBusy) {
+      state_ = VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY;
+      OnLog(
+          "VideoCaptureImpl changing state to "
+          "VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY");
     } else {
       state_ = VIDEO_CAPTURE_STATE_ERROR;
       OnLog("VideoCaptureImpl changing state to VIDEO_CAPTURE_STATE_ERROR");

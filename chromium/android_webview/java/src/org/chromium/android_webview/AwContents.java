@@ -34,6 +34,7 @@ import android.util.SparseArray;
 import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStructure;
@@ -53,6 +54,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.android_webview.autofill.AndroidAutofillSafeModeAction;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.AwSwitches;
+import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.gfx.AwDrawFnImpl;
 import org.chromium.android_webview.gfx.AwFunctor;
 import org.chromium.android_webview.gfx.AwGLFunctor;
@@ -155,6 +157,7 @@ import java.util.regex.Pattern;
  * (We define this class independent of the hidden WebViewProvider interfaces, to allow
  * continuous build &amp; test in the open source SDK-based tree).
  */
+@Lifetime.WebView
 @JNINamespace("android_webview")
 public class AwContents implements SmartClipProvider {
     private static final String TAG = "AwContents";
@@ -713,7 +716,7 @@ public class AwContents implements SmartClipProvider {
     private class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate {
         @Override
         public boolean shouldIgnoreNavigation(NavigationHandle navigationHandle, GURL escapedUrl,
-                boolean crossFrame, boolean isSandboxedFrame) {
+                boolean hiddenCrossFrame, boolean isSandboxedFrame) {
             // The shouldOverrideUrlLoading call might have resulted in posting messages to the
             // UI thread. Using sendMessage here (instead of calling onPageStarted directly)
             // will allow those to run in order.
@@ -1021,6 +1024,7 @@ public class AwContents implements SmartClipProvider {
     private class AwFrameMetricsListener {
         private FrameMetricsListener mFrameMetricsListener;
         private boolean mAttached;
+        private WeakReference<Window> mWindow;
 
         public AwFrameMetricsListener() {
             FrameMetricsStore metricsStore = new FrameMetricsStore();
@@ -1030,13 +1034,14 @@ public class AwContents implements SmartClipProvider {
 
         public void attachListener(Window window) {
             if (mAttached) return;
+            mWindow = new WeakReference<Window>(window);
             final Handler handler = new Handler();
             window.addOnFrameMetricsAvailableListener(mFrameMetricsListener, handler);
             mAttached = true;
         }
 
         public void detachListener(Window window) {
-            if (!mAttached) return;
+            if (!mAttached || window != mWindow.get()) return;
             window.removeOnFrameMetricsAvailableListener(mFrameMetricsListener);
             mAttached = false;
         }
@@ -1705,13 +1710,11 @@ public class AwContents implements SmartClipProvider {
                 crashed, AwContentsJni.get().getEffectivePriority(mNativeAwContents)));
     }
 
-    @VisibleForTesting
     public @RendererPriority int getEffectivePriorityForTesting() {
         assert !isDestroyed(NO_WARN);
         return AwContentsJni.get().getEffectivePriority(mNativeAwContents);
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     public AwDarkMode getAwDarkModeForTesting() {
         return mAwDarkMode;
     }
@@ -1818,7 +1821,6 @@ public class AwContents implements SmartClipProvider {
         return mNavigationController;
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     public AutofillProvider getAutofillProviderForTesting() {
         return mAutofillProvider;
     }
@@ -2361,7 +2363,6 @@ public class AwContents implements SmartClipProvider {
         mAwViewMethods.setLayerType(layerType, paint);
     }
 
-    @VisibleForTesting
     public int getEffectiveBackgroundColorForTesting() {
         return getEffectiveBackgroundColor();
     }
@@ -2388,12 +2389,10 @@ public class AwContents implements SmartClipProvider {
         return mSettings.supportsMultiTouchZoom();
     }
 
-    @VisibleForTesting
     public View getZoomControlsViewForTest() {
         return mZoomControls.getZoomControlsViewForTest();
     }
 
-    @VisibleForTesting
     public AwZoomControls getZoomControlsForTest() {
         return mZoomControls;
     }
@@ -2423,12 +2422,10 @@ public class AwContents implements SmartClipProvider {
      */
     public void setScrollBarStyle(int style) {
         if (TRACE) Log.i(TAG, "%s setScrollBarStyle", this);
-        if (style == View.SCROLLBARS_INSIDE_OVERLAY
-                || style == View.SCROLLBARS_OUTSIDE_OVERLAY) {
-            mOverlayHorizontalScrollbar = mOverlayVerticalScrollbar = true;
-        } else {
-            mOverlayHorizontalScrollbar = mOverlayVerticalScrollbar = false;
-        }
+        boolean scrollbars =
+                style == View.SCROLLBARS_INSIDE_OVERLAY || style == View.SCROLLBARS_OUTSIDE_OVERLAY;
+        mOverlayHorizontalScrollbar = scrollbars;
+        mOverlayVerticalScrollbar = scrollbars;
     }
 
     /**
@@ -3353,6 +3350,13 @@ public class AwContents implements SmartClipProvider {
         mAwViewMethods.onWindowVisibilityChanged(visibility);
     }
 
+    /**
+     * @see android.view.View#onResolvePointerIcon(MotionEvent, int)
+     */
+    public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
+        return mStylusWritingController.resolvePointerIcon();
+    }
+
     private void setViewVisibilityInternal(boolean visible) {
         mIsViewVisible = visible;
         if (!isDestroyed(NO_WARN)) {
@@ -3434,7 +3438,6 @@ public class AwContents implements SmartClipProvider {
         return mDrawFunctor != null;
     }
 
-    @VisibleForTesting
     public void setPostDelayedTaskForTesting(BiFunction<Runnable, Long, Void> fn) {
         mPostDelayedTaskForTesting = fn;
     }
@@ -3485,7 +3488,6 @@ public class AwContents implements SmartClipProvider {
      * Returns true if the web contents has an associated interstitial.
      * This method is only called by tests.
      */
-    @VisibleForTesting
     public boolean isDisplayingInterstitialForTesting() {
         return AwContentsJni.get().isDisplayingInterstitialForTesting(mNativeAwContents);
     }
@@ -3930,7 +3932,7 @@ public class AwContents implements SmartClipProvider {
      * Determine if at least one edge of the WebView extends over the edge of the window.
      */
     private boolean extendsOutOfWindow() {
-        int loc[] = new int[2];
+        int[] loc = new int[2];
         mContainerView.getLocationOnScreen(loc);
         int x = loc[0];
         int y = loc[1];
@@ -3994,7 +3996,6 @@ public class AwContents implements SmartClipProvider {
      * Return the device locale in the same format we use to populate the 'hl' query parameter for
      * Safe Browsing interstitial urls, as done in BaseUIManager::app_locale().
      */
-    @VisibleForTesting
     public static String getSafeBrowsingLocaleForTesting() {
         return AwContentsJni.get().getSafeBrowsingLocaleForTesting();
     }
@@ -4143,7 +4144,7 @@ public class AwContents implements SmartClipProvider {
         // was removed too recently to have had its functor reclaimed, we still collect data.
         // This likely doesn't matter too much, especially since as noted below, the metrics are
         // expected to only be useful to tell whether the experiment produces a signal.
-        if (AwContentsLifecycleNotifier.getAppState() != AppState.BACKGROUND) return;
+        if (AwContentsLifecycleNotifier.getInstance().getAppState() != AppState.BACKGROUND) return;
 
         // Comment below from base/android/meminfo_dump_provider.cc:
         //
@@ -4184,7 +4185,6 @@ public class AwContents implements SmartClipProvider {
         }
     }
 
-    @VisibleForTesting
     public static void resetRecordMemoryForTesting() {
         sLastCollectionTime = -MEMORY_COLLECTION_INTERVAL_MS;
     }

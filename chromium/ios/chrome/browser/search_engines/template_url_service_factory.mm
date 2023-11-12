@@ -24,9 +24,11 @@
 #import "components/rlz/rlz_tracker.h"  // nogncheck
 #endif
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+//Vivaldi
+#import "components/search_engines/vivaldi_pref_names.h"
+#import "components/prefs/pref_service.h"
+#import "components/pref_registry/pref_registry_syncable.h"
+//End Vivaldi
 
 namespace ios {
 namespace {
@@ -45,6 +47,13 @@ std::unique_ptr<KeyedService> BuildTemplateURLService(
     web::BrowserState* context) {
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(context);
+
+  // Vivaldi
+  if (!browser_state->GetPrefs()->HasPrefPath(prefs::kLanguageAtInstall))
+    browser_state->GetPrefs()->SetString(prefs::kLanguageAtInstall,
+        GetApplicationContext()->GetApplicationLocale());
+  //End Vivaldi
+
   return std::make_unique<TemplateURLService>(
       browser_state->GetPrefs(),
       std::make_unique<ios::UIThreadSearchTermsData>(),
@@ -91,6 +100,11 @@ void TemplateURLServiceFactory::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   DefaultSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
+
+  //Vivaldi
+  registry->RegisterStringPref(prefs::kLanguageAtInstall, "");
+  //End Vivaldi
+
 }
 
 std::unique_ptr<KeyedService>

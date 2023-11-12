@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_actions_handler.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/feature_engagement/public/event_constants.h"
@@ -22,10 +22,6 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @implementation ToolbarButtonActionsHandler {
   feature_engagement::Tracker* _engagementTracker;
@@ -80,7 +76,7 @@
 }
 
 - (void)newTabAction:(id)sender {
-  UIView* senderView = base::mac::ObjCCastStrict<UIView>(sender);
+  UIView* senderView = base::apple::ObjCCastStrict<UIView>(sender);
   CGPoint center = [senderView.superview convertPoint:senderView.center
                                                toView:nil];
   OpenNewTabCommand* command =

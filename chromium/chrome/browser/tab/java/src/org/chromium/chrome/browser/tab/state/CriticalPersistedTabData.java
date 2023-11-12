@@ -15,6 +15,7 @@ import com.google.flatbuffers.FlatBufferBuilder;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
@@ -363,6 +364,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return TabLaunchType.FROM_RECENT_TABS;
             case LaunchTypeAtCreation.FROM_READING_LIST:
                 return TabLaunchType.FROM_READING_LIST;
+            case LaunchTypeAtCreation.FROM_OMNIBOX:
+                return TabLaunchType.FROM_OMNIBOX;
             case LaunchTypeAtCreation.SIZE:
                 return TabLaunchType.SIZE;
             case LaunchTypeAtCreation.UNKNOWN:
@@ -423,6 +426,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return TabLaunchType.FROM_RECENT_TABS;
             case LaunchTypeAtCreation.FROM_READING_LIST:
                 return TabLaunchType.FROM_READING_LIST;
+            case LaunchTypeAtCreation.FROM_OMNIBOX:
+                return TabLaunchType.FROM_OMNIBOX;
             case TabLaunchType.SIZE:
                 return LaunchTypeAtCreation.SIZE;
             default:
@@ -850,9 +855,9 @@ public class CriticalPersistedTabData extends PersistedTabData {
         mObservers.removeObserver(criticalPersistedTabDataObserver);
     }
 
-    @VisibleForTesting
     public void setShouldSaveForTesting(boolean shouldSaveForTesting) {
         mShouldSaveForTesting = shouldSaveForTesting;
+        ResettersForTesting.register(() -> mShouldSaveForTesting = false);
     }
 
     /**
@@ -867,7 +872,6 @@ public class CriticalPersistedTabData extends PersistedTabData {
         mShouldSave = true;
     }
 
-    @VisibleForTesting
     public boolean getShouldSaveForTesting() {
         return mShouldSave;
     }

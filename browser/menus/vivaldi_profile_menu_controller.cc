@@ -48,7 +48,7 @@ void ProfileMenuController::CollectTargetProfiles(
   if (profile_manager && activeProfile->IsRegularProfile()) {
     std::vector<ProfileAttributesEntry*> entries =
         profile_manager->GetProfileAttributesStorage()
-            .GetAllProfilesAttributesSortedByName();
+            .GetAllProfilesAttributesSortedByNameWithCheck();
     for (ProfileAttributesEntry* entry : entries) {
       base::FilePath profile_path = entry->GetPath();
       Profile* profile = profile_manager->GetProfileByPath(profile_path);

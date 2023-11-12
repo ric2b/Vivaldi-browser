@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.history_clusters;
 
+import static android.content.Context.ACCESSIBILITY_SERVICE;
+
 import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
 import static org.junit.Assert.assertEquals;
@@ -33,6 +35,7 @@ import android.text.SpannableString;
 import android.text.style.StyleSpan;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -45,6 +48,7 @@ import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -76,14 +80,13 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelega
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.shadows.ShadowAppCompatResources;
-import org.chromium.ui.util.AccessibilityUtil;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
-import org.chromium.url.ShadowGURL;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -95,10 +98,8 @@ import java.util.concurrent.TimeUnit;
 
 /** Unit tests for HistoryClustersMediator. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE, shadows = {ShadowAppCompatResources.class, ShadowGURL.class})
-@SuppressWarnings("DoNotMock") // Mocks GURL
+@Config(manifest = Config.NONE, shadows = {ShadowAppCompatResources.class})
 public class HistoryClustersMediatorTest {
-    private static final String ITEM_URL_SPEC = "https://www.wombats.com/";
     private static final String INCOGNITO_EXTRA = "history_clusters.incognito";
     private static final String NEW_TAB_EXTRA = "history_clusters.new_tab";
     private static final String TAB_GROUP_EXTRA = "history_clusters.tab_group";
@@ -116,19 +117,9 @@ public class HistoryClustersMediatorTest {
     @Mock
     private LargeIconBridge mLargeIconBridge;
     @Mock
-    private GURL mGurl1;
-    @Mock
-    private GURL mGurl2;
-    @Mock
-    private GURL mGurl3;
-    @Mock
-    private GURL mGurl4;
-    @Mock
     private Tab mTab;
     @Mock
     private Tab mTab2;
-    @Mock
-    private GURL mMockGurl;
     @Mock
     private HistoryClustersMediator.Clock mClock;
     @Mock
@@ -144,12 +135,17 @@ public class HistoryClustersMediatorTest {
     @Mock
     private HistoryClustersMetricsLogger mMetricsLogger;
     @Mock
-    private AccessibilityUtil mAccessibilityUtil;
+    private AccessibilityManager mAccessibilityManager;
     @Mock
     private Configuration mConfiguration;
     @Mock
     private Callback<String> mAnnounceCallback;
 
+    private GURL mItemGurl = new GURL("https://www.wombats.com/");
+    private GURL mGurl1 = new GURL("http://spec1.com");
+    private GURL mGurl2 = new GURL("http://spec2.com");
+    private GURL mGurl3 = new GURL("http://spec3.com");
+    private GURL mGurl4 = new GURL("http://spec4.com");
     private ClusterVisit mVisit1;
     private ClusterVisit mVisit2;
     private ClusterVisit mVisit3;
@@ -168,6 +164,7 @@ public class HistoryClustersMediatorTest {
     private Intent mIntent = new Intent();
     private HistoryClustersMediator mMediator;
     private boolean mIsSeparateActivity;
+    private boolean mRenameEnabled = true;
     private HistoryClustersDelegate mHistoryClustersDelegate;
     private SelectionDelegate<ClusterVisit> mSelectionDelegate = new SelectionDelegate<>();
     private final ObservableSupplierImpl<Boolean> mShouldShowPrivacyDisclaimerSupplier =
@@ -180,8 +177,8 @@ public class HistoryClustersMediatorTest {
     @Before
     public void setUp() {
         ContextUtils.initApplicationContextForTests(mContext);
+        doReturn(mAccessibilityManager).when(mContext).getSystemService(ACCESSIBILITY_SERVICE);
         doReturn(mResources).when(mContext).getResources();
-        doReturn(ITEM_URL_SPEC).when(mMockGurl).getSpec();
         doReturn(mLayoutManager).when(mRecyclerView).getLayoutManager();
         mConfiguration.keyboard = Configuration.KEYBOARD_NOKEYS;
         doReturn(mConfiguration).when(mResources).getConfiguration();
@@ -259,19 +256,19 @@ public class HistoryClustersMediatorTest {
             public void markVisitForRemoval(ClusterVisit clusterVisit) {
                 mVisitsForRemoval.add(clusterVisit);
             }
+
+            @Override
+            public boolean isRenameEnabled() {
+                return mRenameEnabled;
+            }
         };
 
         mShouldShowPrivacyDisclaimerSupplier.set(true);
         mShouldShowClearBrowsingDataSupplier.set(true);
-        doReturn("http://spec1.com").when(mGurl1).getSpec();
-        doReturn("http://spec2.com").when(mGurl2).getSpec();
-        doReturn("http://spec3.com").when(mGurl3).getSpec();
-        doReturn("http://spec3.com").when(mGurl4).getSpec();
 
         mMediator = new HistoryClustersMediator(mBridge, mLargeIconBridge, mContext, mResources,
                 mModelList, mToolbarModel, mHistoryClustersDelegate, mClock, mTemplateUrlService,
-                mSelectionDelegate, mMetricsLogger, mAccessibilityUtil, mAnnounceCallback,
-                mHandler);
+                mSelectionDelegate, mMetricsLogger, mAnnounceCallback, mHandler);
         mVisit1 = new ClusterVisit(1.0F, mGurl1, "Title 1", "url1.com/", new ArrayList<>(),
                 new ArrayList<>(), mGurl1, 123L, new ArrayList<>());
         mVisit2 = new ClusterVisit(1.0F, mGurl2, "Title 2", "url2.com/", new ArrayList<>(),
@@ -303,6 +300,12 @@ public class HistoryClustersMediatorTest {
                 new HistoryClustersResult(Arrays.asList(mCluster1, mCluster2),
                         new LinkedHashMap<>(ImmutableMap.of("label", 1, "hostname.com", 1)), "",
                         false, false);
+    }
+
+    @After
+    public void tearDown() {
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(false);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(false);
     }
 
     @Test
@@ -357,10 +360,11 @@ public class HistoryClustersMediatorTest {
     @Test
     public void testScrollToLoadDisabled() {
         mConfiguration.keyboard = Configuration.KEYBOARD_12KEY;
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(true);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(true);
         mMediator = new HistoryClustersMediator(mBridge, mLargeIconBridge, mContext, mResources,
                 mModelList, mToolbarModel, mHistoryClustersDelegate, mClock, mTemplateUrlService,
-                mSelectionDelegate, mMetricsLogger, mAccessibilityUtil, mAnnounceCallback,
-                mHandler);
+                mSelectionDelegate, mMetricsLogger, mAnnounceCallback, mHandler);
 
         Promise<HistoryClustersResult> promise = new Promise<>();
         doReturn(promise).when(mBridge).queryClusters("query");
@@ -484,10 +488,18 @@ public class HistoryClustersMediatorTest {
     }
 
     @Test
-    public void testOpenInFullPageTablet() {
+    public void testOpenInFullPageTablet_renameDisabled() {
+        mRenameEnabled = false;
         doReturn(2).when(mResources).getInteger(R.integer.min_screen_width_bucket);
         mMediator.openHistoryClustersUi("pandas");
         verify(mTab).loadUrl(argThat(hasSameUrl("chrome://history/journeys?q=pandas")));
+    }
+
+    @Test
+    public void testOpenInFullPageTablet() {
+        doReturn(2).when(mResources).getInteger(R.integer.min_screen_width_bucket);
+        mMediator.openHistoryClustersUi("pandas");
+        verify(mTab).loadUrl(argThat(hasSameUrl("chrome://history/2?q=pandas")));
     }
 
     @Test
@@ -506,7 +518,7 @@ public class HistoryClustersMediatorTest {
     @Test
     public void testSearchTextChanged() {
         doReturn(new Promise<>()).when(mBridge).queryClusters("pan");
-        // Add a dummy entry to mModelList so we can check it was cleared.
+        // Add a placeholder entry to mModelList so we can check it was cleared.
         mModelList.add(new ListItem(42, new PropertyModel()));
         mMediator.onSearchTextChanged("p");
         mMediator.onSearchTextChanged("pa");
@@ -539,15 +551,15 @@ public class HistoryClustersMediatorTest {
 
     @Test
     public void testNavigate() {
-        mMediator.navigateToUrlInCurrentTab(mMockGurl, false);
+        mMediator.navigateToUrlInCurrentTab(mItemGurl, false);
 
-        verify(mTab).loadUrl(argThat(hasSameUrl(ITEM_URL_SPEC)));
+        verify(mTab).loadUrl(argThat(hasSameUrl(mItemGurl.getSpec())));
     }
 
     @Test
     public void testNavigateSeparateActivity() {
         mIsSeparateActivity = true;
-        mMediator.navigateToUrlInCurrentTab(mMockGurl, false);
+        mMediator.navigateToUrlInCurrentTab(mItemGurl, false);
         verify(mContext).startActivity(mIntent);
     }
 
@@ -565,12 +577,12 @@ public class HistoryClustersMediatorTest {
     @Test
     public void testRelatedSearchesClick() {
         doReturn(true).when(mTemplateUrlService).isLoaded();
-        doReturn(JUnitTestGURLs.GOOGLE_URL_DOGS)
+        doReturn(JUnitTestGURLs.GOOGLE_URL_DOGS.getSpec())
                 .when(mTemplateUrlService)
                 .getUrlForSearchQuery("dogs");
         mMediator.onRelatedSearchesChipClicked("dogs", 2);
         verify(mMetricsLogger).recordRelatedSearchesClick(2);
-        verify(mTab).loadUrl(argThat(hasSameUrl(JUnitTestGURLs.GOOGLE_URL_DOGS)));
+        verify(mTab).loadUrl(argThat(hasSameUrl(JUnitTestGURLs.GOOGLE_URL_DOGS.getSpec())));
     }
 
     @Test

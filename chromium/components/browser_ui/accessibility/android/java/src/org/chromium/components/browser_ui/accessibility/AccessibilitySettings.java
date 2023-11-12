@@ -17,6 +17,9 @@ import org.chromium.components.browser_ui.accessibility.FontSizePrefs.FontSizePr
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -40,7 +43,6 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
     private boolean mRecordFontSizeChangeOnStop;
     private AccessibilitySettingsDelegate mDelegate;
     private BooleanPreferenceDelegate mReaderForAccessibilityDelegate;
-    private BooleanPreferenceDelegate mAccessibilityTabSwitcherDelegate;
     private double mPageZoomLatestDefaultZoomPrefValue;
 
     private FontSizePrefs mFontSizePrefs;
@@ -85,8 +87,18 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
 
         if (mDelegate.showPageZoomSettingsUI()) {
             mTextScalePref.setVisible(false);
+            // Set the initial values for page zoom and text contrast.
+            // TODO(crbug.com/1459631): Edit this initial value when we propagate text contrast
+            // changes to the backend.
             mPageZoomDefaultZoomPref.setInitialValue(PageZoomUtils.getDefaultZoomAsSeekBarValue(
                     mDelegate.getBrowserContextHandle()));
+            mPageZoomDefaultZoomPref.setmBrowserContextHandle(mDelegate.getBrowserContextHandle());
+            if (ContentFeatureMap.isEnabled(ContentFeatureList.SMART_ZOOM)) {
+                mPageZoomDefaultZoomPref.setInitialTextSizeContrastValue(
+                        PageZoomUtils.TEXT_SIZE_CONTRAST_MAX_LEVEL
+                        - UserPrefs.get(mDelegate.getBrowserContextHandle())
+                                  .getInteger("settings.a11y.text_size_contrast_factor"));
+            }
             mPageZoomDefaultZoomPref.setOnPreferenceChangeListener(this);
             mPageZoomAlwaysShowPref.setChecked(PageZoomUtils.shouldShowZoomMenuItem());
             mPageZoomAlwaysShowPref.setOnPreferenceChangeListener(this);
@@ -111,20 +123,6 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
         } else {
             getPreferenceScreen().removePreference(readerForAccessibilityPref);
         }
-
-        ChromeSwitchPreference accessibilityTabSwitcherPref =
-                (ChromeSwitchPreference) findPreference(
-                        AccessibilityConstants.ACCESSIBILITY_TAB_SWITCHER);
-        if (BuildConfig.IS_VIVALDI) {
-            getPreferenceScreen().removePreference(accessibilityTabSwitcherPref);
-        } else {
-        mAccessibilityTabSwitcherDelegate = mDelegate.getAccessibilityTabSwitcherDelegate();
-        if (mAccessibilityTabSwitcherDelegate != null) {
-            accessibilityTabSwitcherPref.setChecked(mAccessibilityTabSwitcherDelegate.isEnabled());
-        } else {
-            getPreferenceScreen().removePreference(accessibilityTabSwitcherPref);
-        }
-        } // Vivaldi
 
         Preference captions = findPreference(PREF_CAPTIONS);
         // Vivaldi: Captions settings activity is not available on AAOS.

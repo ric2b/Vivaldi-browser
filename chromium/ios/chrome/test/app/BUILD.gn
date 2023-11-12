@@ -3,11 +3,8 @@
 # found in the LICENSE file.
 
 source_set("test_support") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "bookmarks_test_util.h",
-    "bookmarks_test_util.mm",
     "browsing_data_test_util.h",
     "browsing_data_test_util.mm",
     "chrome_test_util.h",
@@ -60,7 +57,7 @@ source_set("test_support") {
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/app/application_delegate:test_support",
     "//ios/chrome/browser/autofill",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browsing_data",
     "//ios/chrome/browser/content_settings",
@@ -89,16 +86,12 @@ source_set("test_support") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/authentication/cells",
+    "//ios/chrome/browser/ui/authentication/history_sync",
     "//ios/chrome/browser/ui/bookmarks:core",
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/browser/ui/main",
     "//ios/chrome/browser/ui/passwords/bottom_sheet:common",
-    "//ios/chrome/browser/ui/settings",
-    "//ios/chrome/browser/ui/settings:settings_root",
-    "//ios/chrome/browser/ui/settings/password",
-    "//ios/chrome/browser/ui/settings/password:password_ui",
     "//ios/chrome/browser/ui/settings/password:test_support",
-    "//ios/chrome/browser/ui/settings/password/password_details:password_details_ui",
     "//ios/chrome/browser/ui/settings/password/password_settings:common",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid",
     "//ios/chrome/browser/ui/tabs",
@@ -109,6 +102,7 @@ source_set("test_support") {
     "//ios/testing:open_url_context",
     "//ios/third_party/material_components_ios",
     "//ios/web",
+    "//ios/web/common:features",
     "//ios/web/public/security",
     "//ios/web/public/test",
     "//net",

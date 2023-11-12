@@ -6,8 +6,9 @@
 
 #import <objc/runtime.h>
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
+#import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
@@ -21,7 +22,10 @@
 #import "components/sessions/core/session_id.h"
 #import "components/sessions/core/tab_restore_service.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "components/sync_sessions/open_tabs_ui_delegate.h"
 #import "components/sync_sessions/session_sync_service.h"
 #import "ios/chrome/app/tests_hook.h"
@@ -59,6 +63,7 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/sync/enterprise_utils.h"
 #import "ios/chrome/browser/sync/session_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
@@ -71,6 +76,7 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/ui/authentication/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
@@ -97,17 +103,16 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_empty_state_view.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -168,6 +173,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
                                              SyncPresenter,
                                              TableViewURLDragDataSource,
                                              UIContextMenuInteractionDelegate,
+
+                                            // Vivaldi
+                                            VivaldiTabGridEmptyStateViewDelegate,
+                                            // End Vivaldi
+
                                              UIGestureRecognizerDelegate> {
   // The displayed recently closed tabs.
   std::vector<RecentlyClosedTableViewItemPair> _recentlyClosedItems;
@@ -213,12 +223,14 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   if (self) {
     _sessionState = SessionsSyncUserState::USER_SIGNED_OUT;
     _syncedSessions.reset(new synced_sessions::SyncedSessions());
-    _restoredTabDisposition = WindowOpenDisposition::CURRENT_TAB;
     _preventUpdates = YES;
 
     // Vivaldi
-    self.styler.cellBackgroundColor =
-        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    if (self.page == TabGridPageRemoteTabs ||
+        self.page == TabGridPageClosedTabs) {
+      self.styler.cellBackgroundColor =
+          [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    }
     // End Vivaldi
 
   }
@@ -235,6 +247,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
   if (IsVivaldiRunning()) {
     self.tableView.estimatedSectionHeaderHeight = vSectionHeaderHeight;
+    self.navigationItem.largeTitleDisplayMode =
+        UINavigationItemLargeTitleDisplayModeNever;
   } else {
   self.tableView.estimatedSectionHeaderHeight = kEstimatedRowHeight;
   } // End Vivaldi
@@ -309,8 +323,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return YES;
   }
 
-  if (IsManagedSyncDataType(self.syncService,
-                            syncer::UserSelectableType::kTabs)) {
+  if (self.syncService->GetUserSettings()->IsTypeManagedByPolicy(
+          syncer::UserSelectableType::kTabs)) {
     // Return YES if the data type is disabled by the SyncTypesListDisabled
     // policy.
     return YES;
@@ -334,6 +348,16 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return;
   }
 
+  if (IsVivaldiRunning()) {
+    [self.tableView
+        performBatchUpdates:^{
+          if (self.searchTerms.length)
+            [self updateSessionSections];
+          else
+            [self updateEmptyStateViewWithUserState:self.sessionState];
+        }
+                 completion:nil];
+  } else {
   [self.tableView
       performBatchUpdates:^{
         if (self.searchTerms.length)
@@ -342,6 +366,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
           [self updateOtherDevicesSectionForState:self.sessionState];
       }
                completion:nil];
+  } // End Vivaldi
+
 }
 
 #pragma mark - TableViewModel
@@ -362,12 +388,34 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) {
     [self addSessionSections];
   } else {
+
+    if (IsVivaldiRunning()) {
+      [self updateEmptyStateViewWithUserState:self.sessionState];
+    } else {
     [self addOtherDevicesSectionForState:self.sessionState];
+    } // End Vivaldi
+
   }
 
   if (self.searchTerms.length) {
     [self addSuggestedActionsSection];
   }
+
+  // Note: (prio@vivaldi.com) - Show empty state page when recent tabs is
+  // opened from the overflow menu and not from the tab switcher, and there's
+  // nothing to show.
+  if ((self.page != TabGridPageRemoteTabs &&
+      self.page != TabGridPageClosedTabs) &&
+    self.tableViewModel.numberOfSections == 0) {
+    [self addEmptyTableViewWithImage:
+        [UIImage imageNamed:vTabGridEmptyStateRegularTabsImage]
+                               title:l10n_util::GetNSString(
+                                   IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_TITLE)
+                            subtitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_DESCRIPTION)];
+  }
+  // End Vivaldi
+
 }
 
 #pragma mark Recently Closed Section
@@ -401,9 +449,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   [model setSectionIdentifier:SectionIdentifierRecentlyClosedTabs
                  collapsedKey:kRecentlyClosedCollapsedKey];
 
-  // Vivaldi: Let's not show the section header text for the tabs since that's
-  // basically duplicate of the title.
-  if (IsVivaldiRunning()) {
+  // Note: (prio@vivaldi.com) Show recently closed tabs section header title
+  // when this view is opened from recent tabs, and not in tab switcher.
+  if (IsVivaldiRunning() &&
+      (self.page == TabGridPageRemoteTabs ||
+       self.page == TabGridPageClosedTabs)) {
     [self removeEmptyStateAnimated:NO];
   } else {
   TableViewDisclosureHeaderFooterItem* header =
@@ -528,11 +578,18 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   SessionsSyncUserState previousState = self.sessionState;
   if (previousState !=
       SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) {
+
+    // Note: (prio@vivaldi.com) - We skip this since we don't show other
+    // device section. We show empty view with different states according to
+    // the user session state.
+    if (!IsVivaldiRunning()) {
     // The previous state was one of the OtherDevices states, remove it.
     [self.tableView deleteSections:[self otherDevicesSectionIndexSet]
                   withRowAnimation:UITableViewRowAnimationNone];
     [self.tableViewModel
         removeSectionWithIdentifier:SectionIdentifierOtherDevices];
+    } // End Vivaldi
+
   }
 
   // Clean up any previously added SessionSections.
@@ -744,10 +801,17 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
       case SessionsSyncUserState::USER_SIGNED_IN_SYNC_OFF:
         itemType = ItemTypeOtherDevicesSyncOff;
-        itemSubtitle = l10n_util::GetNSString(
-            IDS_IOS_RECENT_TABS_OTHER_DEVICES_SYNC_IS_OFF_MESSAGE);
+        itemSubtitle =
+            l10n_util::GetNSString(IDS_IOS_RECENT_TABS_OTHER_DEVICES_LABEL);
         itemButtonText = l10n_util::GetNSString(
-            IDS_IOS_RECENT_TABS_OTHER_DEVICES_TURN_ON_SYNC);
+            IDS_IOS_RECENT_TABS_OTHER_DEVICES_TURN_ON_TABS);
+        if (!base::FeatureList::IsEnabled(
+                syncer::kReplaceSyncPromosWithSignInPromos)) {
+          itemSubtitle = l10n_util::GetNSString(
+              IDS_IOS_RECENT_TABS_OTHER_DEVICES_SYNC_IS_OFF_MESSAGE);
+          itemButtonText = l10n_util::GetNSString(
+              IDS_IOS_RECENT_TABS_OTHER_DEVICES_TURN_ON_SYNC);
+        }
         break;
 
       case SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_NO_SESSIONS:
@@ -759,8 +823,13 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       case SessionsSyncUserState::USER_SIGNED_OUT:
         [self addSigninPromoViewItem];
         itemType = ItemTypeOtherDevicesSignedOut;
-        itemSubtitle = l10n_util::GetNSString(
-            IDS_IOS_RECENT_TABS_OTHER_DEVICES_SIGNED_OUT_MESSAGE);
+        itemSubtitle =
+            base::FeatureList::IsEnabled(
+                syncer::kReplaceSyncPromosWithSignInPromos)
+                ? l10n_util::GetNSString(
+                      IDS_IOS_RECENT_TABS_OTHER_DEVICES_LABEL)
+                : l10n_util::GetNSString(
+                      IDS_IOS_RECENT_TABS_OTHER_DEVICES_SIGNED_OUT_MESSAGE);
         break;
     }
     NSString* title =
@@ -802,17 +871,26 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   // Init|_signinPromoViewMediator` if nil.
   if (!self.signinPromoViewMediator && self.browserState) {
     self.signinPromoViewMediator = [[SigninPromoViewMediator alloc]
-              initWithBrowser:self.browser
-        accountManagerService:ChromeAccountManagerServiceFactory::
-                                  GetForBrowserState(self.browserState)
-                  authService:AuthenticationServiceFactory::GetForBrowserState(
-                                  self.browserState)
-                  prefService:self.browserState->GetPrefs()
-                  syncService:self.syncService
-                  accessPoint:signin_metrics::AccessPoint::
-                                  ACCESS_POINT_RECENT_TABS
-                    presenter:self
-           baseViewController:self];
+        initWithAccountManagerService:ChromeAccountManagerServiceFactory::
+                                          GetForBrowserState(self.browserState)
+                          authService:AuthenticationServiceFactory::
+                                          GetForBrowserState(self.browserState)
+                          prefService:self.browserState->GetPrefs()
+                          syncService:self.syncService
+                          accessPoint:signin_metrics::AccessPoint::
+                                          ACCESS_POINT_RECENT_TABS
+                            presenter:self
+                   baseViewController:self];
+    if (base::FeatureList::IsEnabled(
+            syncer::kReplaceSyncPromosWithSignInPromos)) {
+      ChromeAccountManagerService* accountManagerService =
+          ChromeAccountManagerServiceFactory::GetForBrowserState(
+              self.browserState);
+      self.signinPromoViewMediator.signinPromoAction =
+          accountManagerService->HasIdentities()
+              ? SigninPromoAction::kSigninSheet
+              : SigninPromoAction::kInstantSignin;
+    }
     self.signinPromoViewMediator.consumer = self;
   }
 
@@ -1104,12 +1182,16 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   if (self.page == TabGridPageClosedTabs) {
     return;
   }
+
+  if (self.page == TabGridPageRemoteTabs) {
+    [self updateEmptyStateViewWithUserState:newSessionState];
+  }
   // End Vivaldi
 
   if ((newSessionState == self.sessionState &&
        self.sessionState !=
            SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) ||
-      self.signinPromoViewMediator.signinInProgress) {
+      self.signinPromoViewMediator.showSpinner) {
     // No need to refresh the sections since all states other than
     // USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS only have static content. This means
     // that if the previous State is the same as the new one the static content
@@ -1144,7 +1226,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     // Update the TableView and TableViewModel sections to match the new
     // sessionState.
     // Turn Off animations since UITableViewRowAnimationNone still animates.
-    BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
+    const BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
     [UIView setAnimationsEnabled:NO];
     if (newSessionState ==
         SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) {
@@ -1153,10 +1235,17 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       }
                                completion:nil];
     } else {
+
+      // Note: (prio@vivaldi.com) - We skip this since we don't show other
+      // device section. We show empty view with different states according to
+      // the user session state.
+      if (!IsVivaldiRunning()) {
       [self.tableView performBatchUpdates:^{
         [self updateOtherDevicesSectionForState:newSessionState];
       }
                                completion:nil];
+      } // End Vivaldi
+
     }
     [UIView setAnimationsEnabled:animationsWereEnabled];
   }
@@ -1299,14 +1388,25 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   if (itemTypeSelected == ItemTypeOtherDevicesSigninPromo) {
     [self.signinPromoViewMediator signinPromoViewIsVisible];
     TableViewSigninPromoCell* signinPromoCell =
-        base::mac::ObjCCastStrict<TableViewSigninPromoCell>(cell);
-    signinPromoCell.signinPromoView.imageView.hidden = YES;
-    signinPromoCell.signinPromoView.textLabel.hidden = YES;
+        base::apple::ObjCCastStrict<TableViewSigninPromoCell>(cell);
+    if (base::FeatureList::IsEnabled(
+            syncer::kReplaceSyncPromosWithSignInPromos)) {
+      TableViewSigninPromoItem* signinPromoItem =
+          base::apple::ObjCCastStrict<TableViewSigninPromoItem>(
+              [self.tableViewModel itemAtIndexPath:indexPath]);
+      [signinPromoItem.configurator
+          configureSigninPromoView:signinPromoCell.signinPromoView
+                         withStyle:SigninPromoViewStyleOnlyButton];
+    } else {
+      signinPromoCell.signinPromoView.imageView.hidden = YES;
+      signinPromoCell.signinPromoView.textLabel.hidden = YES;
+    }
     // Disable animations when setting the background color to prevent flash on
     // rotation.
+    const BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
     [UIView setAnimationsEnabled:NO];
     signinPromoCell.backgroundColor = nil;
-    [UIView setAnimationsEnabled:YES];
+    [UIView setAnimationsEnabled:animationsWereEnabled];
   }
   // Retrieve favicons for closed tabs and remote sessions.
   if (itemTypeSelected == ItemTypeRecentlyClosed ||
@@ -1321,11 +1421,13 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   }
   // Set button action method for ItemTypeOtherDevicesSyncOff.
   if (itemTypeSelected == ItemTypeOtherDevicesSyncOff) {
-      TableViewIllustratedCell* illustratedCell =
-          base::mac::ObjCCastStrict<TableViewIllustratedCell>(cell);
-      [illustratedCell.button addTarget:self
-                                 action:@selector(updateSyncState)
-                       forControlEvents:UIControlEventTouchUpInside];
+    TableViewIllustratedCell* illustratedCell =
+        base::apple::ObjCCastStrict<TableViewIllustratedCell>(cell);
+    [illustratedCell.button addTarget:self
+                               action:@selector(didTapPromoActionButton)
+                     forControlEvents:UIControlEventTouchUpInside];
+    illustratedCell.button.accessibilityIdentifier =
+        kRecentTabsTabSyncOffButtonAccessibilityIdentifier;
   }
   // Hide the separator between this cell and the SignIn Promo.
   if (itemTypeSelected == ItemTypeOtherDevicesSignedOut) {
@@ -1337,7 +1439,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     TabsSearchService* search_service =
         TabsSearchServiceFactory::GetForBrowserState(self.browserState);
     __weak TableViewTabsSearchSuggestedHistoryCell* weakCell =
-        base::mac::ObjCCastStrict<TableViewTabsSearchSuggestedHistoryCell>(
+        base::apple::ObjCCastStrict<TableViewTabsSearchSuggestedHistoryCell>(
             cell);
 
     NSString* currentSearchTerm = self.searchTerms;
@@ -1387,7 +1489,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return nil;
 
   TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
-  TableViewURLItem* URLItem = base::mac::ObjCCastStrict<TableViewURLItem>(item);
+  TableViewURLItem* URLItem =
+      base::apple::ObjCCastStrict<TableViewURLItem>(item);
 
   return [self.menuProvider
       contextMenuConfigurationForItem:URLItem
@@ -1421,7 +1524,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     case ItemTypeSessionTabData: {
       TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
       TableViewURLItem* URLItem =
-          base::mac::ObjCCastStrict<TableViewURLItem>(item);
+          base::apple::ObjCCastStrict<TableViewURLItem>(item);
       GURL gurl;
       if (URLItem.URL)
         gurl = URLItem.URL.gurl;
@@ -1490,8 +1593,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   DCHECK(item);
   DCHECK(cell);
 
-  TableViewURLItem* URLItem = base::mac::ObjCCastStrict<TableViewURLItem>(item);
-  TableViewURLCell* URLCell = base::mac::ObjCCastStrict<TableViewURLCell>(cell);
+  TableViewURLItem* URLItem =
+      base::apple::ObjCCastStrict<TableViewURLItem>(item);
+  TableViewURLCell* URLCell =
+      base::apple::ObjCCastStrict<TableViewURLCell>(cell);
 
   NSString* itemIdentifier = URLItem.uniqueIdentifier;
   [self.imageDataSource
@@ -1651,28 +1756,16 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       self.searchTerms = @"";
     }
     new_tab_page_uma::RecordAction(
-        self.browserState->IsOffTheRecord(),
-        self.webStateList->GetActiveWebState(),
+        self.isIncognito, self.webStateList->GetActiveWebState(),
         new_tab_page_uma::ACTION_OPENED_FOREIGN_SESSION);
     std::unique_ptr<web::WebState> web_state =
         session_util::CreateWebStateWithNavigationEntries(
             self.browserState, toLoad->current_navigation_index,
             toLoad->navigations);
-    switch (self.restoredTabDisposition) {
-      case WindowOpenDisposition::CURRENT_TAB:
-        self.webStateList->ReplaceWebStateAt(self.webStateList->active_index(),
-                                             std::move(web_state));
-        break;
-      case WindowOpenDisposition::NEW_FOREGROUND_TAB:
-        self.webStateList->InsertWebState(
-            self.webStateList->count(), std::move(web_state),
-            (WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE),
-            WebStateOpener());
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+    self.webStateList->InsertWebState(
+        self.webStateList->count(), std::move(web_state),
+        (WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE),
+        WebStateOpener());
   }
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
@@ -1697,17 +1790,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
         "MobileRecentTabManagerRecentTabOpenedSearchResult"));
   }
   new_tab_page_uma::RecordAction(
-      self.browserState->IsOffTheRecord(),
-      self.webStateList->GetActiveWebState(),
+      self.isIncognito, self.webStateList->GetActiveWebState(),
       new_tab_page_uma::ACTION_OPENED_RECENTLY_CLOSED_ENTRY);
 
-  // If RecentTabs is being displayed from incognito, the resulting tab will
-  // open in the corresponding normal BVC. Change the disposition to avoid
-  // clobbering any tabs.
-  WindowOpenDisposition disposition =
-      self.isIncognito ? WindowOpenDisposition::NEW_FOREGROUND_TAB
-                       : self.restoredTabDisposition;
-  RestoreTab(entry_id, disposition, self.browser);
+  RestoreTab(entry_id, WindowOpenDisposition::NEW_FOREGROUND_TAB, self.browser);
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
 
@@ -1786,10 +1872,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     if (headerItem.type == ItemTypeRecentlyClosedHeader ||
         headerItem.type == ItemTypeSessionHeader) {
       TableViewDisclosureHeaderFooterView* disclosureHeaderView =
-          base::mac::ObjCCastStrict<TableViewDisclosureHeaderFooterView>(
+          base::apple::ObjCCastStrict<TableViewDisclosureHeaderFooterView>(
               headerView);
       TableViewDisclosureHeaderFooterItem* disclosureItem =
-          base::mac::ObjCCastStrict<TableViewDisclosureHeaderFooterItem>(
+          base::apple::ObjCCastStrict<TableViewDisclosureHeaderFooterItem>(
               headerItem);
       BOOL collapsed = [self.tableViewModel
           sectionIsCollapsed:[self.tableViewModel
@@ -1867,7 +1953,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
            sectionIdentifier:SectionIdentifierOtherDevices];
     TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
     TableViewSigninPromoItem* signInItem =
-        base::mac::ObjCCastStrict<TableViewSigninPromoItem>(item);
+        base::apple::ObjCCastStrict<TableViewSigninPromoItem>(item);
     signInItem.configurator = configurator;
     // If section is collapsed no tableView update is needed.
     if ([self.tableViewModel
@@ -1881,15 +1967,20 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 }
 
 - (void)signinDidFinish {
-  [self.delegate refreshSessionsView];
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    [self.presentationDelegate showHistorySyncOptInAfterDedicatedSignIn:YES];
+  } else {
+    [self.delegate refreshSessionsView];
+  }
 }
 
 #pragma mark - SyncPresenter
 
 - (void)showPrimaryAccountReauth {
   [self.handler showSignin:[[ShowSigninCommand alloc]
-                               initWithOperation:
-                                   AuthenticationOperationPrimaryAccountReauth
+                               initWithOperation:AuthenticationOperation::
+                                                     kPrimaryAccountReauth
                                      accessPoint:signin_metrics::AccessPoint::
                                                      ACCESS_POINT_RECENT_TABS]
         baseViewController:self];
@@ -1901,10 +1992,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 - (void)showGoogleServicesSettings {
   [self.handler showGoogleServicesSettingsFromViewController:self];
-}
-
-- (void)showSyncManagerSettings {
-  [self.handler showSyncSettingsFromViewController:self];
 }
 
 - (void)showAccountSettings {
@@ -1972,7 +2059,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 #pragma mark - Private Helpers
 
-- (void)updateSyncState {
+- (void)didTapPromoActionButton {
   syncer::SyncService* const syncService = self.syncService;
   if (!syncService) {
     return;
@@ -1981,16 +2068,47 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       syncService->GetUserActionableError();
   if (error == syncer::SyncService::UserActionableError::kSignInNeedsUpdate) {
     [self showPrimaryAccountReauth];
+  } else if ([self shouldShowHistorySyncOnPromoAction]) {
+    [self.presentationDelegate showHistorySyncOptInAfterDedicatedSignIn:NO];
   } else if (ShouldShowSyncSettings(error)) {
-    [self showSyncManagerSettings];
+    [self.handler showSyncSettingsFromViewController:self];
   } else if (error ==
              syncer::SyncService::UserActionableError::kNeedsPassphrase) {
     [self showSyncPassphraseSettings];
   }
 }
 
-// Vivaldi
-#pragma mark Vivaldi Empty State View Section
+// Returns YES if the History Sync Opt-In should be shown when the promo action
+// button is tapped.
+// TODO(crbug.com/1462326): This logic should be moved outside of the
+// ViewController.
+- (BOOL)shouldShowHistorySyncOnPromoAction {
+  if (!base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    return NO;
+  }
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+  // TODO(crbug.com/1466884): Delete the usage of ConsentLevel::kSync after
+  // Phase 2 on iOS is launched. See ConsentLevel::kSync documentation for
+  // details.
+  if (authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSync)) {
+    return NO;
+  }
+  // Check if History Sync Opt-In should be skipped.
+  // In case it's not necessary to show the history opt-in, but the promo action
+  // button is still available, sync errors should be checked to show the
+  // correct screen to handle the error (ex. passphrase screen).
+  HistorySyncSkipReason skipReason = [HistorySyncCoordinator
+      getHistorySyncOptInSkipReason:self.syncService
+              authenticationService:authenticationService
+                        prefService:_browserState->GetPrefs()
+              isHistorySyncOptional:NO];
+  return skipReason == HistorySyncSkipReason::kNone;
+}
+
+
+#pragma mark - Vivaldi
 
 - (void)setEmptyStateView:(UIView<GridEmptyView>*)emptyStateView {
   if (_emptyStateView)
@@ -2064,6 +2182,41 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     removeEmptyState();
   }
 }
+
+- (void)updateEmptyStateViewWithUserState:(SessionsSyncUserState)state {
+  if (self.page == TabGridPageRemoteTabs) {
+    TabGridEmptyStateView* emptyView = (TabGridEmptyStateView*)_emptyStateView;
+    if (emptyView) {
+      emptyView.delegate = self;
+      [emptyView updateEmptyViewWithUserState:state];
+    }
+  }
+}
+
+#pragma mark - VivaldiTabGridEmptyStateViewDelegate
+
+- (void)didSelectLoginFromEmptyStateView {
+  if ([self.presentationDelegate
+   respondsToSelector:@selector(didSelectLoginFromEmptyStateView)]) {
+    [self.presentationDelegate didSelectLoginFromEmptyStateView];
+  }
+}
+
+- (void)didSelectRegisterFromEmptyStateView {
+  if ([self.presentationDelegate
+   respondsToSelector:@selector(didSelectRegisterFromEmptyStateView)]) {
+    [self.presentationDelegate didSelectRegisterFromEmptyStateView];
+  }
+}
+
+- (void)didSelectEnableSyncFromEmptyStateView {
+  if ([self.presentationDelegate
+   respondsToSelector:@selector(didSelectEnableSyncFromEmptyStateView)]) {
+    [self.presentationDelegate didSelectEnableSyncFromEmptyStateView];
+  }
+}
+
+
 // End Vivaldi
 @end
 

@@ -7,6 +7,7 @@ Version: 3.20.3
 CPEPrefix: cpe:/a:google:protobuf:3.20.3
 Revision: fe271ab76f2ad2b2b28c10443865d2af21e27e0e
 Security Critical: yes
+Shipped: yes
 
 Steps used to create the current version:
 1. Pull the release from https://github.com/google/protobuf/releases (Source
@@ -139,3 +140,7 @@ Description of the patches:
   Imports (rebased):
   https://github.com/protocolbuffers/protobuf/commit/def602dd07b7eae1cac6823705975317b5607fc3
 
+- 0035-fix-shared-library-constants
+
+  Fixes for component build when building with MediaPipe. AnyMetadata::PackFrom
+  is called which require string constants to be exported.

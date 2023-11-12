@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
+#include "build/build_config.h"
 
 #include <map>
 #include <string>
@@ -17,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -26,6 +28,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/services/screen_ai/buildflags/buildflags.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/ax_inspect_factory.h"
 #include "content/public/browser/browser_accessibility_state.h"
@@ -36,6 +39,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "pdf/pdf_features.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/context_menu_data/untrustworthy_context_menu_params.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -164,7 +168,9 @@ class PDFExtensionAccessibilityTest : public PDFExtensionTestBase {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest, PdfAccessibility) {
+// Flaky, see crbug.com/1477361
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
+                       DISABLED_PdfAccessibility) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
 
   MimeHandlerViewGuest* guest = LoadPdfGetMimeHandlerView(
@@ -180,8 +186,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest, PdfAccessibility) {
   ASSERT_MULTILINE_STREQ(kExpectedPDFAXTree, ax_tree_dump);
 }
 
+// Flaky, see crbug.com/1477361
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
-                       PdfAccessibilityEnableLater) {
+                       DISABLED_PdfAccessibilityEnableLater) {
   // In this test, load the PDF file first, with accessibility off.
   MimeHandlerViewGuest* guest = LoadPdfGetMimeHandlerView(
       embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
@@ -199,15 +206,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
   ASSERT_MULTILINE_STREQ(kExpectedPDFAXTree, ax_tree_dump);
 }
 
-// Flaky, see crbug.com/1228762
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_PdfAccessibilityInIframe DISABLED_PdfAccessibilityInIframe
-#else
-#define MAYBE_PdfAccessibilityInIframe PdfAccessibilityInIframe
-#endif
-
+// Flaky, see crbug.com/1477361
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
-                       MAYBE_PdfAccessibilityInIframe) {
+                       DISABLED_PdfAccessibilityInIframe) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/pdf/test-iframe.html")));
@@ -270,8 +271,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
   ASSERT_TRUE(found);
 }
 
+// Flaky, see crbug.com/1477361
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
-                       PdfAccessibilitySelection) {
+                       DISABLED_PdfAccessibilitySelection) {
   MimeHandlerViewGuest* guest = LoadPdfGetMimeHandlerView(
       embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
   ASSERT_TRUE(guest);
@@ -318,8 +320,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
   EXPECT_EQ(ax::mojom::Role::kRegion, region->GetRole());
 }
 
+// Flaky, see crbug.com/1477361
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
-                       PdfAccessibilityContextMenuAction) {
+                       DISABLED_PdfAccessibilityContextMenuAction) {
   // Validate the context menu arguments for PDF selection when context menu is
   // invoked via accessibility tree.
   const char kExepectedPDFSelection[] =
@@ -373,6 +376,89 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
   std::string selected_text = base::UTF16ToUTF8(params.selection_text);
   base::ReplaceChars(selected_text, "\r", "", &selected_text);
   EXPECT_EQ(kExepectedPDFSelection, selected_text);
+}
+
+// Flaky, see crbug.com/1477361
+IN_PROC_BROWSER_TEST_F(
+    PDFExtensionAccessibilityTest,
+    DISABLED_MAYBE_RecordHasAccessibleTextToUmaWithAccessiblePdf) {
+  MimeHandlerViewGuest* guest_view = LoadPdfGetMimeHandlerView(
+      embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
+  ASSERT_TRUE(guest_view);
+
+  WebContents* contents = GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  base::HistogramTester histograms;
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  WaitForAccessibilityTreeToContainNodeWithName(contents,
+                                                "1 First Section\r\n");
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount("Accessibility.PDF.HasAccessibleText", true,
+                               /*expected_count=*/1);
+  histograms.ExpectTotalCount("Accessibility.PDF.HasAccessibleText",
+                              /*expected_count=*/1);
+}
+
+// Flaky, see crbug.com/1477361
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTest,
+                       DISABLED_RecordInaccessiblePdfUKM) {
+  MimeHandlerViewGuest* guest_view =
+      LoadPdfGetMimeHandlerView(embedded_test_server()->GetURL(
+          "/pdf/accessibility/hello-world-in-image.pdf"));
+  ASSERT_TRUE(guest_view);
+
+  WebContents* contents = GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  base::test::TestFuture<void> ukm_recorded;
+  ukm_recorder.SetOnAddEntryCallback(
+      ukm::builders::Accessibility_InaccessiblePDFs::kEntryName,
+      ukm_recorded.GetRepeatingCallback());
+
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  // This string is defined as `IDS_AX_UNLABELED_IMAGE_ROLE_DESCRIPTION` in
+  // blink_accessibility_strings.grd.
+#if BUILDFLAG(IS_WIN)
+  const char kUnlabeledImageName[] = "Unlabeled graphic";
+#else
+  const char kUnlabeledImageName[] = "Unlabeled image";
+#endif  // BUILDFLAG(IS_WIN)
+  WaitForAccessibilityTreeToContainNodeWithName(contents, kUnlabeledImageName);
+
+  ASSERT_TRUE(ukm_recorded.Wait());
+}
+
+// Flaky, see crbug.com/1477361
+IN_PROC_BROWSER_TEST_F(
+    PDFExtensionAccessibilityTest,
+    DISABLED_RecordHasAccessibleTextToUmaWithInaccessiblePdf) {
+  MimeHandlerViewGuest* guest_view =
+      LoadPdfGetMimeHandlerView(embedded_test_server()->GetURL(
+          "/pdf/accessibility/hello-world-in-image.pdf"));
+  ASSERT_TRUE(guest_view);
+
+  WebContents* contents = GetActiveWebContents();
+  ASSERT_TRUE(contents);
+
+  base::HistogramTester histograms;
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  // This string is defined as `IDS_AX_UNLABELED_IMAGE_ROLE_DESCRIPTION` in
+  // blink_accessibility_strings.grd.
+#if BUILDFLAG(IS_WIN)
+  const char kUnlabeledImageName[] = "Unlabeled graphic";
+#else
+  const char kUnlabeledImageName[] = "Unlabeled image";
+#endif  // BUILDFLAG(IS_WIN)
+  WaitForAccessibilityTreeToContainNodeWithName(contents, kUnlabeledImageName);
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectBucketCount("Accessibility.PDF.HasAccessibleText", false,
+                               /*expected_count=*/1);
+  histograms.ExpectTotalCount("Accessibility.PDF.HasAccessibleText",
+                              /*expected_count=*/1);
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

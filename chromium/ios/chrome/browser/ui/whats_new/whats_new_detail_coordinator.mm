@@ -1,11 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/whats_new/whats_new_detail_coordinator.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/strcat.h"
 #import "base/time/time.h"
@@ -19,10 +19,6 @@
 #import "ios/chrome/browser/ui/whats_new/whats_new_screenshot_view_controller.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface WhatsNewDetailCoordinator () <
     UIAdaptivePresentationControllerDelegate,
@@ -79,10 +75,8 @@
                     subtitle:item.subtitle
           primaryActionTitle:item.primaryActionTitle
             instructionSteps:item.instructionSteps
-            hasPrimaryAction:item.hasPrimaryAction
                         type:item.type
-                learnMoreURL:item.learnMoreURL
-          hasLearnMoreAction:item.learnMoreURL.is_valid()];
+                learnMoreURL:item.learnMoreURL];
       self.whatsNewDetailViewController.actionHandler = self.actionHandler;
       self.whatsNewDetailViewController.delegate = self;
     }

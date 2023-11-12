@@ -16,10 +16,6 @@
 #import "ios/chrome/browser/translate/translate_service_ios.h"
 #import "ios/web/public/webui/web_ui_ios.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 IOSTranslateInternalsHandler::IOSTranslateInternalsHandler() = default;
 IOSTranslateInternalsHandler::~IOSTranslateInternalsHandler() = default;
 
@@ -112,12 +108,12 @@ IOSTranslateInternalsHandler::Observer::~Observer() {}
 
 #pragma mark - WebStateListObserver
 
-void IOSTranslateInternalsHandler::Observer::WebStateListChanged(
+void IOSTranslateInternalsHandler::Observer::WebStateListDidChange(
     WebStateList* web_state_list,
     const WebStateListChange& change,
-    const WebStateSelection& selection) {
+    const WebStateListStatus& status) {
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
+    case WebStateListChange::Type::kStatusOnly:
       // Do nothing when a WebState is selected and its status is updated.
       break;
     case WebStateListChange::Type::kDetach: {

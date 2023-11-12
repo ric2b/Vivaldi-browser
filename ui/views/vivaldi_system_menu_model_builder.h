@@ -46,9 +46,6 @@ class VivaldiSystemMenuModelBuilder {
   void BuildSystemMenuForBrowserWindow(ui::SimpleMenuModel* model);
   void BuildSystemMenuForAppOrPopupWindow(ui::SimpleMenuModel* model);
 
-  // Adds items for toggling the frame type (if necessary).
-  void AddFrameToggleItems(ui::SimpleMenuModel* model);
-
   SystemMenuModelDelegate menu_delegate_;
   std::unique_ptr<ui::MenuModel> menu_model_;
   std::unique_ptr<ui::SimpleMenuModel> zoom_menu_contents_;

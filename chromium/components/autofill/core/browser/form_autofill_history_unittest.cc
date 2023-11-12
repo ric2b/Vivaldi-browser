@@ -5,6 +5,8 @@
 #include "components/autofill/core/browser/form_autofill_history.h"
 
 #include <memory>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -21,44 +23,42 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
-static constexpr char kExampleSite[] = "https://example.com";
 namespace autofill {
 
 using ::testing::ElementsAre;
 using ::testing::Pair;
 
+constexpr char kExampleSite[] = "https://example.com";
+
 class FormAutofillHistoryTest : public testing::Test {
  public:
-  FieldGlobalId AddNewFieldFilling(const char* label,
-                                   const char* name,
-                                   const char* value,
-                                   const char* type,
-                                   ServerFieldType field_type) {
-    std::unique_ptr<FormFieldData> field = std::make_unique<FormFieldData>();
-    test::CreateTestFormField(label, name, value, type, field.get());
-    std::unique_ptr<AutofillField> autofill_field =
-        std::make_unique<AutofillField>(*field);
-    autofill_field->SetTypeTo(AutofillType(field_type));
-    FieldGlobalId field_id = field->global_id();
-    filled_fields_.emplace_back(std::move(field), std::move(autofill_field));
-    return field_id;
+  FieldGlobalId AddNewFieldFilling(std::string_view label,
+                                   std::string_view name,
+                                   std::string_view value,
+                                   std::string_view type,
+                                   ServerFieldType field_type,
+                                   bool is_autofilled = false) {
+    FormFieldData field = test::CreateTestFormField(label, name, value, type);
+    field.is_autofilled = is_autofilled;
+    AutofillField autofill_field(field);
+    autofill_field.SetTypeTo(AutofillType(field_type));
+    filled_fields_.emplace_back(field, std::move(autofill_field));
+    return field.global_id();
   }
   void AddFormFilling(bool is_refill) {
     std::vector<std::pair<const FormFieldData*, const AutofillField*>> fields;
     for (const auto& [field, autofill_field] : filled_fields_) {
-      fields.emplace_back(field.get(), autofill_field.get());
+      fields.emplace_back(&field, &autofill_field);
     }
     form_autofill_history_.AddFormFillEntry(
         fields, url::Origin::Create(GURL(kExampleSite)), is_refill);
   }
 
-  std::vector<
-      std::pair<std::unique_ptr<FormFieldData>, std::unique_ptr<AutofillField>>>
-      filled_fields_;
+  std::vector<std::pair<FormFieldData, AutofillField>> filled_fields_;
   FormAutofillHistory form_autofill_history_;
 
  private:
-  test::AutofillUnitTestEnvironment autofill_test_environemnt_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
 };
 
 // Tests the function FormAutofillHistory::AddFormFillEntry upon a normal fill.
@@ -70,7 +70,8 @@ TEST_F(FormAutofillHistoryTest, AddFormFillEntry_NormalFill) {
   EXPECT_TRUE(form_autofill_history_.HasHistory(first_name_id));
   FormAutofillHistory::FillOperation fill_operation =
       form_autofill_history_.GetLastFillingOperationForField(first_name_id);
-  EXPECT_EQ(*fill_operation.GetValue(first_name_id), u"some-value");
+  EXPECT_EQ(fill_operation.GetAutofillValue(first_name_id),
+            std::make_pair(u"some-value", false));
   EXPECT_THAT(fill_operation.GetFieldTypeMap(),
               ElementsAre(Pair(first_name_id, NAME_FIRST)));
 
@@ -85,9 +86,10 @@ TEST_F(FormAutofillHistoryTest, AddFormFillEntry_Refill) {
   AddFormFilling(/*is_refill=*/false);
 
   // Modify the first name filling to simulate a refill.
-  filled_fields_[0].first->value = u"some-other-first-name";
-  FieldGlobalId last_name_id = AddNewFieldFilling(
-      "last name", "last name", "some-other-last-name", "text", NAME_LAST);
+  filled_fields_[0].first.value = u"some-other-first-name";
+  FieldGlobalId last_name_id =
+      AddNewFieldFilling("last name", "last name", "some-other-last-name",
+                         "text", NAME_LAST, /*is_autofilled=*/true);
   AddFormFilling(/*is_refill=*/true);
 
   EXPECT_TRUE(form_autofill_history_.HasHistory(first_name_id));
@@ -98,8 +100,10 @@ TEST_F(FormAutofillHistoryTest, AddFormFillEntry_Refill) {
   EXPECT_EQ(
       fill_operation,
       form_autofill_history_.GetLastFillingOperationForField(last_name_id));
-  EXPECT_EQ(*fill_operation.GetValue(first_name_id), u"some-first-name");
-  EXPECT_EQ(*fill_operation.GetValue(last_name_id), u"some-other-last-name");
+  EXPECT_EQ(fill_operation.GetAutofillValue(first_name_id),
+            std::make_pair(u"some-first-name", false));
+  EXPECT_EQ(fill_operation.GetAutofillValue(last_name_id),
+            std::make_pair(u"some-other-last-name", true));
   EXPECT_THAT(fill_operation.GetFieldTypeMap(),
               ElementsAre(Pair(first_name_id, NAME_FIRST),
                           Pair(last_name_id, NAME_LAST)));

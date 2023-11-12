@@ -87,6 +87,14 @@ NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
 // Update protocol using ALPN information in HTTPS DNS records.
 NET_EXPORT BASE_DECLARE_FEATURE(kUseDnsHttpsSvcbAlpn);
 
+// If the `kUseAlternativePortForGloballyReachableCheck` flag is enabled, the
+// globally reachable check will use the port number specified by
+// `kAlternativePortForGloballyReachableCheck` flag. Otherwise, the globally
+// reachable check will use 443 port.
+NET_EXPORT extern const base::FeatureParam<int>
+    kAlternativePortForGloballyReachableCheck;
+NET_EXPORT BASE_DECLARE_FEATURE(kUseAlternativePortForGloballyReachableCheck);
+
 // If enabled allows the use of SHA-1 by the server for signatures
 // in the TLS handshake.
 NET_EXPORT BASE_DECLARE_FEATURE(kSHA1ServerSignature);
@@ -168,6 +176,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPartitionNelAndReportingByNetworkIsolationKey);
 // `is_cross_site_` -> a boolean indicating whether the frame site is
 // schemefully cross-site from the top-level site.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableCrossSiteFlagNetworkIsolationKey);
+NET_EXPORT BASE_DECLARE_FEATURE(
+    kEnableFrameSiteSharedOpaqueNetworkIsolationKey);
+NET_EXPORT BASE_DECLARE_FEATURE(kHttpCacheKeyingExperimentControlGroup);
 
 // Enables sending TLS 1.3 Key Update messages on TLS 1.3 connections in order
 // to ensure that this corner of the spec is exercised. This is currently
@@ -286,12 +297,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kUdpSocketPosixAlwaysUpdateBytesReceived);
 // See spec changes in https://github.com/httpwg/http-extensions/pull/1348
 NET_EXPORT BASE_DECLARE_FEATURE(kCookieSameSiteConsidersRedirectChain);
 
-// When this feature is enabled, the SameParty attribute is enabled. (Note that
-// when this feature is disabled, the SameParty attribute is still parsed and
-// saved for cookie-sets, but it has no associated semantics (when setting or
-// reading cookies).)
-NET_EXPORT BASE_DECLARE_FEATURE(kSamePartyAttributeEnabled);
-
 // When this feature is enabled, the network service will wait until First-Party
 // Sets are initialized before issuing requests that use the HTTP cache or
 // cookies.
@@ -309,9 +314,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPartitionedCookies);
 // frames.
 NET_EXPORT BASE_DECLARE_FEATURE(kNoncedPartitionedCookies);
 
-// When enabled, cookies cannot have an expiry date further than 400 days in the
-// future.
-NET_EXPORT BASE_DECLARE_FEATURE(kClampCookieExpiryTo400Days);
+// When enabled, cookie-related code will treat cookies containing '\0', '\r',
+// and '\n' as invalid and reject the cookie.
+NET_EXPORT BASE_DECLARE_FEATURE(kBlockTruncatedCookies);
 
 // Controls whether static key pinning is enforced.
 NET_EXPORT BASE_DECLARE_FEATURE(kStaticKeyPinningEnforcement);
@@ -319,11 +324,15 @@ NET_EXPORT BASE_DECLARE_FEATURE(kStaticKeyPinningEnforcement);
 // When enabled, cookies with a non-ASCII domain attribute will be rejected.
 NET_EXPORT BASE_DECLARE_FEATURE(kCookieDomainRejectNonASCII);
 
-// Blocks the 'Set-Cookie' request header on outbound fetch requests.
-NET_EXPORT BASE_DECLARE_FEATURE(kBlockSetCookieHeader);
-
 NET_EXPORT BASE_DECLARE_FEATURE(kThirdPartyStoragePartitioning);
 NET_EXPORT BASE_DECLARE_FEATURE(kSupportPartitionedBlobUrl);
+
+// Feature to enable consideration of 3PCD Support settings.
+NET_EXPORT BASE_DECLARE_FEATURE(kTpcdSupportSettings);
+
+// Whether to enable the use of 3PC based on 3PCD metadata grants delivered via
+// component updater.
+NET_EXPORT BASE_DECLARE_FEATURE(kTpcdMetadataGrants);
 
 // Whether ALPS parsing is on for any type of frame.
 NET_EXPORT BASE_DECLARE_FEATURE(kAlpsParsing);
@@ -348,11 +357,11 @@ NET_EXPORT BASE_DECLARE_FEATURE(kBlockNewForbiddenHeaders);
 // Whether to probe for SHA-256 on some legacy platform keys, before assuming
 // the key requires SHA-1. See SSLPlatformKeyWin for details.
 NET_EXPORT BASE_DECLARE_FEATURE(kPlatformKeyProbeSHA256);
-#endif
 
-// Enable support for HTTP extensible priorities (RFC 9218)
-// https://crbug.com/1362031
-NET_EXPORT BASE_DECLARE_FEATURE(kPriorityIncremental);
+// Whether or not to use the GetNetworkConnectivityHint API on modern Windows
+// versions for the Network Change Notifier.
+NET_EXPORT BASE_DECLARE_FEATURE(kEnableGetNetworkConnectivityHintAPI);
+#endif
 
 // Prefetch to follow normal semantics instead of 5-minute rule
 // https://crbug.com/1345207
@@ -368,20 +377,63 @@ NET_EXPORT BASE_DECLARE_FEATURE(kKerberosInBrowserRedirect);
 // A flag to use asynchronous session creation for new QUIC sessions.
 NET_EXPORT BASE_DECLARE_FEATURE(kAsyncQuicSession);
 
+// A flag to make multiport context creation asynchronous.
+NET_EXPORT BASE_DECLARE_FEATURE(kAsyncMultiPortPath);
+
 // Enables custom proxy configuration for the IP Protection experimental proxy.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableIpProtectionProxy);
 
 // Sets the name of the IP protection proxy.
 NET_EXPORT extern const base::FeatureParam<std::string> kIpPrivacyProxyServer;
 
-// Sets the allow list for the IP protection proxy.
+// Sets the name of the IP protection auth token server.
+NET_EXPORT extern const base::FeatureParam<std::string> kIpPrivacyTokenServer;
+
+// Sets the path component of the IP protection auth token server URL used for
+// getting initial token signing data.
 NET_EXPORT extern const base::FeatureParam<std::string>
-    kIpPrivacyProxyAllowlist;
+    kIpPrivacyTokenServerGetInitialDataPath;
+
+// Sets the path component of the IP protection auth token server URL used for
+// getting blind-signed tokens.
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kIpPrivacyTokenServerGetTokensPath;
+
+// Sets the path component of the IP protection auth token server URL used for
+// getting proxy configuration.
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kIpPrivacyTokenServerGetProxyConfigPath;
+
+// Sets the batch size to fetch new auth tokens for IP protection.
+NET_EXPORT extern const base::FeatureParam<int>
+    kIpPrivacyAuthTokenCacheBatchSize;
+
+// Sets the cache low-water-mark for auth tokens for IP protection.
+NET_EXPORT extern const base::FeatureParam<int>
+    kIpPrivacyAuthTokenCacheLowWaterMark;
+
+// Sets the normal time between fetches of the IP protection proxy list.
+NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kIpPrivacyProxyListFetchInterval;
+
+// Sets the minimum time between fetches of the IP protection proxy list, such
+// as when a re-fetch is forced due to an error.
+NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kIpPrivacyProxyListMinFetchInterval;
+
+// Controls whether IP Protection _proxying_ is bypassed by not including any
+// of the proxies in the proxy list. This supports experimental comparison of
+// connections that _would_ have been proxied, but were not.
+NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyDirectOnly;
 
 // Whether QuicParams::migrate_sessions_on_network_change_v2 defaults to true or
 // false. This is needed as a workaround to set this value to true on Android
 // but not on WebView (until crbug.com/1430082 has been fixed).
 NET_EXPORT BASE_DECLARE_FEATURE(kMigrateSessionsOnNetworkChangeV2);
+
+// Enables whether blackhole detector should be disabled during connection
+// migration and there is no available network.
+NET_EXPORT BASE_DECLARE_FEATURE(kDisableBlackholeOnNoNewNetwork);
 
 #if BUILDFLAG(IS_LINUX)
 // AddressTrackerLinux will not run inside the network service in this
@@ -406,6 +458,24 @@ NET_EXPORT BASE_DECLARE_FEATURE(kAsyncCacheLock);
 
 // Enables Early Hints on HTTP/1.1.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableEarlyHintsOnHttp11);
+
+// Enables draft-07 version of WebTransport over HTTP/3.
+NET_EXPORT BASE_DECLARE_FEATURE(kEnableWebTransportDraft07);
+
+// Enables Zstandard Content-Encoding support.
+NET_EXPORT BASE_DECLARE_FEATURE(kZstdContentEncoding);
+
+// Enables SHA-256 and username hashing support for HTTP Digest auth.
+NET_EXPORT BASE_DECLARE_FEATURE(kDigestAuthEnableSecureAlgorithms);
+
+NET_EXPORT BASE_DECLARE_FEATURE(kThirdPartyPartitionedStorageAllowedByDefault);
+
+// Gate access to cookie deprecation API which allows developers to opt in
+// server side testing without cookies. This doesn't actually do anything in
+// terms of deprecating cookies.
+// (See
+// https://developer.chrome.com/en/docs/privacy-sandbox/chrome-testing/#mode-a)
+NET_EXPORT BASE_DECLARE_FEATURE(kCookieDeprecationFacilitatedTestingLabels);
 
 }  // namespace net::features
 

@@ -15,7 +15,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -30,10 +30,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
-
-namespace attribution_reporting {
-class SuitableOrigin;
-}  // namespace attribution_reporting
 
 namespace base {
 class FilePath;
@@ -133,12 +129,8 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
                  BrowsingDataFilterBuilder* filter_builder,
                  bool delete_rate_limit_data,
                  base::OnceClosure done) override;
-  void NotifyFailedSourceRegistration(
-      const std::string& header_value,
-      const attribution_reporting::SuitableOrigin& source_origin,
-      const attribution_reporting::SuitableOrigin& reporting_origin,
-      attribution_reporting::mojom::SourceType,
-      attribution_reporting::mojom::SourceRegistrationError) override;
+  void SetDebugMode(absl::optional<bool> enabled,
+                    base::OnceClosure done) override;
 
   void GetAllDataKeys(
       base::OnceCallback<void(std::set<DataKey>)> callback) override;
@@ -246,8 +238,7 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
                         const OsRegistration&,
                         bool success);
 
-  // Never null.
-  const raw_ptr<StoragePartitionImpl> storage_partition_;
+  const raw_ref<StoragePartitionImpl> storage_partition_;
 
   // Holds pending sources and triggers in the order they were received by the
   // browser. For the time being, they must be processed in this order in order

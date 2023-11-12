@@ -12,23 +12,39 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 bool IsUserPolicyNotificationNeeded(AuthenticationService* authService,
                                     PrefService* prefService) {
-  if (!policy::IsUserPolicyEnabled()) {
-    return false;
-  }
-
   if (prefService->GetBoolean(
           policy::policy_prefs::kUserPolicyNotificationWasShown)) {
     // Return false the notification was already shown in the past.
     return false;
   }
 
-  // Return true if the primary identity is managed. Return false if there is
-  // no account that is syncing (can be signed out or signed in with sync off).
-  return authService->HasPrimaryIdentityManaged(signin::ConsentLevel::kSync);
+  return CanFetchUserPolicy(authService, prefService);
+}
+
+bool CanFetchUserPolicy(AuthenticationService* authService,
+                        PrefService* prefService) {
+  if (!policy::IsAnyUserPolicyFeatureEnabled()) {
+    // Return false immediately if the user policy features isn't enabled for
+    // the minimal consent level.
+    return false;
+  }
+
+  // TODO(crbug.com/1462552): Remove kSync usage after users are migrated to
+  // kSignin only after kSync sunset. See ConsentLevel::kSync for more details.
+
+  bool enabled_for_sync =
+      policy::IsUserPolicyEnabledForSigninOrSyncConsentLevel();
+
+  if (!enabled_for_sync &&
+      authService->HasPrimaryIdentityManaged(signin::ConsentLevel::kSync)) {
+    // Return false if sync is turned ON while the feature for that consent
+    // level isn't enabled.
+    return false;
+  }
+
+  // Return true if the primary identity is managed with the minimal
+  // `consent_level` to enable User Policy.
+  return authService->HasPrimaryIdentityManaged(signin::ConsentLevel::kSignin);
 }

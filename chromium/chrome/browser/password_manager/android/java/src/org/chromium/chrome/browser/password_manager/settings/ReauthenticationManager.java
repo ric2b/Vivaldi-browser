@@ -135,9 +135,10 @@ public final class ReauthenticationManager {
      *                        when coming from password check.
      * @param fragmentManager For putting the lock screen on the transaction stack.
      */
-    public static void displayReauthenticationFragment(int descriptionId, int containerViewId,
+    // Vivaldi: We are returning the |PasswordReauthenticationFragment| here.
+    public static Fragment displayReauthenticationFragment(int descriptionId, int containerViewId,
             FragmentManager fragmentManager, @ReauthScope int scope) {
-        if (sSkipSystemReauth) return;
+        if (sSkipSystemReauth) return null; // Vivaldi
 
         Fragment passwordReauthentication = new PasswordReauthenticationFragment();
         Bundle args = new Bundle();
@@ -153,6 +154,9 @@ public final class ReauthenticationManager {
         }
         fragmentTransaction.addToBackStack(null);
         fragmentTransaction.commit();
+
+        // Vivaldi
+        return passwordReauthentication;
     }
 
     /**

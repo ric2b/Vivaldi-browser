@@ -11,6 +11,8 @@
 NSString* vBookmarksFolderIcon = @"vivaldi_bookmarks_folder";
 // Image name for the speed dial folder icon.
 NSString* vSpeedDialFolderIcon = @"vivaldi_speed_dial_folder";
+// Image name for trash folder icon
+NSString* vBookmarkTrashFolder = @"vivaldi_trash_folder";
 // Image name for the folder selection chevron.
 NSString* vBookmarkFolderSelectionChevron =
   @"vivaldi_bookmark_folder_selection_chevron";

@@ -64,6 +64,8 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/skia/include/codec/SkCodec.h"
+#include "third_party/skia/include/codec/SkPngDecoder.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -210,13 +212,19 @@ sk_sp<SkImage> HibernationHandler::GetImage() {
     return image_;
   }
 
-  DCHECK(encoded_);
+  CHECK(encoded_);
+  CHECK(SkPngDecoder::IsPng(encoded_->data(), encoded_->size()));
   DCHECK(
       base::FeatureList::IsEnabled(features::kCanvasCompressHibernatedImage));
 
   base::TimeTicks before = base::TimeTicks::Now();
   // Note: not discarding the encoded image.
-  auto image = SkImages::DeferredFromEncodedData(encoded_)->makeRasterImage();
+  sk_sp<SkImage> image = nullptr;
+  std::unique_ptr<SkCodec> codec = SkPngDecoder::Decode(encoded_, nullptr);
+  if (codec) {
+    image = std::get<0>(codec->getImage());
+  }
+
   base::TimeTicks after = base::TimeTicks::Now();
   UMA_HISTOGRAM_TIMES(
       "Blink.Canvas.2DLayerBridge.Compression.DecompressionTime",
@@ -320,13 +328,11 @@ HibernatedCanvasMemoryDumpProvider::HibernatedCanvasMemoryDumpProvider() {
 }
 
 Canvas2DLayerBridge::Canvas2DLayerBridge(const gfx::Size& size,
-                                         RasterMode raster_mode,
                                          OpacityMode opacity_mode)
     : logger_(std::make_unique<Logger>()),
       have_recorded_draw_commands_(false),
       is_hidden_(false),
       is_being_displayed_(false),
-      raster_mode_(raster_mode),
       opacity_mode_(opacity_mode),
       size_(size),
       snapshot_state_(kInitialSnapshotState),
@@ -345,7 +351,7 @@ Canvas2DLayerBridge::~Canvas2DLayerBridge() {
   if (!layer_)
     return;
 
-  if (raster_mode_ == RasterMode::kGPU) {
+  if (IsAccelerated()) {
     layer_->ClearTexture();
     // Orphaning the layer is required to trigger the recreation of a new layer
     // in the case where destruction is caused by a canvas resize. Test:
@@ -366,7 +372,8 @@ void Canvas2DLayerBridge::ResetResourceProvider() {
 }
 
 bool Canvas2DLayerBridge::ShouldAccelerate() const {
-  bool use_gpu = raster_mode_ == RasterMode::kGPU;
+  bool use_gpu = resource_host_ && resource_host_->preferred_2d_raster_mode() ==
+                                       RasterModeHint::kPreferGPU;
 
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
       SharedGpuContext::ContextProviderWrapper();
@@ -379,8 +386,10 @@ bool Canvas2DLayerBridge::ShouldAccelerate() const {
 }
 
 bool Canvas2DLayerBridge::IsAccelerated() const {
-  if (raster_mode_ == RasterMode::kCPU)
+  if (resource_host_ && resource_host_->preferred_2d_raster_mode() ==
+                            RasterModeHint::kPreferCPU) {
     return false;
+  }
   if (IsHibernating())
     return false;
   if (resource_host_ && resource_host_->ResourceProvider())
@@ -582,8 +591,7 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
     layer_->SetBlendBackgroundColor(opacity_mode_ != kOpaque);
     layer_->SetNearestNeighbor(resource_host_->FilterQuality() ==
                                cc::PaintFlags::FilterQuality::kNone);
-    layer_->SetHDRConfiguration(resource_host_->GetHDRMode(),
-                                resource_host_->GetHDRMetadata());
+    layer_->SetHdrMetadata(resource_host_->GetHDRMetadata());
     layer_->SetFlipped(!resource_provider->IsOriginTopLeft());
   }
   // After the page becomes visible and successfully restored the canvas
@@ -640,11 +648,9 @@ void Canvas2DLayerBridge::SetFilterQuality(
                                cc::PaintFlags::FilterQuality::kNone);
 }
 
-void Canvas2DLayerBridge::SetHDRConfiguration(
-    gfx::HDRMode hdr_mode,
-    absl::optional<gfx::HDRMetadata> hdr_metadata) {
+void Canvas2DLayerBridge::SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {
   if (layer_)
-    layer_->SetHDRConfiguration(hdr_mode, hdr_metadata);
+    layer_->SetHdrMetadata(hdr_metadata);
 }
 
 void Canvas2DLayerBridge::SetIsInHiddenPage(bool hidden) {
@@ -879,7 +885,9 @@ bool Canvas2DLayerBridge::CheckResourceProviderValid() {
   if (IsHibernating()) {
     return true;
   }
-  if (!layer_ || raster_mode_ == RasterMode::kCPU) {
+  if (!layer_ ||
+      (resource_host_ && resource_host_->preferred_2d_raster_mode() ==
+                             RasterModeHint::kPreferCPU)) {
     return true;
   }
   if (context_lost_) {

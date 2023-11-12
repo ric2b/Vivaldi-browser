@@ -12,8 +12,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/token.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
+#include "components/viz/common/surfaces/video_capture_target.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -176,8 +178,8 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // will be posted to the UI thread before the MouseCursorOverlayController
   // deleter task.
 #if !BUILDFLAG(IS_ANDROID)
-  raw_ptr<MouseCursorOverlayController, DanglingUntriaged> cursor_controller_ =
-      nullptr;
+  raw_ptr<MouseCursorOverlayController, AcrossTasksDanglingUntriaged>
+      cursor_controller_ = nullptr;
 #endif
 
   // We may not have a frame sink ID target at all times.

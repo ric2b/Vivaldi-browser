@@ -21,10 +21,6 @@
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 NSString* const kOverflowMenuSkipTestMessage =
@@ -145,13 +141,6 @@ void ResolvePassphraseErrorFromOverflowMenu() {
     EARL_GREY_TEST_SKIPPED(kOverflowMenuSkipTestMessage)
   }
 
-  AppLaunchConfiguration config;
-  // Enable Overflow Menu identity error indicators.
-  config.features_enabled.push_back(kIndicateSyncErrorInOverflowMenu);
-  config.features_enabled.push_back(
-      syncer::kIndicateAccountStorageErrorInAccountCell);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
   // Encrypt synced data with a passphrase to enable passphrase encryption for
   // the signed in account.
   [ChromeEarlGrey addBookmarkWithSyncPassphrase:kPassphrase];
@@ -185,13 +174,6 @@ void ResolvePassphraseErrorFromOverflowMenu() {
   if (![ChromeEarlGrey isNewOverflowMenuEnabled]) {
     EARL_GREY_TEST_SKIPPED(kOverflowMenuSkipTestMessage)
   }
-
-  AppLaunchConfiguration config;
-  // Enable Overflow Menu indicators.
-  config.features_enabled.push_back(kIndicateSyncErrorInOverflowMenu);
-  config.features_enabled.push_back(
-      syncer::kIndicateAccountStorageErrorInAccountCell);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
   // Encrypt synced data with a passphrase to enable passphrase encryption for
   // the signed in account.
@@ -236,6 +218,27 @@ void ResolvePassphraseErrorFromOverflowMenu() {
   [[EarlGrey
       selectElementWithMatcher:GetWhatsNewDestinationWithNewBadgeMatcher()]
       assertWithMatcher:grey_notNil()];
+}
+
+// Tests that the overflow menu footer displays Family Link disclaimer with a
+// link to more information about family accounts.
+- (void)testOverflowMenuFooterFamilyLink {
+  if (![ChromeEarlGrey isNewOverflowMenuEnabled]) {
+    EARL_GREY_TEST_SKIPPED(kOverflowMenuSkipTestMessage)
+  }
+
+  // Sign in and Sync account.
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+  [SigninEarlGrey setIsSubjectToParentalControls:YES forIdentity:fakeIdentity];
+
+  // Open tools menu to click on "Learn more" family link footer.
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuAction:grey_accessibilityID(kTextMenuFamilyLinkInfo)];
+
+  // Wait for the Family Link page to be visible.
+  [ChromeEarlGrey waitForWebStateVisible];
 }
 
 @end

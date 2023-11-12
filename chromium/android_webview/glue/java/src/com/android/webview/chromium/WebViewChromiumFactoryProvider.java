@@ -62,7 +62,6 @@ import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.build.BuildConfig;
 import org.chromium.build.NativeLibraries;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
-import org.chromium.components.embedder_support.application.FirebaseConfig;
 import org.chromium.components.version_info.VersionConstants;
 import org.chromium.content_public.browser.LGEmailActionModeWorkaround;
 
@@ -173,11 +172,17 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     private ServiceWorkerController mServiceWorkerController;
 
-    // Timestamp of init start and duration, used in the
-    // 'WebView.Startup.CreationTime.Stage1.FactoryInit' trace event.
     public class InitInfo {
+        // Timestamp of init start and duration, used in the
+        // 'WebView.Startup.CreationTime.Stage1.FactoryInit' trace event.
         public long mStartTime;
         public long mDuration;
+
+        // Timestamp of the framework getProvider() method start and elapsed time until init is
+        // finished, used in the 'WebView.Startup.CreationTime.TotalFactoryInitTime'
+        // trace event.
+        public long mTotalFactoryInitStartTime;
+        public long mTotalFactoryInitDuration;
     };
 
     private InitInfo mInitInfo = new InitInfo();
@@ -428,8 +433,6 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
             ThreadUtils.setWillOverrideUiThread();
             BuildInfo.setBrowserPackageInfo(packageInfo);
-            BuildInfo.setFirebaseAppId(
-                    FirebaseConfig.getFirebaseAppIdForPackage(packageInfo.packageName));
             AndroidXProcessGlobalConfig androidXConfig = AndroidXProcessGlobalConfig.getConfig();
             try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
                 try (ScopedSysTraceEvent e2 = ScopedSysTraceEvent.scoped(
@@ -504,11 +507,13 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 "Android.WebView.Startup.CreationTime.Stage1.FactoryInit", mInitInfo.mDuration);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            final long webviewLoadStart =
+            mInitInfo.mTotalFactoryInitStartTime =
                     mWebViewDelegate.getStartupTimestamps().getWebViewLoadStart();
+            mInitInfo.mTotalFactoryInitDuration =
+                    SystemClock.uptimeMillis() - mInitInfo.mTotalFactoryInitStartTime;
             RecordHistogram.recordTimesHistogram(
                     "Android.WebView.Startup.CreationTime.TotalFactoryInitTime",
-                    SystemClock.uptimeMillis() - webviewLoadStart);
+                    mInitInfo.mTotalFactoryInitDuration);
         }
     }
 
@@ -703,20 +708,20 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     @Override
     public GeolocationPermissions getGeolocationPermissions() {
-        return mAwInit.getGeolocationPermissions();
+        return mAwInit.getDefaultGeolocationPermissions();
     }
 
     @Override
     public CookieManager getCookieManager() {
-        return mAwInit.getCookieManager();
+        return mAwInit.getDefaultCookieManager();
     }
 
     @Override
     public ServiceWorkerController getServiceWorkerController() {
         synchronized (mAwInit.getLock()) {
             if (mServiceWorkerController == null) {
-                mServiceWorkerController =
-                        new ServiceWorkerControllerAdapter(mAwInit.getServiceWorkerController());
+                mServiceWorkerController = new ServiceWorkerControllerAdapter(
+                        mAwInit.getDefaultServiceWorkerController());
             }
         }
         return mServiceWorkerController;
@@ -734,12 +739,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     @Override
     public WebStorage getWebStorage() {
-        return mAwInit.getWebStorage();
+        return mAwInit.getDefaultWebStorage();
     }
 
     @Override
     public WebViewDatabase getWebViewDatabase(final Context context) {
-        return mAwInit.getWebViewDatabase(context);
+        return mAwInit.getDefaultWebViewDatabase(context);
     }
 
     WebViewDelegate getWebViewDelegate() {
@@ -767,7 +772,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     // Only on UI thread.
     AwBrowserContext getBrowserContextOnUiThread() {
-        return mAwInit.getBrowserContextOnUiThread();
+        return mAwInit.getDefaultBrowserContextOnUiThread();
     }
 
     WebViewChromiumAwInit getAwInit() {

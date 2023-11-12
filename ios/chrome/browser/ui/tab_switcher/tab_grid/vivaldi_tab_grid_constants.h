@@ -17,6 +17,13 @@ extern NSString* const vTabGridToolbarTextButtonColor;
 // Colors for the empty state.
 extern NSString* const vTabGridEmptyStateTitleTextColor;
 extern NSString* const vTabGridEmptyStateBodyTextColor;
+extern NSString* const vTabGridEmptyStateLoginButtonBGColor;
+
+// Assets for the empty state
+extern NSString* vTabGridEmptyStateRegularTabsImage;
+extern NSString* vTabGridEmptyStatePrivateTabsImage;
+extern NSString* vTabGridEmptyStateSyncedTabsImage;
+extern NSString* vTabGridEmptyStateClosedTabsImage;
 
 // Colors for grid cell item
 extern NSString* const vTabGridSelectedColor;
@@ -53,5 +60,10 @@ extern const CGFloat vTabGridSectionPaddingiPadLandscape;
 
 // Section header height for recent and sync tabs.
 extern const CGFloat vSectionHeaderHeight;
+
+// Button corner radius for login button in empty state
+extern const CGFloat vRecentTabsEmptyStateLoginButtonCornerRadius;
+// Button height for login button in empty state
+extern const CGFloat vRecentTabsEmptyStateLoginButtonHeight;
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_VIVALDI_H_

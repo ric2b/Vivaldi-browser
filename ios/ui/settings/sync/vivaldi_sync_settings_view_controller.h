@@ -40,7 +40,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSyncSettingsSwitch,
   ItemTypeSyncPasswordsSwitch,
   ItemTypeSyncAutofillSwitch,
+  ItemTypeSyncTabsSwitch,
   ItemTypeSyncHistorySwitch,
+  ItemTypeSyncReadingListSwitch,
+  ItemTypeSyncNotesSwitch,
 
   ItemTypeStartSyncingButton,
 

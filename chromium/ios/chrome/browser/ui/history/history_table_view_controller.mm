@@ -4,13 +4,15 @@
 
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/i18n/time_formatting.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/model_type.h"
+#import "components/sync/service/sync_service.h"
 #import "components/url_formatter/elide_url.h"
 #import "components/url_formatter/url_formatter.h"
 #import "ios/chrome/app/tests_hook.h"
@@ -35,15 +37,14 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
-#import "ios/chrome/browser/sync/sync_setup_service.h"
-#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/history/history_entries_status_item.h"
 #import "ios/chrome/browser/ui/history/history_entries_status_item_delegate.h"
 #import "ios/chrome/browser/ui/history/history_entry_inserter.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
 #import "ios/chrome/browser/ui/history/history_menu_provider.h"
+#import "ios/chrome/browser/ui/history/history_table_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
-#import "ios/chrome/browser/ui/history/history_ui_delegate.h"
 #import "ios/chrome/browser/ui/history/history_util.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
@@ -59,6 +60,7 @@
 #import "ios/web/public/navigation/referrer.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/strings/grit/ui_strings.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
@@ -68,10 +70,6 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using history::BrowsingHistoryService;
 
@@ -251,6 +249,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // Clear C++ ivars.
   _browser = nullptr;
   _historyService = nullptr;
+  [self dismissContextMenuCoordinator];
 }
 
 #pragma mark - TableViewModel
@@ -287,14 +286,12 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
   // If history sync is enabled and there hasn't been a response from synced
   // history, try fetching again.
-  SyncSetupService* syncSetupService =
-      SyncSetupServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-
-  // Vivaldi: We will enter into the block only if sync setup service is created
-  if (vivaldi::IsVivaldiRunning() && syncSetupService) {
-  if (syncSetupService->IsSyncFeatureEnabled() &&
-      syncSetupService->IsDataTypeActive(syncer::HISTORY_DELETE_DIRECTIVES) &&
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
+  // Vivaldi: We will enter into the block only if sync service is created
+  if (vivaldi::IsVivaldiRunning() && syncService) {
+  if (syncService->GetActiveDataTypes().Has(
+          syncer::HISTORY_DELETE_DIRECTIVES) &&
       queryResultsInfo.sync_timed_out) {
     [self showHistoryMatchingQuery:_currentQuery];
     return;
@@ -306,11 +303,22 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
   // If there are no results and no URLs have been loaded, report that no
   // history entries were found.
+
+  if (vivaldi::IsVivaldiRunning()) {
+    if (self.browser->GetBrowserState()->IsOffTheRecord()
+        || (results.empty() && self.empty && !self.searchInProgress)) {
+      [self addEmptyTableViewBackground];
+      [self updateToolbarButtonsWithAnimation:NO];
+      return;
+    }
+
+  } else {
   if (results.empty() && self.empty && !self.searchInProgress) {
     [self addEmptyTableViewBackground];
     [self updateToolbarButtonsWithAnimation:NO];
     return;
   }
+  } // End Vivaldi
 
   self.finishedLoading = queryResultsInfo.reached_beginning;
   self.empty = NO;
@@ -494,7 +502,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 - (void)willPresentSearchController:(UISearchController*)searchController {
   [self showScrim];
-
 }
 
 - (void)didDismissSearchController:(UISearchController*)searchController {
@@ -527,9 +534,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
   base::RecordAction(base::UserMetricsAction("IOSHistoryCloseWithSwipe"));
-  // Call the delegate dismissHistoryWithCompletion to clean up state and
-  // stop the Coordinator.
-  [self.delegate dismissHistoryWithCompletion:nil];
+  // Call the delegate dismissHistoryTableViewController:withCompletion: to
+  // clean up state and stop the Coordinator.
+  [self.delegate dismissHistoryTableViewController:self withCompletion:nil];
 }
 
 #pragma mark - History Data Updates
@@ -556,7 +563,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // Delete items from Browser History.
   std::vector<BrowsingHistoryService::HistoryEntry> entries;
   for (NSIndexPath* indexPath in toDeleteIndexPaths) {
-    HistoryEntryItem* object = base::mac::ObjCCastStrict<HistoryEntryItem>(
+    HistoryEntryItem* object = base::apple::ObjCCastStrict<HistoryEntryItem>(
         [self.tableViewModel itemAtIndexPath:indexPath]);
     BrowsingHistoryService::HistoryEntry entry;
     entry.url = object.URL;
@@ -621,7 +628,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
             base::UserMetricsAction("HistoryPage_EntryLinkClick"));
       }
       HistoryEntryItem* historyItem =
-          base::mac::ObjCCastStrict<HistoryEntryItem>(item);
+          base::apple::ObjCCastStrict<HistoryEntryItem>(item);
       [self openURL:historyItem.URL];
     }
   }
@@ -654,7 +661,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     return nil;
   }
 
-  HistoryEntryItem* entry = base::mac::ObjCCastStrict<HistoryEntryItem>(
+  HistoryEntryItem* entry = base::apple::ObjCCastStrict<HistoryEntryItem>(
       [self.tableViewModel itemAtIndexPath:indexPath]);
   UIView* cell = [self.tableView cellForRowAtIndexPath:indexPath];
   return [self.menuProvider contextMenuConfigurationForItem:entry
@@ -672,7 +679,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     case kEntriesStatusSectionIdentifier: {
       // Might be a different type of header.
       TableViewLinkHeaderFooterView* linkView =
-          base::mac::ObjCCast<TableViewLinkHeaderFooterView>(view);
+          base::apple::ObjCCast<TableViewLinkHeaderFooterView>(view);
       linkView.delegate = self;
     } break;
     default:
@@ -689,9 +696,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   cellToReturn.userInteractionEnabled = !(item.type == ItemTypeEntriesStatus);
   if (item.type == ItemTypeHistoryEntry) {
     HistoryEntryItem* URLItem =
-        base::mac::ObjCCastStrict<HistoryEntryItem>(item);
+        base::apple::ObjCCastStrict<HistoryEntryItem>(item);
     TableViewURLCell* URLCell =
-        base::mac::ObjCCastStrict<TableViewURLCell>(cellToReturn);
+        base::apple::ObjCCastStrict<TableViewURLCell>(cellToReturn);
     CrURL* crurl = [[CrURL alloc] initWithGURL:URLItem.URL];
     [self.imageDataSource
         faviconForPageURL:crurl
@@ -751,7 +758,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 - (void)keyCommand_close {
   base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
-  [self.delegate dismissHistoryWithCompletion:nil];
+  [self.delegate dismissHistoryTableViewController:self withCompletion:nil];
 }
 
 #pragma mark - TableViewURLDragDataSource
@@ -765,7 +772,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   switch (item.type) {
     case ItemTypeHistoryEntry: {
       HistoryEntryItem* URLItem =
-          base::mac::ObjCCastStrict<HistoryEntryItem>(item);
+          base::apple::ObjCCastStrict<HistoryEntryItem>(item);
       return [[URLInfo alloc] initWithURL:URLItem.URL title:URLItem.text];
     }
     case ItemTypeEntriesStatus:
@@ -777,6 +784,11 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 }
 
 #pragma mark - Private methods
+
+- (void)dismissContextMenuCoordinator {
+  [self.contextMenuCoordinator stop];
+  self.contextMenuCoordinator = nil;
+}
 
 // Fetches history for search text `query`. If `query` is nil or the empty
 // string, all history is fetched. If continuation is false, then the most
@@ -932,7 +944,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
           [self.tableViewModel itemsInSectionWithIdentifier:sectionIdentifier];
       for (id item in items) {
         HistoryEntryItem* historyItem =
-            base::mac::ObjCCastStrict<HistoryEntryItem>(item);
+            base::apple::ObjCCastStrict<HistoryEntryItem>(item);
         if (![entries containsObject:historyItem]) {
           NSIndexPath* indexPath =
               [self.tableViewModel indexPathForItem:historyItem];
@@ -1052,16 +1064,20 @@ const CGFloat kButtonHorizontalPadding = 30.0;
         UINavigationItemLargeTitleDisplayModeNever;
 
     // Vivaldi
-    if (vivaldi::IsVivaldiRunning())
+    if (vivaldi::IsVivaldiRunning()) {
       self.vivaldiSearchBarView.hidden = YES;
+      self.navigationController.toolbarHidden = YES;
+    } // End Vivaldi
+
   } else {
 
     // Vivaldi
     if (!vivaldi::IsVivaldiRunning())
     self.navigationItem.searchController = self.searchController;
-    else
+    else {
       self.vivaldiSearchBarView.hidden = NO;
-    // End Vivaldi
+      self.navigationController.toolbarHidden = NO;
+    } // End Vivaldi
 
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
@@ -1096,7 +1112,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
           isEqual:[NSIndexPath indexPathForItem:0 inSection:0]])
     return;
 
-  HistoryEntryItem* entry = base::mac::ObjCCastStrict<HistoryEntryItem>(
+  HistoryEntryItem* entry = base::apple::ObjCCastStrict<HistoryEntryItem>(
       [self.tableViewModel itemAtIndexPath:touchedItemIndexPath]);
 
   __weak HistoryTableViewController* weakSelf = self;
@@ -1116,6 +1132,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
   ProceduralBlock openInNewTabAction = ^{
     [weakSelf openURLInNewTab:entry.URL];
+    [weakSelf dismissContextMenuCoordinator];
   };
   [self.contextMenuCoordinator addItemWithTitle:openInNewTabTitle
                                          action:openInNewTabAction
@@ -1138,6 +1155,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB);
   ProceduralBlock openInNewIncognitoTabAction = ^{
     [weakSelf openURLInNewIncognitoTab:entry.URL];
+    [weakSelf dismissContextMenuCoordinator];
   };
   BOOL incognitoEnabled =
       !IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs());
@@ -1151,10 +1169,18 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_COPY);
   ProceduralBlock copyURLAction = ^{
     StoreURLInPasteboard(entry.URL);
+    [weakSelf dismissContextMenuCoordinator];
   };
   [self.contextMenuCoordinator addItemWithTitle:copyURLTitle
                                          action:copyURLAction
                                           style:UIAlertActionStyleDefault];
+
+  [self.contextMenuCoordinator
+      addItemWithTitle:l10n_util::GetNSString(IDS_APP_CANCEL)
+                action:^{
+                  [weakSelf dismissContextMenuCoordinator];
+                }
+                 style:UIAlertActionStyleCancel];
   [self.contextMenuCoordinator start];
 }
 
@@ -1164,9 +1190,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
       base::UserMetricsAction("MobileHistoryPage_EntryLinkOpenNewTab"));
   UrlLoadParams params = UrlLoadParams::InNewTab(URL);
   __weak __typeof(self) weakSelf = self;
-  [self.delegate dismissHistoryWithCompletion:^{
-    [weakSelf loadAndActivateTabFromHistoryWithParams:params incognito:NO];
-  }];
+  [self.delegate
+      dismissHistoryTableViewController:self
+                         withCompletion:^{
+                           [weakSelf
+                               loadAndActivateTabFromHistoryWithParams:params
+                                                             incognito:NO];
+                         }];
 }
 
 // Opens URL in a new non-incognito tab in a new window and dismisses the
@@ -1189,9 +1219,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   UrlLoadParams params = UrlLoadParams::InNewTab(URL);
   params.in_incognito = YES;
   __weak __typeof(self) weakSelf = self;
-  [self.delegate dismissHistoryWithCompletion:^{
-    [weakSelf loadAndActivateTabFromHistoryWithParams:params incognito:YES];
-  }];
+  [self.delegate
+      dismissHistoryTableViewController:self
+                         withCompletion:^{
+                           [weakSelf
+                               loadAndActivateTabFromHistoryWithParams:params
+                                                             incognito:YES];
+                         }];
 }
 
 #pragma mark Helper Methods
@@ -1227,6 +1261,11 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Returns the toolbar buttons for the current state.
 - (NSArray<UIBarButtonItem*>*)toolbarButtons {
   if ([self isEmptyState]) {
+
+    // Note: We don't show the buttons when there's no history.
+    if (vivaldi::IsVivaldiRunning())
+      return @[]; // End Vivaldi.
+
     return @[
       [self createSpacerButton], self.clearBrowsingDataButton,
       [self createSpacerButton]
@@ -1235,7 +1274,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if (self.isEditing) {
     return @[ self.deleteButton, [self createSpacerButton], self.cancelButton ];
   }
-
   return @[
     self.clearBrowsingDataButton, [self createSpacerButton], self.editButton
   ];
@@ -1244,10 +1282,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Adds a view as background of the TableView.
 - (void)addEmptyTableViewBackground {
   if (vivaldi::IsVivaldiRunning()) {
+    BOOL isOffTheRecord = self.browser->GetBrowserState()->IsOffTheRecord();
+    NSString* emptyMessageString = isOffTheRecord ?
+        l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_MESSAGE_PRIVATE_TAB) :
+        l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_MESSAGE);
     [self addEmptyTableViewWithImage:[UIImage imageNamed:
                                       @"vivaldi_history_empty"]
             title:l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_TITLE)
-            subtitle:l10n_util::GetNSString(IDS_VIVALDI_HISTORY_EMPTY_MESSAGE)];
+            subtitle:emptyMessageString];
   } else // End Vivaldi
   [self addEmptyTableViewWithImage:[UIImage imageNamed:@"history_empty"]
                              title:l10n_util::GetNSString(
@@ -1276,28 +1318,31 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   params.load_strategy = self.loadStrategy;
   __weak __typeof(self) weakSelf = self;
-  [self.delegate dismissHistoryWithCompletion:^{
-    [weakSelf loadAndActivateTabFromHistoryWithParams:params incognito:NO];
-  }];
+  [self.delegate
+      dismissHistoryTableViewController:self
+                         withCompletion:^{
+                           [weakSelf
+                               loadAndActivateTabFromHistoryWithParams:params
+                                                             incognito:NO];
+                         }];
 }
 
 // Dismisses this ViewController.
 - (void)dismissHistory {
   base::RecordAction(base::UserMetricsAction("MobileHistoryClose"));
-
-  [self.delegate dismissHistoryWithCompletion:nil];
+  [self.delegate dismissHistoryTableViewController:self withCompletion:nil];
 }
 
 - (void)openPrivacySettings {
   base::RecordAction(
       base::UserMetricsAction("HistoryPage_InitClearBrowsingData"));
-  [self.delegate displayPrivacySettings];
+  [self.delegate displayClearHistoryData];
 }
 
 #pragma mark - Accessibility
 
 - (BOOL)accessibilityPerformEscape {
-  [self.delegate dismissHistoryWithCompletion:nil];
+  [self.delegate dismissHistoryTableViewController:self withCompletion:nil];
   return YES;
 }
 
@@ -1382,7 +1427,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 #pragma mark - Vivaldi
 
 - (void)dismissHistory:(id)sender {
-  [self.delegate dismissHistoryWithCompletion:nil];
+  [self.delegate dismissHistoryTableViewController:self withCompletion:nil];;
 }
 
 - (UIBarButtonItem*)customizedDoneMenuButton {

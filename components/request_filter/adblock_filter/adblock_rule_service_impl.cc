@@ -239,4 +239,9 @@ void RuleServiceImpl::InitializeCosmeticFilter(CosmeticFilter* filter) {
   filter->Initialize(weak_index_managers);
 }
 
+bool RuleServiceImpl::IsApplyingIosRules(RuleGroup group) {
+  // Only meaningful on iOS/WebKit
+  return false;
+}
+
 }  // namespace adblock_filter

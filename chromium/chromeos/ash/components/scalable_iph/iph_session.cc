@@ -10,13 +10,23 @@
 namespace scalable_iph {
 
 IphSession::IphSession(const base::Feature& feature,
-                       feature_engagement::Tracker* tracker)
-    : feature_(feature), tracker_(tracker) {
+                       feature_engagement::Tracker* tracker,
+                       Delegate* delegate)
+    : feature_(feature), tracker_(tracker), delegate_(delegate) {
   CHECK(tracker_);
+  CHECK(delegate_);
 }
 
 IphSession::~IphSession() {
   tracker_->Dismissed(feature_);
+}
+
+void IphSession::PerformAction(ActionType action_type,
+                               const std::string& event_name) {
+  if (!event_name.empty()) {
+    tracker_->NotifyEvent(event_name);
+  }
+  delegate_->PerformActionForIphSession(action_type);
 }
 
 }  // namespace scalable_iph

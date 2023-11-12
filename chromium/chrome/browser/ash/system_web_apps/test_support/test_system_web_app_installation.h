@@ -36,7 +36,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
                                        const GURL&,
                                        const apps::AppLaunchParams&)>;
 
-  std::unique_ptr<WebAppInstallInfo> GetWebAppInfo() const override;
+  std::unique_ptr<web_app::WebAppInstallInfo> GetWebAppInfo() const override;
 
   std::vector<std::string> GetAppIdsToUninstallAndReplace() const override;
   gfx::Size GetMinimumWindowSize() const override;
@@ -51,6 +51,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
   bool ShouldCaptureNavigations() const override;
   bool ShouldAllowResize() const override;
   bool ShouldAllowMaximize() const override;
+  bool ShouldAllowFullscreen() const override;
   bool ShouldHaveTabStrip() const override;
   bool ShouldHaveReloadButtonInMinimalUi() const override;
   bool ShouldAllowScriptsToCloseWindows() const override;
@@ -111,6 +112,7 @@ class UnittestingSystemAppDelegate : public SystemWebAppDelegate {
   bool capture_navigations_ = false;
   bool is_resizeable_ = true;
   bool is_maximizable_ = true;
+  bool is_fullscreenable_ = true;
   bool has_tab_strip_ = false;
   bool should_have_reload_button_in_minimal_ui_ = true;
   bool allow_scripts_to_close_windows_ = false;

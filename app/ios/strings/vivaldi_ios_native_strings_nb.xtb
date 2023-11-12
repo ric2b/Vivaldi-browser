@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Etter innhold</translation>
 <translation id="2129408066358825297">Alder</translation>
 <translation id="2148384276939959392">Synkroniser valgte</translation>
+<translation id="21693288559538605">Oppsummering av reklame- og sporingsblokkering</translation>
 <translation id="2195713384412091023">Dette vil fjerne alle synkroniserte data lagret på vår tjener, nullstille krypteringspassordet ditt og logge deg ut.</translation>
 <translation id="2243210264130642074">Notat lagret</translation>
 <translation id="2272338747456392228">Konto har blitt låst</translation>
 <translation id="2273327106802955778">Mer-meny</translation>
 <translation id="2324160330092901720">En bekreftelseskode har blitt sendt til <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Tøm papirkurv</translation>
 <translation id="2359808026110333948">Fortsett</translation>
 <translation id="2386793615875593361">1 objekt valgt</translation>
 <translation id="2388224692799337242">Når du begynner å surfe vil historikken din dukke opp her</translation>
@@ -95,7 +97,6 @@ blokkert</translation>
 <translation id="3229182533910980085">Legg til dine første bokmerker ved å trykke på pluss-ikonet under</translation>
 <translation id="3236835587712044564">Fornøyd med Vivaldi? Gjør den til din standard.</translation>
 <translation id="3270894089048358271">Sett Vivaldi som standard</translation>
-<translation id="3270930591809084274">Synkroniserte faner</translation>
 <translation id="3335772982573114336">Nytt notat</translation>
 <translation id="33451081266695216">Tilkobling strupet av server.</translation>
 <translation id="3346386541263128307">Epostadressene må samsvare.</translation>
@@ -113,10 +114,11 @@ blokkert</translation>
 <translation id="3607176258839749451">Registrering mislyktes på grunn av en feil. Prøv igjen senere.</translation>
 <translation id="3646647753063635401">Synkroniser alle data, og automatisk aktiver synkronisering av nye datatyper</translation>
 <translation id="3682791711395736890">Vis skrivebordsversjonen av nettstedet</translation>
-<translation id="3692650606013198282">Åpne i privatfane</translation>
+<translation id="3692650606013198282">Åpne i privatmodus</translation>
 <translation id="3699026013955941879">Koden er utløpt. Be om en ny aktiveringskode.</translation>
 <translation id="3700829948786686853">Velkommen til Vivaldi</translation>
 <translation id="3766350025418769949">Du kan bruke passord du har lagret i Vivaldi Passordhåndtering i andre apper på din iPad.</translation>
+<translation id="3845564230651302310">Bruker nye blokkeringsinnstillinger...</translation>
 <translation id="3858860766373142691">Navn</translation>
 <translation id="3866249974567520381">Beskrivelse</translation>
 <translation id="3872195896030547485">Skriv inn en gyldig e-postadresse.</translation>
@@ -127,7 +129,6 @@ blokkert</translation>
 <translation id="3997823869212225788">Skriv inn den 6-sifrede koden</translation>
 <translation id="4002066346123236978">Tittel</translation>
 <translation id="4032606071208172574">(standard)</translation>
-<translation id="4048057312173843244">Synkroniserte faner fra andre enheter dukker opp her. Logg på Sync for å bruke denne tjenesten.</translation>
 <translation id="4073968054795398875">Sync-tjeneren opplever problemer. Prøver på nytt snart …</translation>
 <translation id="4096707694175478403">Panel</translation>
 <translation id="414098425907666915">Privat søk</translation>
@@ -143,6 +144,7 @@ blokkert</translation>
 blokkert</translation>
 <translation id="4299298331965375737">Gjøre Vivaldi til standard nettleser?</translation>
 <translation id="4304224509867189079">Logg inn</translation>
+<translation id="4316955624679873896">Bokmerket i</translation>
 <translation id="432696242656678770">Russisk (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spansk (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Vietnamesisk (<ph name="ORIGIN" />)</translation>
@@ -211,6 +213,7 @@ blokkert</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
 <translation id="5859825823508296659">Rediger domene</translation>
 <translation id="5867841422488265304">Søk eller skriv inn nettadresse</translation>
+<translation id="5869217094746242845">Lær mer om personvern og sikkerhet</translation>
 <translation id="5871497086027727873">1 objekt flyttet</translation>
 <translation id="5898502570200301364">Du kan bruke passord du har lagret i Vivaldi Passordhåndtering i andre apper på din iPhone.</translation>
 <translation id="5900160494089383343">Dette brukernavnet er ikke tilgjengelig.</translation>
@@ -225,6 +228,7 @@ blokkert</translation>
 <translation id="6406506848690869874">Sync</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valgt</translation>
 <translation id="6468130661190228905">Beklager, men det ser ut som om du må vente litt til før du kan bli med i fellesskapet. Vi krever at medlemmene er minst 16 år gamle før de får bli med.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importer<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Sikkerhetskopi av krypteringsnøkkel</translation>
 <translation id="6527303717912515753">Del</translation>
 <translation id="6535988230515403205">Polsk (<ph name="ORIGIN" />)</translation>
@@ -262,6 +266,7 @@ blokkert</translation>
 <translation id="7311118006561484338">Etter tittel</translation>
 <translation id="7325310788570036874">Fortsett med å surfe smartere, smidigere og raskere med Vivaldi.</translation>
 <translation id="734110743815267231">Hebraisk (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Åpne i privatmodus?</translation>
 <translation id="7362952245780030555">Velg mellom fulle skrivebordsfaner og den forenklede fanevelgeren.</translation>
 <translation id="7379938540614588640">Nederlandsk (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Legg til ny kilde</translation>
@@ -318,6 +323,7 @@ Du har nådd maksgrensen for antall forsøk. Be om en ny kode ved å velge Send 
 <translation id="8677007239430848917">Legg til ditt første notat ved å trykke på pluss-ikonet under</translation>
 <translation id="8684294196284714094">Klar til å sette Vivaldi som din standard nettleser?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> objekter slettet</translation>
+<translation id="8763006697839582351">Åpne i Vivaldi i privatmodus</translation>
 <translation id="8804164990146287819">Retningslinjer for personvern</translation>
 <translation id="8819841443522803117">På tide å bytte standardnettleser? Velg Vivaldi.</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
@@ -329,7 +335,6 @@ Du har nådd maksgrensen for antall forsøk. Be om en ny kode ved å velge Send 
 <translation id="9043882097999887291">Reklamer
 blokkert</translation>
 <translation id="9065203028668620118">Rediger</translation>
-<translation id="9078193189520575214">Bruker endringer...</translation>
 <translation id="9079251484401922158">Finsk (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 objekt</translation>
 <translation id="9091665118798175641">Synkroniser autofyllinformasjon for skjemaer</translation>

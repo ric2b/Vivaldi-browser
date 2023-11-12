@@ -15,12 +15,12 @@
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
 #include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/adblock_filter/adblock_content_injection_provider.h"
-#include "components/request_filter/adblock_filter/adblock_resources.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
@@ -57,6 +57,7 @@ class RuleServiceImpl : public RuleServiceContent,
                          const GURL& url) const override;
   void AddObserver(RuleService::Observer* observer) override;
   void RemoveObserver(RuleService::Observer* observer) override;
+  bool IsApplyingIosRules(RuleGroup group) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
   IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;

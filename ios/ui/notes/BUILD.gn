@@ -72,6 +72,4 @@ source_set("notes") {
   ]
 
   frameworks = [ "UIKit.framework" ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

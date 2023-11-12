@@ -58,6 +58,7 @@ update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constan
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_background_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_title_text_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_body_text_color",
+    "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_empty_state_login_button_bg_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:grid_toolbar_text_button_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_background_color",
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources:page_control_icon_not_selected_color",
@@ -180,6 +181,9 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
     "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
     "//vivaldi/ios/ui/settings/resources:main_settings",
     "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_autofill_banner",
+    "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_manager_empty",
+    "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
+    "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
   ]
 }
 

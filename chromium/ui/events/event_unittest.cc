@@ -62,8 +62,8 @@ TEST(EventTest, GetCharacter) {
   // contains Control.
   // e.g. Control+Shift+2 produces U+200C on "Persian" keyboard.
   // http://crbug.com/582453
-  KeyEvent keyev5(0x200C, VKEY_UNKNOWN, ui::DomCode::NONE,
-                  EF_CONTROL_DOWN | EF_SHIFT_DOWN);
+  KeyEvent keyev5 = ui::KeyEvent::FromCharacter(
+      0x200C, VKEY_UNKNOWN, ui::DomCode::NONE, EF_CONTROL_DOWN | EF_SHIFT_DOWN);
   EXPECT_EQ(0x200C, keyev5.GetCharacter());
 }
 
@@ -251,7 +251,7 @@ TEST(EventTest, KeyEvent) {
       {VKEY_A, EF_SHIFT_DOWN, 'A'},
       {VKEY_A, EF_CAPS_LOCK_ON, 'A'},
       {VKEY_A, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'a'},
-      {VKEY_A, EF_CONTROL_DOWN, '\x01'},
+      {VKEY_A, EF_CONTROL_DOWN, 0x01},
       {VKEY_A, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x01'},
       {VKEY_Z, 0, 'z'},
       {VKEY_Z, EF_SHIFT_DOWN, 'Z'},
@@ -260,60 +260,60 @@ TEST(EventTest, KeyEvent) {
       {VKEY_Z, EF_CONTROL_DOWN, '\x1A'},
       {VKEY_Z, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1A'},
 
-      {VKEY_2, EF_CONTROL_DOWN, '\0'},
+      {VKEY_2, EF_CONTROL_DOWN, '\x12'},
       {VKEY_2, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0'},
-      {VKEY_6, EF_CONTROL_DOWN, '\x1E'},
+      {VKEY_6, EF_CONTROL_DOWN, '\x16'},
       {VKEY_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1E'},
-      {VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\x1F'},
+      {VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\x0D'},
       {VKEY_OEM_MINUS, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1F'},
-      {VKEY_OEM_4, EF_CONTROL_DOWN, '['},
-      {VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '{'},
-      {VKEY_OEM_5, EF_CONTROL_DOWN, '\\'},
-      {VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '|'},
-      {VKEY_OEM_6, EF_CONTROL_DOWN, ']'},
-      {VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '}'},
+      {VKEY_OEM_4, EF_CONTROL_DOWN, '\x1B'},
+      {VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1B'},
+      {VKEY_OEM_5, EF_CONTROL_DOWN, '\x1C'},
+      {VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1C'},
+      {VKEY_OEM_6, EF_CONTROL_DOWN, '\x1D'},
+      {VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1D'},
       {VKEY_RETURN, EF_CONTROL_DOWN, '\x0A'},
 
       {VKEY_0, 0, '0'},
       {VKEY_0, EF_SHIFT_DOWN, ')'},
       {VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, ')'},
-      {VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, ')'},
+      {VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x09'},
 
       {VKEY_9, 0, '9'},
       {VKEY_9, EF_SHIFT_DOWN, '('},
       {VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, '('},
-      {VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '('},
+      {VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x08'},
 
-      {VKEY_NUMPAD0, EF_CONTROL_DOWN, '0'},
+      {VKEY_NUMPAD0, EF_CONTROL_DOWN, '\x10'},
       {VKEY_NUMPAD0, EF_SHIFT_DOWN, '0'},
 
-      {VKEY_NUMPAD9, EF_CONTROL_DOWN, '9'},
+      {VKEY_NUMPAD9, EF_CONTROL_DOWN, '\x19'},
       {VKEY_NUMPAD9, EF_SHIFT_DOWN, '9'},
 
       {VKEY_TAB, EF_NONE, '\t'},
       {VKEY_TAB, EF_CONTROL_DOWN, '\t'},
       {VKEY_TAB, EF_SHIFT_DOWN, '\t'},
 
-      {VKEY_MULTIPLY, EF_CONTROL_DOWN, '*'},
+      {VKEY_MULTIPLY, EF_CONTROL_DOWN, '\x0A'},
       {VKEY_MULTIPLY, EF_SHIFT_DOWN, '*'},
-      {VKEY_ADD, EF_CONTROL_DOWN, '+'},
+      {VKEY_ADD, EF_CONTROL_DOWN, '\x0B'},
       {VKEY_ADD, EF_SHIFT_DOWN, '+'},
-      {VKEY_SUBTRACT, EF_CONTROL_DOWN, '\x1f'},
+      {VKEY_SUBTRACT, EF_CONTROL_DOWN, '\x0D'},
       {VKEY_SUBTRACT, EF_SHIFT_DOWN, '-'},
-      {VKEY_DECIMAL, EF_CONTROL_DOWN, '.'},
+      {VKEY_DECIMAL, EF_CONTROL_DOWN, '\x0E'},
       {VKEY_DECIMAL, EF_SHIFT_DOWN, '.'},
-      {VKEY_DIVIDE, EF_CONTROL_DOWN, '\x7f'},
+      {VKEY_DIVIDE, EF_CONTROL_DOWN, '\x0F'},
       {VKEY_DIVIDE, EF_SHIFT_DOWN, '/'},
 
-      {VKEY_OEM_1, EF_CONTROL_DOWN, ';'},
+      {VKEY_OEM_1, EF_CONTROL_DOWN, '\x1B'},
       {VKEY_OEM_1, EF_SHIFT_DOWN, ':'},
-      {VKEY_OEM_PLUS, EF_CONTROL_DOWN, '='},
+      {VKEY_OEM_PLUS, EF_CONTROL_DOWN, '\x1D'},
       {VKEY_OEM_PLUS, EF_SHIFT_DOWN, '+'},
-      {VKEY_OEM_COMMA, EF_CONTROL_DOWN, ','},
+      {VKEY_OEM_COMMA, EF_CONTROL_DOWN, '\x0C'},
       {VKEY_OEM_COMMA, EF_SHIFT_DOWN, '<'},
-      {VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '.'},
+      {VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '\x0E'},
       {VKEY_OEM_PERIOD, EF_SHIFT_DOWN, '>'},
-      {VKEY_OEM_3, EF_CONTROL_DOWN, '`'},
+      {VKEY_OEM_3, EF_CONTROL_DOWN, '\x0'},
       {VKEY_OEM_3, EF_SHIFT_DOWN, '~'},
   };
 
@@ -325,7 +325,8 @@ TEST(EventTest, KeyEvent) {
 }
 
 TEST(EventTest, KeyEventDirectUnicode) {
-  KeyEvent key(0x1234U, ui::VKEY_UNKNOWN, ui::DomCode::NONE, ui::EF_NONE);
+  KeyEvent key = ui::KeyEvent::FromCharacter(0x1234U, ui::VKEY_UNKNOWN,
+                                             ui::DomCode::NONE, ui::EF_NONE);
   EXPECT_EQ(0x1234U, key.GetCharacter());
   EXPECT_EQ(ET_KEY_PRESSED, key.type());
   EXPECT_TRUE(key.is_char());
@@ -1132,6 +1133,16 @@ TEST(EventTest, NeverCopyTarget) {
   ui::MouseEvent targeted_copy2 = targeted;
 
   EXPECT_EQ(nullptr, targeted_copy2.target());
+}
+
+// Verify if a character event is created.
+TEST(EventTest, CreateCharcterEvent) {
+  KeyEvent key_event =
+      ui::KeyEvent::FromCharacter(0x5A, VKEY_Z, ui::DomCode::NONE, EF_NONE);
+  EXPECT_TRUE(key_event.is_char());
+  EXPECT_EQ(0x5A, key_event.GetCharacter());
+  EXPECT_EQ(VKEY_Z, key_event.key_code());
+  EXPECT_EQ(EF_NONE, key_event.flags());
 }
 
 }  // namespace ui

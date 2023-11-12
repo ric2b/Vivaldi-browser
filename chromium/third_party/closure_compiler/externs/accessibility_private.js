@@ -238,6 +238,18 @@ chrome.accessibilityPrivate.FocusRingStackingOrder = {
 };
 
 /**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.AssistiveTechnologyType = {
+  CHROME_VOX: 'chromeVox',
+  SELECT_TO_SPEAK: 'selectToSpeak',
+  SWITCH_ACCESS: 'switchAccess',
+  AUTO_CLICK: 'autoClick',
+  MAGNIFIER: 'magnifier',
+  DICTATION: 'dictation',
+};
+
+/**
  * @typedef {{
  *   rects: !Array<!chrome.accessibilityPrivate.ScreenRect>,
  *   type: !chrome.accessibilityPrivate.FocusType,
@@ -264,8 +276,8 @@ chrome.accessibilityPrivate.AcceleratorAction = {
 chrome.accessibilityPrivate.AccessibilityFeature = {
   GOOGLE_TTS_LANGUAGE_PACKS: 'googleTtsLanguagePacks',
   DICTATION_CONTEXT_CHECKING: 'dictationContextChecking',
-  CHROMEVOX_TABS_DEPRECATION: 'chromevoxTabsDeprecation',
   CHROMEVOX_SETTINGS_MIGRATION: 'chromevoxSettingsMigration',
+  GAME_FACE_INTEGRATION: 'gameFaceIntegration',
 };
 
 /**
@@ -326,6 +338,13 @@ chrome.accessibilityPrivate.DictationBubbleHintType = {
  * }}
  */
 chrome.accessibilityPrivate.DictationBubbleProperties;
+
+/**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.ToastType = {
+  DICTATION_NO_FOCUSED_TEXT_FIELD: 'dictationNoFocusedTextField',
+};
 
 /**
  * @enum {string}
@@ -426,8 +445,10 @@ chrome.accessibilityPrivate.setNativeAccessibilityEnabled = function(enabled) {}
  * Sets the given accessibility focus rings for this extension.
  * @param {!Array<!chrome.accessibilityPrivate.FocusRingInfo>} focusRings Array
  *     of focus rings to draw.
+ * @param {!chrome.accessibilityPrivate.AssistiveTechnologyType} atType
+ *     Associates these focus rings with this feature type.
  */
-chrome.accessibilityPrivate.setFocusRings = function(focusRings) {};
+chrome.accessibilityPrivate.setFocusRings = function(focusRings, atType) {};
 
 /**
  * Sets the bounds of the accessibility highlight.
@@ -598,10 +619,12 @@ chrome.accessibilityPrivate.updateSelectToSpeakPanel = function(show, anchor, is
  * @param {string} title The title of the confirmation dialog.
  * @param {string} description The description to show within the confirmation
  *     dialog.
+ * @param {?string|undefined} cancelName The human-readable name of the cancel
+ *     button.
  * @param {function(boolean): void} callback Called when the dialog is confirmed
  *     or cancelled.
  */
-chrome.accessibilityPrivate.showConfirmationDialog = function(title, description, callback) {};
+chrome.accessibilityPrivate.showConfirmationDialog = function(title, description, cancelName, callback) {};
 
 /**
  * Gets the DOM key string for the given key code, taking into account the
@@ -642,6 +665,13 @@ chrome.accessibilityPrivate.getDlcContents = function(dlc, callback) {};
 chrome.accessibilityPrivate.isLacrosPrimary = function(callback) {};
 
 /**
+ * Displays an accessibility-related toast.
+ * @param {!chrome.accessibilityPrivate.ToastType} type The type of toast to
+ *     show.
+ */
+chrome.accessibilityPrivate.showToast = function(type) {};
+
+/**
  * Fired whenever ChromeVox should output introduction.
  * @type {!ChromeEvent}
  */
@@ -667,6 +697,13 @@ chrome.accessibilityPrivate.onTwoFingerTouchStart;
  * @type {!ChromeEvent}
  */
 chrome.accessibilityPrivate.onTwoFingerTouchStop;
+
+/**
+ * Fired when the Select to Speak context menu is clicked from outside the
+ * context of the Select to Speak extension.
+ * @type {!ChromeEvent}
+ */
+chrome.accessibilityPrivate.onSelectToSpeakContextMenuClicked;
 
 /**
  * Fired when Chrome OS wants to change the Select-to-Speak state, between

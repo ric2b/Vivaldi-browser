@@ -58,8 +58,6 @@ class ShellSurfaceBase : public SurfaceTreeHost,
                          public wm::ActivationChangeObserver,
                          public wm::TooltipObserver {
  public:
-  using ShapeRects = std::vector<gfx::Rect>;
-
   // The |origin| is the initial position in screen coordinates. The position
   // specified as part of the geometry is relative to the shell surface.
   ShellSurfaceBase(Surface* surface,
@@ -325,6 +323,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   // SurfaceTreeHost:
   void SetRootSurface(Surface* root_surface) override;
+  float GetPendingScaleFactor() const override;
 
   bool frame_enabled() const {
     return frame_type_ != SurfaceFrameType::NONE &&
@@ -348,6 +347,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void set_in_extended_drag(bool in_extended_drag) {
     in_extended_drag_ = in_extended_drag;
   }
+
+  const absl::optional<cc::Region>& shape_dp() const { return shape_dp_; }
 
  protected:
   // Creates the |widget_| for |surface_|. |show_state| is the initial state
@@ -376,8 +377,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   virtual void SetWidgetBounds(const gfx::Rect& bounds,
                                bool adjusted_by_server) = 0;
 
-  // Updates the bounds of surface to match the current widget bounds.
-  void UpdateSurfaceBounds();
+  // Updates the bounds of host window to match the current widget bounds.
+  void UpdateHostWindowOrigin();
 
   // Creates, deletes and update the shadow bounds based on
   // |shadow_bounds_|.
@@ -444,8 +445,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   gfx::Rect geometry_;
   gfx::Rect pending_geometry_;
   absl::optional<gfx::Rect> initial_bounds_;
-  absl::optional<ShapeRects> shape_rects_dp_;
-  absl::optional<ShapeRects> pending_shape_rects_dp_;
+  absl::optional<cc::Region> shape_dp_;
+  absl::optional<cc::Region> pending_shape_dp_;
 
   int64_t display_id_ = display::kInvalidDisplayId;
   int64_t pending_display_id_ = display::kInvalidDisplayId;
@@ -475,6 +476,13 @@ class ShellSurfaceBase : public SurfaceTreeHost,
  private:
   FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
                            HostWindowBoundsUpdatedAfterCommitWidget);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
+                           HostWindowBoundsUpdatedWithNegativeCoordinate);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
+                           HostWindowIncludesAllSubSurfacesWithScaleFactor);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest,
+                           ShadowBoundsWithNegativeCoordinate);
+  FRIEND_TEST_ALL_PREFIXES(ShellSurfaceTest, ShadowBoundsWithScaleFactor);
 
   // Called on widget creation to initialize its window state.
   // TODO(reveman): Remove virtual functions below to avoid FBC problem.

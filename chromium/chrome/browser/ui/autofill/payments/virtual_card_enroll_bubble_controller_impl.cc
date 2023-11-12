@@ -12,8 +12,10 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/android/autofill/autofill_vcn_enroll_bottom_sheet_bridge.h"
 #include "components/autofill/core/browser/payments/autofill_virtual_card_enrollment_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/payments/autofill_virtual_card_enrollment_infobar_mobile.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
 #else
@@ -37,8 +39,9 @@ VirtualCardEnrollBubbleControllerImpl::
 VirtualCardEnrollBubbleController*
 VirtualCardEnrollBubbleController::GetOrCreate(
     content::WebContents* web_contents) {
-  if (!web_contents)
+  if (!web_contents) {
     return nullptr;
+  }
 
   VirtualCardEnrollBubbleControllerImpl::CreateForWebContents(web_contents);
   return VirtualCardEnrollBubbleControllerImpl::FromWebContents(web_contents);
@@ -63,8 +66,9 @@ void VirtualCardEnrollBubbleControllerImpl::ShowBubble(
 void VirtualCardEnrollBubbleControllerImpl::ReshowBubble() {
   DCHECK(IsIconVisible());
 
-  if (bubble_view())
+  if (bubble_view()) {
     return;
+  }
 
   is_user_gesture_ = true;
   Show();
@@ -94,9 +98,9 @@ std::u16string VirtualCardEnrollBubbleControllerImpl::GetDeclineButtonText()
       virtual_card_enrollment_fields_.virtual_card_enrollment_source ==
               VirtualCardEnrollmentSource::kSettingsPage
           ? IDS_CANCEL
-          : virtual_card_enrollment_fields_.last_show
-                ? IDS_AUTOFILL_VIRTUAL_CARD_ENROLLMENT_DECLINE_BUTTON_LABEL_NO_THANKS
-                : IDS_AUTOFILL_VIRTUAL_CARD_ENROLLMENT_DECLINE_BUTTON_LABEL_SKIP);
+      : virtual_card_enrollment_fields_.last_show
+          ? IDS_AUTOFILL_VIRTUAL_CARD_ENROLLMENT_DECLINE_BUTTON_LABEL_NO_THANKS
+          : IDS_AUTOFILL_VIRTUAL_CARD_ENROLLMENT_DECLINE_BUTTON_LABEL_SKIP);
 }
 
 std::u16string VirtualCardEnrollBubbleControllerImpl::GetLearnMoreLinkText()
@@ -108,6 +112,26 @@ std::u16string VirtualCardEnrollBubbleControllerImpl::GetLearnMoreLinkText()
 const VirtualCardEnrollmentFields
 VirtualCardEnrollBubbleControllerImpl::GetVirtualCardEnrollmentFields() const {
   return virtual_card_enrollment_fields_;
+}
+
+VirtualCardEnrollmentBubbleSource
+VirtualCardEnrollBubbleControllerImpl::GetVirtualCardEnrollmentBubbleSource()
+    const {
+  switch (virtual_card_enrollment_fields_.virtual_card_enrollment_source) {
+    case VirtualCardEnrollmentSource::kUpstream:
+      return VirtualCardEnrollmentBubbleSource::
+          VIRTUAL_CARD_ENROLLMENT_UPSTREAM_SOURCE;
+    case VirtualCardEnrollmentSource::kDownstream:
+      return VirtualCardEnrollmentBubbleSource::
+          VIRTUAL_CARD_ENROLLMENT_DOWNSTREAM_SOURCE;
+    case VirtualCardEnrollmentSource::kSettingsPage:
+      return VirtualCardEnrollmentBubbleSource::
+          VIRTUAL_CARD_ENROLLMENT_SETTINGS_PAGE_SOURCE;
+    case VirtualCardEnrollmentSource::kNone:
+      NOTREACHED();
+      return VirtualCardEnrollmentBubbleSource::
+          VIRTUAL_CARD_ENROLLMENT_UNKNOWN_SOURCE;
+  }
 }
 
 AutofillBubbleBase*
@@ -216,8 +240,9 @@ void VirtualCardEnrollBubbleControllerImpl::OnVisibilityChanged(
     Show();
   } else if (visibility == content::Visibility::HIDDEN) {
     HideBubble();
-    if (bubble_state_ != BubbleState::kShowingIcon)
+    if (bubble_state_ != BubbleState::kShowingIcon) {
       bubble_state_ = BubbleState::kHidden;
+    }
   }
 #endif
 }
@@ -229,21 +254,34 @@ VirtualCardEnrollBubbleControllerImpl::GetPageActionIconType() {
 
 void VirtualCardEnrollBubbleControllerImpl::DoShowBubble() {
 #if BUILDFLAG(IS_ANDROID)
+  auto delegate_mobile =
+      std::make_unique<AutofillVirtualCardEnrollmentInfoBarDelegateMobile>(
+          this);
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnablePaymentsAndroidBottomSheet)) {
+    autofill_vcn_enroll_bottom_sheet_bridge_ =
+        std::make_unique<AutofillVCNEnrollBottomSheetBridge>();
+    autofill_vcn_enroll_bottom_sheet_bridge_->RequestShowContent(
+        web_contents(), std::move(delegate_mobile));
+    return;
+  }
+
   infobars::ContentInfoBarManager* infobar_manager =
       infobars::ContentInfoBarManager::FromWebContents(web_contents());
   DCHECK(infobar_manager);
   infobar_manager->RemoveAllInfoBars(true);
-  infobar_manager->AddInfoBar(CreateVirtualCardEnrollmentInfoBarMobile(
-      std::make_unique<AutofillVirtualCardEnrollmentInfoBarDelegateMobile>(
-          this)));
+  infobar_manager->AddInfoBar(
+      CreateVirtualCardEnrollmentInfoBarMobile(std::move(delegate_mobile)));
 #else
   // If bubble is already showing for another card, close it.
-  if (bubble_view())
+  if (bubble_view()) {
     HideBubble();
+  }
 
   bubble_state_ = BubbleState::kShowingIconAndBubble;
-  if (!IsWebContentsActive())
+  if (!IsWebContentsActive()) {
     return;
+  }
 
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   // For reprompts after link clicks, |is_user_gesture| is set to false.
@@ -271,34 +309,17 @@ void VirtualCardEnrollBubbleControllerImpl::DoShowBubble() {
   // Reset value for the next time tab is switched.
   reprompt_required_ = false;
 
-  if (bubble_shown_closure_for_testing_)
+  if (bubble_shown_closure_for_testing_) {
     bubble_shown_closure_for_testing_.Run();
-}
-
-VirtualCardEnrollmentBubbleSource
-VirtualCardEnrollBubbleControllerImpl::GetVirtualCardEnrollmentBubbleSource() {
-  switch (virtual_card_enrollment_fields_.virtual_card_enrollment_source) {
-    case VirtualCardEnrollmentSource::kUpstream:
-      return VirtualCardEnrollmentBubbleSource::
-          VIRTUAL_CARD_ENROLLMENT_UPSTREAM_SOURCE;
-    case VirtualCardEnrollmentSource::kDownstream:
-      return VirtualCardEnrollmentBubbleSource::
-          VIRTUAL_CARD_ENROLLMENT_DOWNSTREAM_SOURCE;
-    case VirtualCardEnrollmentSource::kSettingsPage:
-      return VirtualCardEnrollmentBubbleSource::
-          VIRTUAL_CARD_ENROLLMENT_SETTINGS_PAGE_SOURCE;
-    default:
-      NOTREACHED();
-      return VirtualCardEnrollmentBubbleSource::
-          VIRTUAL_CARD_ENROLLMENT_UNKNOWN_SOURCE;
   }
 }
 
 #if !BUILDFLAG(IS_ANDROID)
 bool VirtualCardEnrollBubbleControllerImpl::IsWebContentsActive() {
   Browser* active_browser = chrome::FindBrowserWithActiveWindow();
-  if (!active_browser)
+  if (!active_browser) {
     return false;
+  }
 
   return active_browser->tab_strip_model()->GetActiveWebContents() ==
          web_contents();

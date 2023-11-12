@@ -8,7 +8,6 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
 import com.google.errorprone.annotations.DoNotMock;
 
@@ -38,7 +37,7 @@ import java.util.Random;
  * reconstruct a GURL in Java, allowing it to be much faster in the common case and easier to use.
  */
 @JNINamespace("url")
-@DoNotMock("Create a real instance instead. For Robolectric, see JUnitTestGURLs.java")
+@DoNotMock("Create a real instance instead.")
 public class GURL {
     private static final String TAG = "GURL";
     /* package */ static final int SERIALIZER_VERSION = 1;
@@ -369,7 +368,6 @@ public class GURL {
     }
 
     /** Inits this GURL with the internal state of another GURL. */
-    @VisibleForTesting
     /* package */ void initForTesting(GURL gurl) {
         init(gurl.mSpec, gurl.mIsValid, gurl.mParsed);
     }

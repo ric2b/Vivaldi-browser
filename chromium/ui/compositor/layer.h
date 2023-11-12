@@ -103,6 +103,13 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
     sync_visibility_with_source_ = sync_visibility;
   }
 
+  // This method is relevant only if this layer is a mirror destination layer.
+  // Sets whether this mirror layer's rounded corners are synchronized with the
+  // source layer's rounded corners.
+  void set_sync_rounded_corners_with_source(bool sync_rounded_corners) {
+    sync_rounded_corners_with_source_ = sync_rounded_corners;
+  }
+
   // Sets up this layer to mirror output of |subtree_reflected_layer|, including
   // its entire hierarchy. |this| should be of type LAYER_SOLID_COLOR and should
   // not be a descendant of |subtree_reflected_layer|. This is achieved by using
@@ -174,7 +181,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // The layer's animator is responsible for causing automatic animations when
   // properties are set. It also manages a queue of pending animations and
   // handles blending of animations. The layer takes ownership of the animator.
-  void SetAnimator(LayerAnimator* animator);
+  void SetAnimator(scoped_refptr<LayerAnimator> animator);
 
   // Returns the layer's animator. Creates a default animator of one has not
   // been set. Will not return NULL.
@@ -304,8 +311,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Zoom the background by a factor of |zoom|. The effect is blended along the
   // edge across |inset| pixels.
   // NOTE: Background zoom does not currently work with software compositing,
-  // see crbug.com/1451898. Usage should be limited to ash/ which does not
-  // rely on software compositing.
+  // see crbug.com/1451898. Usage should generally be limited to ash chrome,
+  // which does not rely on software compositing. Elsewhere, background zoom can
+  // still be set, but it will have no effect when software compositing is used
+  // (e.g. as a fallback when the GPU process has crashed too many times).
   void SetBackgroundZoom(float zoom, int inset);
 
   // Applies an offset when drawing pixels for the layer background filter.
@@ -405,7 +414,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void SetName(const std::string& name);
 
   // Set new TransferableResource for this layer. This method only supports
-  // a gpu-backed |resource|.
+  // a gpu-backed |resource| which is assumed to have top-left origin. Clients
+  // should call SetTextureFlipped(true) for bottom-left origin resources.
   void SetTransferableResource(const viz::TransferableResource& resource,
                                viz::ReleaseCallback release_callback,
                                gfx::Size texture_size_in_dip);
@@ -720,6 +730,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // If true, and this is a destination mirror layer, changes in the source
   // layer's visibility are propagated to this mirror layer.
   bool sync_visibility_with_source_ = true;
+
+  // If true, and this is a destination mirror layer, changes in the rounded
+  // corners of the source layer are propagated to this mirror layer.
+  bool sync_rounded_corners_with_source_ = true;
 
   gfx::Rect bounds_;
 

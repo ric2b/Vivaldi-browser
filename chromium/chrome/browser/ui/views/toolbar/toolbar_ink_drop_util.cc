@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/color/chrome_color_provider_utils.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "components/user_education/common/user_education_class_properties.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/ui_base_features.h"
@@ -97,6 +98,12 @@ void ConfigureToolbarInkdropForRefresh2023(
     const ChromeColorIds ripple_color_id) {
   CHECK(features::IsChromeRefresh2023());
   views::InkDrop::Get(host)->SetLayerRegion(views::LayerRegion::kAbove);
+  CreateToolbarInkdropCallbacks(host, hover_color_id, ripple_color_id);
+}
+
+void CreateToolbarInkdropCallbacks(views::View* const host,
+                                   const ChromeColorIds hover_color_id,
+                                   const ChromeColorIds ripple_color_id) {
   views::InkDrop::Get(host)->SetCreateRippleCallback(base::BindRepeating(
       [](views::View* host, ChromeColorIds ripple_color_id)
           -> std::unique_ptr<views::InkDropRipple> {
@@ -117,15 +124,21 @@ void ConfigureToolbarInkdropForRefresh2023(
   views::InkDrop::Get(host)->SetCreateHighlightCallback(base::BindRepeating(
       [](views::View* host, ChromeColorIds hover_color_id) {
         const auto* color_provider = host->GetColorProvider();
-        const SkColor hover_color =
-            color_provider ? color_provider->GetColor(hover_color_id)
-                           : gfx::kPlaceholderColor;
+        SkColor hover_color = color_provider
+                                  ? color_provider->GetColor(hover_color_id)
+                                  : gfx::kPlaceholderColor;
+
+        // override the hover color if this is triggered by `user_education`.
+        if (host->GetProperty(user_education::kHasInProductHelpPromoKey)) {
+          hover_color = color_provider->GetColor(
+              ui::kColorButtonFeatureAttentionHighlight);
+        }
+
         const float hover_alpha = SkColorGetA(hover_color);
 
         auto ink_drop_highlight = std::make_unique<views::InkDropHighlight>(
-            host->size(), host->height() / 2,
-            gfx::PointF(host->GetLocalBounds().CenterPoint()),
-            SkColorSetA(hover_color, SK_AlphaOPAQUE));
+            gfx::SizeF(host->size()), SkColorSetA(hover_color, SK_AlphaOPAQUE));
+
         ink_drop_highlight->set_visible_opacity(hover_alpha / SK_AlphaOPAQUE);
         return ink_drop_highlight;
       },

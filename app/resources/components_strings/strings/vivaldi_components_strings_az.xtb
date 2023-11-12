@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Səhifənin yüklənməsi üçün lazım olan verilənləri yenidən daxil etmək üçün yenidən yüklə düyməsinə vurun.</translation>
 <translation id="3234666976984236645">Bu saytda vacib kontenti həmişə aşkarlamaq</translation>
 <translation id="3308738399950580893">reklamlar</translation>
+<translation id="3384522979010096022">Təşkilat bu sayta baxmağınıza icazə vermir</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> hal-hazırda əlçatan deyil.</translation>
 <translation id="3427092606871434483">İcazə vermək (standart)</translation>
 <translation id="3447661539832366887">Bu cihazın sahibi dinozavr oyununu söndürüb.</translation>
@@ -164,7 +165,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> Təhlükəsizlik standartlarına əməl etmir.</translation>
 <translation id="7219179957768738017">Bu bağlantıda <ph name="SSL_VERSION" /> istifadə olunur.</translation>
 <translation id="7221855153210829124">Bildirişlər göstərilsin</translation>
-<translation id="7260504762447901703">Girişi ləğv etmək</translation>
 <translation id="7353601530677266744">Əmr sətri</translation>
 <translation id="7364115444476960850">Daxil olmağa çalışdığınız səhifə <ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="7419106976560586862">Profil yolu</translation>

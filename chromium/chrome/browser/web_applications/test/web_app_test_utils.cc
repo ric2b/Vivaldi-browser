@@ -29,8 +29,9 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -69,8 +70,8 @@
 #include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
+#include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
-#include "third_party/blink/public/common/url_pattern.h"
 #include "third_party/blink/public/mojom/manifest/capture_links.mojom-shared.h"
 #include "third_party/liburlpattern/pattern.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -394,11 +395,12 @@ std::vector<blink::Manifest::ImageResource> CreateRandomHomeTabIcons(
   return icons;
 }
 
-std::vector<blink::UrlPattern> CreateRandomScopePatterns(RandomHelper& random) {
-  std::vector<blink::UrlPattern> scope_patterns;
+std::vector<blink::SafeUrlPattern> CreateRandomScopePatterns(
+    RandomHelper& random) {
+  std::vector<blink::SafeUrlPattern> scope_patterns;
 
   for (int i = random.next_uint(4) + 1; i >= 0; --i) {
-    blink::UrlPattern url_pattern;
+    blink::SafeUrlPattern url_pattern;
 
     for (int j = random.next_uint(4) + 1; j >= 0; --j) {
       liburlpattern::Part part;
@@ -748,12 +750,17 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   }
   app->SetAdditionalSearchTerms(std::move(additional_search_terms));
 
-  int num_shortcut_menus = static_cast<int>(random.next_uint(4)) + 1;
+  int num_shortcut_items = static_cast<int>(random.next_uint(4)) + 1;
   auto item_infos =
-      CreateRandomShortcutsMenuItemInfos(scope, num_shortcut_menus, random);
+      CreateRandomShortcutsMenuItemInfos(scope, num_shortcut_items, random);
   auto icons_sizes =
-      CreateRandomDownloadedShortcutsMenuIconsSizes(num_shortcut_menus, random);
-  app->SetShortcutsMenuInfo(std::move(item_infos), std::move(icons_sizes));
+      CreateRandomDownloadedShortcutsMenuIconsSizes(num_shortcut_items, random);
+  CHECK_EQ(item_infos.size(), icons_sizes.size());
+  for (int i = 0; i < num_shortcut_items; ++i) {
+    item_infos[i].downloaded_icon_sizes = std::move(icons_sizes[i]);
+  }
+  icons_sizes.clear();
+  app->SetShortcutsMenuInfo(std::move(item_infos));
 
   app->SetManifestUrl(
       params.base_url.Resolve("/manifest" + seed_str + ".json"));
@@ -870,17 +877,13 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
           random.next_enum<blink::mojom::TabStripMemberVisibility>();
     }
 
+    blink::Manifest::NewTabButtonParams new_tab_button_params;
     if (random.next_bool()) {
-      blink::Manifest::NewTabButtonParams new_tab_button_params;
-      if (random.next_bool()) {
-        new_tab_button_params.url = scope.Resolve(
-            "new_tab_button_url" + base::NumberToString(random.next_uint()));
-      }
-      tab_strip.new_tab_button = new_tab_button_params;
-    } else {
-      tab_strip.new_tab_button =
-          random.next_enum<blink::mojom::TabStripMemberVisibility>();
+      new_tab_button_params.url = scope.Resolve(
+          "new_tab_button_url" + base::NumberToString(random.next_uint()));
     }
+    tab_strip.new_tab_button = new_tab_button_params;
+
     app->SetTabStrip(std::move(tab_strip));
   }
 
@@ -926,6 +929,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     app->SetIsolationData(isolation_data);
   }
 
+  app->SetIsUserSelectedAppForSupportedLinks(random.next_bool());
   return app;
 }
 
@@ -933,7 +937,7 @@ void TestAcceptDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback), true /*accept*/,
                                 std::move(web_app_info)));
 }
@@ -942,7 +946,7 @@ void TestDeclineDialogCallback(
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback),
                                 false /*accept*/, std::move(web_app_info)));
 }
@@ -989,7 +993,7 @@ void AddInstallUrlData(PrefService* pref_service,
                        const AppId& app_id,
                        const GURL& url,
                        const ExternalInstallSource& source) {
-  ScopedRegistryUpdate update(sync_bridge);
+  ScopedRegistryUpdate update = sync_bridge->BeginUpdate();
   WebApp* app_to_update = update->UpdateApp(app_id);
   DCHECK(app_to_update);
 
@@ -1004,13 +1008,22 @@ void AddInstallUrlAndPlaceholderData(PrefService* pref_service,
                                      const GURL& url,
                                      const ExternalInstallSource& source,
                                      bool is_placeholder) {
-  ScopedRegistryUpdate update(sync_bridge);
+  ScopedRegistryUpdate update = sync_bridge->BeginUpdate();
   WebApp* app_to_update = update->UpdateApp(app_id);
   DCHECK(app_to_update);
 
   // Adding install_url, source and placeholder information to the web_app DB.
   app_to_update->AddExternalSourceInformation(
       ConvertExternalInstallSourceToSource(source), url, is_placeholder);
+}
+
+void SynchronizeOsIntegration(Profile* profile,
+                              const AppId& app_id,
+                              absl::optional<SynchronizeOsOptions> options) {
+  base::test::TestFuture<void> sync_future;
+  WebAppProvider::GetForTest(profile)->scheduler().SynchronizeOsIntegration(
+      app_id, sync_future.GetCallback(), options);
+  EXPECT_TRUE(sync_future.Wait());
 }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

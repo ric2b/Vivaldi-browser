@@ -136,10 +136,13 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   struct FloatingObject {
     DISALLOW_NEW();
 
-    void Trace(Visitor* visitor) const {}
+    void Trace(Visitor* visitor) const {
+      visitor->Trace(float_style);
+      visitor->Trace(style);
+    }
 
-    const ComputedStyle& float_style;
-    const ComputedStyle& style;
+    Member<const ComputedStyle> float_style;
+    Member<const ComputedStyle> style;
     LayoutUnit float_inline_max_size_with_margin;
   };
 
@@ -174,6 +177,10 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
       const String* previous_text,
       const HeapVector<NGInlineItem>* previous_items) const;
   void AssociateItemsWithInlines(NGInlineNodeData*) const;
+  bool IsNGShapeCacheAllowed(const String&,
+                             const Font*,
+                             const HeapVector<NGInlineItem>&,
+                             ShapeResultSpacing<String>&) const;
 
   NGInlineNodeData* MutableData() const {
     return To<LayoutBlockFlow>(box_.Get())->GetNGInlineNodeData();

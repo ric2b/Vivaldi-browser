@@ -9,6 +9,7 @@
 #include <memory>
 #include <ostream>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
@@ -37,6 +38,10 @@
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_drag_handler.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "ui/ozone/platform/wayland/host/wayland_async_cursor.h"
+#endif
 
 struct zwp_keyboard_shortcuts_inhibitor_v1;
 
@@ -239,6 +244,10 @@ class WaylandWindow : public PlatformWindow,
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
     WindowTiledEdges tiled_edges;
 #endif
+
+    // Dumps the values of the states that are part of the standard
+    // xdg_toplevel.state enum into a string;
+    std::string ToString() const;
   };
 
   // Configure related:
@@ -428,6 +437,14 @@ class WaylandWindow : public PlatformWindow,
   // requested changes (server requested changes may be throttled).
   void MaybeApplyLatestStateRequest(bool force);
 
+  // Returns the next state that will be applied, or the currently applied state
+  // if there are no later unapplied states. This is used when updating a single
+  // property (e.g. window scale) without wanting to modify the others.
+  PlatformWindowDelegate::State GetLatestRequestedState() const {
+    return in_flight_requests_.empty() ? applied_state_
+                                       : in_flight_requests_.back().state;
+  }
+
   // PendingConfigureState describes the content of a configure sent from the
   // wayland server.
   struct PendingConfigureState {
@@ -474,6 +491,11 @@ class WaylandWindow : public PlatformWindow,
   std::unique_ptr<WaylandSurface> TakeWaylandSurface();
 
   void UpdateCursorShape(scoped_refptr<BitmapCursor> cursor);
+
+#if BUILDFLAG(IS_LINUX)
+  void OnCursorLoaded(scoped_refptr<WaylandAsyncCursor> cursor,
+                      scoped_refptr<BitmapCursor> bitmap_cursor);
+#endif
 
   // StateRequest describes a State that we are applying to the window, and the
   // metadata about that State, such as what serial number to use for ack (if it
@@ -529,8 +551,13 @@ class WaylandWindow : public PlatformWindow,
 
   wl::Object<zaura_surface> aura_surface_;
 
+#if BUILDFLAG(IS_LINUX)
+  // The current asynchronously loaded cursor (Linux specific).
+  scoped_refptr<WaylandAsyncCursor> async_cursor_;
+#else
   // The current cursor bitmap (immutable).
   scoped_refptr<BitmapCursor> cursor_;
+#endif
 
   // Margins between edges of the surface and the window geometry (i.e., the
   // area of the window that is visible to the user as the actual window).  The

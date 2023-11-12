@@ -20,10 +20,6 @@
 #import "ios/chrome/browser/sync/ios_chrome_synced_tab_delegate.h"
 #import "ios/chrome/browser/tabs/tab_parenting_global_observer.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 sync_sessions::SyncedTabDelegate* GetSyncedTabDelegateFromWebState(
@@ -63,12 +59,12 @@ IOSChromeLocalSessionEventRouter::Observer::~Observer() {}
 
 #pragma mark - WebStateListObserver
 
-void IOSChromeLocalSessionEventRouter::Observer::WebStateListChanged(
+void IOSChromeLocalSessionEventRouter::Observer::WebStateListDidChange(
     WebStateList* web_state_list,
     const WebStateListChange& change,
-    const WebStateSelection& selection) {
+    const WebStateListStatus& status) {
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
+    case WebStateListChange::Type::kStatusOnly:
       // Do nothing when a WebState is selected and its status is updated.
       break;
     case WebStateListChange::Type::kDetach: {

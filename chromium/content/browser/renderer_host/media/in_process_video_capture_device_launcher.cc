@@ -59,7 +59,6 @@
 #include "media/capture/video/chromeos/scoped_video_capture_jpeg_decoder.h"
 #include "media/capture/video/chromeos/video_capture_jpeg_decoder_impl.h"
 #elif BUILDFLAG(IS_WIN)
-#include "media/capture/video/win/video_capture_buffer_tracker_factory_win.h"
 #include "media/capture/video/win/video_capture_device_factory_win.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -99,6 +98,13 @@ BASE_FEATURE(kScreenCaptureKitMac,
 // feature has no effect if kScreenCaptureKitMac is enabled.
 BASE_FEATURE(kScreenCaptureKitMacWindow,
              "ScreenCaptureKitMacWindow",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If this feature is enabled, ScreenCaptureKit will be used for screen
+// capturing even if kScreenCaptureKitMac is disabled. Please note that this
+// feature has no effect if kScreenCaptureKitMac is enabled.
+BASE_FEATURE(kScreenCaptureKitMacScreen,
+             "ScreenCaptureKitMacScreen",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -186,7 +192,9 @@ DesktopCaptureImplementation CreatePlatformDependentVideoCaptureDevice(
   // if both fail, use the generic DesktopCaptureDevice.
   if (base::FeatureList::IsEnabled(kScreenCaptureKitMac) ||
       (desktop_id.type == DesktopMediaID::TYPE_WINDOW &&
-       base::FeatureList::IsEnabled(kScreenCaptureKitMacWindow))) {
+       base::FeatureList::IsEnabled(kScreenCaptureKitMacWindow)) ||
+      (desktop_id.type == DesktopMediaID::TYPE_SCREEN &&
+       base::FeatureList::IsEnabled(kScreenCaptureKitMacScreen))) {
     if ((device_out = CreateScreenCaptureKitDeviceMac(desktop_id)))
       return kScreenCaptureKitDeviceMac;
   }
@@ -396,7 +404,7 @@ InProcessVideoCaptureDeviceLauncher::CreateDeviceClient(
   scoped_refptr<media::VideoCaptureBufferPool> buffer_pool =
       base::MakeRefCounted<media::VideoCaptureBufferPoolImpl>(
           requested_buffer_type, buffer_pool_max_buffer_count,
-          std::make_unique<media::VideoCaptureBufferTrackerFactoryWin>(
+          std::make_unique<media::VideoCaptureBufferTrackerFactoryImpl>(
               std::move(dxgi_device_manager)));
 #else
   scoped_refptr<media::VideoCaptureBufferPool> buffer_pool =

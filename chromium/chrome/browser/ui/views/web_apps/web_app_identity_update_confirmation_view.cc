@@ -155,12 +155,6 @@ WebAppIdentityUpdateConfirmationView::WebAppIdentityUpdateConfirmationView(
   install_manager_observation_.Observe(&provider->install_manager());
 }
 
-void WebAppIdentityUpdateConfirmationView::OnWebAppWillBeUninstalled(
-    const web_app::AppId& app_id) {
-  if (app_id == app_id_)
-    GetWidget()->Close();
-}
-
 void WebAppIdentityUpdateConfirmationView::OnWebAppInstallManagerDestroyed() {
   install_manager_observation_.Reset();
   GetWidget()->Close();
@@ -171,26 +165,33 @@ bool WebAppIdentityUpdateConfirmationView::ShouldShowCloseButton() const {
 }
 
 void WebAppIdentityUpdateConfirmationView::OnDialogAccepted() {
+  DCHECK(callback_);
   std::move(callback_).Run(web_app::AppIdentityUpdate::kAllowed);
 }
 
-void WebAppIdentityUpdateConfirmationView::OnWebAppUninstallDialogClosed(
-    webapps::UninstallResultCode code) {
-  if (code == webapps::UninstallResultCode::kSuccess ||
-      code == webapps::UninstallResultCode::kNoAppToUninstall) {
-    GetWidget()->Close();  // An uninstall is already in progress.
-  }
-}
-
 bool WebAppIdentityUpdateConfirmationView::Cancel() {
-  uninstall_dialog_ = std::make_unique<WebAppUninstallDialogViews>(
-      profile_, GetWidget()->GetNativeWindow());
-  uninstall_dialog_->ConfirmUninstall(
+  auto* provider = web_app::WebAppProvider::GetForWebApps(profile_);
+  DCHECK(provider);
+  provider->ui_manager().PresentUserUninstallDialog(
       app_id_, webapps::WebappUninstallSource::kAppMenu,
+      GetWidget()->GetNativeWindow(), base::DoNothing(),
       base::BindOnce(
-          &WebAppIdentityUpdateConfirmationView::OnWebAppUninstallDialogClosed,
+          &WebAppIdentityUpdateConfirmationView::OnWebAppUninstallScheduled,
           weak_factory_.GetWeakPtr()));
   return false;
+}
+
+void WebAppIdentityUpdateConfirmationView::OnWebAppUninstallScheduled(
+    bool uninstall_scheduled) {
+  if (!uninstall_scheduled) {
+    return;
+  }
+
+  DCHECK(callback_);
+  if (GetWidget()) {
+    std::move(callback_).Run(web_app::AppIdentityUpdate::kUninstall);
+    GetWidget()->Close();
+  }
 }
 
 BEGIN_METADATA(WebAppIdentityUpdateConfirmationView, views::DialogDelegateView)

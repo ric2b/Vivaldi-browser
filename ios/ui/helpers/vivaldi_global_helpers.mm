@@ -2,6 +2,8 @@
 
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 
+#import "base/apple/bundle_locations.h"
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
@@ -114,6 +116,15 @@
         self.iPadLayoutState == LayoutStateTwoThirdScreen));
 }
 
++ (BOOL)isFinalReleaseBuild {
+  NSString* scheme =
+      base::apple::ObjCCast<NSString>([base::apple::FrameworkBundle()
+          objectForInfoDictionaryKey:@"KSChannelChromeScheme"]);
+  if (!scheme)
+    return NO;
+  return [scheme isEqualToString:@"vivaldi_final"];
+}
+
 + (BOOL)isValidDomain:(NSString* _Nonnull)urlString {
   NSString *pattern =
       @"^(https?://)?([\\da-z.-]+)\\.([a-z.]{2,6})([/\\w .-]*)*/?$";
@@ -193,6 +204,45 @@
     }
   }
   return result;
+}
+
++ (BOOL)areHostsEquivalentForURL:(NSURL* _Nonnull)aURL
+                            bURL:(NSURL* _Nonnull)bURL {
+  // Define a constant for the minimum number of components in a domain.
+  // Domains should at least have a top-level domain and a second-level domain,
+  // e.g. "apple.com".
+  static NSInteger const kMinDomainComponents = 2;
+
+  // Extract host strings from the input URLs
+  NSString *aHost = aURL.host;
+  NSString *bHost = bURL.host;
+
+  // If either host string is nil, return NO since there's nothing to compare
+  if (!aHost || !bHost) return NO;
+
+  // Split host strings into components separated by "."
+  NSArray *aHostComponents = [aHost componentsSeparatedByString:@"."];
+  NSArray *bHostComponents = [bHost componentsSeparatedByString:@"."];
+
+  // If either host string does not have the minimum number of domain components,
+  // perform a simple string comparison and return the result.
+  if (aHostComponents.count < kMinDomainComponents ||
+      bHostComponents.count < kMinDomainComponents)
+    return [aHost isEqualToString:bHost];
+
+  // Construct domain strings from the last two components of the host strings,
+  // and compare them.
+  NSString *aDomain =
+    [NSString stringWithFormat:@"%@.%@",
+        aHostComponents[aHostComponents.count - kMinDomainComponents],
+          aHostComponents.lastObject];
+  NSString *bDomain =
+    [NSString stringWithFormat:@"%@.%@",
+        bHostComponents[bHostComponents.count - kMinDomainComponents],
+          bHostComponents.lastObject];
+
+  // Return YES if the domain strings are equal, NO otherwise.
+  return [aDomain isEqualToString:bDomain];
 }
 
 @end

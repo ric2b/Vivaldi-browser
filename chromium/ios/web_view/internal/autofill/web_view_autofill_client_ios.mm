@@ -34,10 +34,6 @@
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 #import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace autofill {
 
 // static
@@ -269,6 +265,19 @@ void WebViewAutofillClientIOS::ConfirmSaveAddressProfile(
                             callback:std::move(callback)];
 }
 
+void WebViewAutofillClientIOS::ShowEditAddressProfileDialog(
+    const AutofillProfile& profile) {
+  // Please note: This method is only implemented on desktop and is therefore
+  // unreachable here.
+  NOTREACHED();
+}
+
+void WebViewAutofillClientIOS::ShowDeleteAddressProfileDialog() {
+  // Please note: This method is only implemented on desktop and is therefore
+  // unreachable here.
+  NOTREACHED();
+}
+
 bool WebViewAutofillClientIOS::HasCreditCardScanFeature() {
   return false;
 }
@@ -313,15 +322,16 @@ void WebViewAutofillClientIOS::PinPopupView() {
   NOTIMPLEMENTED();
 }
 
-AutofillClient::PopupOpenArgs WebViewAutofillClientIOS::GetReopenPopupArgs()
-    const {
+AutofillClient::PopupOpenArgs WebViewAutofillClientIOS::GetReopenPopupArgs(
+    AutofillSuggestionTriggerSource trigger_source) const {
   NOTIMPLEMENTED();
   return {};
 }
 
 void WebViewAutofillClientIOS::UpdatePopup(
     const std::vector<Suggestion>& suggestions,
-    PopupType popup_type) {
+    PopupType popup_type,
+    AutofillSuggestionTriggerSource trigger_source) {
   NOTIMPLEMENTED();
 }
 
@@ -338,7 +348,7 @@ bool WebViewAutofillClientIOS::IsPasswordManagerEnabled() {
       password_manager::prefs::kCredentialsEnableService);
 }
 
-void WebViewAutofillClientIOS::PropagateAutofillPredictions(
+void WebViewAutofillClientIOS::PropagateAutofillPredictionsDeprecated(
     AutofillDriver* driver,
     const std::vector<FormStructure*>& forms) {
   [bridge_
@@ -349,7 +359,7 @@ void WebViewAutofillClientIOS::PropagateAutofillPredictions(
 }
 
 void WebViewAutofillClientIOS::DidFillOrPreviewForm(
-    mojom::RendererFormDataAction action,
+    mojom::AutofillActionPersistence action_persistence,
     AutofillTriggerSource trigger_source,
     bool is_refill) {}
 

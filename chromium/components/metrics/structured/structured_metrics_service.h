@@ -52,6 +52,8 @@ class StructuredMetricsService final {
   // Clears all event and log data.
   void Purge();
 
+  MetricsServiceClient* GetMetricsServiceClient() const;
+
   bool reporting_active() const {
     return reporting_service_->reporting_active();
   }
@@ -113,7 +115,7 @@ class StructuredMetricsService final {
   bool structured_metrics_enabled_ = false;
 
   // The metrics client |this| is service is associated.
-  base::raw_ptr<MetricsServiceClient> client_;
+  raw_ptr<MetricsServiceClient> client_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

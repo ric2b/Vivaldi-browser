@@ -6,7 +6,7 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -15,13 +15,9 @@
 #include "components/policy/policy_constants.h"
 #include "components/version_info/version_info.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 bool ChromeCrashReporterClient::ReportingIsEnforcedByPolicy(
     bool* breakpad_enabled) {
-  base::ScopedCFTypeRef<CFStringRef> key =
+  base::apple::ScopedCFTypeRef<CFStringRef> key =
       base::SysUTF8ToCFStringRef(policy::key::kMetricsReportingEnabled);
   Boolean key_valid;
   Boolean metrics_reporting_enabled = CFPreferencesGetAppBooleanValue(key,

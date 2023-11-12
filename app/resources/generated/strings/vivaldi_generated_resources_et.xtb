@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Taasta seaded</translation>
 <translation id="4478664379124702289">Salvesta link nimega...</translation>
 <translation id="4520385623207007473">Kasutusel olevad küpsised</translation>
+<translation id="456449593072900590">Kustuta väljumisel</translation>
 <translation id="4580596421317071374">Paroolid salvestatakse selles seadmes <ph name="GOOGLE_PASSWORD_MANAGER" />is.</translation>
 <translation id="4593021220803146968">&amp;Ava <ph name="URL" /></translation>
 <translation id="4595560905247879544">Rakendusi ja laiendusi saab muuta ainult haldur (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -235,6 +236,7 @@
 <translation id="4839303808932127586">Sa&amp;lvesta video nimega...</translation>
 <translation id="4840096453115567876">Kas soovid privaatsest režiimist siiski väljuda?</translation>
 <translation id="488785315393301722">Näita üksikasju</translation>
+<translation id="4895799941222633551">Lisa otsetee...</translation>
 <translation id="4912643508233590958">Jõudeolekust ärkamised</translation>
 <translation id="49265687513387605">Ekraani ei õnnestu üle kanda. Vaata, kas vastasid ekraani jagamise alustamise kinnitusdialoogile.</translation>
 <translation id="4927753642311223124">Siin pole midagi vaadata, liigu aga edasi.</translation>
@@ -272,12 +274,12 @@
 <translation id="5370819323174483825">&amp;Laadi uuesti</translation>
 <translation id="5390743329570580756">Saatmistingimus</translation>
 <translation id="5398572795982417028">Piiridest väljas olev leheviide, maksimum on <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Lisa otsetee...</translation>
 <translation id="5425042808445046667">Jätka allalaadimist</translation>
 <translation id="5427459444770871191">Pööra &amp;päripäeva</translation>
 <translation id="5431318178759467895">Värviline</translation>
 <translation id="5485102783864353244">Lisa rakendus</translation>
 <translation id="5486561344817861625">Simuleeri brauseri taaskäivitust</translation>
-<translation id="5487521232677179737">Kustuta andmed</translation>
 <translation id="5509693895992845810">Salvesta nimega...</translation>
 <translation id="5521078259930077036">Kas see on koduleht, mida ootasid?</translation>
 <translation id="5542132724887566711">Profiil</translation>
@@ -303,7 +305,6 @@
 <translation id="583281660410589416">Tundmatu</translation>
 <translation id="5851868085455377790">Väljaandja</translation>
 <translation id="5860491529813859533">Lülita sisse</translation>
-<translation id="5867841422488265304">Otsi või sisesta veebiaadress</translation>
 <translation id="5910363049092958439">Sa&amp;lvesta pilt nimega...</translation>
 <translation id="5914724413750400082">Moodul (<ph name="MODULUS_NUM_BITS" /> bitti):
   <ph name="MODULUS_HEX_DUMP" />
@@ -362,6 +363,7 @@
 <translation id="6886871292305414135">Ava link uuel kaardil</translation>
 <translation id="6892812721183419409">Ava link kasutajana <ph name="USER" /></translation>
 <translation id="6900284862687837908">Taustarakendus: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6916590542764765824">Laienduste haldamine</translation>
 <translation id="6945221475159498467">Vali</translation>
 <translation id="6955446738988643816">Inspekteeri hüpikakent</translation>
 <translation id="6970856801391541997">Prindi ainult teatud leheküljed</translation>
@@ -372,12 +374,12 @@
 <translation id="7070484045139057854">Laiendus võib lugeda ja muuta saidiandmeid</translation>
 <translation id="708060913198414444">K&amp;opeeri heli aadress</translation>
 <translation id="7121728544325372695">Nutikad kriipsud</translation>
+<translation id="7144856456372460176">Paigalda <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Laaditud asukohast:</translation>
 <translation id="7186088072322679094">Hoia tööriistaribal</translation>
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Õigekirja kontrollimine kirjutamisel</translation>
-<translation id="73786666777299047">Ava Chrome’i veebipood</translation>
 <translation id="7385854874724088939">Printida üritamisel läks midagi valesti. Kontrolli printerit ja proovi uuesti.</translation>
 <translation id="7412226954991670867">GPU mälu</translation>
 <translation id="7421925624202799674">&amp;Vaata lehe lähtekoodi</translation>
@@ -438,6 +440,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8382913212082956454">Kopeeri meiliaadress</translation>
 <translation id="8434480141477525001">NaCL-i silumisport</translation>
 <translation id="8449008133205184768">Aseta ja ühita stiil</translation>
+<translation id="8477178913400731244">Kustuta andmed</translation>
 <translation id="8477384620836102176">Üldine</translation>
 <translation id="8496717697661868878">Käivita see plugin</translation>
 <translation id="8512476990829870887">Lõpeta protsess</translation>

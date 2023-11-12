@@ -14,7 +14,7 @@
 #include "base/values.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/web_wrapper.h"
-#include "components/optimization_guide/core/new_optimization_guide_decider.h"
+#include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -48,10 +48,12 @@ class TestSyncService;
 
 namespace commerce {
 
+extern const uint64_t kInvalidDiscountId;
+
 // A mock Optimization Guide decider that allows us to specify the response for
 // a particular URL.
 class MockOptGuideDecider
-    : public optimization_guide::NewOptimizationGuideDecider {
+    : public optimization_guide::OptimizationGuideDecider {
  public:
   MockOptGuideDecider();
   MockOptGuideDecider(const MockOptGuideDecider&) = delete;
@@ -119,6 +121,9 @@ class MockOptGuideDecider
       const std::string& jackpot_url,
       const PriceBucket& price_bucket,
       const bool has_multiple_catalogs);
+
+  OptimizationMetadata BuildDiscountsResponse(
+      const std::vector<DiscountInfo>& infos);
 
  private:
   absl::optional<GURL> response_url_;

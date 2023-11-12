@@ -22,6 +22,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/color/color_recipe.h"
 #include "ui/compositor/layer.h"
@@ -307,6 +308,48 @@ TEST_F(WidgetWithCustomParamsTest, NamePropagatedFromContentsViewClassName) {
   EXPECT_EQ(contents->GetClassName(), widget->GetName());
 }
 
+TEST_F(WidgetWithCustomParamsTest, InitWithNativeTheme) {
+  // Verify that `InitParams::native_theme` is applied during widget
+  // initialization.
+
+  class TestView : public View {
+   public:
+    ~TestView() override = default;
+
+    void OnThemeChanged() override {
+      View::OnThemeChanged();
+      auto* native_theme = GetNativeTheme();
+      if (native_theme && native_theme->user_color()) {
+        user_color_ = *native_theme->user_color();
+      }
+    }
+
+    SkColor user_color() const { return user_color_; }
+
+   private:
+    SkColor user_color_ = SK_ColorWHITE;
+  };
+
+  const SkColor test_color = SkColorSetARGB(1, 2, 3, 4);
+
+  WidgetDelegate delegate;
+  auto view = std::make_unique<TestView>();
+  auto* view_raw_ptr = view.get();
+  delegate.SetContentsView(std::move(view));
+
+  ui::TestNativeTheme test_native_theme;
+  test_native_theme.set_user_color(test_color);
+
+  SetInitFunction(base::BindLambdaForTesting([&](Widget::InitParams* params) {
+    params->delegate = &delegate;
+    params->native_theme = &test_native_theme;
+  }));
+
+  std::unique_ptr<Widget> widget = CreateTestWidget();
+
+  EXPECT_EQ(view_raw_ptr->user_color(), test_color);
+}
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
   struct SkottieColors {
@@ -354,8 +397,7 @@ TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
       delegate1.SetContentsView(std::make_unique<ViewObservingSkottieColors>());
   SetInitFunction(base::BindLambdaForTesting([&](Widget::InitParams* params) {
     params->delegate = &delegate1;
-    params->background_elevation =
-        ui::ColorProviderManager::ElevationMode::kLow;
+    params->background_elevation = ui::ColorProviderKey::ElevationMode::kLow;
   }));
   std::unique_ptr<Widget> widget1 = CreateTestWidget();
   ASSERT_EQ(1u, contents1->history.size());
@@ -366,8 +408,7 @@ TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
       delegate2.SetContentsView(std::make_unique<ViewObservingSkottieColors>());
   SetInitFunction(base::BindLambdaForTesting([&](Widget::InitParams* params) {
     params->delegate = &delegate2;
-    params->background_elevation =
-        ui::ColorProviderManager::ElevationMode::kHigh;
+    params->background_elevation = ui::ColorProviderKey::ElevationMode::kHigh;
   }));
   std::unique_ptr<Widget> widget2 = CreateTestWidget();
   ASSERT_EQ(1u, contents2->history.size());
@@ -394,8 +435,7 @@ TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
       delegate3.SetContentsView(std::make_unique<ViewObservingSkottieColors>());
   SetInitFunction(base::BindLambdaForTesting([&](Widget::InitParams* params) {
     params->delegate = &delegate3;
-    params->background_elevation =
-        ui::ColorProviderManager::ElevationMode::kLow;
+    params->background_elevation = ui::ColorProviderKey::ElevationMode::kLow;
   }));
   std::unique_ptr<Widget> widget3 = CreateTestWidget();
   ASSERT_EQ(1u, contents3->history.size());
@@ -410,8 +450,7 @@ TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
       delegate4.SetContentsView(std::make_unique<ViewObservingSkottieColors>());
   SetInitFunction(base::BindLambdaForTesting([&](Widget::InitParams* params) {
     params->delegate = &delegate4;
-    params->background_elevation =
-        ui::ColorProviderManager::ElevationMode::kHigh;
+    params->background_elevation = ui::ColorProviderKey::ElevationMode::kHigh;
   }));
   std::unique_ptr<Widget> widget4 = CreateTestWidget();
   ASSERT_EQ(1u, contents4->history.size());
@@ -464,12 +503,11 @@ class WidgetColorModeTest : public WidgetTest {
 
  private:
   static void AddColor(ui::ColorProvider* provider,
-                       const ui::ColorProviderManager::Key& key) {
+                       const ui::ColorProviderKey& key) {
     ui::ColorMixer& mixer = provider->AddMixer();
     mixer[ui::kColorSysPrimary] = {
-        key.color_mode == ui::ColorProviderManager::ColorMode::kDark
-            ? kDarkColor
-            : kLightColor};
+        key.color_mode == ui::ColorProviderKey::ColorMode::kDark ? kDarkColor
+                                                                 : kLightColor};
   }
 };
 
@@ -491,7 +529,7 @@ TEST_F(WidgetColorModeTest, ColorModeOverride_DarkOverride) {
   test_theme.SetDarkMode(false);
   widget->SetNativeThemeForTest(&test_theme);
 
-  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kDark);
+  widget->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
   // Verify that we resolve the light color even though the theme is dark.
   EXPECT_EQ(kDarkColor,
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
@@ -503,7 +541,7 @@ TEST_F(WidgetColorModeTest, ColorModeOverride_LightOverride) {
   test_theme.SetDarkMode(true);
   widget->SetNativeThemeForTest(&test_theme);
 
-  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kLight);
+  widget->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kLight);
   // Verify that we resolve the light color even though the theme is dark.
   EXPECT_EQ(kLightColor,
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
@@ -558,13 +596,13 @@ TEST_F(WidgetColorModeTest, ChildInheritsColorMode_Overrides) {
 
   // Set the parent's override to light, then back to dark. the child should
   // follow the parent's overridden color mode.
-  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kLight);
+  widget->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kLight);
   EXPECT_EQ(kLightColor,
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
   EXPECT_EQ(kLightColor,
             widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
 
-  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kDark);
+  widget->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
   EXPECT_EQ(kDarkColor,
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
   EXPECT_EQ(kDarkColor,
@@ -572,8 +610,7 @@ TEST_F(WidgetColorModeTest, ChildInheritsColorMode_Overrides) {
 
   // Override the child's color mode to light. The parent should continue to
   // report a dark color mode.
-  widget_child->SetColorModeOverride(
-      ui::ColorProviderManager::ColorMode::kLight);
+  widget_child->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kLight);
   EXPECT_EQ(kDarkColor,
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
   EXPECT_EQ(kLightColor,
@@ -1320,10 +1357,6 @@ TEST_P(WidgetWithDestroyedNativeViewOrNativeWidgetTest,
 
 TEST_P(WidgetWithDestroyedNativeViewOrNativeWidgetTest, Deactivate) {
   widget()->Deactivate();
-}
-
-TEST_P(WidgetWithDestroyedNativeViewOrNativeWidgetTest, DebugToggleFrameType) {
-  widget()->DebugToggleFrameType();
 }
 
 TEST_P(WidgetWithDestroyedNativeViewOrNativeWidgetTest, DraggedView) {
@@ -5312,6 +5345,101 @@ TEST_F(WidgetTest, MouseWheelEvent) {
 
   event_generator->MoveMouseWheel(1, 1);
   EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSEWHEEL));
+}
+
+// Test that ui::ET_MOUSE_ENTERED is dispatched even when not followed by
+// ui::ET_MOUSE_MOVED.
+TEST_F(WidgetTest, MouseEnteredWithoutMoved) {
+  WidgetAutoclosePtr widget(CreateTopLevelFramelessPlatformWidget());
+  widget->SetBounds(gfx::Rect(0, 0, 100, 100));
+
+  auto* root_view = static_cast<internal::RootView*>(widget->GetRootView());
+  auto* v1 = root_view->AddChildView(std::make_unique<EventCountView>());
+  v1->SetBounds(10, 10, 10, 10);
+  auto* v2 = root_view->AddChildView(std::make_unique<EventCountView>());
+  v2->SetBounds(20, 10, 10, 10);
+
+  widget->Show();
+
+  auto generator =
+      CreateEventGenerator(GetContext(), widget->GetNativeWindow());
+
+  // Enter |v1| and check that it received ui::ET_MOUSE_ENTERED.
+  auto enter_location = v1->GetBoundsInScreen().CenterPoint();
+  generator->set_current_screen_location(enter_location);
+  generator->SendMouseEnter();
+  EXPECT_EQ(v1, GetMouseMoveHandler(root_view));
+  EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v1->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(0, v1->GetEventCount(ui::ET_MOUSE_EXITED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_EXITED));
+
+  // Enter |v2| and check that |v1| received ui::ET_MOUSE_EXITED and |v2|
+  // received ui::ET_MOUSE_ENTERED.
+  enter_location = v2->GetBoundsInScreen().CenterPoint();
+  generator->set_current_screen_location(enter_location);
+  generator->SendMouseEnter();
+  EXPECT_EQ(v2, GetMouseMoveHandler(root_view));
+  EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v1->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_EXITED));
+  EXPECT_EQ(1, v2->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_EXITED));
+
+  // Enter |root_view| and check that |v2| received ui::ET_MOUSE_EXITED.
+  enter_location = gfx::Point(0, 0);
+  generator->set_current_screen_location(enter_location);
+  generator->SendMouseEnter();
+  EXPECT_EQ(nullptr, GetMouseMoveHandler(root_view));
+  EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v1->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_EXITED));
+  EXPECT_EQ(1, v2->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_MOVED));
+  EXPECT_EQ(1, v2->GetEventCount(ui::ET_MOUSE_EXITED));
+}
+
+// Test that ui::ET_MOUSE_MOVED after ui::ET_MOUSE_ENTERED doesn't cause an
+// extra ui::ET_MOUSE_ENTERED.
+TEST_F(WidgetTest, MouseMovedAfterEnteredDoesntCauseEntered) {
+  WidgetAutoclosePtr widget(CreateTopLevelFramelessPlatformWidget());
+  widget->SetBounds(gfx::Rect(0, 0, 100, 100));
+
+  auto* root_view = widget->GetRootView();
+  auto* v = root_view->AddChildView(std::make_unique<EventCountView>());
+  v->SetBounds(10, 10, 10, 10);
+
+  widget->Show();
+
+  auto generator =
+      CreateEventGenerator(GetContext(), widget->GetNativeWindow());
+
+  // Enter |v|.
+  auto enter_location = v->GetBoundsInScreen().CenterPoint();
+  generator->set_current_screen_location(enter_location);
+  generator->SendMouseEnter();
+
+  // Send ui::ET_MOUSE_MOVED at the same location and check that it didn't
+  // generate ui::ET_MOUSE_ENTERED again.
+  generator->MoveMouseBy(0, 0);
+  EXPECT_EQ(1, v->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(1, v->GetEventCount(ui::ET_MOUSE_MOVED));
+
+  // Reset state by entering |root_view|.
+  generator->MoveMouseTo(0, 0);
+
+  // Enter |v| again.
+  generator->set_current_screen_location(enter_location);
+  generator->SendMouseEnter();
+
+  // Send ui::ET_MOUSE_MOVED at a slightly offset location and check that it
+  // didn't generate ui::ET_MOUSE_ENTERED again.
+  generator->MoveMouseBy(1, 1);
+  EXPECT_EQ(2, v->GetEventCount(ui::ET_MOUSE_ENTERED));
+  EXPECT_EQ(2, v->GetEventCount(ui::ET_MOUSE_MOVED));
 }
 
 class CloseFromClosingObserver : public WidgetObserver {

@@ -17,10 +17,6 @@
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/public/web_state.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // Helper to access the correct NavigationItem, accounting for pending entries.
@@ -236,6 +232,14 @@ int64_t IOSChromeSyncedTabDelegate::GetRootTaskIdForNavigationId(
       IOSTaskTabHelper::FromWebState(web_state_)
           ->GetContextRecordTaskId(nav_id);
   return record ? record->root_task_id() : -1;
+}
+
+std::unique_ptr<sync_sessions::SyncedTabDelegate>
+IOSChromeSyncedTabDelegate::CreatePlaceholderTabSyncedTabDelegate() {
+  NOTREACHED()
+      << "CreatePlaceholderTabSyncedTabDelegate is not supported for the "
+         "iOS platform.";
+  return nullptr;
 }
 
 bool IOSChromeSyncedTabDelegate::GetSessionStorageIfNeeded() const {

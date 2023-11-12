@@ -56,11 +56,8 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   void CompleteLogin(const UserContext& user_context) final;
   void OnGaiaScreenReady() final;
   void SetDisplayEmail(const std::string& email) final;
-  void SetDisplayAndGivenName(const std::string& display_name,
-                              const std::string& given_name) final;
   void ShowAllowlistCheckFailedError() final;
-  void LoadWallpaper(const AccountId& account_id) final;
-  void LoadSigninWallpaper() final;
+  void UpdateWallpaper(const AccountId& prefilled_account) final;
   bool IsUserAllowlisted(
       const AccountId& account_id,
       const absl::optional<user_manager::UserType>& user_type) final;
@@ -150,9 +147,6 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
 
   // Make sure chrome won't exit while we are at login/oobe screen.
   ScopedKeepAlive keep_alive_;
-
-  // Called after host deletion.
-  std::vector<base::OnceClosure> completion_callbacks_;
 
   KioskAppMenuController kiosk_app_menu_controller_;
 

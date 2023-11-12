@@ -67,7 +67,13 @@ TEST_PPAPI_OUT_OF_PROCESS(Graphics2D)
 TEST_PPAPI_IN_PROCESS(ImageData)
 TEST_PPAPI_OUT_OF_PROCESS(ImageData)
 
-TEST_PPAPI_OUT_OF_PROCESS(InputEvent)
+// Fails on macOS; https://crbug.com/14531024
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_InputEvent DISABLED_InputEvent
+#else
+#define MAYBE_InputEvent InputEvent
+#endif
+TEST_PPAPI_OUT_OF_PROCESS(MAYBE_InputEvent)
 
 // "Instance" tests are really InstancePrivate tests. InstancePrivate is not
 // supported in NaCl, so these tests are only run trusted.
@@ -114,13 +120,7 @@ IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest,
 // Flaky on all platforms (crbug.com/438729, crbug.com/800376)
 TEST_PPAPI_OUT_OF_PROCESS(DISABLED_MediaStreamAudioTrack)
 
-// Failing on M116 Mac (crbug.com/1465575)
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_MediaStreamVideoTrack DISABLED_MediaStreamVideoTrack
-#else
-#define MAYBE_MediaStreamVideoTrack MediaStreamVideoTrack
-#endif
-TEST_PPAPI_OUT_OF_PROCESS(MAYBE_MediaStreamVideoTrack)
+TEST_PPAPI_OUT_OF_PROCESS(MediaStreamVideoTrack)
 
 TEST_PPAPI_IN_PROCESS(Memory)
 TEST_PPAPI_OUT_OF_PROCESS(Memory)

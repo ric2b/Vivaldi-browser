@@ -85,6 +85,10 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
+    builder = "chromeos-betty-pi-arc-cfi-thin-lto-chrome",
+)
+
+chrome_internal_verifier(
     builder = "chromeos-betty-pi-arc-chrome",
 )
 
@@ -97,11 +101,11 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
-    builder = "chromeos-kevin-chrome",
+    builder = "chromeos-jacuzzi-chrome",
 )
 
 chrome_internal_verifier(
-    builder = "chromeos-kevin-compile-chrome",
+    builder = "chromeos-jacuzzi-compile-chrome",
 )
 
 chrome_internal_verifier(
@@ -130,10 +134,6 @@ chrome_internal_verifier(
 
 chrome_internal_verifier(
     builder = "fuchsia-internal-images-roller",
-)
-
-chrome_internal_verifier(
-    builder = "fuchsia-smoke-astro",
 )
 
 chrome_internal_verifier(
@@ -216,6 +216,11 @@ chrome_internal_verifier(
 
 chrome_internal_verifier(
     builder = "test-o-emulator",
+)
+
+chrome_internal_verifier(
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
+    builder = "win-arm64-pgo",
 )
 
 chrome_internal_verifier(

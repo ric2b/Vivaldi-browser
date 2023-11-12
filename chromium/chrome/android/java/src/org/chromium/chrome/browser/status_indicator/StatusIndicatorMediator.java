@@ -14,7 +14,6 @@ import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
@@ -455,12 +454,10 @@ class StatusIndicatorMediator implements BrowserControlsStateProvider.Observer,
         }
     }
 
-    @VisibleForTesting
     void updateVisibilityForTesting(boolean hiding) {
         updateVisibility(hiding);
     }
 
-    @VisibleForTesting
     void finishAnimationsForTesting() {
         if (mStatusBarAnimation != null && mStatusBarAnimation.isRunning()) {
             mStatusBarAnimation.end();

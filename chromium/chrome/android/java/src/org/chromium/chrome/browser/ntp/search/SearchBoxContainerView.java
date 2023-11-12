@@ -10,13 +10,51 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.widget.LinearLayout;
 
+import androidx.appcompat.content.res.AppCompatResources;
+
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
+
 /**
  * Provides the additional capabilities needed for the SearchBox container layout.
  */
 public class SearchBoxContainerView extends LinearLayout {
+    private final boolean mIsSurfacePolishEnabled;
+    private final boolean mIsSurfacePolishOmniboxColorEnabled;
+    private final int mEndPadding;
+    private final int mLateralMargin;
+
     /** Constructor for inflating from XML. */
     public SearchBoxContainerView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mIsSurfacePolishEnabled = ChromeFeatureList.sSurfacePolish.isEnabled();
+        mIsSurfacePolishOmniboxColorEnabled = mIsSurfacePolishEnabled
+                && StartSurfaceConfiguration.SURFACE_POLISH_OMNIBOX_COLOR.getValue();
+        mEndPadding = getResources().getDimensionPixelSize(R.dimen.fake_search_box_end_padding);
+        mLateralMargin =
+                getResources().getDimensionPixelSize(R.dimen.mvt_container_lateral_margin_polish);
+    }
+
+    @Override
+    protected void onFinishInflate() {
+        super.onFinishInflate();
+        if (mIsSurfacePolishEnabled) {
+            int startPadding = getPaddingStart();
+            setPaddingRelative(startPadding, 0, mEndPadding, 0);
+
+            MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
+            params.leftMargin = mLateralMargin;
+            params.rightMargin = mLateralMargin;
+
+            if (mIsSurfacePolishOmniboxColorEnabled) {
+                setBackground(AppCompatResources.getDrawable(
+                        getContext(), R.drawable.home_surface_search_box_background_colorful));
+            } else {
+                setBackground(AppCompatResources.getDrawable(
+                        getContext(), R.drawable.home_surface_search_box_background_neutral));
+            }
+        }
     }
 
     @Override

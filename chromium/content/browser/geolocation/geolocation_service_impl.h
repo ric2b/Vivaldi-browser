@@ -14,6 +14,7 @@
 #include "services/device/public/mojom/geolocation.mojom.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "third_party/blink/public/mojom/geolocation/geolocation_service.mojom.h"
+#include "url/origin.h"
 
 namespace blink {
 namespace mojom {
@@ -35,14 +36,9 @@ class GeolocationServiceImplContext {
   ~GeolocationServiceImplContext();
   using PermissionCallback =
       base::OnceCallback<void(blink::mojom::PermissionStatus)>;
-
   void RequestPermission(RenderFrameHost* render_frame_host,
                          bool user_gesture,
                          PermissionCallback callback);
-
-  PermissionController::SubscriptionId SubscribePermissionStatusChange(
-      RenderFrameHost* render_frame_host,
-      PermissionCallback callback);
 
  private:
   bool has_pending_permission_request_ = false;
@@ -88,7 +84,12 @@ class CONTENT_EXPORT GeolocationServiceImpl
   raw_ptr<device::mojom::GeolocationContext, DanglingUntriaged>
       geolocation_context_;
 
+  // Used to subscribe to permission status changes.
   PermissionController::SubscriptionId subscription_id_;
+
+  // Tracks the origin for which a granted permission is being observed. Used to
+  // terminate access upon permission revocation.
+  url::Origin requesting_origin_;
 
   // Note: |render_frame_host_| owns |this| instance.
   const raw_ptr<RenderFrameHost, DanglingUntriaged> render_frame_host_;

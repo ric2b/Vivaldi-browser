@@ -68,6 +68,7 @@
 <translation id="2148892889047469596">Odesílání listu</translation>
 <translation id="2150139952286079145">Vyhledat cíle</translation>
 <translation id="215753907730220065">Ukončit režim celé obrazovky</translation>
+<translation id="2158475082070321257">Kopírovat odkaz na zvýraznění</translation>
 <translation id="2177950615300672361">Soukromý list: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul nativního klienta: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
@@ -184,6 +185,7 @@
 <translation id="3943582379552582368">&amp;Zpět</translation>
 <translation id="3948116654032448504">&amp;Vyhledat obrázek pomocí vyhledávače <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Bylo přidáno nové rozšíření (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="398477389655464998">Kopírovat odkaz do zvýraznění</translation>
 <translation id="4021279097213088397">−</translation>
 <translation id="4022426551683927403">Přid&amp;at do slovníku</translation>
 <translation id="4058793769387728514">Zkontrolovat dokument</translation>
@@ -194,7 +196,7 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Zakázat rozšíření ve vývojářském režimu</translation>
 <translation id="4100839878934973028">Jiný program ve vašem počítači nainstaloval aplikaci, která může měnit funkce prohlížeče Vivaldi.</translation>
-<translation id="4104163789986725820">E&amp;xport...</translation>
+<translation id="4104163789986725820">Export...</translation>
 <translation id="4109898769411476438">Před importem zavřete prohlížeč</translation>
 <translation id="4130207949184424187">Toto rozšíření změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
 <translation id="4131410914670010031">Černobíle</translation>
@@ -277,7 +279,6 @@
 <translation id="5431318178759467895">Barevně</translation>
 <translation id="5485102783864353244">Přidat aplikaci</translation>
 <translation id="5486561344817861625">Simulovat restart prohlížeče</translation>
-<translation id="5487521232677179737">Vymazat data</translation>
 <translation id="5509693895992845810">Uložit &amp;jako…</translation>
 <translation id="5521078259930077036">Je toto domovská stránka, kterou jste očekávali?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -303,7 +304,6 @@
 <translation id="583281660410589416">Neznámé</translation>
 <translation id="5851868085455377790">Vydavatel</translation>
 <translation id="5860491529813859533">Zapnout</translation>
-<translation id="5867841422488265304">Zadejte dotaz nebo webovou adresu</translation>
 <translation id="5910363049092958439">Uložit o&amp;brázek jako…</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> bitů):
   <ph name="MODULUS_HEX_DUMP" />
@@ -379,7 +379,6 @@
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrolovat pravopis během psaní</translation>
-<translation id="73786666777299047">Otevřít Internetový obchod Chrome</translation>
 <translation id="7385854874724088939">Při pokusu o tisk došlo k chybě. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="7412226954991670867">Paměť GPU</translation>
 <translation id="7421925624202799674">Zobrazit zdrojo&amp;vý kód stránky</translation>
@@ -432,7 +431,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8071432093239591881">Vytisknout jako obrázek</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8168435359814927499">Obsah</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování}other{Probíhají stahování}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování} other {Probíhají stahování}}</translation>
 <translation id="8230134520748321204">Uložit heslo pro <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>
 <translation id="8351419472474436977">Toto rozšíření převzalo kontrolu nad nastavením vašeho proxy serveru, což znamená, že může změnit, narušit nebo sledovat vše, co děláte na internetu. Pokud si nejste jisti, proč k tomu došlo, zřejmě se jedná o nežádoucí změnu.</translation>

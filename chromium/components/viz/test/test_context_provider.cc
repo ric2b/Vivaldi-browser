@@ -19,7 +19,7 @@
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_raster_interface.h"
 #include "gpu/command_buffer/client/raster_implementation_gles.h"
@@ -158,6 +158,21 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
   return mailbox;
+}
+
+gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
+    SharedImageFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
+    uint32_t usage,
+    base::StringPiece debug_label,
+    gpu::SurfaceHandle surface_handle,
+    gfx::BufferUsage buffer_usage) {
+  return CreateSharedImage(format, size, color_space, surface_origin,
+                           alpha_type, usage, std::move(debug_label),
+                           surface_handle);
 }
 
 gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
@@ -557,8 +572,8 @@ void TestContextProvider::RemoveObserver(ContextLostObserver* obs) {
 
 unsigned int TestContextProvider::GetGrGLTextureFormat(
     SharedImageFormat format) const {
-  return TextureStorageFormat(format.resource_format(),
-                              ContextCapabilities().angle_rgbx_internal_format);
+  return SharedImageFormatRestrictedSinglePlaneUtils::ToGLTextureStorageFormat(
+      format, ContextCapabilities().angle_rgbx_internal_format);
 }
 
 }  // namespace viz

@@ -158,9 +158,6 @@ void CreateContextProviderAfterGpuChannelEstablished(
     return;
   }
 
-  gpu::GpuChannelEstablishFactory* factory =
-      BrowserGpuChannelHostFactory::instance();
-
   int32_t stream_id = kGpuStreamIdDefault;
   gpu::SchedulingPriority stream_priority = kGpuStreamPriorityUI;
 
@@ -170,8 +167,7 @@ void CreateContextProviderAfterGpuChannelEstablished(
 
   auto context_provider =
       base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
-          std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
-          stream_id, stream_priority, handle,
+          std::move(gpu_channel_host), stream_id, stream_priority, handle,
           GURL(std::string("chrome://gpu/Compositor::CreateContextProvider")),
           automatic_flushes, support_locking, support_grcontext,
           shared_memory_limits, attributes,
@@ -658,9 +654,6 @@ void CompositorImpl::OnGpuChannelEstablished(
   DCHECK(window_);
   DCHECK_NE(surface_handle_, gpu::kNullSurfaceHandle);
 
-  gpu::GpuChannelEstablishFactory* factory =
-      BrowserGpuChannelHostFactory::instance();
-
   int32_t stream_id = kGpuStreamIdDefault;
   gpu::SchedulingPriority stream_priority = kGpuStreamPriorityUI;
 
@@ -669,12 +662,12 @@ void CompositorImpl::OnGpuChannelEstablished(
   constexpr bool support_grcontext = true;
   display_color_spaces_ = display::Screen::GetScreen()
                               ->GetDisplayNearestWindow(root_window_)
-                              .color_spaces();
+                              .GetColorSpaces();
 
   auto context_provider =
       base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
-          std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
-          stream_id, stream_priority, gpu::kNullSurfaceHandle,
+          std::move(gpu_channel_host), stream_id, stream_priority,
+          gpu::kNullSurfaceHandle,
           GURL(std::string("chrome://gpu/CompositorImpl::") +
                std::string("CompositorContextProvider")),
           automatic_flushes, support_locking, support_grcontext,
@@ -824,7 +817,7 @@ void CompositorImpl::OnDisplayMetricsChanged(const display::Display& display,
 
   if (changed_metrics &
       display::DisplayObserver::DisplayMetric::DISPLAY_METRIC_COLOR_SPACE) {
-    display_color_spaces_ = display.color_spaces();
+    display_color_spaces_ = display.GetColorSpaces();
     if (display_private_) {
       display_private_->SetDisplayColorSpaces(display_color_spaces_);
     }

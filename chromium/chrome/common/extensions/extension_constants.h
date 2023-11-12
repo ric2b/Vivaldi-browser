@@ -53,9 +53,6 @@ extern const char kGooglePlayMusicAppId[];
 // The extension id of the Google+ application.
 extern const char kGooglePlusAppId[];
 
-// The extension id of the Identity API UI application.
-extern const char kIdentityApiUiAppId[];
-
 // The extension id of the Text Editor application.
 extern const char kTextEditorAppId[];
 
@@ -173,6 +170,8 @@ extern const char kDeskApiExtensionId[];
 extern const char kBruSecurityKeyForwarderExtensionId[];
 // The extension id of the OneDrive FS external component extension.
 extern const char kODFSExtensionId[];
+// The extension id of Perfetto UI extension.
+extern const char kPerfettoUIExtensionId[];
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // The extension id of the Accessibility Common extension.

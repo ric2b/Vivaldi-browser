@@ -96,7 +96,7 @@ MergePerformanceEntryVectors(const PerformanceEntryVector& first_entry_vector,
                              const PerformanceEntryVector& second_entry_vector,
                              const AtomicString& maybe_name);
 
-class CORE_EXPORT Performance : public EventTargetWithInlineData {
+class CORE_EXPORT Performance : public EventTarget {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -129,24 +129,12 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
       bool allow_negative_value,
       bool cross_origin_isolated_capability);
 
-  static base::TimeDelta MonotonicTimeToTimeDelta(
-      base::TimeTicks time_origin,
-      base::TimeTicks monotonic_time,
-      bool allow_negative_value,
-      bool cross_origin_isolated_capability);
-
   // Translate given platform monotonic time in seconds into a high resolution
   // DOMHighResTimeStamp in milliseconds. The result timestamp is relative to
   // document's time origin and has a time resolution that is safe for
   // exposing to web.
   DOMHighResTimeStamp MonotonicTimeToDOMHighResTimeStamp(base::TimeTicks) const;
   DOMHighResTimeStamp now() const;
-
-  // Translate given platform monotonic time in seconds into base::TimeDelta.
-  // The result timestamp is relative to document's time origin and is
-  // equivalent to the timestamp returned by the function
-  // MonotonicTimeToDOMHighResTimeStamp.
-  base::TimeDelta MonotonicTimeToTimeDelta(base::TimeTicks) const;
 
   // High Resolution Time Level 3 timeOrigin.
   // (https://www.w3.org/TR/hr-time-3/#dom-performance-timeorigin)

@@ -34,6 +34,7 @@
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -68,18 +69,19 @@ IsolatedWebAppInstallCommandHelper::CreateDefaultResponseReaderFactory(
 
 IsolatedWebAppInstallCommandHelper::IsolatedWebAppInstallCommandHelper(
     IsolatedWebAppUrlInfo url_info,
+    std::unique_ptr<WebAppDataRetriever> data_retriever,
     std::unique_ptr<IsolatedWebAppResponseReaderFactory>
         response_reader_factory)
     : url_info_(std::move(url_info)),
-      response_reader_factory_(std::move(response_reader_factory)),
-      data_retriever_(std::make_unique<WebAppDataRetriever>()) {}
+      data_retriever_(std::move(data_retriever)),
+      response_reader_factory_(std::move(response_reader_factory)) {}
 
 IsolatedWebAppInstallCommandHelper::~IsolatedWebAppInstallCommandHelper() =
     default;
 
 void IsolatedWebAppInstallCommandHelper::CheckTrustAndSignatures(
     const IsolatedWebAppLocation& location,
-    const PrefService& prefs,
+    Profile* profile,
     base::OnceCallback<void(base::expected<void, std::string>)> callback) {
   absl::visit(
       base::Overloaded{
@@ -91,7 +93,7 @@ void IsolatedWebAppInstallCommandHelper::CheckTrustAndSignatures(
           [&](const DevModeBundle& location) {
             CHECK_EQ(url_info_.web_bundle_id().type(),
                      web_package::SignedWebBundleId::Type::kEd25519PublicKey);
-            if (!IsIwaDevModeEnabled(prefs)) {
+            if (!IsIwaDevModeEnabled(profile)) {
               std::move(callback).Run(
                   base::unexpected(std::string(kIwaDevModeNotEnabledMessage)));
               return;
@@ -101,7 +103,7 @@ void IsolatedWebAppInstallCommandHelper::CheckTrustAndSignatures(
           [&](const DevModeProxy& location) {
             CHECK_EQ(url_info_.web_bundle_id().type(),
                      web_package::SignedWebBundleId::Type::kDevelopment);
-            if (!IsIwaDevModeEnabled(prefs)) {
+            if (!IsIwaDevModeEnabled(profile)) {
               std::move(callback).Run(
                   base::unexpected(std::string(kIwaDevModeNotEnabledMessage)));
               return;
@@ -168,8 +170,21 @@ void IsolatedWebAppInstallCommandHelper::LoadInstallUrl(
 
   GURL install_page_url =
       url_info_.origin().GetURL().Resolve(kGeneratedInstallPagePath);
+
+  content::NavigationController::LoadURLParams load_params(install_page_url);
+  load_params.transition_type = ui::PAGE_TRANSITION_GENERATED;
+  // It is important to bypass a potentially registered Service Worker for two
+  // reasons:
+  // 1. `IsolatedWebAppPendingInstallInfo` is attached to a `WebContents` and
+  //    retrieved inside `IsolatedWebAppURLLoaderFactory` based on a frame tree
+  //    node id. There is no frame tree node id for requests that are
+  //    intercepted by Service Workers.
+  // 2. We want to make sure that a Service Worker cannot tamper with the
+  //    install page.
+  load_params.reload_type = content::ReloadType::BYPASSING_CACHE;
+
   url_loader.LoadUrl(
-      install_page_url, &web_contents,
+      std::move(load_params), &web_contents,
       WebAppUrlLoader::UrlComparison::kIgnoreQueryParamsAndRef,
       base::BindOnce(&IsolatedWebAppInstallCommandHelper::OnLoadInstallUrl,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -332,6 +347,8 @@ void IsolatedWebAppInstallCommandHelper::RetrieveIconsAndPopulateInstallInfo(
   data_retriever_->GetIcons(
       &web_contents, std::move(icon_urls),
       /*skip_page_favicons=*/true,
+      // IWAs should not refer to resources which don't exist.
+      /*fail_all_if_any_fail=*/true,
       base::BindOnce(&IsolatedWebAppInstallCommandHelper::OnRetrieveIcons,
                      weak_factory_.GetWeakPtr(), std::move(install_info),
                      std::move(callback)));
@@ -355,11 +372,6 @@ void IsolatedWebAppInstallCommandHelper::OnRetrieveIcons(
   PopulateOtherIcons(&install_info, icons_map);
 
   std::move(callback).Run(std::move(install_info));
-}
-
-void IsolatedWebAppInstallCommandHelper::SetDataRetrieverForTesting(
-    std::unique_ptr<WebAppDataRetriever> data_retriever) {
-  data_retriever_ = std::move(data_retriever);
 }
 
 IsolatedWebAppInstallCommandHelper::ManifestAndUrl::ManifestAndUrl(

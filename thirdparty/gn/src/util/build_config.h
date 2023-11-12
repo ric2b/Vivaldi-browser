@@ -59,11 +59,11 @@
 #elif defined(__MVS__)
 #include "zos-base.h"
 #define OS_ZOS 1
+#elif defined(__serenity__)
+#define OS_SERENITY 1
 #else
 #error Please add support for your platform in build_config.h
 #endif
-// NOTE: Adding a new port? Please follow
-// https://chromium.googlesource.com/chromium/src/+/master/docs/new_port_policy.md
 
 // For access to standard BSD features, use OS_BSD instead of a
 // more specific macro.
@@ -77,7 +77,7 @@
     defined(OS_FREEBSD) || defined(OS_LINUX) || defined(OS_MACOSX) || \
     defined(OS_NACL) || defined(OS_NETBSD) || defined(OS_OPENBSD) ||  \
     defined(OS_QNX) || defined(OS_SOLARIS) || defined(OS_HAIKU) || \
-    defined(OS_MSYS) || defined(OS_ZOS)
+    defined(OS_MSYS) || defined(OS_ZOS) || defined(OS_SERENITY)
 #define OS_POSIX 1
 #endif
 

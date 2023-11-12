@@ -5,9 +5,9 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {emptyState, GooglePhotosEnablementState, kDefaultImageSymbol, PersonalizationRouter, WallpaperActionName, WallpaperCollection, WallpaperCollections, WallpaperGridItem, WallpaperImage} from 'chrome://personalization/js/personalization_app.js';
+import {emptyState, GooglePhotosEnablementState, kDefaultImageSymbol, PersonalizationRouterElement, WallpaperActionName, WallpaperCollection, WallpaperCollectionsElement, WallpaperGridItemElement, WallpaperImage} from 'chrome://personalization/js/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {assertDeepEquals, assertEquals, assertGE, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertGE, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 
@@ -15,12 +15,12 @@ import {baseSetup, createSvgDataUrl, initElement, teardownElement} from './perso
 import {TestPersonalizationStore} from './test_personalization_store.js';
 import {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
 
-suite('WallpaperCollectionsTest', function() {
-  let wallpaperCollectionsElement: WallpaperCollections|null = null;
+suite('WallpaperCollectionsElementTest', function() {
+  let wallpaperCollectionsElement: WallpaperCollectionsElement|null = null;
   let wallpaperProvider: TestWallpaperProvider;
   let personalizationStore: TestPersonalizationStore;
-  const routerOriginal = PersonalizationRouter.instance;
-  const routerMock = TestMock.fromClass(PersonalizationRouter);
+  const routerOriginal = PersonalizationRouterElement.instance;
+  const routerMock = TestMock.fromClass(PersonalizationRouterElement);
 
   // A simplified representation of WallpaperCollectionElement tile for
   // testing.
@@ -37,20 +37,21 @@ suite('WallpaperCollectionsTest', function() {
   }
 
   setup(function() {
+    loadTimeData.overrideValues({isGooglePhotosIntegrationEnabled: true});
     const mocks = baseSetup();
     wallpaperProvider = mocks.wallpaperProvider;
     personalizationStore = mocks.personalizationStore;
-    PersonalizationRouter.instance = () => routerMock;
+    PersonalizationRouterElement.instance = () => routerMock;
   });
 
   teardown(async () => {
     await teardownElement(wallpaperCollectionsElement);
     wallpaperCollectionsElement = null;
-    PersonalizationRouter.instance = routerOriginal;
+    PersonalizationRouterElement.instance = routerOriginal;
   });
 
   test('shows error when fails to load', async () => {
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
 
     // No error displayed while loading.
     let error = wallpaperCollectionsElement.shadowRoot!.querySelector(
@@ -84,7 +85,7 @@ suite('WallpaperCollectionsTest', function() {
     personalizationStore.expectAction(
         WallpaperActionName.SET_IMAGES_FOR_COLLECTION);
 
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
 
     await personalizationStore.waitForAction(
         WallpaperActionName.SET_IMAGES_FOR_COLLECTION);
@@ -112,6 +113,13 @@ suite('WallpaperCollectionsTest', function() {
             'id_2': false,
             '_time_of_day_chromebook_collection': false,
           },
+          local: {
+            data: {
+              'LocalImage0.png': false,
+              'LocalImage1.png': false,
+            },
+            images: false,
+          },
         },
         personalizationStore.data.wallpaper.loading,
         'expected loading state is set',
@@ -119,7 +127,7 @@ suite('WallpaperCollectionsTest', function() {
   });
 
   test('sets aria label on main', async () => {
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     assertEquals(
@@ -130,12 +138,12 @@ suite('WallpaperCollectionsTest', function() {
   });
 
   test('displays no_images.svg when no local images', async () => {
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     const localTile = wallpaperCollectionsElement.shadowRoot!
-                          .querySelector<WallpaperGridItem>(
-                              `${WallpaperGridItem.is}[collage]`);
+                          .querySelector<WallpaperGridItemElement>(
+                              `${WallpaperGridItemElement.is}[collage]`);
 
     assertTrue(!!localTile, 'local tile is present');
 
@@ -150,8 +158,8 @@ suite('WallpaperCollectionsTest', function() {
     assertEquals(
         loadTimeData.getString('zeroImages'),
         wallpaperCollectionsElement.shadowRoot!
-            .querySelector<WallpaperGridItem>(
-                `${WallpaperGridItem.is}[collage]`)
+            .querySelector<WallpaperGridItemElement>(
+                `${WallpaperGridItemElement.is}[collage]`)
             ?.secondaryText,
         'no images text is displayed');
   });
@@ -162,12 +170,12 @@ suite('WallpaperCollectionsTest', function() {
       [kDefaultImageSymbol]: {url: 'data:image/png;base64,qqqq'},
     };
 
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     const localTile = wallpaperCollectionsElement.shadowRoot!
-                          .querySelector<WallpaperGridItem>(
-                              `${WallpaperGridItem.is}[collage]`);
+                          .querySelector<WallpaperGridItemElement>(
+                              `${WallpaperGridItemElement.is}[collage]`);
 
     assertTrue(!!localTile, 'local tile is present');
 
@@ -190,12 +198,12 @@ suite('WallpaperCollectionsTest', function() {
       '/qwer': false,
     };
 
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     const localTile = wallpaperCollectionsElement.shadowRoot!
-                          .querySelector<WallpaperGridItem>(
-                              `${WallpaperGridItem.is}[collage]`);
+                          .querySelector<WallpaperGridItemElement>(
+                              `${WallpaperGridItemElement.is}[collage]`);
 
     assertTrue(!!localTile, 'local tile is present');
 
@@ -208,18 +216,30 @@ suite('WallpaperCollectionsTest', function() {
         localTile.src, 'all three images are displayed');
   });
 
+  test('no Google Photos tile for ineligible users', async () => {
+    loadTimeData.overrideValues({isGooglePhotosIntegrationEnabled: false});
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
+    await waitAfterNextRender(wallpaperCollectionsElement);
+
+    const googlePhotosTile =
+        wallpaperCollectionsElement.shadowRoot!
+            .querySelector<WallpaperGridItemElement>(
+                `${WallpaperGridItemElement.is}[data-google-photos]`);
+    assertFalse(!!googlePhotosTile, 'google photos tile is not present');
+  });
+
   test('customizes text for managed google photos', async () => {
     const managedIconSelector = `iron-icon[icon^='personalization:managed']`;
 
     personalizationStore.data.wallpaper.googlePhotos.enabled =
         GooglePhotosEnablementState.kEnabled;
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     const googlePhotosTile =
         wallpaperCollectionsElement.shadowRoot!
-            .querySelector<WallpaperGridItem>(
-                `${WallpaperGridItem.is}[data-google-photos]`);
+            .querySelector<WallpaperGridItemElement>(
+                `${WallpaperGridItemElement.is}[data-google-photos]`);
     assertTrue(!!googlePhotosTile, 'google photos tile is present');
     assertEquals(
         null, googlePhotosTile.querySelector(managedIconSelector),
@@ -237,6 +257,11 @@ suite('WallpaperCollectionsTest', function() {
   });
 
   test('sets collection description text', async () => {
+    // The mock set of collections created for this test does not contain the
+    // time of day collection. If time of day wallpaper happens to be enabled,
+    // the test will fail because the time of day collection is missing, which
+    // is irrelevant for this test case. It must explicitly be disabled here.
+    loadTimeData.overrideValues({isTimeOfDayWallpaperEnabled: false});
     wallpaperProvider.setCollections([
       {
         id: 'asdf',
@@ -262,12 +287,12 @@ suite('WallpaperCollectionsTest', function() {
       asdf: false,
       qwerty: false,
     };
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
     await waitAfterNextRender(wallpaperCollectionsElement);
 
     const onlineTiles = wallpaperCollectionsElement.shadowRoot!
-                            .querySelectorAll<WallpaperGridItem>(
-                                `${WallpaperGridItem.is}[data-online]`);
+                            .querySelectorAll<WallpaperGridItemElement>(
+                                `${WallpaperGridItemElement.is}[data-online]`);
 
     assertEquals(2, onlineTiles.length);
     assertDeepEquals(
@@ -286,7 +311,7 @@ suite('WallpaperCollectionsTest', function() {
       // Local images are still loading.
       personalizationStore.data.wallpaper.loading.local.images = true;
 
-      wallpaperCollectionsElement = initElement(WallpaperCollections);
+      wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
       await waitAfterNextRender(wallpaperCollectionsElement);
 
       let tiles = getTiles();
@@ -410,7 +435,7 @@ suite('WallpaperCollectionsTest', function() {
     personalizationStore.expectAction(
         WallpaperActionName.SET_IMAGES_FOR_COLLECTION);
 
-    wallpaperCollectionsElement = initElement(WallpaperCollections);
+    wallpaperCollectionsElement = initElement(WallpaperCollectionsElement);
 
     await personalizationStore.waitForAction(
         WallpaperActionName.SET_IMAGES_FOR_COLLECTION);
@@ -421,7 +446,7 @@ suite('WallpaperCollectionsTest', function() {
         type: 'image_online',
       },
       {id: 'local_', type: 'image_local'},
-      {id: 'google_photos_', 'type': 'loading'},
+      {id: 'google_photos_', 'type': 'image_google_photos'},
       {id: 'id_0', type: 'image_online'},
       {id: 'id_1', type: 'image_online'},
       {id: 'id_2', type: 'image_online'},
@@ -436,8 +461,8 @@ suite('WallpaperCollectionsTest', function() {
     // Do not use initElement because it flushes startup tasks, but test
     // needs to verify an initial state.
     wallpaperCollectionsElement =
-        document.createElement(WallpaperCollections.is) as
-            WallpaperCollections &
+        document.createElement(WallpaperCollectionsElement.is) as
+            WallpaperCollectionsElement &
         HTMLElement;
 
     // Sets up loading tiles again.

@@ -28,7 +28,7 @@ public class MostVisitedTilesCarouselLayout extends LinearLayout implements Most
     private Integer mInitialTileNum;
     private Integer mIntervalPaddingsLandscapeTablet;
     private Integer mIntervalPaddingsPortraitTablet;
-    private boolean mIsMultiColumnFeedOnTabletEnabled;
+    private boolean mIsNtpAsHomeSurfaceEnabled;
 
     /**
      * Constructor for inflating from XML.
@@ -87,7 +87,6 @@ public class MostVisitedTilesCarouselLayout extends LinearLayout implements Most
     }
 
     @Nullable
-    @VisibleForTesting
     public SuggestionsTileView findTileViewForTesting(SiteSuggestion suggestion) {
         int childCount = getChildCount();
         for (int i = 0; i < childCount; i++) {
@@ -132,7 +131,7 @@ public class MostVisitedTilesCarouselLayout extends LinearLayout implements Most
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (mIsMultiColumnFeedOnTabletEnabled) {
+        if (mIsNtpAsHomeSurfaceEnabled) {
             if (mInitialTileNum == null) {
                 mInitialTileNum = getChildCount();
             }
@@ -158,32 +157,27 @@ public class MostVisitedTilesCarouselLayout extends LinearLayout implements Most
     }
 
     @Override
-    public void setIsMultiColumnFeedOnTabletEnabled(boolean isMultiColumnFeedOnTabletEnabled) {
-        mIsMultiColumnFeedOnTabletEnabled = isMultiColumnFeedOnTabletEnabled;
+    public void setIsNtpAsHomeSurfaceEnabled(boolean isNtpAsHomeSurfaceEnabled) {
+        mIsNtpAsHomeSurfaceEnabled = isNtpAsHomeSurfaceEnabled;
     }
 
-    @VisibleForTesting
-    boolean getIsMultiColumnFeedOnTabletEnabledForTesting() {
-        return mIsMultiColumnFeedOnTabletEnabled;
+    boolean getIsNtpAsHomeSurfaceEnabledForTesting() {
+        return mIsNtpAsHomeSurfaceEnabled;
     }
 
-    @VisibleForTesting
     public void setInitialTileNumForTesting(int initialTileNum) {
         mInitialTileNum = initialTileNum;
     }
 
-    @VisibleForTesting
     public void setTileViewWidthForTesting(int tileViewWidth) {
         mTileViewWidth = tileViewWidth;
     }
 
-    @VisibleForTesting
     public void setTileViewMinIntervalPaddingTabletForTesting(
             int tileViewMinIntervalPaddingTablet) {
         mTileViewMinIntervalPaddingTablet = tileViewMinIntervalPaddingTablet;
     }
 
-    @VisibleForTesting
     public void setTileViewMaxIntervalPaddingTabletForTesting(
             int tileViewMaxIntervalPaddingTablet) {
         mTileViewMaxIntervalPaddingTablet = tileViewMaxIntervalPaddingTablet;

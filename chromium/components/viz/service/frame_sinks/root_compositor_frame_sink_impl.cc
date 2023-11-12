@@ -16,7 +16,9 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display_embedder/output_surface_provider.h"
@@ -37,6 +39,7 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
+#include "base/feature_list.h"
 #include "components/viz/service/frame_sinks/external_begin_frame_source_mac.h"
 #endif
 
@@ -144,10 +147,7 @@ RootCompositorFrameSinkImpl::Create(
     external_begin_frame_source =
         std::make_unique<ExternalBeginFrameSourceIOS>(restart_id);
 #else
-    // TODO(b/221220344): Support dynamically choosing the BeginFrameSource per
-    // VRR state changes.
-    if (params->disable_frame_rate_limit ||
-        params->enable_variable_refresh_rate) {
+    if (params->disable_frame_rate_limit) {
       synthetic_begin_frame_source =
           std::make_unique<BackToBackBeginFrameSource>(
               std::make_unique<DelayBasedTimeSource>(
@@ -169,9 +169,17 @@ RootCompositorFrameSinkImpl::Create(
       auto time_source = std::make_unique<DelayBasedTimeSource>(
           base::SingleThreadTaskRunner::GetCurrentDefault().get());
 #if BUILDFLAG(IS_MAC)
-      synthetic_begin_frame_source =
-          std::make_unique<DelayBasedBeginFrameSourceMac>(
-              std::move(time_source), restart_id);
+      if (base::FeatureList::IsEnabled(
+              features::kCVDisplayLinkBeginFrameSource)) {
+        external_begin_frame_source =
+            std::make_unique<ExternalBeginFrameSourceMac>(
+                restart_id, params->renderer_settings.display_id,
+                output_surface.get());
+      } else {
+        synthetic_begin_frame_source =
+            std::make_unique<DelayBasedBeginFrameSourceMac>(
+                std::move(time_source), restart_id);
+      }
 #else
       synthetic_begin_frame_source =
           std::make_unique<DelayBasedBeginFrameSource>(std::move(time_source),
@@ -223,18 +231,33 @@ RootCompositorFrameSinkImpl::Create(
       std::move(params->display_private), std::move(display_client),
       std::move(synthetic_begin_frame_source),
       std::move(external_begin_frame_source), std::move(display),
-      hw_support_for_multiple_refresh_rates,
-      params->renderer_settings.apply_simple_frame_rate_throttling));
+      hw_support_for_multiple_refresh_rates));
 
+  // Set up the callback for updating VSyncParameters.
+  // The new VSyncParameters will be sent to viz FrameRateDecider through viz
+  // display_->SetSupportedFrameIntervals() in SetDisplayVSyncParameters().
+  // |FrameRateDecider| decides the preferred_frame_interval and calls
+  // RootCompositorFrameSinkImpl::SetPreferredFrameInterval().
 #if !BUILDFLAG(IS_APPLE)
-  // On Mac vsync parameter updates come from the browser process. We don't need
-  // to provide a callback to the OutputSurface since it should never use it.
+  // On Mac vsync parameter updates does not come from OutputSurface.
   if (wants_vsync_updates || impl->synthetic_begin_frame_source_) {
     // |impl| owns and outlives display, and display owns the output surface so
     // unretained is safe.
     output_surface_ptr->SetUpdateVSyncParametersCallback(base::BindRepeating(
         &RootCompositorFrameSinkImpl::SetDisplayVSyncParameters,
         base::Unretained(impl.get())));
+  }
+#elif BUILDFLAG(IS_MAC)
+  if (impl->external_begin_frame_source_) {
+    impl->external_begin_frame_source()->SetUpdateVSyncParametersCallback(
+        base::BindRepeating(
+            &RootCompositorFrameSinkImpl::SetDisplayVSyncParameters,
+            base::Unretained(impl.get())));
+  } else if (impl->synthetic_begin_frame_source_) {
+    impl->synthetic_begin_frame_source_->SetUpdateVSyncParametersCallback(
+        base::BindRepeating(
+            &RootCompositorFrameSinkImpl::SetDisplayVSyncParameters,
+            base::Unretained(impl.get())));
   }
 #endif
 
@@ -246,16 +269,74 @@ RootCompositorFrameSinkImpl::~RootCompositorFrameSinkImpl() {
       begin_frame_source());
 }
 
-void RootCompositorFrameSinkImpl::DidEvictSurface(const SurfaceId& surface_id) {
+bool RootCompositorFrameSinkImpl::WillEvictSurface(
+    const SurfaceId& surface_id) {
   const SurfaceId& current_surface_id = display_->CurrentSurfaceId();
   if (!current_surface_id.is_valid())
-    return;
-  DCHECK_EQ(surface_id.frame_sink_id(), surface_id.frame_sink_id());
-  // This matches CompositorFrameSinkSupport's eviction logic.
+    return true;  // Okay to evict immediately.
+  DCHECK_EQ(surface_id.frame_sink_id(), current_surface_id.frame_sink_id());
+  CHECK(!display_->visible());
+  DCHECK(display_->has_scheduler());
+
+  // This matches CompositorFrameSinkSupport's eviction logic, which wil evict
+  // `surface_id` or matching but older ones. Avoid overwriting the contents
+  // of `current_surface_id` if it's newer here by doing the same check.
   if (surface_id.local_surface_id().parent_sequence_number() >=
       current_surface_id.local_surface_id().parent_sequence_number()) {
-    display_->InvalidateCurrentSurfaceId();
+    // Push empty compositor frame to root surface. This is so the resources
+    // can be unreffed from both viz and the OS compositor (if required).
+    CompositorFrame frame;
+
+    auto& metadata = frame.metadata;
+    metadata.frame_token = kInvalidOrLocalFrameToken;
+
+    // The given `surface_id` may be newer than `current_surface_id`, so use the
+    // one we actually have.
+    auto* surface =
+        support_->frame_sink_manager()->surface_manager()->GetSurfaceForId(
+            current_surface_id);
+    CHECK(surface);
+    metadata.device_scale_factor = surface->device_scale_factor();
+    frame.metadata.begin_frame_ack = BeginFrameAck::CreateManualAckWithDamage();
+
+    frame.render_pass_list.push_back(CompositorRenderPass::Create());
+    const std::unique_ptr<CompositorRenderPass>& render_pass =
+        frame.render_pass_list.back();
+
+    const CompositorRenderPassId kRenderPassId{1};
+    auto surface_rect = gfx::Rect(surface->size_in_pixels());
+    DCHECK(!surface_rect.IsEmpty());
+    render_pass->SetNew(kRenderPassId, /*output_rect=*/surface_rect,
+                        /*damage_rect=*/surface_rect, gfx::Transform());
+
+    SharedQuadState* quad_state = render_pass->CreateAndAppendSharedQuadState();
+
+    quad_state->SetAll(gfx::Transform(), /*layer_rect=*/surface_rect,
+                       /*visible_layer_rect=*/surface_rect,
+                       /*filter_info=*/gfx::MaskFilterInfo(),
+                       /*clip=*/absl::nullopt,
+                       /*contents_opaque=*/true, /*opacity_f=*/1.f,
+                       /*blend=*/SkBlendMode::kSrcOver, /*sorting_context=*/0);
+
+    SolidColorDrawQuad* solid_quad =
+        render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+    solid_quad->SetNew(quad_state, surface_rect, surface_rect, SkColors::kBlack,
+                       /*anti_aliasing_off=*/false);
+
+    support_->SubmitCompositorFrameLocally(current_surface_id, std::move(frame),
+                                           display_->settings());
+
+    // Complete the eviction on next draw and swap.
+    to_evict_on_next_draw_and_swap_ = surface_id.local_surface_id();
+    display_->SetVisible(true);
+    display_->ForceImmediateDrawAndSwapIfPossible();
+    // Don't evict immediately.
+    // Delay eviction until the next draw to make sure that the draw is
+    // successful (requires the surface not to be evicted). We need the draw (of
+    // an empty CF) to be successful to push out and free resources.
+    return false;
   }
+  return true;  // Okay to evict immediately.
 }
 
 const SurfaceId& RootCompositorFrameSinkImpl::CurrentSurfaceId() const {
@@ -263,6 +344,9 @@ const SurfaceId& RootCompositorFrameSinkImpl::CurrentSurfaceId() const {
 }
 
 void RootCompositorFrameSinkImpl::SetDisplayVisible(bool visible) {
+  if (visible) {
+    to_evict_on_next_draw_and_swap_ = LocalSurfaceId();
+  }
   display_->SetVisible(visible);
 }
 
@@ -308,7 +392,8 @@ void RootCompositorFrameSinkImpl::SetDisplayVSyncParameters(
     // If the incoming display interval changes, we should update the
     // |supported_intervals_| in FrameRateDecider
     if (display_frame_interval_ != interval) {
-      display_->SetSupportedFrameIntervals({interval, interval * 2});
+      display_->SetSupportedFrameIntervals(
+          GetSupportedFrameIntervals(interval));
       display_frame_interval_ = interval;
     }
 
@@ -346,6 +431,16 @@ void RootCompositorFrameSinkImpl::SetDisplayVSyncParameters(
   UpdateVSyncParameters();
 }
 
+std::vector<base::TimeDelta>
+RootCompositorFrameSinkImpl::GetSupportedFrameIntervals(
+    base::TimeDelta interval) {
+  if (external_begin_frame_source_) {
+    return external_begin_frame_source_->GetSupportedFrameIntervals(interval);
+  }
+
+  return {interval, interval * 2};
+}
+
 void RootCompositorFrameSinkImpl::UpdateVSyncParameters() {
   base::TimeTicks timebase = display_frame_timebase_;
 
@@ -357,18 +452,6 @@ void RootCompositorFrameSinkImpl::UpdateVSyncParameters() {
                   FrameRateDecider::UnspecifiedFrameInterval()
           ? preferred_frame_interval_
           : display_frame_interval_;
-
-  // Throttle rendering to 30hz.
-  constexpr base::TimeDelta kThrottledInterval = base::Hertz(30);
-
-  // Only throttle if the frame interval is smaller than |kThrottledInterval|
-  // meaning the refresh rate is higher than the target of 30hz.
-  if (apply_simple_frame_rate_throttling_ &&
-      display_frame_interval_ <= kThrottledInterval) {
-    interval = kThrottledInterval;
-    // timebase remains constant while throttling.
-    timebase = base::TimeTicks();
-  }
 
   if (synthetic_begin_frame_source_) {
     synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
@@ -533,8 +616,7 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
     std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
     std::unique_ptr<ExternalBeginFrameSource> external_begin_frame_source,
     std::unique_ptr<Display> display,
-    bool hw_support_for_multiple_refresh_rates,
-    bool apply_simple_frame_rate_throttling)
+    bool hw_support_for_multiple_refresh_rates)
     : compositor_frame_sink_client_(std::move(frame_sink_client)),
       compositor_frame_sink_receiver_(this, std::move(frame_sink_receiver)),
       display_client_(std::move(display_client)),
@@ -546,8 +628,7 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
           /*is_root=*/true)),
       synthetic_begin_frame_source_(std::move(synthetic_begin_frame_source)),
       external_begin_frame_source_(std::move(external_begin_frame_source)),
-      display_(std::move(display)),
-      apply_simple_frame_rate_throttling_(apply_simple_frame_rate_throttling) {
+      display_(std::move(display)) {
   DCHECK(display_);
   DCHECK(begin_frame_source());
   frame_sink_manager->RegisterBeginFrameSource(begin_frame_source(),
@@ -566,7 +647,7 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
 #else
   if (!hw_support_for_multiple_refresh_rates) {
     display_->SetSupportedFrameIntervals(
-        {display_frame_interval_, display_frame_interval_ * 2});
+        GetSupportedFrameIntervals(display_frame_interval_));
     use_preferred_interval_ = true;
   }
 #endif
@@ -677,7 +758,23 @@ RootCompositorFrameSinkImpl::GetPreferredFrameIntervalForFrameSinkId(
       ->GetPreferredFrameIntervalForFrameSinkId(id, type);
 }
 
-void RootCompositorFrameSinkImpl::DisplayDidDrawAndSwap() {}
+void RootCompositorFrameSinkImpl::DisplayDidDrawAndSwap() {
+  if (to_evict_on_next_draw_and_swap_.is_valid()) {
+    display_->SetVisible(false);
+    display_->InvalidateCurrentSurfaceId();
+
+    support_->EvictSurface(to_evict_on_next_draw_and_swap_);
+
+    // Trigger garbage collection immediately, otherwise the surface may not be
+    // evicted for a long time (e.g. not before a frame is produced).
+    if (base::FeatureList::IsEnabled(
+            features::kEagerSurfaceGarbageCollection)) {
+      support_->GarbageCollectSurfaces();
+    }
+  }
+
+  to_evict_on_next_draw_and_swap_ = LocalSurfaceId();
+}
 
 BeginFrameSource* RootCompositorFrameSinkImpl::begin_frame_source() {
   if (external_begin_frame_source_)

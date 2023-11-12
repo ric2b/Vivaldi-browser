@@ -41,7 +41,9 @@ using adblock_filter::KnownRuleSource;
 @optional
 - (void)ruleServiceStateDidLoad;
 @optional
-- (void)rulesListDidApply:(RuleGroup)group;
+- (void)rulesListDidStartApplying:(RuleGroup)group;
+@optional
+- (void)rulesListDidEndApplying:(RuleGroup)group;
 
 @optional
 - (void)ruleSourceDidUpdate:(uint32_t)key

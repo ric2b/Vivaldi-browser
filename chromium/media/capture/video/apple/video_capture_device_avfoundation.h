@@ -18,10 +18,6 @@
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video_capture_types.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace media {
 
 // Find the best capture format from |formats| for the specified dimensions and
@@ -100,7 +96,6 @@ CAPTURE_EXPORT
 
 - (void)setOnPhotoOutputStoppedForTesting:
     (base::RepeatingCallback<void()>)onPhotoOutputStopped;
-- (void)setForceLegacyStillImageApiForTesting:(bool)forceLegacyApi;
 
 // Use the below only for test.
 - (void)callLocked:(base::OnceClosure)lambda;

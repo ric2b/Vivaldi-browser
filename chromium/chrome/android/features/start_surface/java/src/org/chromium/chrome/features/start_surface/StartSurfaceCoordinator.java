@@ -5,6 +5,7 @@
 package org.chromium.chrome.features.start_surface;
 
 import android.app.Activity;
+import android.content.res.Resources;
 import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -42,6 +43,7 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.init.ChromeActivityNativeDelegate;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.logo.LogoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
@@ -58,6 +60,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
+import org.chromium.chrome.browser.tasks.tab_management.RecyclerViewPosition;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegateProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
@@ -208,6 +211,7 @@ public class StartSurfaceCoordinator implements StartSurface {
     private ObservableSupplier<Profile> mProfileSupplier;
     private QueryTileSection mQueryTileSection;
     private boolean mIsMVTilesInitialized;
+    private final boolean mIsSurfacePolishEnabled;
 
     private class ScrollableContainerDelegateImpl implements ScrollableContainerDelegate {
         @Override
@@ -322,6 +326,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                 || !ChromeFeatureList.sQueryTilesOnStart.isEnabled();
         mIsStartSurfaceRefactorEnabled =
                 ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mActivity);
+        mIsSurfacePolishEnabled = ChromeFeatureList.sSurfacePolish.isEnabled();
         TabSwitcher.Controller controller = null;
         Runnable initializeMVTilesRunnable = null;
         View logoContainerView = null;
@@ -333,7 +338,8 @@ public class StartSurfaceCoordinator implements StartSurface {
                     browserControlsManager, tabCreatorManager, menuOrKeyboardActionController,
                     containerView, multiWindowModeStateDispatcher, scrimCoordinator,
                     /* rootView= */ containerView, dynamicResourceLoaderSupplier, snackbarManager,
-                    modalDialogManager, incognitoReauthControllerSupplier, backPressManager);
+                    modalDialogManager, incognitoReauthControllerSupplier, backPressManager,
+                    /* layoutStateProviderSupplier */ null);
             mTabSwitcherCustomViewManagerSupplier.set(
                     mGridTabSwitcher.getTabSwitcherCustomViewManager());
             controller = mGridTabSwitcher.getController();
@@ -536,7 +542,6 @@ public class StartSurfaceCoordinator implements StartSurface {
         }
     }
 
-    @VisibleForTesting
     public StartSurfaceMediator getMediatorForTesting() {
         return mStartSurfaceMediator;
     }
@@ -656,6 +661,25 @@ public class StartSurfaceCoordinator implements StartSurface {
             return mSecondaryTasksSurface.getTabListDelegate();
         } else {
             return mGridTabSwitcher.getTabListDelegate();
+        }
+    }
+
+    @Override
+    public int getTabSwitcherTabListModelSize() {
+        if (mGridTabSwitcher != null) {
+            return mGridTabSwitcher.getTabSwitcherTabListModelSize();
+        } else if (mSecondaryTasksSurface != null) {
+            return mSecondaryTasksSurface.getTabSwitcherTabListModelSize();
+        }
+        return 0;
+    }
+
+    @Override
+    public void setTabSwitcherRecyclerViewPosition(RecyclerViewPosition recyclerViewPosition) {
+        if (mGridTabSwitcher != null) {
+            mGridTabSwitcher.setTabSwitcherRecyclerViewPosition(recyclerViewPosition);
+        } else if (mSecondaryTasksSurface != null) {
+            mSecondaryTasksSurface.setTabSwitcherRecyclerViewPosition(recyclerViewPosition);
         }
     }
 
@@ -783,22 +807,18 @@ public class StartSurfaceCoordinator implements StartSurface {
                 multiWindowModeStateDispatcher, rootView, incognitoReauthControllerSupplier);
     }
 
-    @VisibleForTesting
     public boolean isInitPendingForTesting() {
         return mIsInitPending;
     }
 
-    @VisibleForTesting
     public boolean isInitializedWithNativeForTesting() {
         return mIsInitializedWithNative;
     }
 
-    @VisibleForTesting
     public boolean isSecondaryTaskInitPendingForTesting() {
         return mIsSecondaryTaskInitPending;
     }
 
-    @VisibleForTesting
     public boolean isMVTilesCleanedUpForTesting() {
         if (mTasksSurface != null) {
             return mTasksSurface.isMVTilesCleanedUp();
@@ -809,7 +829,6 @@ public class StartSurfaceCoordinator implements StartSurface {
         return false;
     }
 
-    @VisibleForTesting
     public boolean isMVTilesInitializedForTesting() {
         if (mTasksSurface != null) {
             return mTasksSurface.isMVTilesInitialized();
@@ -817,7 +836,6 @@ public class StartSurfaceCoordinator implements StartSurface {
         return mIsMVTilesInitialized;
     }
 
-    @VisibleForTesting
     public TileGroupDelegateImpl getTileGroupDelegateForTesting() {
         if (mTasksSurface != null) {
             return mTasksSurface.getTileGroupDelegate();
@@ -873,8 +891,13 @@ public class StartSurfaceCoordinator implements StartSurface {
                     : TabSwitcherType.CAROUSEL;
         }
 
-        mView = (TasksView) LayoutInflater.from(mActivity).inflate(
-                R.layout.tasks_view_layout, null);
+        if (!mIsSurfacePolishEnabled) {
+            mView = (TasksView) LayoutInflater.from(mActivity).inflate(
+                    R.layout.tasks_view_layout, null);
+        } else {
+            mView = (TasksView) LayoutInflater.from(mActivity).inflate(
+                    R.layout.tasks_view_layout_polish, null);
+        }
         mView.setId(R.id.primary_tasks_surface_view);
         mView.initialize(mActivityLifecycleDispatcher,
                 mParentTabSupplier.hasValue() && mParentTabSupplier.get().isIncognito(),
@@ -895,7 +918,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                     mView.getCarouselTabSwitcherContainer(), null, mTabModelSelector,
                     /* isTablet= */ false, /* isScrollableMvtEnabled */ true,
                     /* mostRecentTab= */ null, /* singleTabCardClickedCallback */ null,
-                    /* snapshotParentViewRunnable */ null);
+                    /* snapshotParentViewRunnable */ null, mTabContentManager);
         }
         boolean isScrollableMVTEnabled =
                 !ReturnToChromeUtil.shouldImproveStartWhenFeedIsDisabled(mActivity);
@@ -1012,11 +1035,28 @@ public class StartSurfaceCoordinator implements StartSurface {
         mContainerView = directChildHolder;
     }
 
+    private int getLogoInSurfaceHeight() {
+        if (mIsSurfacePolishEnabled
+                && StartSurfaceConfiguration.SURFACE_POLISH_MOVE_DOWN_LOGO.getValue()) {
+            Resources resources = mActivity.getResources();
+            if (StartSurfaceConfiguration.SURFACE_POLISH_LESS_BRAND_SPACE.getValue()) {
+                return LogoUtils.getLogoHeightPolishedShort(resources)
+                        + LogoUtils.getTopMarginPolishedSmall(resources)
+                        + LogoUtils.getBottomMarginPolishedSmall(resources);
+            } else {
+                return LogoUtils.getLogoHeightPolished(resources)
+                        + LogoUtils.getTopMarginPolished(resources)
+                        + LogoUtils.getBottomMarginPolished(resources);
+            }
+        }
+
+        return getPixelSize(R.dimen.ntp_logo_height) + getPixelSize(R.dimen.ntp_logo_margin_top)
+                + getPixelSize(R.dimen.ntp_logo_margin_bottom);
+    }
+
     private void initializeOffsetChangedListener() {
         int realVerticalMargin = getPixelSize(R.dimen.location_bar_vertical_margin);
-        int logoInSurfaceHeight = getPixelSize(R.dimen.ntp_logo_height)
-                + getPixelSize(R.dimen.ntp_logo_margin_top)
-                + getPixelSize(R.dimen.ntp_logo_margin_bottom);
+        int logoInSurfaceHeight = getLogoInSurfaceHeight();
 
         // The following |fake*| values mean the values of the fake search box; |real*| values
         // mean the values of the real search box.
@@ -1024,7 +1064,9 @@ public class StartSurfaceCoordinator implements StartSurface {
         int realHeight = getPixelSize(R.dimen.toolbar_height_no_shadow) - realVerticalMargin * 2;
         int fakeAndRealHeightDiff = fakeHeight - realHeight;
 
-        int fakeEndPadding = getPixelSize(R.dimen.search_box_end_padding);
+        int fakeEndPadding = mIsSurfacePolishEnabled
+                ? getPixelSize(R.dimen.fake_search_box_end_padding)
+                : getPixelSize(R.dimen.search_box_end_padding);
         // realEndPadding is 0;
 
         // fakeTranslationX is 0;
@@ -1033,11 +1075,14 @@ public class StartSurfaceCoordinator implements StartSurface {
                 + (getPixelSize(R.dimen.fake_search_box_lateral_padding)
                         - getPixelSize(R.dimen.search_box_start_padding));
 
-        int fakeButtonSize = getPixelSize(R.dimen.tasks_surface_location_bar_url_button_size);
+        int fakeButtonSize = mIsSurfacePolishEnabled
+                ? getPixelSize(R.dimen.location_bar_action_icon_width)
+                : getPixelSize(R.dimen.tasks_surface_location_bar_url_button_size);
         int realButtonSize = getPixelSize(R.dimen.location_bar_action_icon_width);
 
-        int fakeLensButtonStartMargin =
-                getPixelSize(R.dimen.tasks_surface_location_bar_url_button_start_margin);
+        int fakeLensButtonStartMargin = mIsSurfacePolishEnabled
+                ? 0
+                : getPixelSize(R.dimen.tasks_surface_location_bar_url_button_start_margin);
         // realLensButtonStartMargin is 0;
 
         mOffsetChangedListenerToGenerateScrollEvents = (appBarLayout, verticalOffset) -> {
@@ -1127,12 +1172,10 @@ public class StartSurfaceCoordinator implements StartSurface {
         mStartSurfaceMediator.performSearchQuery(queryText, searchParams);
     }
 
-    @VisibleForTesting
     boolean isSecondaryTasksSurfaceEmptyForTesting() {
         return mSecondaryTasksSurface == null;
     }
 
-    @VisibleForTesting
     FeedSwipeRefreshLayout getFeedSwipeRefreshLayoutForTesting() {
         return mSwipeRefreshLayout;
     }

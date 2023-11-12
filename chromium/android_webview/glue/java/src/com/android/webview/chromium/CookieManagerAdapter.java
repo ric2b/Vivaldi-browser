@@ -56,7 +56,7 @@ public class CookieManagerAdapter extends CookieManager {
     @Override
     public synchronized void setAcceptThirdPartyCookies(WebView webView, boolean accept) {
         try (TraceEvent event = TraceEvent.scoped(
-                     "ApiCall.COOKIE_MANAGER_SET_ACCEPT_THIRD_PARTY_COOKIES")) {
+                     "WebView.ApiCall.COOKIE_MANAGER_SET_ACCEPT_THIRD_PARTY_COOKIES")) {
             WebViewChromium.recordWebViewApiCall(
                     ApiCall.COOKIE_MANAGER_SET_ACCEPT_THIRD_PARTY_COOKIES);
             webView.getSettings().setAcceptThirdPartyCookies(accept);
@@ -199,12 +199,21 @@ public class CookieManagerAdapter extends CookieManager {
 
     @Override
     protected boolean allowFileSchemeCookiesImpl() {
-        return mChromeCookieManager.allowFileSchemeCookies();
+        try (TraceEvent event = TraceEvent.scoped(
+                     "WebView.APICall.Framework.COOKIE_MANAGER_ALLOW_FILE_SCHEME_COOKIES")) {
+            WebViewChromium.recordWebViewApiCall(ApiCall.COOKIE_MANAGER_ALLOW_FILE_SCHEME_COOKIES);
+            return mChromeCookieManager.allowFileSchemeCookies();
+        }
     }
 
     @Override
     protected void setAcceptFileSchemeCookiesImpl(boolean accept) {
-        mChromeCookieManager.setAcceptFileSchemeCookies(accept);
+        try (TraceEvent event = TraceEvent.scoped(
+                     "WebView.APICall.Framework.COOKIE_MANAGER_SET_ACCEPT_FILE_SCHEME_COOKIES")) {
+            WebViewChromium.recordWebViewApiCall(
+                    ApiCall.COOKIE_MANAGER_SET_ACCEPT_FILE_SCHEME_COOKIES);
+            mChromeCookieManager.setAcceptFileSchemeCookies(accept);
+        }
     }
 
     private static String fixupUrl(String url) throws URISyntaxException {

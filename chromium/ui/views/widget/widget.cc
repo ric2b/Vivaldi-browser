@@ -425,6 +425,10 @@ void Widget::Init(InitParams params) {
         std::make_unique<SublevelManager>(this, params.sublevel);
   }
 
+  if (params.native_theme) {
+    native_theme_ = params.native_theme;
+  }
+
   internal::NativeWidgetPrivate* native_widget_raw_ptr =
       CreateNativeWidget(params, this)->AsNativeWidgetPrivate();
   native_widget_ = native_widget_raw_ptr->GetWeakPtr();
@@ -996,8 +1000,7 @@ const ui::ThemeProvider* Widget::GetThemeProvider() const {
                                               : nullptr;
 }
 
-ui::ColorProviderManager::ThemeInitializerSupplier* Widget::GetCustomTheme()
-    const {
+ui::ColorProviderKey::ThemeInitializerSupplier* Widget::GetCustomTheme() const {
   return nullptr;
 }
 
@@ -1210,21 +1213,6 @@ bool Widget::ShouldWindowContentsBeTransparent() const {
                         : false;
 }
 
-void Widget::DebugToggleFrameType() {
-  if (!native_widget_)
-    return;
-
-  if (frame_type_ == FrameType::kDefault) {
-    frame_type_ = ShouldUseNativeFrame() ? FrameType::kForceCustom
-                                         : FrameType::kForceNative;
-  } else {
-    frame_type_ = frame_type_ == FrameType::kForceCustom
-                      ? FrameType::kForceNative
-                      : FrameType::kForceCustom;
-  }
-  FrameTypeChanged();
-}
-
 void Widget::FrameTypeChanged() {
   if (native_widget_)
     native_widget_->FrameTypeChanged();
@@ -1395,6 +1383,12 @@ void Widget::NotifyPaintAsActiveChanged() {
 }
 
 void Widget::SetNativeTheme(ui::NativeTheme* native_theme) {
+  // If `native_theme_` has been set for testing ensure the theme instance is
+  // not reset.
+  if (native_theme_set_for_testing_) {
+    return;
+  }
+
   const bool is_update = native_theme_ && (native_theme_ != native_theme);
   native_theme_ = native_theme;
   native_theme_observation_.Reset();
@@ -1782,6 +1776,13 @@ void Widget::OnMouseEvent(ui::MouseEvent* event) {
       }
       return;
 
+    case ui::ET_MOUSE_ENTERED:
+      last_mouse_event_was_move_ = false;
+      if (root_view) {
+        root_view->OnMouseEntered(*event);
+      }
+      return;
+
     case ui::ET_MOUSE_EXITED:
       last_mouse_event_was_move_ = false;
       if (root_view)
@@ -1973,20 +1974,20 @@ void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
 }
 
 void Widget::SetColorModeOverride(
-    absl::optional<ui::ColorProviderManager::ColorMode> color_mode) {
+    absl::optional<ui::ColorProviderKey::ColorMode> color_mode) {
   color_mode_override_ = color_mode;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, ui::ColorProviderSource:
 
-ui::ColorProviderManager::Key Widget::GetColorProviderKey() const {
+ui::ColorProviderKey Widget::GetColorProviderKey() const {
   // Generally all Widgets should inherit the key of their parent, falling back
   // to the key set by the NativeTheme otherwise.
   // TODO(crbug.com/1455535): `parent_` does not always resolve to the logical
   // parent as expected here (e.g. bubbles). This should be addressed and the
   // use of parent_ below replaced with something like GetLogicalParent().
-  ui::ColorProviderManager::Key key =
+  ui::ColorProviderKey key =
       parent_ ? parent_->GetColorProviderKey()
               : GetNativeTheme()->GetColorProviderKey(GetCustomTheme());
 
@@ -2005,6 +2006,10 @@ ui::ColorProviderManager::Key Widget::GetColorProviderKey() const {
 const ui::ColorProvider* Widget::GetColorProvider() const {
   return ui::ColorProviderManager::Get().GetColorProviderFor(
       GetColorProviderKey());
+}
+
+ui::ColorProviderKey Widget::GetColorProviderKeyForTesting() const {
+  return GetColorProviderKey();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

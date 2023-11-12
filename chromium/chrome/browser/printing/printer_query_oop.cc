@@ -77,7 +77,7 @@ void PrinterQueryOop::OnDidUseDefaultSettings(
   } else {
     VLOG(1) << "Use default settings from service complete";
     result = mojom::ResultCode::kSuccess;
-    printing_context()->ApplyPrintSettings(print_settings->get_settings());
+    printing_context()->SetPrintSettings(print_settings->get_settings());
   }
 
   InvokeSettingsCallback(std::move(callback), result);
@@ -92,7 +92,7 @@ void PrinterQueryOop::OnDidAskUserForSettings(
   if (print_settings->is_settings()) {
     VLOG(1) << "Ask user for settings from service complete";
     result = mojom::ResultCode::kSuccess;
-    printing_context()->ApplyPrintSettings(print_settings->get_settings());
+    printing_context()->SetPrintSettings(print_settings->get_settings());
 
     // Use the same PrintBackendService for querying and printing, so that the
     // same device context can be used with both.
@@ -136,6 +136,8 @@ void PrinterQueryOop::UseDefaultSettings(SettingsCallback callback) {
 #if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
   CHECK(query_with_ui_client_id_.has_value());
 
+  PRINTER_LOG(EVENT) << "Using printer default settings via service";
+
   // Any settings selected from the system dialog could need to be retained
   // for printing, so establish a printing context.
   CHECK(!context_id_.has_value());
@@ -160,6 +162,7 @@ void PrinterQueryOop::GetSettingsWithUI(uint32_t document_page_count,
   print_from_system_dialog_ = true;
 
 #if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
+  PRINTER_LOG(EVENT) << "Getting printer settings from user via service";
   SendAskUserForSettings(document_page_count, has_selection, is_scripted,
                          std::move(callback));
 #else
@@ -253,7 +256,7 @@ void PrinterQueryOop::OnDidUpdatePrintSettings(
   } else {
     VLOG(1) << "Update print settings via service complete for " << device_name;
     result = mojom::ResultCode::kSuccess;
-    printing_context()->ApplyPrintSettings(print_settings->get_settings());
+    printing_context()->SetPrintSettings(print_settings->get_settings());
 
     if (query_with_ui_client_id_.has_value()) {
       // Use the same PrintBackendService for querying and printing, so that the

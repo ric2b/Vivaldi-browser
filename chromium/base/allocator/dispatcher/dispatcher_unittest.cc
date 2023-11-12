@@ -5,7 +5,6 @@
 #include "base/allocator/partition_allocator/partition_root.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#include "base/allocator/buildflags.h"
 #include "base/allocator/dispatcher/configuration.h"
 #include "base/allocator/dispatcher/dispatcher.h"
 #include "base/allocator/dispatcher/testing/dispatcher_test.h"
@@ -14,7 +13,7 @@
 #include "build/build_config.h"
 
 #if BUILDFLAG(USE_PARTITION_ALLOC)
-#include "base/allocator/partition_allocator/partition_alloc_for_testing.h"  // nogncheck
+#include "base/allocator/partition_allocator/partition_alloc_for_testing.h"
 #endif
 
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
@@ -28,7 +27,7 @@ namespace {
 using configuration::kMaximumNumberOfObservers;
 using configuration::kMaximumNumberOfOptionalObservers;
 using partition_alloc::PartitionOptions;
-using partition_alloc::ThreadSafePartitionRoot;
+using partition_alloc::PartitionRoot;
 using testing::DispatcherTest;
 
 // A simple observer implementation. Since these tests plug in to Partition
@@ -100,7 +99,7 @@ TEST_F(BaseAllocatorDispatcherTest, VerifyInitialization) {
 // because it makes PartitionAlloc take a different path that doesn't provide
 // notifications to observer hooks.
 struct PartitionAllocator {
-  void* Alloc(size_t size) { return alloc_.AllocWithFlags(0, size, nullptr); }
+  void* Alloc(size_t size) { return alloc_.AllocInline(size, nullptr); }
   void Free(void* data) { alloc_.Free(data); }
   ~PartitionAllocator() {
     // Use |DisallowLeaks| to confirm that there is no memory allocated and
@@ -109,7 +108,7 @@ struct PartitionAllocator {
   }
 
  private:
-  ThreadSafePartitionRoot alloc_{PartitionOptions{}};
+  PartitionRoot alloc_{PartitionOptions{}};
 };
 
 TEST_F(BaseAllocatorDispatcherTest, VerifyNotificationUsingPartitionAllocator) {

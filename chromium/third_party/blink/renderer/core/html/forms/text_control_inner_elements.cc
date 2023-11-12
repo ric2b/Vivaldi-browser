@@ -47,16 +47,17 @@ EditingViewPortElement::EditingViewPortElement(Document& document)
   setAttribute(html_names::kIdAttr, shadow_element_names::kIdEditingViewPort);
 }
 
-scoped_refptr<const ComputedStyle>
-EditingViewPortElement::CustomStyleForLayoutObject(const StyleRecalcContext&) {
+const ComputedStyle* EditingViewPortElement::CustomStyleForLayoutObject(
+    const StyleRecalcContext&) {
   // FXIME: Move these styles to html.css.
 
   ComputedStyleBuilder style_builder =
-      GetDocument().GetStyleResolver().CreateComputedStyleBuilder();
-  style_builder.InheritFrom(OwnerShadowHost()->ComputedStyleRef());
+      GetDocument().GetStyleResolver().CreateComputedStyleBuilderInheritingFrom(
+          OwnerShadowHost()->ComputedStyleRef());
 
   style_builder.SetFlexGrow(1);
   style_builder.SetMinWidth(Length::Fixed(0));
+  style_builder.SetMinHeight(Length::Fixed(0));
   style_builder.SetDisplay(EDisplay::kBlock);
   style_builder.SetDirection(TextDirection::kLtr);
 
@@ -126,15 +127,14 @@ LayoutObject* TextControlInnerEditorElement::CreateLayoutObject(
   return MakeGarbageCollected<LayoutNGTextControlInnerEditor>(this);
 }
 
-scoped_refptr<const ComputedStyle>
-TextControlInnerEditorElement::CustomStyleForLayoutObject(
+const ComputedStyle* TextControlInnerEditorElement::CustomStyleForLayoutObject(
     const StyleRecalcContext&) {
   Element* host = OwnerShadowHost();
   DCHECK(host);
   const ComputedStyle& start_style = host->ComputedStyleRef();
   ComputedStyleBuilder style_builder =
-      GetDocument().GetStyleResolver().CreateComputedStyleBuilder();
-  style_builder.InheritFrom(start_style);
+      GetDocument().GetStyleResolver().CreateComputedStyleBuilderInheritingFrom(
+          start_style);
   // The inner block, if present, always has its direction set to LTR,
   // so we need to inherit the direction and unicode-bidi style from the
   // element.
@@ -194,11 +194,11 @@ TextControlInnerEditorElement::CustomStyleForLayoutObject(
 
   // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
   // to apply only editing-related and alignment-related.
-  StyleAdjuster::AdjustStyleForEditing(style_builder);
+  StyleAdjuster::AdjustStyleForEditing(style_builder, this);
   if (!is_visible_)
     style_builder.SetOpacity(0);
 
-  scoped_refptr<const ComputedStyle> style = style_builder.TakeStyle();
+  const ComputedStyle* style = style_builder.TakeStyle();
 
   if (style->HasPseudoElementStyle(kPseudoIdScrollbar)) {
     ComputedStyleBuilder no_scrollbar_style_builder =

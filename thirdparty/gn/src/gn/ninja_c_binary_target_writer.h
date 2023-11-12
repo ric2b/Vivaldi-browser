@@ -84,6 +84,9 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
                          const std::vector<OutputFile>& order_only_deps,
                          std::vector<OutputFile>* object_files);
 
+  // Writes the stamp line for a source set. These are not linked.
+  void WriteSourceSetStamp(const std::vector<OutputFile>& object_files);
+
   void WriteLinkerStuff(const std::vector<OutputFile>& object_files,
                         const std::vector<SourceFile>& other_files,
                         const std::vector<OutputFile>& input_deps);

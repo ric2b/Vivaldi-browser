@@ -59,8 +59,6 @@ class CORE_EXPORT SVGElement : public Element {
  public:
   ~SVGElement() override;
 
-  bool SupportsFocus() const override { return false; }
-
   bool IsOutermostSVGSVGElement() const;
 
   bool HasTagName(const SVGQualifiedName& name) const {
@@ -73,12 +71,16 @@ class CORE_EXPORT SVGElement : public Element {
   }
   static bool IsAnimatableCSSProperty(const QualifiedName&);
 
-  enum ApplyMotionTransform {
+  bool HasMotionTransform() const { return HasSVGRareData(); }
+  // Apply any "motion transform" contribution (if existing.)
+  void ApplyMotionTransform(AffineTransform&) const;
+
+  enum ApplyMotionTransformTag {
     kExcludeMotionTransform,
     kIncludeMotionTransform
   };
-  bool HasTransform(ApplyMotionTransform) const;
-  AffineTransform CalculateTransform(ApplyMotionTransform) const;
+  bool HasTransform(ApplyMotionTransformTag) const;
+  AffineTransform CalculateTransform(ApplyMotionTransformTag) const;
 
   enum CTMScope {
     kNearestViewportScope,  // Used by SVGGraphicsElement::getCTM()
@@ -166,7 +168,7 @@ class CORE_EXPORT SVGElement : public Element {
   void CollectExtraStyleForPresentationAttribute(
       MutableCSSPropertyValueSet*) override;
 
-  scoped_refptr<const ComputedStyle> CustomStyleForLayoutObject(
+  const ComputedStyle* CustomStyleForLayoutObject(
       const StyleRecalcContext&) final;
   bool LayoutObjectIsNeeded(const DisplayStyle&) const override;
 
@@ -238,6 +240,8 @@ class CORE_EXPORT SVGElement : public Element {
   static void SynchronizeListOfSVGAttributes(
       const base::span<SVGAnimatedPropertyBase*> attributes);
 
+  bool HasFocusEventListeners() const;
+
  protected:
   SVGElement(const QualifiedName&,
              Document&,
@@ -280,8 +284,6 @@ class CORE_EXPORT SVGElement : public Element {
   void ReportAttributeParsingError(SVGParsingError,
                                    const QualifiedName&,
                                    const AtomicString&);
-  bool HasFocusEventListeners() const;
-
   void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) override;
   void RemovedEventListener(const AtomicString& event_type,
@@ -297,6 +299,8 @@ class CORE_EXPORT SVGElement : public Element {
       delete;  // This will catch anyone doing an unnecessary check.
   bool IsStyledElement() const =
       delete;  // This will catch anyone doing an unnecessary check.
+
+  bool SupportsFocus() const override { return false; }
 
   void WillRecalcStyle(const StyleRecalcChange) override;
   static SVGElementSet& GetDependencyTraversalVisitedSet();

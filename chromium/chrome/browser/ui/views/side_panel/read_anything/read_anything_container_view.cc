@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_toolbar_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_web_ui_view.h"
-#include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_ui.h"
+#include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_untrusted_ui.h"
 #include "chrome/common/accessibility/read_anything_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -35,7 +35,7 @@ int GetNormalizedFontScale(double font_scale) {
 ReadAnythingContainerView::ReadAnythingContainerView(
     ReadAnythingCoordinator* coordinator,
     std::unique_ptr<ReadAnythingToolbarView> toolbar,
-    std::unique_ptr<SidePanelWebUIViewT<ReadAnythingUI>> content)
+    std::unique_ptr<SidePanelWebUIViewT<ReadAnythingUntrustedUI>> content)
     : coordinator_(std::move(coordinator)) {
   // Create and set a FlexLayout LayoutManager for this view, set background.
   auto layout = std::make_unique<views::FlexLayout>();
@@ -91,31 +91,7 @@ void ReadAnythingContainerView::OnReadAnythingThemeChanged(
 
 void ReadAnythingContainerView::OnCoordinatorDestroyed() {
   // When the coordinator that created |this| is destroyed, clean up pointers.
-  LogTextStyle();
   coordinator_ = nullptr;
-}
-
-void ReadAnythingContainerView::LogTextStyle() {
-  int maximum_font_scale_logging =
-      GetNormalizedFontScale(kReadAnythingMaximumFontScale);
-  double font_scale = coordinator_->GetModel()->GetFontScale();
-  base::UmaHistogramExactLinear(string_constants::kFontScaleHistogramName,
-                                GetNormalizedFontScale(font_scale),
-                                maximum_font_scale_logging + 1);
-  ReadAnythingFontModel::ReadAnythingFont font =
-      coordinator_->GetModel()->GetFontModel()->GetFontLoggingValue();
-  base::UmaHistogramEnumeration(string_constants::kFontNameHistogramName, font);
-  ReadAnythingColorsModel::ColorInfo::ReadAnythingColor color =
-      coordinator_->GetModel()->color_logging_value();
-  base::UmaHistogramEnumeration(string_constants::kColorHistogramName, color);
-  read_anything::mojom::LineSpacing line_spacing =
-      coordinator_->GetModel()->line_spacing();
-  base::UmaHistogramEnumeration(string_constants::kLineSpacingHistogramName,
-                                line_spacing);
-  read_anything::mojom::LetterSpacing letter_spacing =
-      coordinator_->GetModel()->letter_spacing();
-  base::UmaHistogramEnumeration(string_constants::kLetterSpacingHistogramName,
-                                letter_spacing);
 }
 
 BEGIN_METADATA(ReadAnythingContainerView, views::View)
@@ -125,7 +101,6 @@ ReadAnythingContainerView::~ReadAnythingContainerView() {
   // If |this| is being destroyed before the associated coordinator, then
   // remove |this| as an observer.
   if (coordinator_) {
-    LogTextStyle();
     coordinator_->RemoveObserver(this);
     coordinator_->RemoveModelObserver(this);
   }

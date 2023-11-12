@@ -18,7 +18,6 @@
 #include "components/safe_browsing/core/browser/safe_browsing_lookup_mechanism_experimenter.h"
 #include "components/safe_browsing/core/browser/safe_browsing_url_checker_impl.h"
 #include "components/safe_browsing/core/browser/url_checker_delegate.h"
-#include "components/safe_browsing/core/browser/utils/scheme_logger.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/utils.h"
@@ -223,12 +222,11 @@ void BrowserURLLoaderThrottle::CheckerOnSB::OnCheckUrlResult(
     NativeUrlCheckNotifier* slow_check_notifier,
     bool proceed,
     bool showed_interstitial,
-    bool did_perform_url_real_time_check,
+    SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check,
     bool did_check_url_real_time_allowlist) {
   if (!slow_check_notifier) {
     OnCompleteCheck(false /* slow_check */, proceed, showed_interstitial,
-                    did_perform_url_real_time_check,
-                    did_check_url_real_time_allowlist);
+                    performed_check, did_check_url_real_time_allowlist);
     return;
   }
 
@@ -251,19 +249,18 @@ void BrowserURLLoaderThrottle::CheckerOnSB::OnCompleteCheck(
     bool slow_check,
     bool proceed,
     bool showed_interstitial,
-    bool did_perform_url_real_time_check,
+    SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check,
     bool did_check_url_real_time_allowlist) {
   if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
     throttle_->OnCompleteCheck(slow_check, proceed, showed_interstitial,
-                               did_perform_url_real_time_check,
+                               performed_check,
                                did_check_url_real_time_allowlist);
   } else {
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&BrowserURLLoaderThrottle::OnCompleteCheck, throttle_,
                        slow_check, proceed, showed_interstitial,
-                       did_perform_url_real_time_check,
-                       did_check_url_real_time_allowlist));
+                       performed_check, did_check_url_real_time_allowlist));
   }
 }
 
@@ -352,9 +349,6 @@ void BrowserURLLoaderThrottle::WillStartRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(0u, pending_checks_);
   DCHECK(!blocked_);
-  base::UmaHistogramBoolean(
-      "SafeBrowsing.BrowserThrottle.WillStartRequestAfterWillProcessResponse",
-      will_process_response_count_ > 0);
   base::UmaHistogramEnumeration(
       "SafeBrowsing.BrowserThrottle.RequestDestination", request->destination);
 
@@ -363,11 +357,25 @@ void BrowserURLLoaderThrottle::WillStartRequest(
     return;
   }
 
-  original_url_ = request->url;
+  if (request->destination != network::mojom::RequestDestination::kDocument &&
+      base::FeatureList::IsEnabled(kSafeBrowsingSkipSubresources)) {
+    VLOG(2) << __func__ << " : Skipping: " << request->url << " : "
+            << request->destination;
+    base::UmaHistogramEnumeration(
+        "SafeBrowsing.BrowserThrottle.RequestDestination.Skipped",
+        request->destination);
+    skip_checks_ = true;
+
+    return;
+  }
+
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.BrowserThrottle.RequestDestination.Checked",
+      request->destination);
+
   pending_checks_++;
   start_request_time_ = base::TimeTicks::Now();
   is_start_request_called_ = true;
-  request_destination_ = request->destination;
   if (base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
     sb_checker_->Start(request->headers, request->load_flags,
                        request->destination, request->has_user_gesture,
@@ -392,21 +400,6 @@ void BrowserURLLoaderThrottle::WillRedirectRequest(
     net::HttpRequestHeaders* /* modified_headers */,
     net::HttpRequestHeaders* /* modified_cors_exempt_headers */) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  base::UmaHistogramBoolean(
-      "SafeBrowsing.BrowserThrottle."
-      "WillRedirectRequestAfterWillProcessResponse",
-      will_process_response_count_ > 0);
-
-  // TODO(crbug.com/1410939): Below histograms are for debugging. Remove them
-  // afterwards.
-  safe_browsing::scheme_logger::LogScheme(
-      original_url_,
-      "SafeBrowsing.BrowserThrottle.RedirectedOriginalUrlScheme");
-  if (original_url_.SchemeIs("chrome-extension")) {
-    safe_browsing::scheme_logger::LogScheme(
-        redirect_info->new_url,
-        "SafeBrowsing.BrowserThrottle.RedirectedExtensionUrlScheme");
-  }
 
   if (blocked_) {
     // OnCheckUrlResult() has set |blocked_| to true and called
@@ -479,18 +472,6 @@ void BrowserURLLoaderThrottle::WillProcessResponse(
              is_response_from_cache_ ? kFromCacheUmaSuffix
                                      : kFromNetworkUmaSuffix}),
         interval);
-    // TODO(crbug.com/1410939): Below histograms are for debugging. Remove them
-    // afterwards.
-    if (!is_response_from_cache_ && interval <= base::Milliseconds(2)) {
-      base::UmaHistogramEnumeration(
-          "SafeBrowsing.BrowserThrottle.FastRequestFromNetwork."
-          "RequestDestination",
-          request_destination_);
-      safe_browsing::scheme_logger::LogScheme(
-          original_url_,
-          "SafeBrowsing.BrowserThrottle.FastRequestFromNetwork.UrlScheme");
-    }
-
     if (check_completed) {
       LogTotalDelay2MetricsWithResponseType(is_response_from_cache_,
                                             base::TimeDelta());
@@ -506,9 +487,8 @@ void BrowserURLLoaderThrottle::WillProcessResponse(
   deferred_ = true;
   defer_start_time_ = base::TimeTicks::Now();
   *defer = true;
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("safe_browsing", "Deferred",
-                                    TRACE_ID_LOCAL(this), "original_url",
-                                    original_url_.spec());
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("safe_browsing", "Deferred",
+                                    TRACE_ID_LOCAL(this));
 }
 
 const char* BrowserURLLoaderThrottle::NameForLoggingWillProcessResponse() {
@@ -524,11 +504,13 @@ void BrowserURLLoaderThrottle::OnCompleteCheck(
     bool slow_check,
     bool proceed,
     bool showed_interstitial,
-    bool did_perform_url_real_time_check,
+    SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check,
     bool did_check_url_real_time_allowlist) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!blocked_);
-  DCHECK(url_real_time_lookup_enabled_ || !did_perform_url_real_time_check);
+  DCHECK(url_real_time_lookup_enabled_ ||
+         performed_check !=
+             SafeBrowsingUrlCheckerImpl::PerformedCheck::kUrlRealTimeCheck);
 
   DCHECK_LT(0u, pending_checks_);
   pending_checks_--;
@@ -547,12 +529,8 @@ void BrowserURLLoaderThrottle::OnCompleteCheck(
       LogTotalDelay2MetricsWithResponseType(is_response_from_cache_,
                                             total_delay_);
     }
-    std::string url_check_type =
-        did_perform_url_real_time_check
-            ? base::StrCat({url_lookup_service_metric_suffix_, kFullURLLookup})
-            : ".HashBasedCheck";
-    LogTotalDelay2Metrics(url_check_type, did_check_url_real_time_allowlist,
-                          total_delay_);
+    LogTotalDelay2Metrics(GetUrlCheckTypeForLogging(performed_check),
+                          did_check_url_real_time_allowlist, total_delay_);
   }
 
   if (proceed) {
@@ -579,6 +557,23 @@ void BrowserURLLoaderThrottle::OnCompleteCheck(
     delegate_->CancelWithError(
         showed_interstitial ? kNetErrorCodeForSafeBrowsing : net::ERR_ABORTED,
         kCustomCancelReasonForURLLoader);
+  }
+}
+
+std::string BrowserURLLoaderThrottle::GetUrlCheckTypeForLogging(
+    SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
+  switch (performed_check) {
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kUrlRealTimeCheck:
+      return base::StrCat({url_lookup_service_metric_suffix_, kFullURLLookup});
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashDatabaseCheck:
+      return ".HashPrefixDatabaseCheck";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kCheckSkipped:
+      return ".SkippedCheck";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashRealTimeCheck:
+      return ".HashPrefixRealTimeCheck";
+    case SafeBrowsingUrlCheckerImpl::PerformedCheck::kUnknown:
+      NOTREACHED();
+      return ".HashPrefixDatabaseCheck";
   }
 }
 

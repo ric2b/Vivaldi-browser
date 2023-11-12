@@ -22,10 +22,6 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 NSString* const kVoiceSearchInputAccessoryViewID =
     @"kVoiceSearchInputAccessoryViewID";
 
@@ -52,14 +48,17 @@ void SetUpButtonWithIcon(UIButton* button, NSString* iconName) {
   button.layer.shadowRadius = kButtonShadowRadius;
 }
 
-void SetUpButtonWithSymbol(UIButton* button, NSString* symbolName) {
+}  // namespace
+
+void UpdateLensButtonAppearance(UIButton* button) {
   [button setTranslatesAutoresizingMaskIntoConstraints:NO];
   UIImageSymbolConfiguration* configuration = [UIImageSymbolConfiguration
       configurationWithPointSize:kSymbolPointSize
                           weight:UIImageSymbolWeightSemibold
                            scale:UIImageSymbolScaleMedium];
 
-  UIImage* icon = CustomSymbolWithConfiguration(symbolName, configuration);
+  UIImage* icon =
+      CustomSymbolWithConfiguration(kCameraLensSymbol, configuration);
   if (UITraitCollection.currentTraitCollection.userInterfaceStyle ==
       UIUserInterfaceStyleDark) {
     icon = MakeSymbolMonochrome(icon);
@@ -82,8 +81,6 @@ void SetUpButtonWithSymbol(UIButton* button, NSString* symbolName) {
     [button.heightAnchor constraintEqualToConstant:kSymbolButtonSize]
   ]];
 }
-
-}  // namespace
 
 NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
     id<OmniboxAssistiveKeyboardDelegate> delegate,
@@ -112,7 +109,8 @@ NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
       [ExtendedTouchTargetButton buttonWithType:UIButtonTypeCustom];
   if (useLens) {
     // Set up the camera button for Lens.
-    SetUpButtonWithSymbol(cameraButton, kCameraLensSymbol);
+    delegate.lensButton = cameraButton;
+    UpdateLensButtonAppearance(cameraButton);
     [cameraButton addTarget:delegate
                      action:@selector(keyboardAccessoryLensTapped)
            forControlEvents:UIControlEventTouchUpInside];

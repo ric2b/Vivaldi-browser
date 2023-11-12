@@ -42,3 +42,6 @@ NSString* vContentsSetting = @"vivaldi_setting_contents";
 
 // Image name for about
 NSString* vAboutSetting  = @"vivaldi_setting_version";
+
+// Image name for toolbar menu
+NSString* vToolbarMenu  = @"toolbar_menu";

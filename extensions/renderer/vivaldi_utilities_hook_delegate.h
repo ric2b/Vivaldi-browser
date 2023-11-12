@@ -38,6 +38,9 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
   APIBindingHooks::RequestResult HandleIsUrlValid(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
+  APIBindingHooks::RequestResult HandleUrlToThumbnailText(
+      v8::Local<v8::Context> context,
+      const std::vector<v8::Local<v8::Value>>& arguments);
   APIBindingHooks::RequestResult HandleSupportsProxy(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);

@@ -124,7 +124,6 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
         return null;
     }
 
-    @VisibleForTesting
     Menu getMenuForTests() {
         return getMenu();
     }

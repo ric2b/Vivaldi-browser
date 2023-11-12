@@ -20,6 +20,7 @@
 #include "base/numerics/ranges.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/typed_macros.h"
 #include "cc/base/math_util.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
@@ -47,6 +48,7 @@
 #include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/overlay_transform_utils.h"
 
 namespace viz {
@@ -73,13 +75,15 @@ struct MaskFilterInfoExt {
 
     // If the embedding quad has no mask filter, then we do not have to block
     // merging.
-    if (mask_filter_info.IsEmpty())
+    if (mask_filter_info.IsEmpty()) {
       return true;
+    }
 
     // If the embedding quad has rounded corner and it is not a fast rounded
     // corner, we cannot merge.
-    if (mask_filter_info.HasRoundedCorners() && !is_fast_rounded_corner)
+    if (mask_filter_info.HasRoundedCorners() && !is_fast_rounded_corner) {
       return false;
+    }
 
     // If any of the quads in the render pass to merged has a mask filter of its
     // own, then we have to check if that has fast rounded corners and they fit
@@ -107,18 +111,27 @@ struct MaskFilterInfoExt {
         return false;
       }
 
+      // Take the bounds of the sqs filter and apply clipping rect as it may
+      // make current mask fit the |mask_filter_info|'s bounds. Not doing so may
+      // result in marking this mask not suitable for merging while it never
+      // spans outside another mask.
+      auto rounded_corner_bounds = sqs->mask_filter_info.bounds();
+      if (sqs->clip_rect.has_value()) {
+        rounded_corner_bounds.Intersect(gfx::RectF(*sqs->clip_rect));
+      }
+
       // Before checking if current mask's rounded corners do not intersect with
       // the upper level rounded corner mask, its system coordinate must be
       // transformed to that target's system coordinate.
-      gfx::MaskFilterInfo sqs_filter = sqs->mask_filter_info;
-      sqs_filter.ApplyTransform(parent_target_transform);
+      rounded_corner_bounds =
+          parent_target_transform.MapRect(rounded_corner_bounds);
 
-      // This is the only case when quads of this render pass with a mask
+      // This is the only case when quads of this render pass with the mask
       // filter info that has fast rounded corners set can be merged into the
       // embedding render pass. So, if they don't intersect with the "toplevel"
       // rounded corners, we can merge.
       if (!mask_filter_info.rounded_corner_bounds().Contains(
-              sqs_filter.bounds())) {
+              rounded_corner_bounds)) {
         return false;
       }
     }
@@ -866,11 +879,16 @@ void SurfaceAggregator::EmitSurfaceContent(
   scaled_quad_to_target_transform.Scale(extra_content_scale_x,
                                         extra_content_scale_y);
 
-  TRACE_EVENT_WITH_FLOW2(
-      "viz,benchmark", "Graphics.Pipeline",
-      TRACE_ID_GLOBAL(frame.metadata.begin_frame_ack.trace_id),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "SurfaceAggregation", "display_trace", display_trace_id_);
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(frame.metadata.begin_frame_ack.trace_id),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_SURFACE_AGGREGATION);
+        data->set_display_trace_id(display_trace_id_);
+      });
 
   const gfx::Rect& surface_quad_visible_rect = surface_quad->visible_rect;
   if (ignore_undamaged) {
@@ -1061,7 +1079,8 @@ void SurfaceAggregator::EmitSurfaceContent(
           dest_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
       quad->SetNew(shared_quad_state, quad_rect, quad_visible_rect,
                    remapped_pass_id, kInvalidResourceId, gfx::RectF(),
-                   gfx::Size(), gfx::Vector2dF(), gfx::PointF(), tex_coord_rect,
+                   gfx::Size(), gfx::Vector2dF(1.0f, 1.0f), gfx::PointF(),
+                   tex_coord_rect,
                    /*force_anti_aliasing_off=*/false,
                    /* backdrop_filter_quality*/ 1.0f);
     }
@@ -1312,7 +1331,8 @@ void SurfaceAggregator::AddRenderPassHelper(
       render_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
   quad->SetNew(shared_quad_state, current_output_rect, current_output_rect,
                quad_pass_id, kInvalidResourceId, gfx::RectF(), gfx::Size(),
-               gfx::Vector2dF(), gfx::PointF(), gfx::RectF(current_output_rect),
+               gfx::Vector2dF(1.0f, 1.0f), gfx::PointF(),
+               gfx::RectF(current_output_rect),
                /*force_anti_aliasing_off=*/false,
                /*backdrop_filter_quality*/ 1.0f);
   dest_pass_list_->push_back(std::move(render_pass));
@@ -1436,17 +1456,23 @@ void SurfaceAggregator::CopyQuadsToPass(
                         &damage_rect_in_quad_space_valid,
                         new_mask_filter_info_ext);
     } else {
-      if (quad->shared_quad_state != last_copied_source_shared_quad_state) {
+      // Here we output the optional quad's |per_quad_damage| to the
+      // |surface_damage_rect_list_|. Any non per quad damage associated with
+      // this |source_pass| will have been added to the
+      // |surface_damage_rect_list_| before this phase.
+      bool needs_sqs =
+          quad->shared_quad_state != last_copied_source_shared_quad_state;
+      bool has_per_quad_damage =
+          source_pass.has_per_quad_damage &&
+          GetOptionalDamageRectFromQuad(quad).has_value() &&
+          resolved_pass.aggregation().will_draw;
+
+      if (needs_sqs || has_per_quad_damage) {
         SharedQuadState* dest_shared_quad_state = CopySharedQuadState(
             quad->shared_quad_state, client_namespace_id, target_transform,
             clip_rect, new_mask_filter_info_ext, dest_pass);
-        // Here we output the optional quad's |per_quad_damage| to the
-        // |surface_damage_rect_list_|. Any non per quad damage associated with
-        // this |source_pass| will have been added to the
-        // |surface_damage_rect_list_| before this phase.
-        if (source_pass.has_per_quad_damage &&
-            GetOptionalDamageRectFromQuad(quad).has_value() &&
-            resolved_pass.aggregation().will_draw) {
+
+        if (has_per_quad_damage) {
           auto damage_rect_in_target_space =
               GetOptionalDamageRectFromQuad(quad);
           dest_shared_quad_state->overlay_damage_index =
@@ -2175,11 +2201,17 @@ AggregatedFrame SurfaceAggregator::Aggregate(
 
   const CompositorFrame& root_surface_frame =
       surface->GetActiveOrInterpolatedFrame();
-  TRACE_EVENT_WITH_FLOW2(
-      "viz,benchmark", "Graphics.Pipeline",
-      TRACE_ID_GLOBAL(root_surface_frame.metadata.begin_frame_ack.trace_id),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "SurfaceAggregation", "display_trace", display_trace_id_);
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(
+          root_surface_frame.metadata.begin_frame_ack.trace_id),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_SURFACE_AGGREGATION);
+        data->set_display_trace_id(display_trace_id_);
+      });
 
   AggregatedFrame frame;
   frame.top_controls_visible_height =

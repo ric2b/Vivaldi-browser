@@ -7,11 +7,13 @@
 #include <algorithm>
 
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/raster_scale/raster_scale_layer_observer.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/geometry/transform.h"
@@ -144,6 +146,14 @@ void WindowMirrorView::InitLayerOwner() {
   // offscreen or is on an inactive desk.
   if (window_util::IsMinimizedOrTucked(source_) ||
       !desks_util::BelongsToActiveDesk(source_)) {
+    // If the window is already visible, don't set its raster scale. This means
+    // that, for example, alt-tab window cycling won't update the raster scale
+    // of visible windows.
+    // TODO(crbug.com/1473882): Consider using compositor occlusion information
+    // to determine if raster scale can be set lower, e.g. on alt-tab.
+    raster_scale_observer_lock_.emplace(
+        (new RasterScaleLayerObserver(target_, mirror_layer, source_))->Lock());
+
     EnsureAllChildrenAreVisible(mirror_layer);
   }
 
@@ -170,5 +180,8 @@ gfx::Rect WindowMirrorView::GetClientAreaBounds() const {
   views::View* client_view = widget->client_view();
   return client_view->ConvertRectToWidget(client_view->GetLocalBounds());
 }
+
+BEGIN_METADATA(WindowMirrorView, views::View)
+END_METADATA
 
 }  // namespace ash

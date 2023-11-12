@@ -4,8 +4,8 @@
 
 module ash.nearby.presence.mojom;
 
+import "mojo/public/mojom/base/absl_status.mojom";
 import "mojo/public/mojom/base/file.mojom";
-import "mojo/public/mojom/base/read_only_file.mojom";
 
 // Request details to be passed to the Presence Library to inform the type of
 // scan to be run.
@@ -13,14 +13,6 @@ struct ScanRequest {
   string account_name;
   array<IdentityType> identity_types;
   array<PresenceScanFilter> scan_filters;
-};
-
-// TODO(b/276642472): Build out StatusCode to match
-// //third_party/abseil-cpp/absl/status/status.h and move it to
-// //mojo/public/mojom/base/ directory.
-enum StatusCode {
-  kOk = 0,
-  kFailure = 1,
 };
 
 // Presence Identity Types used for scanning, values come from
@@ -33,15 +25,25 @@ enum IdentityType {
   kIdentityTypeProvisioned = 4,
 };
 
+// Private Credential encryption key descriptor, representing PrivateKey from
+// //third_party/nearby/src/internal/proto/local_credential.proto.
+struct PrivateKey {
+  string certificate_alias;
+  array<uint8> key;
+};
+
 // Presence filter used in the ScanRequest to specify the types of devices of
 // interest.
 struct PresenceScanFilter {
   PresenceDeviceType device_type;
 };
 
-// Possible Presence Scan device types.
+// Possible Presence Scan device types. These are defined in
+// //third_party/src/nearby/internal/proto/metadata.proto and should be kept
+// consistent with the types defined in `DeviceType`.
 enum PresenceDeviceType {
-  kUnspecified = 0,
+  // The type of the device found during the scan is unknown.
+  kUnknown = 0,
   kPhone = 1,
   kTablet = 2,
   kDisplay = 3,
@@ -52,12 +54,28 @@ enum PresenceDeviceType {
   kFoldable = 8,
 };
 
+// ActionTypes are defined in //third_party/nearby/src/presence/data_element.h
+// and this enum should be kept consistent with the action types defined there
+// and in //chromeos/ash/components/nearby/presence/nearby_presence_service.h.
+enum ActionType {
+  kActiveUnlockAction = 8,
+  kNearbyShareAction = 9,
+  kInstantTetheringAction = 10,
+  kPhoneHubAction = 11,
+  kPresenceManagerAction = 12,
+  kFinderAction = 13,
+  kFastPairSassAction = 14,
+  kTapToTransferAction = 15,
+  kLastAction,
+};
+
 // Presence Device information to specify the device information when a device
 // is found/lost/changed during a scan.
 struct PresenceDevice {
   string endpoint_id;
   string device_name;
   PresenceDeviceType device_type;
+  array<ActionType> actions;
   string? stable_device_id;
 };
 
@@ -78,14 +96,24 @@ struct Metadata {
   array<uint8> bluetooth_mac_address;
 };
 
-// Shared Credentials are distributed to remote devices for identity
-// decryption and authentication, and this struct represents
+// The Nearby Presence library is responsible for generating and storing Shared
+// Credentials for the local device and remote devices. These credentials
+// are generated using information provided by ChromeOS. ChromeOS is responsible
+// for:
+//    1. Retrieving the local device's Shared Credentials from the Nearby
+//       Presence library and uploading them to the Nearby Presence server.
+//    2. Downloading remote devices' Shared Credentials from the Nearby Presence
+//       server and and saving them to the Nearby Presence library.
+//    3. Triggering (re)generation of Shared Credentials for the local device if
+//       device metadata changes.
+// The Nearby Presence library uses the Shared Credentials for decrypting
+// nearby devices' advertisements. This struct represents
 // //third_party/nearby/src/internal/proto/credential.proto.
 struct SharedCredential {
   // The randomly generated unique id of the public credential.
   array<uint8> secret_id;
   // 32 bytes of secure random bytes used to derive any symmetric keys needed.
-   array<uint8, 32> key_seed;
+  array<uint8, 32> key_seed;
   // The time in millis from epoch when this credential becomes effective.
   int64 start_time_millis;
   // The time in millis from epoch when this credential expires.
@@ -109,6 +137,32 @@ struct SharedCredential {
   // The version number of this SharedCredential, matches the corresponding
   // protocol version.
   array<uint8> version;
+};
+
+// Local Credentials are stored on device, and are used to encrypt and salt
+// Nearby Presence advertisements. This struct represents
+// //third_party/nearby/src/internal/proto/local_credential.proto.
+struct LocalCredential {
+  // The unique id of (and hashed based on) a pair of Secret Key and
+  // X509Certificate's public key.
+  array<uint8> secret_id;
+  // Bytes representation of an AES Key owned by local device, to encrypt
+  // local device metadata.
+  array<uint8> key_seed;
+    // The time in millis from epoch when this credential becomes effective.
+  int64 start_time_millis;
+  // The 14 bytes aes key to encrypt metadata in SharedCredential.
+  array<uint8> metadata_encryption_key_v0;
+  // Used for signing advertisement.
+  PrivateKey advertisement_signing_key;
+  // Used for connection authentication.
+  PrivateKey connection_signing_key;
+  // The trust type assigned to the credential.
+  IdentityType identity_type;
+  // The set of 2-byte salts already used to encrypt the metadata key.
+  map<uint32, bool> consumed_salts;
+  // The 16 bytes aes key to encrypt metadata in SharedCredential.
+  array<uint8> metadata_encryption_key_v1;
 };
 
 // Intentionally left empty. The ScanSession remote is used by the client
@@ -140,8 +194,9 @@ interface NearbyPresence {
   //                   devices are being scanned for.
   // scan_observer - Pending remote for the utility process to call with
   //                   scan results.
-  StartScan(ScanRequest scan_request)
-      => (pending_remote<ScanSession>? scan_session, StatusCode status);
+  StartScan(ScanRequest scan_request) =>
+      (pending_remote<ScanSession>? scan_session,
+      mojo_base.mojom.AbslStatusCode status);
 
   // Sets the scan observer for the utility process to use to pass devices
   // back to the browser process.
@@ -166,5 +221,19 @@ interface NearbyPresence {
   // storage, and the generated public credentials will be returned inside the
   // callback for CrOS to upload to the web.
   UpdateLocalDeviceMetadataAndGenerateCredentials(Metadata metadata)
-      => (array<SharedCredential> shared_credentials, StatusCode status);
+      => (array<SharedCredential> shared_credentials,
+          mojo_base.mojom.AbslStatusCode status);
+
+  // Updates the remote shared credentials downloaded from the NP server stored
+  // in the NP library.
+  UpdateRemoteSharedCredentials(array<SharedCredential> shared_credentials,
+                                string account_name)
+      => (mojo_base.mojom.AbslStatusCode status);
+
+  // Retrieves the local shared credentials saved and generated by the NP
+  // library. Upon return, these will be uploaded to the NP server if they
+  // have changed.
+  GetLocalSharedCredentials(string account_name)
+      => (array<SharedCredential> shared_credentials,
+          mojo_base.mojom.AbslStatusCode status);
 };

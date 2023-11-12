@@ -1,0 +1,308 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("imagesets") {
+  deps = [
+    ":img_appicon_final",
+    ":img_appicon_aqua",
+    ":img_appicon_blueprint",
+    ":img_appicon_community",
+    ":img_appicon_gradient",
+    ":img_appicon_gradient1",
+    ":img_appicon_gradient2",
+    ":img_appicon_gradient3",
+    ":img_appicon_internal",
+    ":img_appicon_japan",
+    ":img_appicon_pride",
+    ":img_appicon_lgbtplus",
+    ":img_appicon_matteblack",
+    ":img_appicon_oldopera",
+    ":img_appicon_pink",
+    ":img_appicon_snapshot",
+    ":img_appicon_white",
+    ":img_appicon_wood",
+    ":img_appicon_woodsteel",
+    ":img_appicon_camo",
+    ":img_appicon_coral",
+    ":img_appicon_sand",
+    ":img_appicon_forest_green",
+    ":img_appicon_sagegreen",
+    ":img_appicon_softred",
+    ":img_appicon_softpurple",
+    ":img_appicon_softpink",
+    ":img_appicon_yellow",
+    ":img_appicon_green",
+    ":img_appicon_burgundy"
+  ]
+}
+
+imageset("img_appicon_final") {
+  sources = [
+    "img_appicon_final.imageset/Contents.json",
+    "img_appicon_final.imageset/official.png",
+    "img_appicon_final.imageset/official@2x.png",
+    "img_appicon_final.imageset/official@3x.png",
+  ]
+}
+
+imageset("img_appicon_burgundy") {
+  sources = [
+    "img_appicon_burgundy.imageset/Contents.json",
+    "img_appicon_burgundy.imageset/burgundy.png",
+    "img_appicon_burgundy.imageset/burgundy@2x.png",
+    "img_appicon_burgundy.imageset/burgundy@3x.png",
+  ]
+}
+
+imageset("img_appicon_yellow") {
+  sources = [
+    "img_appicon_yellow.imageset/Contents.json",
+    "img_appicon_yellow.imageset/yellow.png",
+    "img_appicon_yellow.imageset/yellow@2x.png",
+    "img_appicon_yellow.imageset/yellow@3x.png",
+  ]
+}
+
+imageset("img_appicon_softpink") {
+  sources = [
+    "img_appicon_softpink.imageset/Contents.json",
+    "img_appicon_softpink.imageset/softpink.png",
+    "img_appicon_softpink.imageset/softpink@2x.png",
+    "img_appicon_softpink.imageset/softpink@3x.png",
+  ]
+}
+
+imageset("img_appicon_softpurple") {
+  sources = [
+    "img_appicon_softpurple.imageset/Contents.json",
+    "img_appicon_softpurple.imageset/softpurple.png",
+    "img_appicon_softpurple.imageset/softpurple@2x.png",
+    "img_appicon_softpurple.imageset/softpurple@3x.png",
+  ]
+}
+
+imageset("img_appicon_softred") {
+  sources = [
+    "img_appicon_softred.imageset/Contents.json",
+    "img_appicon_softred.imageset/softred.png",
+    "img_appicon_softred.imageset/softred@2x.png",
+    "img_appicon_softred.imageset/softred@3x.png",
+  ]
+}
+
+imageset("img_appicon_sand") {
+  sources = [
+    "img_appicon_sand.imageset/Contents.json",
+    "img_appicon_sand.imageset/sand.png",
+    "img_appicon_sand.imageset/sand@2x.png",
+    "img_appicon_sand.imageset/sand@3x.png",
+  ]
+}
+
+imageset("img_appicon_sagegreen") {
+  sources = [
+    "img_appicon_sagegreen.imageset/Contents.json",
+    "img_appicon_sagegreen.imageset/sagegreen.png",
+    "img_appicon_sagegreen.imageset/sagegreen@2x.png",
+    "img_appicon_sagegreen.imageset/sagegreen@3x.png",
+  ]
+}
+
+imageset("img_appicon_green") {
+  sources = [
+    "img_appicon_green.imageset/Contents.json",
+    "img_appicon_green.imageset/green.png",
+    "img_appicon_green.imageset/green@2x.png",
+    "img_appicon_green.imageset/green@3x.png",
+  ]
+}
+
+imageset("img_appicon_forest_green") {
+  sources = [
+    "img_appicon_forestgreen.imageset/Contents.json",
+    "img_appicon_forestgreen.imageset/forestgreen.png",
+    "img_appicon_forestgreen.imageset/forestgreen@2x.png",
+    "img_appicon_forestgreen.imageset/forestgreen@3x.png",
+  ]
+}
+
+imageset("img_appicon_coral") {
+  sources = [
+    "img_appicon_coral.imageset/Contents.json",
+    "img_appicon_coral.imageset/coral.png",
+    "img_appicon_coral.imageset/coral@2x.png",
+    "img_appicon_coral.imageset/coral@3x.png",
+  ]
+}
+
+imageset("img_appicon_camo") {
+  sources = [
+    "img_appicon_camo.imageset/Contents.json",
+    "img_appicon_camo.imageset/camo.png",
+    "img_appicon_camo.imageset/camo@2x.png",
+    "img_appicon_camo.imageset/camo@3x.png",
+  ]
+}
+
+imageset("img_appicon_aqua") {
+  sources = [
+    "img_appicon_aqua.imageset/Contents.json",
+    "img_appicon_aqua.imageset/aqua.png",
+    "img_appicon_aqua.imageset/aqua@2x.png",
+    "img_appicon_aqua.imageset/aqua@3x.png",
+  ]
+}
+
+imageset("img_appicon_blueprint") {
+  sources = [
+    "img_appicon_blueprint.imageset/Contents.json",
+    "img_appicon_blueprint.imageset/sketch.png",
+    "img_appicon_blueprint.imageset/sketch@2x.png",
+    "img_appicon_blueprint.imageset/sketch@3x.png",
+  ]
+}
+
+imageset("img_appicon_community") {
+  sources = [
+    "img_appicon_community.imageset/Contents.json",
+    "img_appicon_community.imageset/community.png",
+    "img_appicon_community.imageset/community@2x.png",
+    "img_appicon_community.imageset/community@3x.png",
+  ]
+}
+
+imageset("img_appicon_gradient") {
+  sources = [
+    "img_appicon_gradient.imageset/Contents.json",
+    "img_appicon_gradient.imageset/gradient.png",
+    "img_appicon_gradient.imageset/gradient@2x.png",
+    "img_appicon_gradient.imageset/gradient@3x.png",
+  ]
+}
+
+imageset("img_appicon_gradient1") {
+  sources = [
+    "img_appicon_gradient1.imageset/Contents.json",
+    "img_appicon_gradient1.imageset/gradient.png",
+    "img_appicon_gradient1.imageset/gradient@2x.png",
+    "img_appicon_gradient1.imageset/gradient@3x.png",
+  ]
+}
+
+imageset("img_appicon_gradient2") {
+  sources = [
+    "img_appicon_gradient2.imageset/Contents.json",
+    "img_appicon_gradient2.imageset/gradient.png",
+    "img_appicon_gradient2.imageset/gradient@2x.png",
+    "img_appicon_gradient2.imageset/gradient@3x.png",
+  ]
+}
+
+imageset("img_appicon_gradient3") {
+  sources = [
+    "img_appicon_gradient3.imageset/Contents.json",
+    "img_appicon_gradient3.imageset/gradient.png",
+    "img_appicon_gradient3.imageset/gradient@2x.png",
+    "img_appicon_gradient3.imageset/gradient@3x.png",
+  ]
+}
+
+imageset("img_appicon_internal") {
+  sources = [
+    "img_appicon_internal.imageset/Contents.json",
+    "img_appicon_internal.imageset/internal.png",
+    "img_appicon_internal.imageset/internal@2x.png",
+    "img_appicon_internal.imageset/internal@3x.png",
+  ]
+}
+
+imageset("img_appicon_japan") {
+  sources = [
+    "img_appicon_japan.imageset/Contents.json",
+    "img_appicon_japan.imageset/japan.png",
+    "img_appicon_japan.imageset/japan@2x.png",
+    "img_appicon_japan.imageset/japan@3x.png",
+  ]
+}
+
+imageset("img_appicon_lgbtplus") {
+  sources = [
+    "img_appicon_lgbtplus.imageset/Contents.json",
+    "img_appicon_lgbtplus.imageset/lgbtplus.png",
+    "img_appicon_lgbtplus.imageset/lgbtplus@2x.png",
+    "img_appicon_lgbtplus.imageset/lgbtplus@3x.png",
+  ]
+}
+
+imageset("img_appicon_matteblack") {
+  sources = [
+    "img_appicon_matteblack.imageset/Contents.json",
+    "img_appicon_matteblack.imageset/matteblack.png",
+    "img_appicon_matteblack.imageset/matteblack@2x.png",
+    "img_appicon_matteblack.imageset/matteblack@3x.png",
+  ]
+}
+
+imageset("img_appicon_oldopera") {
+  sources = [
+    "img_appicon_oldopera.imageset/Contents.json",
+    "img_appicon_oldopera.imageset/oldopera.png",
+    "img_appicon_oldopera.imageset/oldopera@2x.png",
+    "img_appicon_oldopera.imageset/oldopera@3x.png",
+  ]
+}
+
+imageset("img_appicon_pink") {
+  sources = [
+    "img_appicon_pink.imageset/Contents.json",
+    "img_appicon_pink.imageset/pink.png",
+    "img_appicon_pink.imageset/pink@2x.png",
+    "img_appicon_pink.imageset/pink@3x.png",
+  ]
+}
+
+imageset("img_appicon_pride") {
+  sources = [
+    "img_appicon_pride.imageset/Contents.json",
+    "img_appicon_pride.imageset/pride.png",
+    "img_appicon_pride.imageset/pride@2x.png",
+    "img_appicon_pride.imageset/pride@3x.png",
+  ]
+}
+
+imageset("img_appicon_snapshot") {
+  sources = [
+    "img_appicon_snapshot.imageset/Contents.json",
+    "img_appicon_snapshot.imageset/snapshot.png",
+    "img_appicon_snapshot.imageset/snapshot@2x.png",
+    "img_appicon_snapshot.imageset/snapshot@3x.png",
+  ]
+}
+
+imageset("img_appicon_white") {
+  sources = [
+    "img_appicon_white.imageset/Contents.json",
+    "img_appicon_white.imageset/white.png",
+    "img_appicon_white.imageset/white@2x.png",
+    "img_appicon_white.imageset/white@3x.png",
+  ]
+}
+
+imageset("img_appicon_wood") {
+  sources = [
+    "img_appicon_wood.imageset/Contents.json",
+    "img_appicon_wood.imageset/wood.png",
+    "img_appicon_wood.imageset/wood@2x.png",
+    "img_appicon_wood.imageset/wood@3x.png",
+  ]
+}
+
+imageset("img_appicon_woodsteel") {
+  sources = [
+    "img_appicon_woodsteel.imageset/Contents.json",
+    "img_appicon_woodsteel.imageset/woodsteel.png",
+    "img_appicon_woodsteel.imageset/woodsteel@2x.png",
+    "img_appicon_woodsteel.imageset/woodsteel@3x.png",
+  ]
+}

@@ -90,6 +90,13 @@ imageset("sync_settings") {
   ]
 }
 
+imageset("sync_tabs") {
+  sources = [
+    "sync_tabs.imageset/Contents.json",
+    "sync_tabs.imageset/sync_tabs.pdf",
+  ]
+}
+
 # Main Setting
 
 imageset("vivaldi_setting_sync") {
@@ -190,5 +197,13 @@ imageset("vivaldi_passwords_autofill_banner") {
     "vivaldi_passwords_autofill_banner.imageset/Contents.json",
     "vivaldi_passwords_autofill_banner.imageset/vivaldi_passwords_autofill_banner@2x.png",
     "vivaldi_passwords_autofill_banner.imageset/vivaldi_passwords_autofill_banner@3x.png",
+  ]
+}
+
+imageset("vivaldi_passwords_manager_empty") {
+  sources = [
+    "vivaldi_passwords_manager_empty.imageset/Contents.json",
+    "vivaldi_passwords_manager_empty.imageset/vivaldi_passwords_manager_empty.pdf",
+    "vivaldi_passwords_manager_empty.imageset/vivaldi_passwords_manager_empty_dark.pdf",
   ]
 }

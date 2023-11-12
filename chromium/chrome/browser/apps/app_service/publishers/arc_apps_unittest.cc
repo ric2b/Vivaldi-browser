@@ -97,7 +97,7 @@ apps::IntentFilters CreateIntentFilters(
         authority, apps::PatternMatchType::kLiteral));
   }
   filter->conditions.push_back(std::make_unique<apps::Condition>(
-      apps::ConditionType::kHost, std::move(values)));
+      apps::ConditionType::kAuthority, std::move(values)));
 
   apps::ConditionValues values3;
   values3.push_back(std::make_unique<apps::ConditionValue>(
@@ -238,7 +238,8 @@ class ArcAppsPublisherTest : public testing::Test {
   ArcAppTest arc_test_;
   std::unique_ptr<TestingProfile> profile_;
   apps::AppServiceTest app_service_test_;
-  raw_ptr<arc::ArcIntentHelperBridge, ExperimentalAsh> intent_helper_;
+  raw_ptr<arc::ArcIntentHelperBridge, DanglingUntriaged | ExperimentalAsh>
+      intent_helper_;
   std::unique_ptr<arc::FakeFileSystemInstance> file_system_instance_;
   std::unique_ptr<arc::ArcFileSystemBridge> arc_file_system_bridge_;
 };
@@ -445,13 +446,12 @@ TEST_F(ArcAppsPublisherTest, PublishPermission) {
   base::ranges::sort(result, std::less<>(), &apps::Permission::permission_type);
 
   EXPECT_EQ(result[0]->permission_type, apps::PermissionType::kCamera);
-  EXPECT_EQ(absl::get<apps::TriState>(result[0]->value->value),
-            apps::TriState::kAsk);
+  EXPECT_EQ(absl::get<apps::TriState>(result[0]->value), apps::TriState::kAsk);
   EXPECT_FALSE(result[0]->is_managed);
   EXPECT_EQ(result[0]->details, absl::nullopt);
 
   EXPECT_EQ(result[1]->permission_type, apps::PermissionType::kLocation);
-  EXPECT_TRUE(result[1]->value->IsPermissionEnabled());
+  EXPECT_TRUE(result[1]->IsPermissionEnabled());
   EXPECT_TRUE(result[1]->is_managed);
   EXPECT_EQ(result[1]->details, "While in use");
 }
@@ -647,15 +647,13 @@ TEST_F(ArcAppsPublisherTest, OnInstallationStarted_RegistersPromiseApp) {
       apps::PackageId(apps::AppType::kArc, package_name);
 
   // Verify that the promise app is not yet registered.
-  const apps::PromiseApp* promise_app_before =
-      cache->GetPromiseAppForTesting(package_id);
+  const apps::PromiseApp* promise_app_before = cache->GetPromiseApp(package_id);
   EXPECT_FALSE(promise_app_before);
 
   arc_test()->app_instance()->SendInstallationStarted(package_name);
 
   // Verify that the promise app is now registered.
-  const apps::PromiseApp* promise_app_after =
-      cache->GetPromiseAppForTesting(package_id);
+  const apps::PromiseApp* promise_app_after = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_after);
 }
 
@@ -679,8 +677,7 @@ TEST_F(ArcAppsPublisherTest, OnInstallationProgressChanged_UpdatesPromiseApp) {
   cache->OnPromiseApp(std::move(promise_app));
 
   // Check that the initial progress value is correct.
-  const apps::PromiseApp* promise_app_result =
-      cache->GetPromiseAppForTesting(package_id);
+  const apps::PromiseApp* promise_app_result = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_result);
   EXPECT_TRUE(promise_app_result->progress.has_value());
   EXPECT_EQ(promise_app_result->progress.value(), progress_initial);
@@ -688,7 +685,7 @@ TEST_F(ArcAppsPublisherTest, OnInstallationProgressChanged_UpdatesPromiseApp) {
   // Send an update and check the progress value.
   arc_test()->app_instance()->SendInstallationProgressChanged(package_name,
                                                               progress_next);
-  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  promise_app_result = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_result);
   EXPECT_TRUE(promise_app_result->progress.has_value());
   EXPECT_EQ(promise_app_result->progress.value(), progress_next);
@@ -712,21 +709,20 @@ TEST_F(ArcAppsPublisherTest, OnInstallationActiveChanged_UpdatesPromiseApp) {
   cache->OnPromiseApp(std::move(promise_app));
 
   // Check that the initial status is correct.
-  const apps::PromiseApp* promise_app_result =
-      cache->GetPromiseAppForTesting(package_id);
+  const apps::PromiseApp* promise_app_result = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_result);
   EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kPending);
 
   // Send an update and check the status.
   arc_test()->app_instance()->SendInstallationActiveChanged(package_name, true);
-  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  promise_app_result = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_result);
   EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kInstalling);
 
   // Send an update and check the status.
   arc_test()->app_instance()->SendInstallationActiveChanged(package_name,
                                                             false);
-  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  promise_app_result = cache->GetPromiseApp(package_id);
   EXPECT_TRUE(promise_app_result);
   EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kPending);
 }
@@ -781,6 +777,7 @@ TEST_F(ArcAppsPublisherTest, OnlyValidFilterIsPublished) {
   EXPECT_EQ(published_filters.size(), 1u);
 
   apps::IntentFilterPtr expected_filter =
-      apps_util::MakeIntentFilterForUrlScope(kTestUrl);
+      apps_util::MakeIntentFilterForUrlScope(kTestUrl,
+                                             /*omit_port_for_testing=*/true);
   EXPECT_EQ(*published_filters[0], *expected_filter);
 }

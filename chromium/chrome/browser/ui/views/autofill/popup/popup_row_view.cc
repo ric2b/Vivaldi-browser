@@ -53,7 +53,7 @@ std::unique_ptr<PopupRowView> PopupRowView::Create(PopupViewViews& popup_view,
                                                                    line_number);
       break;
     default:
-      if (IsFooterFrontendId(popup_item_id)) {
+      if (IsFooterPopupItemId(popup_item_id)) {
         strategy =
             std::make_unique<PopupFooterStrategy>(controller, line_number);
       } else {
@@ -116,33 +116,37 @@ void PopupRowView::SetSelectedCell(absl::optional<CellType> cell) {
     return;
   }
 
-  auto view_from_type =
-      [this](absl::optional<CellType> type) -> PopupCellView* {
-    if (!type) {
-      return nullptr;
-    }
-    switch (*type) {
-      case CellType::kContent:
-        return content_view_.get();
-      case CellType::kControl:
-        return control_view_.get();
-    }
-  };
-
-  if (PopupCellView* old_view = view_from_type(selected_cell_)) {
+  PopupCellView* old_view =
+      selected_cell_ ? GetCellView(*selected_cell_) : nullptr;
+  if (old_view) {
     old_view->SetSelected(false);
   }
-  selected_cell_ = cell;
 
-  if (PopupCellView* new_view = view_from_type(selected_cell_)) {
+  PopupCellView* new_view = cell ? GetCellView(*cell) : nullptr;
+  if (new_view) {
     new_view->SetSelected(true);
     GetA11ySelectionDelegate().NotifyAXSelection(*new_view);
     NotifyAccessibilityEvent(ax::mojom::Event::kSelectedChildrenChanged, true);
+    selected_cell_ = cell;
   } else {
     // Set the selected cell to none in case an invalid choice was made (e.g.
-    // selecting a control cell when none exists).
+    // selecting a control cell when none exists) or the cell was reset
+    // explicitly with `absl::nullopt`.
     selected_cell_ = absl::nullopt;
   }
+}
+
+void PopupRowView::SetCellPermanentlyHighlighted(CellType type,
+                                                 bool highlighted) {
+  if (PopupCellView* view = GetCellView(type)) {
+    view->SetPermanentlyHighlighted(highlighted);
+  }
+}
+
+gfx::RectF PopupRowView::GetCellBounds(CellType cell) const {
+  const PopupCellView* view = GetCellView(cell);
+  // The view is expected to be present.
+  return gfx::RectF(view->GetBoundsInScreen());
 }
 
 bool PopupRowView::HandleKeyPressEvent(
@@ -158,16 +162,6 @@ bool PopupRowView::HandleKeyPressEvent(
     return true;
   }
   switch (event.windows_key_code) {
-    case ui::VKEY_RETURN:
-      if (*GetSelectedCell() == CellType::kControl &&
-          GetControlView()->GetOnAcceptedCallback()) {
-        GetControlView()->GetOnAcceptedCallback().Run();
-        return true;
-      }
-      // TODO(crbug.com/1411172): Handle all return key presses here once the
-      // reaction delay for accepting suggestions is the same between keyboard
-      // and mouse/gesture events.
-      return false;
     case ui::VKEY_LEFT:
       // `base::i18n::IsRTL` is used here instead of the controller's method
       // because the controller's `IsRTL` depends on the language of the focused
@@ -203,6 +197,19 @@ void PopupRowView::SelectPreviousCell() {
   if (*GetSelectedCell() == CellType::kControl) {
     SetSelectedCell(CellType::kContent);
   }
+}
+
+const PopupCellView* PopupRowView::GetCellView(CellType type) const {
+  switch (type) {
+    case CellType::kContent:
+      return content_view_.get();
+    case CellType::kControl:
+      return control_view_.get();
+  }
+}
+
+PopupCellView* PopupRowView::GetCellView(CellType type) {
+  return const_cast<PopupCellView*>(std::as_const(*this).GetCellView(type));
 }
 
 BEGIN_METADATA(PopupRowView, views::View)

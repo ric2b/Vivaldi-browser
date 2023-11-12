@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/core/scroll/scroll_customization.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/custom_spaces.h"
@@ -72,9 +73,11 @@ class LayoutObject;
 class MathMLQualifiedName;
 class MutationObserver;
 class MutationObserverRegistration;
+class NodeCloningData;
 class NodeList;
 class NodeListsNodeData;
 class NodeRareData;
+class Part;
 class QualifiedName;
 class RegisteredEventListener;
 class ScrollTimeline;
@@ -90,6 +93,7 @@ class V8ScrollStateCallback;
 class V8UnionNodeOrStringOrTrustedScript;
 class V8UnionStringOrTrustedScript;
 class WebPluginContainerImpl;
+
 struct PhysicalRect;
 
 const int kElementNamespaceTypeShift = 5;
@@ -134,8 +138,6 @@ enum class SlotChangeType {
   kSuppressSlotChangeEvent,
 };
 
-enum class CloneChildrenFlag { kSkip, kClone, kCloneWithShadows };
-
 // LinkHighlight determines the largest enclosing node with hand cursor set.
 enum class LinkHighlightCandidate {
   // This node is with hand cursor set.
@@ -149,7 +151,7 @@ enum class LinkHighlightCandidate {
 // A Node is a base class for all objects in the DOM tree.
 // The spec governing this interface can be found here:
 // https://dom.spec.whatwg.org/#interface-node
-class CORE_EXPORT Node : public EventTargetWithInlineData {
+class CORE_EXPORT Node : public EventTarget {
   DEFINE_WRAPPERTYPEINFO();
   friend class TreeScope;
   friend class TreeScopeAdopter;
@@ -290,8 +292,20 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
 
   bool hasChildren() const { return firstChild(); }
   Node* cloneNode(bool deep, ExceptionState&) const;
+
   // https://dom.spec.whatwg.org/#concept-node-clone
-  virtual Node* Clone(Document&, CloneChildrenFlag) const = 0;
+  // The implementation differs a bit from the spec algorithm, notably in the
+  // order that nodes are appended to their eventual destination. The spec
+  // requires each Element's children to be cloned before they are appended to
+  // the Element, whereas the Chromium implementation first attaches a new
+  // clone to its parent, and then clones children. This avoids an O(log-n^2)
+  // set of calls to Node::InsertedInto().
+  virtual Node* Clone(
+      Document& factory,
+      NodeCloningData& data,
+      ContainerNode* append_to,
+      ExceptionState& append_exception_state = ASSERT_NO_EXCEPTION) const = 0;
+
   // This is not web-exposed. We should rename it or remove it.
   Node* cloneNode(bool deep) const;
   void normalize();
@@ -311,7 +325,7 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
 
   bool SupportsAltText();
 
-  void SetComputedStyle(scoped_refptr<const ComputedStyle> computed_style);
+  void SetComputedStyle(const ComputedStyle* computed_style);
 
   // Other methods (not part of DOM)
   ALWAYS_INLINE NodeType getNodeType() const {
@@ -661,7 +675,7 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
   // This differs from GetTreeScope for shadow clones inside <svg:use/>.
   TreeScope& OriginatingTreeScope() const;
 
-  HashSet<Member<TreeScope>> GetAncestorTreeScopes() const;
+  HeapHashSet<Member<TreeScope>> GetAncestorTreeScopes() const;
 
   bool InActiveDocument() const;
 
@@ -771,13 +785,6 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
   inline const ComputedStyle* GetComputedStyle() const;
   inline const ComputedStyle& ComputedStyleRef() const;
   bool ShouldSkipMarkingStyleDirty() const;
-
-  const ComputedStyle* EnsureComputedStyle(
-      PseudoId pseudo_element_specifier = kPseudoIdNone,
-      const AtomicString& pseudo_argument = g_null_atom) {
-    return VirtualEnsureComputedStyle(pseudo_element_specifier,
-                                      pseudo_argument);
-  }
 
   // ---------------------------------------------------------------------------
   // Notification of document structure changes (see container_node.h for more
@@ -950,6 +957,14 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
 
   void RegisterScrollTimeline(ScrollTimeline*);
   void UnregisterScrollTimeline(ScrollTimeline*);
+
+  void AddDOMPart(Part& part) { EnsureRareData().AddDOMPart(part); }
+  void RemoveDOMPart(Part& part) { EnsureRareData().RemoveDOMPart(part); }
+  PartsList* GetDOMParts() const {
+    return HasRareData() ? RareData()->GetDOMParts() : nullptr;
+  }
+  void UpdateForRemovedDOMParts(ContainerNode& insertion_point);
+  void UpdateForInsertedDOMParts(ContainerNode& insertion_point);
 
   // For the imperative slot distribution API.
   void SetManuallyAssignedSlot(HTMLSlotElement* slot);
@@ -1145,13 +1160,6 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
   inline const ComputedStyle* GetComputedStyleAssumingElement() const;
 
  private:
-  // Gets nodeName without caching AtomicStrings. Used by
-  // debugName. Compositor may call debugName from the "impl" thread
-  // during "commit". The main thread is stopped at that time, but
-  // it is not safe to cache AtomicStrings because those are
-  // per-thread.
-  virtual String DebugNodeName() const;
-
   Node* ToNode() final;
 
   bool IsUserActionElementActive() const;
@@ -1164,10 +1172,6 @@ class CORE_EXPORT Node : public EventTargetWithInlineData {
   void SetStyleChange(StyleChangeType change_type) {
     node_flags_ = (node_flags_ & ~kStyleChangeMask) | change_type;
   }
-
-  virtual const ComputedStyle* VirtualEnsureComputedStyle(
-      PseudoId = kPseudoIdNone,
-      const AtomicString& pseudo_argument = g_null_atom);
 
   // Used exclusively by |EnsureRareData|.
   NodeRareData& CreateRareData();

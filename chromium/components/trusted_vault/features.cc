@@ -5,6 +5,7 @@
 #include "components/trusted_vault/features.h"
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 
 namespace trusted_vault {
 
@@ -19,6 +20,12 @@ BASE_FEATURE(kSyncTrustedVaultVerifyDeviceRegistration,
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kSetClientEncryptionKeysJsApi,
              "SetClientEncryptionKeysJsApi",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+BASE_FEATURE(kChromeOSTrustedVaultUseWebUIDialog,
+             "ChromeOSTrustedVaultUseWebUIDialog",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 

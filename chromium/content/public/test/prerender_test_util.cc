@@ -256,7 +256,7 @@ PrerenderTestHelper::PrerenderTestHelper(const WebContents::Getter& fn)
 
 PrerenderTestHelper::~PrerenderTestHelper() = default;
 
-void PrerenderTestHelper::SetUp(
+void PrerenderTestHelper::RegisterServerRequestMonitor(
     net::test_server::EmbeddedTestServer* http_server) {
   EXPECT_FALSE(http_server->Started());
   http_server->RegisterRequestMonitor(base::BindRepeating(
@@ -390,9 +390,9 @@ PrerenderTestHelper::AddEmbedderTriggeredPrerenderAsync(
     return nullptr;
 
   WebContents* web_contents = GetWebContents();
-  return web_contents->StartPrerendering(prerendering_url, trigger_type,
-                                         embedder_histogram_suffix,
-                                         page_transition, nullptr);
+  return web_contents->StartPrerendering(
+      prerendering_url, trigger_type, embedder_histogram_suffix,
+      page_transition, PreloadingHoldbackStatus::kUnspecified, nullptr);
 }
 
 void PrerenderTestHelper::NavigatePrerenderedPage(int host_id,

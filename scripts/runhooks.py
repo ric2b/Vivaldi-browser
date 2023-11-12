@@ -17,7 +17,7 @@ depot_tools_path = os.path.join(SRC, "chromium/third_party/depot_tools")
 os.environ["PATH"] = os.pathsep.join([os.environ["PATH"], depot_tools_path])
 if os.access("build/toolchain.json", os.F_OK) and "DEPOT_TOOLS_WIN_TOOLCHAIN" in os.environ:
   del os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]
-os.environ["DEPOT_TOOLS_BOOTSTRAP_PYTHON3"]="1"
+os.environ["DEPOT_TOOLS_BOOTSTRAP_PYTHON3"]="0"
 os.environ["VPYTHON_BYPASS"]= "manually managed python not supported by chrome operations"
 
 def copy_files(src, dst):

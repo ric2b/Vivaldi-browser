@@ -57,7 +57,7 @@
       që të siguroheni se serveri proxy po funksionon. Nëse nuk besoni se ju duhet
       një server proxy:
       <ph name="PLATFORM_TEXT" /></translation>
-<translation id="3226128629678568754">Shtypni butonin Freskoj për të parashtruar edhe një herë të dhënat që nevojiten për hapjen e faqes.</translation>
+<translation id="3226128629678568754">Shtypni butonin Freskoj për të parashtruar edhe një herë të dhënat për hapjen e faqes.</translation>
 <translation id="3234666976984236645">Gjithmonë diktoj materialet e rëndësishme te ky uebsajti</translation>
 <translation id="3308738399950580893">reklamat</translation>
 <translation id="3384522979010096022">Organizata juaj nuk ju lejon ta shihni uebsajtin</translation>
@@ -165,14 +165,13 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk i respekton standardet e sigurisë.</translation>
 <translation id="7219179957768738017">Linja përdor <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Shfaq njoftimet</translation>
-<translation id="7260504762447901703">Revokoj aksesin</translation>
 <translation id="7353601530677266744">Terminali i komandave</translation>
 <translation id="7364115444476960850">Faqja që provuat të hapni u bllokua nga <ph name="BLOCKER_NAME" /> i Vivaldit</translation>
 <translation id="7419106976560586862">Vendndodhja e profilit</translation>
 <translation id="7445762425076701745">Identiteti i këtij serveri nuk mund të vërtetohet plotësisht. Serveri përdor një emër të vlefshëm vetëm brenda rrjetit tuaj kompjuterik dhe autoritetet e jashtme certifikuese nuk e vërtetojnë dot se kujt i përket. Autoritetet certifikuese ndonjëherë lëshojnë dëshmi edhe për emra të tillë, prandaj nuk ka garanci që jeni lidhur me uebsajtin e kërkuar apo me një pirat interneti.</translation>
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>
 <translation id="7518003948725431193">Nuk ka faqe me adresën: <ph name="URL" /></translation>
-<translation id="7549584377607005141">Faqja kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por ju duhet të përsëritni veprimet e mëparshme.</translation>
+<translation id="7549584377607005141">Faqja kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por duhet të përsëritni veprimet e mëparshme.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> nuk e shqyrton dot kërkesën për momentin.</translation>
 <translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
 <translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>

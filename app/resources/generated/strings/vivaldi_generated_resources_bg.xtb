@@ -31,7 +31,7 @@
 <translation id="150411034776756821">Премахване на <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Разширение промени страницата, показвана при щракване върху бутон „Начална страница“.</translation>
 <translation id="1552752544932680961">Организарай разширението</translation>
-<translation id="15662109988763471">Избраният принтер е недостъпен или не е инсталиран правилно. Проверете го или изберете друг.</translation>
+<translation id="15662109988763471">Избраният принтер не е наличен или не е инсталиран правилно. Проверете го или изберете друг.</translation>
 <translation id="1588438908519853928">Обикновен</translation>
 <translation id="1588870296199743671">Отвори препратката в…</translation>
 <translation id="1589055389569595240">Покажи правопис и граматика</translation>
@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Възстанови настройките</translation>
 <translation id="4478664379124702289">Запиши пр&amp;епратката като…</translation>
 <translation id="4520385623207007473">Използвани бисквитки</translation>
+<translation id="456449593072900590">Изтрий при изход</translation>
 <translation id="4580596421317071374">Паролите са записани в <ph name="GOOGLE_PASSWORD_MANAGER" /> в устройството.</translation>
 <translation id="4593021220803146968">&amp;Премини към <ph name="URL" /></translation>
 <translation id="4595560905247879544">Приложения и разширения могат да се променят само от мениджъра (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">цветно</translation>
 <translation id="5485102783864353244">Добави приложението</translation>
 <translation id="5486561344817861625">Симулирай повторен пуск на браузъра</translation>
-<translation id="5487521232677179737">Изчисти данните</translation>
 <translation id="5509693895992845810">Запиши &amp;като…</translation>
 <translation id="5521078259930077036">Тази ли начална страница очаквате?</translation>
 <translation id="5542132724887566711">Профил</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Неизвестен</translation>
 <translation id="5851868085455377790">Издател</translation>
 <translation id="5860491529813859533">Включи</translation>
-<translation id="5867841422488265304">Потърсете или въведете адрес</translation>
 <translation id="5910363049092958439">Запи&amp;ши картината като…</translation>
 <translation id="5914724413750400082">Модул (<ph name="MODULUS_NUM_BITS" /> бита):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Достъпът е отказан.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7339785458027436441">Проверявай правописа при писане</translation>
-<translation id="73786666777299047">Отвори магазина на Chrome</translation>
 <translation id="7385854874724088939">Нещо не е наред при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
@@ -442,6 +440,7 @@
 <translation id="8382913212082956454">Копирай адреса за &amp;е-поща</translation>
 <translation id="8434480141477525001">Отработващ порт за NaCl</translation>
 <translation id="8449008133205184768">Постави и приеми стила</translation>
+<translation id="8477178913400731244">Изтрий данните</translation>
 <translation id="8477384620836102176">&amp;Общи</translation>
 <translation id="8496717697661868878">Изпълни приставката</translation>
 <translation id="8512476990829870887">Прекрати процеса</translation>

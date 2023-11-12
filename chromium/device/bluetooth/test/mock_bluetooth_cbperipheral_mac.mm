@@ -4,17 +4,13 @@
 
 #include "device/bluetooth/test/mock_bluetooth_cbperipheral_mac.h"
 
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #include "device/bluetooth/test/bluetooth_test_mac.h"
 #include "device/bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h"
 #include "device/bluetooth/test/mock_bluetooth_cbdescriptor_mac.h"
 #include "device/bluetooth/test/mock_bluetooth_cbservice_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-using base::mac::ObjCCast;
+using base::apple::ObjCCast;
 
 @implementation MockCBPeripheral {
   NSUUID* __strong _identifier;

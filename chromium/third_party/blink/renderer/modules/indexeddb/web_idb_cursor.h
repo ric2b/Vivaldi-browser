@@ -10,12 +10,13 @@
 #include <memory>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
+#include "third_party/blink/renderer/modules/indexeddb/idb_factory_client.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_value.h"
-#include "third_party/blink/renderer/modules/indexeddb/web_idb_callbacks.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
 namespace blink {
@@ -71,9 +72,6 @@ class MODULES_EXPORT WebIDBCursor final {
  private:
   void AdvanceCallback(IDBRequest* request,
                        mojom::blink::IDBCursorResultPtr result);
-
-  mojo::PendingAssociatedRemote<mojom::blink::IDBCallbacks> GetCallbacksProxy(
-      std::unique_ptr<WebIDBCallbacks> callbacks);
 
   FRIEND_TEST_ALL_PREFIXES(WebIDBCursorTest, AdvancePrefetchTest);
   FRIEND_TEST_ALL_PREFIXES(WebIDBCursorTest, PrefetchReset);

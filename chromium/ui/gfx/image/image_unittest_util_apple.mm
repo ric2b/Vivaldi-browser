@@ -6,18 +6,14 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/bit_cast.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_MAC)
 #import <AppKit/AppKit.h>
 #elif BUILDFLAG(IS_IOS)
 #import <UIKit/UIKit.h>
-#endif
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
 #endif
 
 namespace gfx::test {
@@ -38,20 +34,21 @@ SkColor GetPlatformImageColor(PlatformImage image, int x, int y) {
 #endif
 
   // Start by extracting the target pixel into a 1x1 CGImage.
-  base::ScopedCFTypeRef<CGImageRef> pixel_image(CGImageCreateWithImageInRect(
-      image_ref, target_pixel));
+  base::apple::ScopedCFTypeRef<CGImageRef> pixel_image(
+      CGImageCreateWithImageInRect(image_ref, target_pixel));
 
   // Draw that pixel into a 1x1 bitmap context.
-  base::ScopedCFTypeRef<CGColorSpaceRef> color_space(
+  base::apple::ScopedCFTypeRef<CGColorSpaceRef> color_space(
       CGColorSpaceCreateDeviceRGB());
-  base::ScopedCFTypeRef<CGContextRef> bitmap_context(CGBitmapContextCreate(
-      /*data=*/nullptr,
-      /*width=*/1,
-      /*height=*/1,
-      /*bitsPerComponent=*/8,
-      /*bytesPerRow=*/4, color_space,
-      kCGImageAlphaPremultipliedFirst |
-          static_cast<CGImageAlphaInfo>(kCGBitmapByteOrder32Host)));
+  base::apple::ScopedCFTypeRef<CGContextRef> bitmap_context(
+      CGBitmapContextCreate(
+          /*data=*/nullptr,
+          /*width=*/1,
+          /*height=*/1,
+          /*bitsPerComponent=*/8,
+          /*bytesPerRow=*/4, color_space,
+          kCGImageAlphaPremultipliedFirst |
+              static_cast<CGImageAlphaInfo>(kCGBitmapByteOrder32Host)));
   CGContextDrawImage(bitmap_context, CGRectMake(0, 0, 1, 1), pixel_image);
 
   // The CGBitmapContext has the same memory layout as SkColor, so we can just

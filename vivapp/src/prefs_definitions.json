@@ -139,7 +139,7 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": []},
           "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
           "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
           "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3"]},
@@ -150,7 +150,8 @@
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
           "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
           "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
-          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []},
+          "COMMAND_SHOW_WORKSPACE_MENU": {"shortcuts": []}
         }
       ],
       "default_linux": [
@@ -289,7 +290,7 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": []},
           "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
           "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
           "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3"]},
@@ -300,7 +301,8 @@
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
           "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
           "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
-          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []},
+          "COMMAND_SHOW_WORKSPACE_MENU": {"shortcuts": []}
         }
       ],
       "default_mac": [
@@ -438,7 +440,7 @@
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["meta+/"]},
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["alt+meta+p", "f4"]},
-          "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["shift+meta+i"]},
+          "COMMAND_TOGGLE_IMAGES": {"shortcuts": []},
           "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]},
           "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
           "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
@@ -450,7 +452,8 @@
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
           "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
           "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
-          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []},
+          "COMMAND_SHOW_WORKSPACE_MENU": {"shortcuts": []}
         }
       ]
     },
@@ -539,6 +542,21 @@
           "default": true,
           "syncable": true
         },
+        "show_best_result": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_internal_urls": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_search_or_go_to": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
         "show_bookmarks": {
           "type": "boolean",
           "default": true,
@@ -594,15 +612,15 @@
           "type": "list",
           "default": [
             "BEST_RESULT",
-            "INTERNAL_URLS",
-            "DIRECT_TYPE",
             "SEARCH",
             "SUGGESTIONS",
+            "DIRECT_MATCH",
             "NICKNAMES",
             "BOOKMARKS",
             "FREQ_VISIT",
             "TYPED_HISTORY",
-            "HISTORY"
+            "HISTORY",
+            "INTERNAL_URLS"
           ],
           "syncable": true
         }
@@ -655,7 +673,7 @@
         "keep_selected": {
           "type": "boolean",
           "description": "Keep last search engine selected in search field",
-          "default": false,
+          "default": true,
           "syncable": true
         },
         "suggest_enabled": {
@@ -950,10 +968,16 @@
     },
     "calendar": {
       "onboarding_shown": {
-        "description": "Allow relative dates display",
+        "description": "Flag to store if calendar onboarding has been shown.",
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "templates_version": {
+        "description": "Keep track of default templates version. To know when to update.",
+        "type": "integer",
+        "default": 0,
+        "syncable": false
       },
       "date_format": {
         "type": "enum",
@@ -1137,6 +1161,11 @@
           "syncable": false
         },
         "week_number": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "dim_past_events": {
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -2781,6 +2810,12 @@
         "default": [],
         "syncable": false
       },
+      "connected": {
+        "description": "Connected state.",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
       "connectStrategy": {
         "description": "How a relay server is selected when a connection is made.",
         "type": "string",
@@ -2978,6 +3013,11 @@
           "default": true,
           "syncable": true
         },
+        "order": {
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
         "titles_visible": {
           "type": "enum",
           "enum_values": {
@@ -3064,12 +3104,6 @@
       },
       "last_seen_version": {
         "description": "Most recent version number seen on startup",
-        "type": "string",
-        "default": "",
-        "syncable": false
-      },
-      "last_seen_mail_version": {
-        "description": "Most recent version number for mail seen on startup",
         "type": "string",
         "default": "",
         "syncable": false
@@ -4412,7 +4446,7 @@
       "use_native_decoration": {
         "type": "boolean",
         "default": false,
-        "syncable": true
+        "syncable": false
       },
       "show_window_close_confirmation_dialog": {
         "type": "boolean",
@@ -4693,6 +4727,10 @@
   },
 
   "chromium": {
+    "kNetworkPredictionOptions": {
+      "path": "net.network_prediction_options",
+      "type": "integer"
+    },
     "kAcceptLanguages": {
       "path": "intl.accept_languages",
       "type": "dictionary"
@@ -4795,6 +4833,10 @@
     },
     "kCustomHandlersEnabled": {
       "path": "custom_handlers.enabled",
+      "type": "boolean"
+    },
+    "kVivaldiAddressBarSearchDirectMatchEnabled": {
+      "path": "vivaldi.address_bar.search.direct_match_enabled",
       "type": "boolean"
     }
   },

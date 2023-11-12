@@ -85,7 +85,15 @@ class VIZ_SERVICE_EXPORT OverlayProcessorDelegated
     kCompositedHas2dShear = 9,
     kCompositedHas2dRotation = 10,
     kCompositedFeatureDisabled = 11,
-    kMaxValue = kCompositedFeatureDisabled
+    kCompositedCandidateFailed = 12,
+    kCompositedCandidateBlending = 13,
+    kCompositedCandidateQuadMaterial = 14,
+    kCompositedCandidateBufferFormat = 15,
+    kCompositedCandidateNearFilter = 16,
+    kCompositedCandidateNotSharedImage = 17,
+    kCompositedCandidateMaskFilter = 18,
+    kCompositedCandidateTransformCantClip = 19,
+    kMaxValue = kCompositedCandidateTransformCantClip
   };
 
   gfx::RectF GetPrimaryPlaneDisplayRect(
@@ -120,7 +128,9 @@ class VIZ_SERVICE_EXPORT OverlayProcessorDelegated
 
   DelegationStatus delegated_status_ = DelegationStatus::kCompositedOther;
   bool supports_clip_rect_ = false;
+  bool supports_out_of_window_clip_rect_ = false;
   bool needs_background_image_ = false;
+  bool supports_affine_transform_ = false;
   gfx::RectF unassigned_damage_;
   // Used to count the number of frames we should wait until allowing delegation
   // again.

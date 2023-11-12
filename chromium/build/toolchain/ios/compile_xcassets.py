@@ -96,7 +96,7 @@ def FilterCompilerOutput(compiler_output, relative_paths):
 
 def CompileAssetCatalog(output, platform, target_environment, product_type,
                         min_deployment_target, inputs, compress_pngs,
-                        partial_info_plist):
+                        partial_info_plist, primary_app_icon):
   """Compile the .xcassets bundles to an asset catalog using actool.
 
   Args:
@@ -176,7 +176,16 @@ def CompileAssetCatalog(output, platform, target_environment, product_type,
       if asset_type not in ACTOOL_FLAG_FOR_ASSET_TYPE:
         continue
 
-      command.extend([ACTOOL_FLAG_FOR_ASSET_TYPE[asset_type], asset_name])
+      # Vivaldi
+      # The appiconset name passed through 'primary_app_icon' will be considered
+      # as the primary icon.
+      # All other appiconsets from all targets and resources will be considered
+      # as alternate app icons.
+      if asset_type == '.appiconset' and asset_name != primary_app_icon:
+          command.extend(['--alternate-app-icon', asset_name])
+      else:
+          command.extend([ACTOOL_FLAG_FOR_ASSET_TYPE[asset_type], asset_name])
+      # End Vivaldi
 
   # Always ask actool to generate a partial Info.plist file. If no path
   # has been given by the caller, use a temporary file name.
@@ -271,6 +280,13 @@ def Main():
   parser.add_argument('inputs',
                       nargs='+',
                       help='path to input assets catalog sources')
+
+  # Vivaldi
+  parser.add_argument('--primary-app-icon',
+                      '-a``',
+                      help='Primary app icon name')
+  # End Vivaldi
+
   args = parser.parse_args()
 
   if os.path.basename(args.output) != 'Assets.car':
@@ -286,7 +302,8 @@ def Main():
 
   CompileAssetCatalog(args.output, args.platform, args.target_environment,
                       args.product_type, args.minimum_deployment_target,
-                      args.inputs, args.compress_pngs, args.partial_info_plist)
+                      args.inputs, args.compress_pngs, args.partial_info_plist,
+                      args.primary_app_icon)
 
 
 if __name__ == '__main__':

@@ -35,6 +35,23 @@ const bookmarks::BookmarkNode* AddProductBookmark(
   const bookmarks::BookmarkNode* node =
       bookmark_model->AddURL(bookmark_model->other_node(), 0, title, url,
                              nullptr, absl::nullopt, absl::nullopt, true);
+
+  AddProductInfoToExistingBookmark(
+      bookmark_model, node, title, cluster_id, is_price_tracked, price_micros,
+      currency_code, last_subscription_change_time);
+
+  return node;
+}
+
+void AddProductInfoToExistingBookmark(
+    bookmarks::BookmarkModel* bookmark_model,
+    const bookmarks::BookmarkNode* bookmark_node,
+    const std::u16string& title,
+    uint64_t cluster_id,
+    bool is_price_tracked,
+    const int64_t price_micros,
+    const std::string& currency_code,
+    const absl::optional<int64_t>& last_subscription_change_time) {
   std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
       std::make_unique<power_bookmarks::PowerBookmarkMeta>();
   power_bookmarks::ShoppingSpecifics* specifics =
@@ -51,9 +68,8 @@ const bookmarks::BookmarkNode* AddProductBookmark(
         last_subscription_change_time.value());
   }
 
-  power_bookmarks::SetNodePowerBookmarkMeta(bookmark_model, node,
+  power_bookmarks::SetNodePowerBookmarkMeta(bookmark_model, bookmark_node,
                                             std::move(meta));
-  return node;
 }
 
 CommerceSubscription CreateUserTrackedSubscription(uint64_t cluster_id) {
@@ -100,6 +116,26 @@ absl::optional<PriceInsightsInfo> CreateValidPriceInsightsInfo(
   info->price_bucket = price_bucket;
 
   return info;
+}
+
+DiscountInfo CreateValidDiscountInfo(const std::string& detail,
+                                     const std::string& terms_and_conditions,
+                                     const std::string& value_in_text,
+                                     const std::string& discount_code,
+                                     int64_t id,
+                                     bool is_merchant_wide,
+                                     double expiry_time_sec) {
+  DiscountInfo discount_info;
+
+  discount_info.description_detail = detail;
+  discount_info.terms_and_conditions.emplace(terms_and_conditions);
+  discount_info.value_in_text = value_in_text;
+  discount_info.discount_code = discount_code;
+  discount_info.id = id;
+  discount_info.is_merchant_wide = is_merchant_wide;
+  discount_info.expiry_time_sec = expiry_time_sec;
+
+  return discount_info;
 }
 
 }  // namespace commerce

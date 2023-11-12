@@ -187,10 +187,15 @@ if (perform_signing) {
       assert(vivaldi_notarytool_password != "")
       args += [
         "--notarize",
-        "--notary-user", vivaldi_notarize_account,
-        "--notary-password", vivaldi_notarytool_password,
-        "--notarization-tool", "notarytool",
       ]
+      notarize_args = [
+        "--team-id", chrome_mac_team_id,
+        "--apple-id", vivaldi_notarize_account,
+        "--keychain-profile", vivaldi_notarytool_password,
+      ]
+      foreach (arg, notarize_args) {
+        args += ["--notary-arg=$arg"]
+      }
     } else {
       args += [
         # Vivaldi does not use entitlements_plist or provisioning_profile
@@ -216,10 +221,15 @@ if (perform_signing) {
       assert(vivaldi_notarytool_password != "")
       args += [
         "--notarize",
-        "--notary-user", vivaldi_notarize_account,
-        "--notary-password", vivaldi_notarytool_password,
-        "--notarize-team-id", chrome_mac_team_id,
       ]
+      notarize_args = [
+        "--team-id", chrome_mac_team_id,
+        "--apple-id", vivaldi_notarize_account,
+        "--keychain-profile", vivaldi_notarytool_password,
+      ]
+      foreach (arg, notarize_args) {
+        args += ["--notary-arg=$arg"]
+      }
     }
     args += [ dmg_name ]
   }

@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/paint/skia_paint_canvas.h"
+#include "media/base/video_encoder_metrics_provider.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/media_buildflags.h"
@@ -37,6 +38,7 @@
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/sequence_bound.h"
@@ -417,8 +419,10 @@ VideoTrackRecorderImpl::Encoder::Encoder(
 VideoTrackRecorderImpl::Encoder::~Encoder() = default;
 
 void VideoTrackRecorderImpl::Encoder::InitializeEncoder(
-    KeyFrameRequestProcessor::Configuration key_frame_config) {
+    KeyFrameRequestProcessor::Configuration key_frame_config,
+    std::unique_ptr<media::VideoEncoderMetricsProvider> metrics_provider) {
   key_frame_processor_.UpdateConfig(key_frame_config);
+  metrics_provider_ = std::move(metrics_provider);
   Initialize();
 }
 
@@ -934,9 +938,13 @@ void VideoTrackRecorderImpl::InitializeEncoderOnEncoderSupportKnown(
     }
   }
 
+  CHECK(callback_interface());
+  auto metrics_provider =
+      callback_interface()->CreateVideoEncoderMetricsProvider();
+  CHECK(metrics_provider);
   encoder_.emplace(encoding_task_runner, std::move(encoder));
-  encoder_.AsyncCall(&Encoder::InitializeEncoder).WithArgs(key_frame_config_);
-
+  encoder_.AsyncCall(&Encoder::InitializeEncoder)
+      .WithArgs(key_frame_config_, std::move(metrics_provider));
   if (should_pause_encoder_on_initialization_)
     encoder_.AsyncCall(&Encoder::SetPaused).WithArgs(true);
 
@@ -984,7 +992,7 @@ VideoTrackRecorderPassthrough::VideoTrackRecorderPassthrough(
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
   // HandleEncodedVideoFrame() will be called on Render Main thread.
   // Note: Adding an encoded sink internally generates a new key frame
-  // request, no need to RequestRefreshFrame().
+  // request, no need to RequestKeyFrame().
   ConnectEncodedToTrack(
       WebMediaStreamTrack(track_),
       base::BindPostTask(
@@ -1008,7 +1016,7 @@ void VideoTrackRecorderPassthrough::Pause() {
 void VideoTrackRecorderPassthrough::Resume() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
   state_ = KeyFrameState::kWaitingForKeyFrame;
-  RequestRefreshFrame();
+  RequestKeyFrame();
 }
 
 void VideoTrackRecorderPassthrough::OnEncodedVideoFrameForTesting(
@@ -1020,11 +1028,11 @@ void VideoTrackRecorderPassthrough::OnEncodedVideoFrameForTesting(
       capture_time);
 }
 
-void VideoTrackRecorderPassthrough::RequestRefreshFrame() {
+void VideoTrackRecorderPassthrough::RequestKeyFrame() {
   auto* video_track =
       static_cast<MediaStreamVideoTrack*>(track_->GetPlatformTrack());
   DCHECK(video_track->source());
-  video_track->source()->RequestRefreshFrame();
+  video_track->source()->RequestKeyFrame();
 }
 
 void VideoTrackRecorderPassthrough::DisconnectFromTrack() {
@@ -1043,7 +1051,7 @@ void VideoTrackRecorderPassthrough::HandleEncodedVideoFrame(
     return;
   if (state_ == KeyFrameState::kWaitingForKeyFrame &&
       !encoded_frame->IsKeyFrame()) {
-    // Don't RequestRefreshFrame() here - we already did this implicitly when
+    // Don't RequestKeyFrame() here - we already did this implicitly when
     // Creating/Starting or explicitly when Resuming this object.
     return;
   }
@@ -1054,7 +1062,7 @@ void VideoTrackRecorderPassthrough::HandleEncodedVideoFrame(
     key_frame_processor_.OnKeyFrame(now);
   }
   if (key_frame_processor_.OnFrameAndShouldRequestKeyFrame(now)) {
-    RequestRefreshFrame();
+    RequestKeyFrame();
   }
 
   absl::optional<gfx::ColorSpace> color_space;

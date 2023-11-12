@@ -59,7 +59,7 @@ sign_bundle("sign_intents_extension") {
   gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/intents_extension/appex"
 
   binary = "$bindir/intents_extension"
-  entitlements = "$gendir/chrome_intents.entitlements"
+  entitlements = "$gendir/intents_extension.appex.entitlements"
   app = "${vivaldi_profiles}/intents_extension.appex"
   plists =[
     "$gendir/appex_generate_info_plist.plist",

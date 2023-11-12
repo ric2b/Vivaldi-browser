@@ -44,6 +44,7 @@
 #include "net/ssl/ssl_config_service.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_packets.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base::android {
 class ApplicationStatusListener;
@@ -143,6 +144,9 @@ class NET_EXPORT URLRequestContextBuilder {
 
   // Sets whether Brotli compression is enabled.  Disabled by default;
   void set_enable_brotli(bool enable_brotli) { enable_brotli_ = enable_brotli; }
+
+  // Sets whether Zstd compression is enabled. Disabled by default.
+  void set_enable_zstd(bool enable_zstd) { enable_zstd_ = enable_zstd; }
 
   // Sets the |check_cleartext_permitted| flag, which controls whether to check
   // system policy before allowing a cleartext http or ws request.
@@ -349,6 +353,10 @@ class NET_EXPORT URLRequestContextBuilder {
     client_socket_factory_ = std::move(client_socket_factory);
   }
 
+  void set_cookie_deprecation_label(const std::string& label) {
+    cookie_deprecation_label_ = label;
+  }
+
   // Binds the context to `network`. All requests scheduled through the context
   // built by this builder will be sent using `network`. Requests will fail if
   // `network` disconnects. `options` allows to specify the ManagerOptions that
@@ -401,6 +409,7 @@ class NET_EXPORT URLRequestContextBuilder {
   }
 
   bool enable_brotli_ = false;
+  bool enable_zstd_ = false;
   bool check_cleartext_permitted_ = false;
   bool require_network_anonymization_key_ = false;
   raw_ptr<NetworkQualityEstimator> network_quality_estimator_ = nullptr;
@@ -408,6 +417,8 @@ class NET_EXPORT URLRequestContextBuilder {
   std::string accept_language_;
   std::string user_agent_;
   std::unique_ptr<HttpUserAgentSettings> http_user_agent_settings_;
+
+  absl::optional<std::string> cookie_deprecation_label_;
 
   bool http_cache_enabled_ = true;
   bool throttling_enabled_ = false;

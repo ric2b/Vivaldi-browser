@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -211,9 +212,7 @@ int32_t PepperVideoDecoderHost::OnHostMsgInitialize(
         std::max(shim_texture_pool_size, min_picture_count_);
     auto new_decoder = VideoDecoderShim::Create(this, shim_texture_pool_size,
                                                 /*use_hw_decoder=*/true);
-    if (new_decoder &&
-        new_decoder->Initialize(media::VideoDecodeAccelerator::Config(profile_),
-                                this)) {
+    if (new_decoder && new_decoder->Initialize(profile_)) {
       decoder_.reset(new_decoder.release());
       initialized_ = true;
       mojo_video_decoder_path_initialized_ = true;
@@ -347,14 +346,14 @@ int32_t PepperVideoDecoderHost::OnHostMsgAssignTextures(
   // Verify that the new texture IDs are unique and store them in
   // |new_textures|.
   PictureBufferMap new_textures;
-  for (uint32_t i = 0; i < texture_ids.size(); i++) {
-    if (picture_buffer_map_.find(texture_ids[i]) != picture_buffer_map_.end() ||
-        new_textures.find(texture_ids[i]) != new_textures.end()) {
+  for (uint32_t texture_id : texture_ids) {
+    if (base::Contains(picture_buffer_map_, texture_id) ||
+        base::Contains(new_textures, texture_id)) {
       // Can't assign the same texture more than once.
       return PP_ERROR_BADARGUMENT;
     }
     new_textures.insert(
-        std::make_pair(texture_ids[i], PictureBufferState::ASSIGNED));
+        std::make_pair(texture_id, PictureBufferState::ASSIGNED));
   }
 
   picture_buffer_map_.insert(new_textures.begin(), new_textures.end());
@@ -557,8 +556,7 @@ bool PepperVideoDecoderHost::TryFallbackToSoftwareDecoder() {
                                     min_picture_count_);
   std::unique_ptr<VideoDecoderShim> new_decoder(VideoDecoderShim::Create(
       this, shim_texture_pool_size, /*use_hw_decoder=*/false));
-  if (!new_decoder->Initialize(media::VideoDecodeAccelerator::Config(profile_),
-                               this)) {
+  if (!new_decoder->Initialize(profile_)) {
     return false;
   }
 

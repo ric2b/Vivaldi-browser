@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,10 +17,6 @@
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/tangible_sync/tangible_sync_consumer.h"
 #import "ios/chrome/browser/ui/authentication/tangible_sync/tangible_sync_mediator_delegate.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface TangibleSyncMediator () <ChromeAccountManagerServiceObserver,
                                     IdentityManagerObserverBridgeDelegate>
@@ -65,6 +61,13 @@
                       accessPoint:(signin_metrics::AccessPoint)accessPoint {
   self = [super init];
   if (self) {
+    CHECK(authenticationService);
+    CHECK(chromeAccountManagerService);
+    CHECK(consentAuditor);
+    CHECK(identityManager);
+    CHECK(syncService);
+    CHECK(syncSetupService);
+    CHECK(unifiedConsentService);
     _authenticationService = authenticationService;
     _accountManagerService = chromeAccountManagerService;
     _accountManagerServiceObserver =
@@ -87,11 +90,13 @@
   _accountManagerServiceObserver.reset();
   _identityManagerObserver.reset();
   self.consumer = nil;
-  _authenticationService = nil;
-  _accountManagerService = nil;
-  _identityManager = nil;
-  _syncService = nil;
-  _syncSetupService = nil;
+  _authenticationService = nullptr;
+  _accountManagerService = nullptr;
+  _consentAuditor = nullptr;
+  _identityManager = nullptr;
+  _syncService = nullptr;
+  _syncSetupService = nullptr;
+  _unifiedConsentService = nullptr;
 }
 
 - (void)startSyncWithConfirmationID:(const int)confirmationID

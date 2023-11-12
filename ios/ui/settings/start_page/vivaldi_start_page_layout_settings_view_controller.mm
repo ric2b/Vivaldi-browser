@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -248,7 +248,7 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
 
   // Do nothing if the tapped option was already the default.
   TableViewTextItem* selectedTextItem =
-      base::mac::ObjCCastStrict<TableViewTextItem>(selectedItem);
+      base::apple::ObjCCastStrict<TableViewTextItem>(selectedItem);
   if (selectedTextItem.accessoryType == UITableViewCellAccessoryCheckmark) {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     return;
@@ -259,7 +259,7 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
     for (TableViewItem* item in
          [model itemsInSectionWithIdentifier:SectionIdentifierSettings]) {
       TableViewTextItem* textItem =
-          base::mac::ObjCCastStrict<TableViewTextItem>(item);
+          base::apple::ObjCCastStrict<TableViewTextItem>(item);
       if (textItem.accessoryType == UITableViewCellAccessoryCheckmark) {
         textItem.accessoryType = UITableViewCellAccessoryNone;
         UITableViewCell* cell =
@@ -271,7 +271,7 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
 
   // Show the checkmark on the new default option.
   TableViewTextItem* newSelectedOption =
-      base::mac::ObjCCastStrict<TableViewTextItem>(
+      base::apple::ObjCCastStrict<TableViewTextItem>(
           [model itemAtIndexPath:indexPath]);
   newSelectedOption.accessoryType = UITableViewCellAccessoryCheckmark;
   UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];

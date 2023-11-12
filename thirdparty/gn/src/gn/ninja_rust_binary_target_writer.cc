@@ -209,6 +209,7 @@ void NinjaRustBinaryTargetWriter::Run() {
   std::copy(classified_deps.non_linkable_deps.begin(),
             classified_deps.non_linkable_deps.end(),
             std::back_inserter(extern_deps));
+
   WriteExternsAndDeps(extern_deps, transitive_crates, rustdeps, nonrustdeps);
   WriteSourcesAndInputs();
   WritePool(out_);
@@ -347,18 +348,23 @@ void NinjaRustBinaryTargetWriter::WriteExternsAndDeps(
     path_output_.WriteDir(out_, dir, PathOutput::DIR_NO_LAST_SLASH);
   }
 
-  // Non-Rust native dependencies.
   UniqueVector<SourceDir> nonrustdep_dirs;
+
+  // Non-Rust native dependencies. A dependency from Rust implies the ability
+  // to specify it in #[link], and GN will ensure that rustc can find it by
+  // adding it to the native library search paths.
   for (const auto& nonrustdep : nonrustdeps) {
     nonrustdep_dirs.push_back(
         nonrustdep.AsSourceFile(settings_->build_settings()).GetDir());
   }
-  // First -Lnative to specify the search directories.
-  // This is necessary for #[link(...)] directives to work properly.
   for (const auto& nonrustdep_dir : nonrustdep_dirs) {
     out_ << " -Lnative=";
     path_output_.WriteDir(out_, nonrustdep_dir, PathOutput::DIR_NO_LAST_SLASH);
   }
+
+  // If rustc will invoke a linker, then pass linker arguments to include those
+  // non-Rust native dependencies in the linking step.
+
   // Before outputting any libraries to link, ensure the linker is in a mode
   // that allows dynamic linking, as rustc may have previously put it into
   // static-only mode.
@@ -369,10 +375,19 @@ void NinjaRustBinaryTargetWriter::WriteExternsAndDeps(
     out_ << " -Clink-arg=";
     path_output_.WriteFile(out_, nonrustdep);
   }
+
+  // Library search paths are required to find system libraries named in #[link]
+  // directives, which will not be specified in non-Rust native dependencies.
   WriteLibrarySearchPath(out_, tool_);
+  // If rustc will invoke a linker, all libraries need the passed through to the
+  // linker.
   WriteLibs(out_, tool_);
+
   out_ << std::endl;
   out_ << "  ldflags =";
+  // If rustc will invoke a linker, linker flags need to be forwarded through to
+  // the linker.
   WriteCustomLinkerFlags(out_, tool_);
+
   out_ << std::endl;
 }

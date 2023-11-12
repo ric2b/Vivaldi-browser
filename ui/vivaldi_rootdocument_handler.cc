@@ -2,6 +2,9 @@
 
 #include "ui/vivaldi_rootdocument_handler.h"
 
+#include <set>
+
+#include "base/containers/contains.h"
 #include "chrome/browser/browser_process.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/extension_registry_factory.h"
@@ -9,6 +12,13 @@
 #include "extensions/browser/extension_registry.h"
 
 namespace extensions {
+
+// Paths in this set will not create a VivaldiRootDocumentHandler.
+using GatherProfileSet = std::set<base::FilePath>;
+GatherProfileSet& ProfilesWithNoVivaldi() {
+  static base::NoDestructor<GatherProfileSet> profilepaths_to_avoid;
+  return *profilepaths_to_avoid;
+}
 
 // static
 VivaldiRootDocumentHandler*
@@ -36,6 +46,11 @@ VivaldiRootDocumentHandlerFactory::~VivaldiRootDocumentHandlerFactory() {}
 
 KeyedService* VivaldiRootDocumentHandlerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
+  Profile* profile = Profile::FromBrowserContext(context);
+  base::FilePath profile_dir = profile->GetPath();
+  if (ShouldProfileCreateVivaldiClient(profile_dir)) {
+    return nullptr;
+  }
   return new VivaldiRootDocumentHandler(context);
 }
 
@@ -52,32 +67,31 @@ content::BrowserContext*
 VivaldiRootDocumentHandlerFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
-  return ExtensionsBrowserClient::Get()->GetRedirectedContextInIncognito(
-      context, /*force_guest_profile=*/true, /*force_system_profile=*/false);
+  return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
+      context, /*force_guest_profile=*/true);
 
 }
 
 VivaldiRootDocumentHandler::VivaldiRootDocumentHandler(
     content::BrowserContext* context)
     : profile_(Profile::FromBrowserContext(context)) {
-  profile_->AddObserver(this);
+  observed_profiles_.AddObservation(profile_);
+  if (profile_->HasPrimaryOTRProfile())
+    observed_profiles_.AddObservation(
+        profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true));
+
   ExtensionRegistry::Get(profile_)->AddObserver(this);
-
-  // The ProfileManager may be null in unit tests.
-  if (g_browser_process->profile_manager())
-    profile_manager_observation_.Observe(g_browser_process->profile_manager());
-
 }
 
 VivaldiRootDocumentHandler::~VivaldiRootDocumentHandler() {
   DCHECK(!vivaldi_document_loader_);
   DCHECK(!vivaldi_document_loader_off_the_record_);
-  profile_->RemoveObserver(this);
 }
 
 void VivaldiRootDocumentHandler::OnOffTheRecordProfileCreated(
     Profile* off_the_record) {
-  off_the_record->AddObserver(this);
+  observed_profiles_.AddObservation(off_the_record);
+
   DCHECK(vivaldi_extension_);
   vivaldi_document_loader_off_the_record_ =
       new VivaldiDocumentLoader(off_the_record, vivaldi_extension_);
@@ -89,19 +103,11 @@ void VivaldiRootDocumentHandler::OnOffTheRecordProfileCreated(
 }
 
 void VivaldiRootDocumentHandler::OnProfileWillBeDestroyed(Profile* profile) {
+  observed_profiles_.RemoveObservation(profile);
   if (profile->IsOffTheRecord() && profile->GetOriginalProfile() == profile_) {
-    profile->RemoveObserver(this);
-    delete vivaldi_document_loader_off_the_record_;
-    vivaldi_document_loader_off_the_record_ = nullptr;
+    vivaldi_document_loader_off_the_record_.ClearAndDelete();
   } else if (profile == profile_) {
     // this will be destroyed by KeyedServiceFactory::ContextShutdown
-  }
-}
-
-void VivaldiRootDocumentHandler::OnProfileMarkedForPermanentDeletion(
-    Profile* profile) {
-  if (profile_ == profile) {
-    Shutdown();
   }
 }
 
@@ -178,10 +184,8 @@ void VivaldiRootDocumentHandler::OnExtensionUninstalled(
 
 void VivaldiRootDocumentHandler::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
-  delete vivaldi_document_loader_;
-  vivaldi_document_loader_ = nullptr;
-  delete vivaldi_document_loader_off_the_record_;
-  vivaldi_document_loader_off_the_record_ = nullptr;
+  vivaldi_document_loader_.ClearAndDelete();
+  vivaldi_document_loader_off_the_record_.ClearAndDelete();
 }
 
 void VivaldiRootDocumentHandler::AddObserver(
@@ -205,6 +209,16 @@ void VivaldiRootDocumentHandler::AddObserver(
 void VivaldiRootDocumentHandler::RemoveObserver(
     VivaldiRootDocumentHandlerObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void MarkProfileForNoVivaldiClient(const base::FilePath& path) {
+  // No need to mark the path more than once.
+  DCHECK(!base::Contains(ProfilesWithNoVivaldi(), path));
+  ProfilesWithNoVivaldi().insert(path);
+}
+
+bool ShouldProfileCreateVivaldiClient(const base::FilePath& path) {
+  return base::Contains(ProfilesWithNoVivaldi(), path);
 }
 
 }  // namespace extensions

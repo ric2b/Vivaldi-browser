@@ -103,6 +103,9 @@ constexpr const char* const kRawPtrManualPathsToIgnore[] = {
                                       // to",
                                       // public/renderer?",
 
+    // Moved from //third_party/blink/renderer/platform/image-decoders/
+    "components/image_decoders/",
+
     // Contains sysroot dirs like debian_bullseye_amd64-sysroot/ that are not
     // part of the repository.
     "build/linux/",
@@ -112,75 +115,6 @@ constexpr const char* const kRawPtrManualPathsToIgnore[] = {
     // cannot
     // catch it even though glslang_tab.cpp.h is in third_party/
     "MachineIndependent/",
-
-    // Exclude paths in separate repositories - i.e. in directories that
-    // 1. Contain a ".git" subdirectory
-    // 2. And hasn't been excluded via "third_party/" substring in their path
-    //    (see the isInThirdPartyLocation AST matcher in
-    //    RewriteRawPtrFields.cpp).
-    //
-    // The list below has been generated with:
-    //
-    //  $ find . -type d -name .git | \
-//      sed -e 's/\.git$//g' | \
-//      sed -e 's/\.\///g' | \
-//      grep -v third_party | \
-//      grep -v '^$' | \
-//      sort | uniq > ~/scratch/git-paths
-    "third_party/clang-format/script/",
-    "chrome/app/theme/default_100_percent/google_chrome/",
-    "chrome/app/theme/default_200_percent/google_chrome/",
-    "chrome/app/theme/google_chrome/",
-    "chrome/app/vector_icons/google_chrome/",
-    "chrome/browser/enterprise/connectors/internal/",
-    "chrome/browser/google/linkdoctor_internal/",
-    "chrome/browser/internal/",
-    "chrome/browser/media/engagement_internal/",
-    "chrome/browser/resources/chromeos/quickoffice/",
-    "chrome/browser/resources/media_router_internal/",
-    "chrome/browser/resources/preinstalled_web_apps/internal/",
-    "chrome/browser/resources/settings_internal/",
-    "chrome/browser/spellchecker/internal/",
-    "chrome/browser/ui/media_router/internal/",
-    "chrome/installer/mac/internal/",
-    "chrome/test/data/firefox3_profile/searchplugins/",
-    "chrome/test/data/firefox3_searchplugins/",
-    "chrome/test/data/gpu/vt/",
-    "chrome/test/data/pdf_private/",
-    "chrome/test/data/perf/canvas_bench/",
-    "chrome/test/data/perf/frame_rate/content/",
-    "chrome/test/data/perf/frame_rate/private/",
-    "chrome/test/data/perf/private/",
-    "chrome/test/data/xr/webvr_info/",
-    "chrome/test/media_router/internal/",
-    "chrome/test/python_tests/",
-    "chrome/tools/memory/",
-    "clank/",
-    "components/history_clusters/internal/",
-    "components/ntp_tiles/resources/internal/",
-    "components/optimization_guide/internal/",
-    "components/resources/default_100_percent/google_chrome/",
-    "components/resources/default_200_percent/google_chrome/",
-    "components/resources/default_300_percent/google_chrome/",
-    "components/site_isolation/internal/",
-    "content/test/data/plugin/",
-    "docs/website/",
-    "google_apis/internal/",
-    "media/cdm/api/",
-    "native_client/",
-    "remoting/android/internal/",
-    "remoting/host/installer/linux/internal/",
-    "remoting/internal/",
-    "remoting/test/internal/",
-    "remoting/tools/internal/",
-    "remoting/webapp/app_remoting/internal/",
-    "tools/page_cycler/acid3/",
-    "tools/perf/data/",
-    "ui/file_manager/internal/",
-    "v8/",
-    "webkit/data/bmp_decoder/",
-    "webkit/data/ico_decoder/",
-    "webkit/data/test_shell/plugins/",
 };
 
 #endif  // TOOLS_CLANG_PLUGINS_RAWPTRMANUALPATHSTOIGNORE_H_

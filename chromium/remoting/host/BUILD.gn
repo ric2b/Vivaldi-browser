@@ -193,7 +193,6 @@ source_set("clipboard") {
 
   if (is_mac) {
     sources += [ "clipboard_mac.mm" ]
-    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_win) {
@@ -240,10 +239,6 @@ source_set("resources") {
 if (is_linux) {
   pkg_config("xkbcommon") {
     packages = [ "xkbcommon" ]
-  }
-
-  pkg_config("libevdev") {
-    packages = [ "libevdev" ]
   }
 }
 
@@ -411,6 +406,14 @@ static_library("common") {
     "zombie_host_detector.h",
   ]
 
+  # ChromotingHostServices currently only works on Linux and Windows.
+  if (is_linux || is_win) {
+    sources += [
+      "chromoting_host_services_server.cc",
+      "chromoting_host_services_server.h",
+    ]
+  }
+
   libs = []
 
   configs += [
@@ -576,7 +579,6 @@ static_library("common") {
       "x11_display_util.cc",
       "x11_display_util.h",
     ]
-    configs += [ ":libevdev" ]
     libs += [ "//third_party/libei/lib64/libei.a" ]
     public_deps += [
       "//third_party/wayland:wayland_client",
@@ -671,8 +673,6 @@ static_library("common") {
       "Carbon.framework",
       "CoreAudio.framework",
     ]
-
-    configs += [ "//build/config/compiler:enable_arc" ]
 
     deps += [
       ":remoting_version",
@@ -821,11 +821,6 @@ source_set("unit_tests") {
     "zombie_host_detector_unittest.cc",
   ]
 
-  # MojoIpcServer currently only works on Linux and Windows.
-  if (is_linux || is_win) {
-    sources += [ "chromoting_host_services_client_unittest.cc" ]
-  }
-
   if (use_ozone || is_chromeos_ash) {
     sources -= [ "input_monitor/local_input_monitor_unittest.cc" ]
   }
@@ -872,6 +867,16 @@ source_set("unit_tests") {
     "//ui/events:events",
   ]
 
+  # ChromotingHostServices currently only works on Linux and Windows.
+  if (is_linux || is_win) {
+    sources += [
+      "chromoting_host_services_client_unittest.cc",
+      "chromoting_host_services_server_unittest.cc",
+    ]
+
+    deps += [ "//remoting/host:ipc_constants" ]
+  }
+
   if (is_linux) {
     deps += [
       "//remoting/host/linux:wayland",
@@ -895,15 +900,19 @@ source_set("unit_tests") {
   if (is_chromeos_ash) {
     sources += [
       "desktop_display_info_loader_chromeos_unittest.cc",
+      "input_injector_chromeos_unittest.cc",
       "it2me/it2me_confirmation_dialog_chromeos_unittest.cc",
     ]
     deps += [
+      "//ash:test_support",
+      "//chromeos/ash/components:test_support",
       "//components/user_manager:test_support",
       "//remoting/host/chromeos",
       "//remoting/host/chromeos:features",
       "//remoting/host/chromeos:reporter_unit_tests",
       "//remoting/host/chromeos:unit_tests",
       "//ui/message_center:test_support",
+      "//ui/ozone",
     ]
   }
 

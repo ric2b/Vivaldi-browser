@@ -82,6 +82,7 @@ versper</translation>
 <translation id="2842985007712546952">Moedervouer</translation>
 <translation id="2843343418360315034">Hongaars (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Inisialiseer sinchronisering…</translation>
+<translation id="2874111661876416905">Soek met Vivaldi</translation>
 <translation id="2874121295511641364">Sinchroniseer ingetikte bronadresse en oop oortjies</translation>
 <translation id="2898963176829412617">Nuwe vouer…</translation>
 <translation id="2961573414320947355">Wil u alle skakels in Vivaldi open? Stel ons dan as verstek in.</translation>
@@ -97,7 +98,6 @@ versper</translation>
 <translation id="3229182533910980085">Voeg u eerste boekmerk toe deur op die onderstaande plusikoon te tik</translation>
 <translation id="3236835587712044564">Tevrede met Vivaldi? Maak dit u verstekblaaier.</translation>
 <translation id="3270894089048358271">Stel Vivaldi in as u verstek</translation>
-<translation id="3270930591809084274">Gesinchroniseerde oortjies</translation>
 <translation id="3335772982573114336">Nuwe nota</translation>
 <translation id="33451081266695216">Verbinding deur bediener gewurg.</translation>
 <translation id="3346386541263128307">E-posadresse moet ooreenstem.</translation>
@@ -130,7 +130,6 @@ versper</translation>
 <translation id="3997823869212225788">Voer die 6-syfer kode in</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4032606071208172574">(Verstek)</translation>
-<translation id="4048057312173843244">Gesinchroniseerde oortjies van ander toestelle sal hier verskyn. Teken by sinchronisering in om hierdie diens te gebruik.</translation>
 <translation id="4073968054795398875">Die sinchroniseerbediener ervaar probleme. Sinchroniseerinisialisering word weer probeer…</translation>
 <translation id="4096707694175478403">Paneel</translation>
 <translation id="414098425907666915">Privaat soekopdrag</translation>
@@ -146,6 +145,7 @@ versper</translation>
 versper</translation>
 <translation id="4299298331965375737">Wil u Vivaldi u verstekblaaier maak?</translation>
 <translation id="4304224509867189079">Teken aan</translation>
+<translation id="4316955624679873896">Boekmerk gemaak in</translation>
 <translation id="432696242656678770">Russies (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spaans (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Viëtnamees (<ph name="ORIGIN" />)</translation>
@@ -214,6 +214,7 @@ versper</translation>
 <translation id="5857090052475505287">Nuwe vouer</translation>
 <translation id="5859825823508296659">Wysig domein</translation>
 <translation id="5867841422488265304">Soek of tik webadres in</translation>
+<translation id="5869217094746242845">Leer meer oor privaatheid en beveiliging</translation>
 <translation id="5871497086027727873">1 item geskuif</translation>
 <translation id="5898502570200301364">U kan die bewaarde wagwoorde in Vivaldi Wagwoordbestuurder in ander toeps op u iPhone gebruik.</translation>
 <translation id="5900160494089383343">Hierdie gebruikersnaam is nie beskikbaar nie.</translation>
@@ -266,6 +267,7 @@ versper</translation>
 <translation id="7311118006561484338">Volgens titel</translation>
 <translation id="7325310788570036874">Blaai slimmer, soepeler en vinniger op die internet met Vivaldi.</translation>
 <translation id="734110743815267231">Hebreeus (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Open in privaat?</translation>
 <translation id="7362952245780030555">Kies tussen volle rekenaaroortjies, of die vereenvoudigde oortjiewisselaar.</translation>
 <translation id="7379938540614588640">Nederlands (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Voeg nuwe bron toe</translation>
@@ -322,6 +324,7 @@ versper</translation>
 <translation id="8677007239430848917">Voeg u eerste nota toe deur op die onderstaande plusikoon te tik</translation>
 <translation id="8684294196284714094">Gereed om Vivaldi as u verstekblaaier in te stel?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items geskrap</translation>
+<translation id="8763006697839582351">Open in Vivaldi privaat</translation>
 <translation id="8804164990146287819">Privaatheidsbeleid</translation>
 <translation id="8819841443522803117">Tyd om van verstekblaaier te wissel? Kies Vivaldi.</translation>
 <translation id="8820817407110198400">Boekmerke</translation>
@@ -333,7 +336,6 @@ versper</translation>
 <translation id="9043882097999887291">Advertensies
 versper</translation>
 <translation id="9065203028668620118">Wysig</translation>
-<translation id="9078193189520575214">Veranderinge word toegepas…</translation>
 <translation id="9079251484401922158">Fins (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 item</translation>
 <translation id="9091665118798175641">Sinchroniseer boekmerke en snelkiesers</translation>

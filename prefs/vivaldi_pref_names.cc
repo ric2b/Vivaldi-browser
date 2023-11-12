@@ -9,11 +9,12 @@ namespace vivaldiprefs {
 const char kAutoUpdateEnabled[] = "vivaldi.autoupdate_enabled";
 const char kVivaldiAccountPendingRegistration[] =
     "vivaldi.vivaldi_account.pending_registration";
+const char kVivaldiAddressBarSearchDirectMatchEnabled[] =
+    "vivaldi.address_bar.search.direct_match_enabled";
 const char kVivaldiExperiments[] = "vivaldi.experiments";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
 const char kVivaldiPIPPlacement[] = "vivaldi.pip_placement";
-
 
 // Local state prefs go here
 const char kVivaldiAutoUpdateStandalone[] = "vivaldi.autoupdate.standalone";
@@ -43,9 +44,12 @@ const char kVivaldiSyncNotificationsServerUrl[] =
     "vivaldi.sync.notifications.server_url";
 
 const char kVivaldiClientHintsBrand[] = "vivaldi.ClientHintsBrand";
-const char kVivaldiClientHintsBrandAppendVivaldi[] = "vivaldi.ClientHintsBrandAppendVivaldi";
-const char kVivaldiClientHintsBrandCustomBrand[] = "vivaldi.ClientHintsCustomBrand";
-const char kVivaldiClientHintsBrandCustomBrandVersion[] = "vivaldi.ClientHintsCustomBrandVersion";
+const char kVivaldiClientHintsBrandAppendVivaldi[] =
+    "vivaldi.ClientHintsBrandAppendVivaldi";
+const char kVivaldiClientHintsBrandCustomBrand[] =
+    "vivaldi.ClientHintsCustomBrand";
+const char kVivaldiClientHintsBrandCustomBrandVersion[] =
+    "vivaldi.ClientHintsCustomBrandVersion";
 
 // Old pref names that have been changed during the migration
 // to the new prefs api.
@@ -85,7 +89,7 @@ const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
 const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
 // Setting for folder visiblity on bookmark folder page
 const char kVivaldiBookmarkFoldersViewMode[] =
-  "vivaldi.bookmark_folders.view_mode";
+    "vivaldi.bookmark_folders.view_mode";
 
 // Tabs
 // Desktop style tabs enabled status
@@ -96,6 +100,6 @@ const char kVivaldiTabStackEnabled[] = "vivaldi.desktop_tabs.tab_stack";
 
 #if BUILDFLAG(IS_ANDROID)
 const char kBackgroundMediaPlaybackAllowed[] =
-  "vivaldi.background.media_playback.allowed";
+    "vivaldi.background.media_playback.allowed";
 #endif
 }  // namespace vivaldiprefs

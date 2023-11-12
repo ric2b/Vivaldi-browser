@@ -13,7 +13,13 @@ extern NSString* const vVivaldiSyncReSendActivationCodeUrl;
 extern NSString* const vVivaldiSyncValidateFieldUrl;
 extern NSString* const vVivaldiTermsOfServiceUrl;
 extern NSString* const vVivaldiReleaseNotesUrl;
+extern NSString* const vVivaldiFirstRunUrl;
 extern NSString* const vVivaldiPrivacyAndSecurity;
+extern NSString* const vVivaldiRecoverUsernameUrl;
+extern NSString* const vVivaldiRecoverPasswordUrl;
+
+// Help
+extern const char vVivaldiHelpCopyLinkToHightlightUrl[];
 
 
 #endif // IOS_UI_COMMON_VIVALDI_URL_CONSTANTS_H_

@@ -53,7 +53,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
-#include "chrome/browser/ui/profile_picker.h"
+#include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -688,7 +688,7 @@ void BackgroundModeManager::StartBackgroundMode() {
   if (in_background_mode_)
     return;
 
-  startup_metric_utils::SetBackgroundModeEnabled();
+  startup_metric_utils::GetBrowser().SetBackgroundModeEnabled();
 
   // Mark ourselves as running in background mode.
   in_background_mode_ = true;

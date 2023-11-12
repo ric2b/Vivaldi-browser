@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/extension_keeplist_chromeos.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/storage_type.h"
@@ -154,7 +155,9 @@ bool ShouldRemoveExtensionByType(const base::StringPiece extension_id,
   switch (chrome_type) {
     case ChromeType::kAsh:
       return !base::Contains(kExtensionsAshOnly, extension_id) &&
-             !base::Contains(kExtensionsBothChromes, extension_id);
+             !base::Contains(
+                 extensions::GetExtensionsAndAppsRunInOSAndStandaloneBrowser(),
+                 extension_id);
 
     case ChromeType::kLacros:
       return base::Contains(kExtensionsAshOnly, extension_id);
@@ -286,14 +289,6 @@ TargetItems GetTargetItems(const base::FilePath& original_profile_dir,
   return target_items;
 }
 
-bool HasEnoughDiskSpace(const int64_t total_copy_size,
-                        const base::FilePath& original_profile_dir) {
-  uint64_t extra_bytes_required_to_be_freed =
-      ExtraBytesRequiredToBeFreed(total_copy_size, original_profile_dir);
-
-  return extra_bytes_required_to_be_freed == 0;
-}
-
 uint64_t ExtraBytesRequiredToBeFreed(
     const int64_t total_copy_size,
     const base::FilePath& original_profile_dir) {
@@ -392,78 +387,6 @@ bool CopyDirectory(const base::FilePath& from_path,
                          progress_tracker)) {
         return false;
       }
-    }
-  }
-
-  return true;
-}
-
-bool CreateHardLink(const base::FilePath& from_file,
-                    const base::FilePath& to_file) {
-  if (link(from_file.value().c_str(), to_file.value().c_str()) == -1) {
-    // Note that `link(from_file, to_file)` fails if `to_file` already exists.
-    PLOG(ERROR) << "link(" << from_file.value() << ", " << to_file.value()
-                << ") failed.";
-    return false;
-  }
-
-  return true;
-}
-
-bool CopyDirectoryByHardLinks(const base::FilePath& from_dir,
-                              const base::FilePath& to_dir) {
-  if (!base::DirectoryExists(from_dir)) {
-    LOG(ERROR) << "from_dir = " << from_dir.value() << " does not exist.";
-    return false;
-  }
-
-  if (base::PathExists(to_dir)) {
-    LOG(ERROR) << "to_dir = " << to_dir.value() << " already exists.";
-    return false;
-  }
-
-  if (!base::CreateDirectory(to_dir)) {
-    PLOG(ERROR) << "Failed base::CreateDirectory(" << to_dir.value() << ").";
-    return false;
-  }
-
-  base::FileEnumerator enumerator(from_dir, false /* recursive */,
-                                  base::FileEnumerator::FILES |
-                                      base::FileEnumerator::DIRECTORIES |
-                                      base::FileEnumerator::SHOW_SYM_LINKS);
-  for (base::FilePath entry = enumerator.Next(); !entry.empty();
-       entry = enumerator.Next()) {
-    const base::FileEnumerator::FileInfo& info = enumerator.GetInfo();
-
-    // Only create hard links for files/dirs and skip other types like symlink
-    // since creating hard links for those might introdue a security risk.
-    if (S_ISREG(info.stat().st_mode)) {
-      if (!CreateHardLink(entry, to_dir.Append(entry.BaseName())))
-        return false;
-    } else if (S_ISDIR(info.stat().st_mode)) {
-      if (!CopyDirectoryByHardLinks(entry, to_dir.Append(entry.BaseName())))
-        return false;
-    }
-  }
-
-  return true;
-}
-
-bool CopyTargetItemsByHardLinks(const base::FilePath& to_dir,
-                                const TargetItems& target_items,
-                                CancelFlag* cancel_flag) {
-  for (const auto& item : target_items.items) {
-    if (cancel_flag->IsSet())
-      return false;
-
-    if (item.is_directory) {
-      if (!CopyDirectoryByHardLinks(item.path,
-                                    to_dir.Append(item.path.BaseName()))) {
-        return false;
-      }
-    } else {
-      if (!CreateHardLink(item.path, to_dir.Append(item.path.BaseName())))
-        return false;
     }
   }
 
@@ -595,20 +518,20 @@ void DryRunToCollectUMA(const base::FilePath& profile_data_dir) {
 
   if (free_disk_space_after_migration < (int64_t)kBuffer) {
     base::UmaHistogramCustomCounts(
-        kDryRunExtraDiskSpaceOccupiedByMoveLowDiskUser,
+        kDryRunExtraDiskSpaceOccupiedByMoveLowDiskUser2,
         extra_bytes_created_by_move / 1024 / 1024, 1, 10000, 100);
-    base::UmaHistogramCustomCounts(kDryRunFreeDiskSpaceLowDiskUser,
+    base::UmaHistogramCustomCounts(kDryRunFreeDiskSpaceLowDiskUser2,
                                    free_disk_space / 1024 / 1024, 1, 10000,
                                    100);
-    base::UmaHistogramCustomCounts(kDryRunFreeDiskSpaceAfterDeleteLowDiskUser,
+    base::UmaHistogramCustomCounts(kDryRunFreeDiskSpaceAfterDeleteLowDiskUser2,
                                    free_disk_space_after_delete / 1024 / 1024,
                                    1, 10000, 100);
     base::UmaHistogramCustomCounts(
-        kDryRunProfileDirSizeLowDiskUser,
+        kDryRunProfileDirSizeLowDiskUser2,
         ComputeDirectorySizeWithoutLinks(profile_data_dir) / 1024 / 1024, 1,
         10000, 100);
     base::UmaHistogramCustomCounts(
-        kDryRunMyFilesDirSizeLowDiskUser,
+        kDryRunMyFilesDirSizeLowDiskUser2,
         ComputeDirectorySizeWithoutLinks(profile_data_dir.Append("MyFiles")) /
             1024 / 1024,
         1, 10000, 100);
@@ -654,6 +577,9 @@ leveldb::Status GetExtensionKeys(leveldb::DB* db,
       (*result)[extension_id].push_back(key);
   }
 
+  PLOG_IF(ERROR, !it->status().ok())
+      << "GetExtensionKeys() failed with status: " << it->status().ToString();
+
   return it->status();
 }
 
@@ -695,7 +621,8 @@ bool MigrateLevelDB(const base::FilePath& original_path,
   leveldb::Status status =
       leveldb_env::OpenDB(options, original_path.value(), &original_db);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while opening original leveldb: " << original_path;
+    PLOG(ERROR) << "Failure while opening original leveldb: " << original_path
+                << ": " << status.ToString();
     return false;
   }
 
@@ -704,7 +631,7 @@ bool MigrateLevelDB(const base::FilePath& original_path,
   status = GetExtensionKeys(original_db.get(), leveldb_type, &original_keys);
   if (!status.ok()) {
     PLOG(ERROR) << "Failure while reading keys from original leveldb: "
-                << original_path;
+                << original_path << ": " << status.ToString();
     return false;
   }
 
@@ -714,7 +641,8 @@ bool MigrateLevelDB(const base::FilePath& original_path,
   options.error_if_exists = true;
   status = leveldb_env::OpenDB(options, target_path.value(), &target_db);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while opening new leveldb: " << target_path;
+    PLOG(ERROR) << "Failure while opening new leveldb: " << target_path << ": "
+                << status.ToString();
     return false;
   }
 
@@ -730,13 +658,15 @@ bool MigrateLevelDB(const base::FilePath& original_path,
   // Copy all the key-value pairs that need to be kept in Ash.
   for (const auto& [extension_id, keys] : original_keys) {
     if (base::Contains(kExtensionsAshOnly, extension_id) ||
-        base::Contains(kExtensionsBothChromes, extension_id)) {
+        base::Contains(
+            extensions::GetExtensionsAndAppsRunInOSAndStandaloneBrowser(),
+            extension_id)) {
       for (const std::string& key : keys) {
         std::string value;
         status = original_db->Get(leveldb::ReadOptions(), key, &value);
         if (!status.ok()) {
           PLOG(ERROR) << "Failure while reading from original leveldb: "
-                      << original_path;
+                      << original_path << ": " << status.ToString();
           return false;
         }
         write_batch.Put(key, value);
@@ -749,7 +679,8 @@ bool MigrateLevelDB(const base::FilePath& original_path,
   write_options.sync = true;
   status = target_db->Write(write_options, &write_batch);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while writing into new leveldb: " << target_path;
+    PLOG(ERROR) << "Failure while writing into new leveldb: " << target_path
+                << ": " << status.ToString();
     return false;
   }
 
@@ -766,7 +697,8 @@ bool MigrateSyncDataLevelDB(const base::FilePath& original_path,
   leveldb::Status status =
       leveldb_env::OpenDB(options, original_path.value(), &original_db);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while opening original leveldb: " << original_path;
+    PLOG(ERROR) << "Failure while opening original leveldb: " << original_path
+                << ": " << status.ToString();
     return false;
   }
 
@@ -777,7 +709,8 @@ bool MigrateSyncDataLevelDB(const base::FilePath& original_path,
   status =
       leveldb_env::OpenDB(options, ash_target_path.value(), &ash_target_db);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while opening new leveldb: " << ash_target_path;
+    PLOG(ERROR) << "Failure while opening new leveldb: " << ash_target_path
+                << ": " << status.ToString();
     return false;
   }
 
@@ -786,7 +719,8 @@ bool MigrateSyncDataLevelDB(const base::FilePath& original_path,
   status = leveldb_env::OpenDB(options, lacros_target_path.value(),
                                &lacros_target_db);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while opening new leveldb: " << lacros_target_path;
+    PLOG(ERROR) << "Failure while opening new leveldb: " << lacros_target_path
+                << ": " << status.ToString();
     return false;
   }
 
@@ -806,7 +740,7 @@ bool MigrateSyncDataLevelDB(const base::FilePath& original_path,
   }
   if (!it->status().ok()) {
     PLOG(ERROR) << "Failure while reading from original leveldb: "
-                << original_path;
+                << original_path << ": " << status.ToString();
     return false;
   }
 
@@ -815,14 +749,14 @@ bool MigrateSyncDataLevelDB(const base::FilePath& original_path,
   write_options.sync = true;
   status = ash_target_db->Write(write_options, &ash_write_batch);
   if (!status.ok()) {
-    PLOG(ERROR) << "Failure while writing into new leveldb: "
-                << ash_target_path;
+    PLOG(ERROR) << "Failure while writing into new leveldb: " << ash_target_path
+                << ": " << status.ToString();
     return false;
   }
   status = lacros_target_db->Write(write_options, &lacros_write_batch);
   if (!status.ok()) {
     PLOG(ERROR) << "Failure while writing into new leveldb: "
-                << lacros_target_path;
+                << lacros_target_path << ": " << status.ToString();
     return false;
   }
 

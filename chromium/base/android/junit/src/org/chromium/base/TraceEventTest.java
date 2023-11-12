@@ -89,6 +89,30 @@ public class TraceEventTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
+    public void testScopedTraceEventWithIntArg() {
+        TraceEvent.setEnabled(true);
+        // Only string literals are allowed in Java event names.
+        try (TraceEvent event = TraceEvent.scoped("TestEvent", 15)) {
+        }
+        verify(mNativeMock).beginWithIntArg("TestEvent", 15);
+        TraceEvent.setEnabled(false);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testWebViewStartupTotalFactoryInit() {
+        TraceEvent.setEnabled(true);
+        long startTime = 10;
+        long duration = 50;
+        TraceEvent.webViewStartupTotalFactoryInit(startTime, duration);
+        verify(mNativeMock).webViewStartupTotalFactoryInit(startTime, duration);
+        TraceEvent.setEnabled(false);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
     public void testWebViewStartupStage1() {
         TraceEvent.setEnabled(true);
         long startTime = 10;

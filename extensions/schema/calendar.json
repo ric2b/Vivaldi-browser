@@ -7,7 +7,7 @@
       {
         "id": "AccountType",
         "type": "string",
-        "enum": [ "local", "vivaldi", "google", "caldav", "ical", "fastmail"],
+        "enum": [ "local", "vivaldi", "google", "caldav", "ical", "fastmail" ],
         "description": "The account type. Maps to int in db: 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
       },
       {
@@ -903,6 +903,26 @@
             "description": "The interval how often this account should poll. In seconds."
           }
         }
+      },
+      {
+        "id": "EventTemplate",
+        "type": "object",
+        "description": "A event template object.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the event template."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the event template."
+          },
+          "ical": {
+            "type": "string",
+            "description": "The ical of the event template."
+          }
+        }
       }
     ],
     "functions": [
@@ -1558,7 +1578,7 @@
               },
               "when": {
                 "type": "number",
-                "optional":  true,
+                "optional": true,
                 "description": "When the notification should fire. In milliseconds since the epoch."
               },
               "period": {
@@ -1819,6 +1839,33 @@
         }
       },
       {
+        "name": "createEventTemplate",
+        "type": "function",
+        "description": "Creates an event template.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "The event template name."
+          },
+          {
+            "type": "string",
+            "name": "ical",
+            "description": "The event template ical."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "EventTemplate"
+            }
+          ]
+        }
+      },
+      {
         "name": "getAllEventTemplates",
         "type": "function",
         "description": "Retrieves all event templates.",
@@ -1830,8 +1877,68 @@
               "name": "results",
               "type": "array",
               "items": {
-                "$ref": "CalendarEvent"
+                "$ref": "EventTemplate"
               }
+            }
+          ]
+        }
+      },
+      {
+        "name": "updateEventTemplate",
+        "type": "function",
+        "description": "Updates the properties of an event template. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+            "description": "The id of the event template to update."
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "name": {
+                "description": "The updated name of the event template.",
+                "type": "string",
+                "optional": true
+              },
+              "ical": {
+                "description": "The updated ical of the event template.",
+                "type": "string",
+                "optional": true
+              }
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "EventTemplate"
+            }
+          ]
+        }
+      },
+      {
+        "name": "deleteEventTemplate",
+        "type": "function",
+        "description": "Deletes an event template.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+	    "description": "The id of the event template to delete."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
             }
           ]
         }

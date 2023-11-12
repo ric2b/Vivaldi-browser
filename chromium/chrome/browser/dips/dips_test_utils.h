@@ -15,12 +15,14 @@
 #include "base/types/expected.h"
 #include "chrome/browser/dips/dips_redirect_info.h"
 #include "chrome/browser/dips/dips_service.h"
+#include "chrome/browser/dips/dips_service_factory.h"
 #include "chrome/browser/dips/dips_utils.h"
 #include "chrome/browser/profiles/profile_test_util.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/test/browser_test_utils.h"
 #include "url/gurl.h"
 
 namespace testing {
@@ -104,6 +106,32 @@ base::expected<content::WebContents*, std::string> OpenInNewTab(
 void AccessCookieViaJSIn(content::WebContents* web_contents,
                          content::RenderFrameHost* frame);
 
+// Helper function to navigate to /set-cookie on `host` and wait for
+// OnCookiesAccessed() to be called.
+bool NavigateToSetCookie(content::WebContents* web_contents,
+                         const net::EmbeddedTestServer* server,
+                         base::StringPiece host,
+                         bool is_secure_cookie_set);
+
+// Helper function for creating an image with a cookie access on the provided
+// WebContents.
+void CreateImageAndWaitForCookieAccess(content::WebContents* web_contents,
+                                       const GURL& image_url);
+
+// Helper function to block until all DIPS storage requests are complete.
+inline void WaitOnStorage(DIPSService* dips_service) {
+  dips_service->storage()->FlushPostedTasksForTesting();
+}
+
+// Helper function to query the `url` state from DIPS storage.
+absl::optional<StateValue> GetDIPSState(DIPSService* dips_service,
+                                        const GURL& url);
+
+inline DIPSService* GetDipsService(content::WebContents* web_contents) {
+  return DIPSServiceFactory::GetForBrowserContext(
+      web_contents->GetBrowserContext());
+}
+
 class URLCookieAccessObserver : public content::WebContentsObserver {
  public:
   URLCookieAccessObserver(content::WebContents* web_contents,
@@ -142,7 +170,8 @@ class FrameCookieAccessObserver : public content::WebContentsObserver {
                          const content::CookieAccessDetails& details) override;
 
  private:
-  const raw_ptr<content::RenderFrameHost, DanglingUntriaged> render_frame_host_;
+  const raw_ptr<content::RenderFrameHost, AcrossTasksDanglingUntriaged>
+      render_frame_host_;
   CookieOperation access_type_;
   base::RunLoop run_loop_;
 };
@@ -177,7 +206,8 @@ class UserActivationObserver : public content::WebContentsObserver {
   void FrameReceivedUserActivation(
       content::RenderFrameHost* render_frame_host) override;
 
-  raw_ptr<content::RenderFrameHost, DanglingUntriaged> const render_frame_host_;
+  raw_ptr<content::RenderFrameHost, AcrossTasksDanglingUntriaged> const
+      render_frame_host_;
   base::RunLoop run_loop_;
 };
 

@@ -10,8 +10,8 @@
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
@@ -349,7 +349,7 @@ BookmarksFolderChooserCoordinator* _folderChooserCoordinator;
   DCHECK(!self.folderItem.bookmarkNode ||
          self.folderItem.bookmarkNode->is_url());
 
-  NSString* urlString = [[self inputURLString] lowercaseString];
+  NSString* urlString = [self inputURLString];
   GURL url = ConvertUserDataToGURL(urlString);
 
   if (!self.inputURLIsValid)

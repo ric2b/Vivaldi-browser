@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/containers/contains.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ash/crosapi/browser_data_migrator.h"
 #include "chrome/browser/ash/crosapi/browser_data_migrator_util.h"
 #include "chrome/browser/ash/crosapi/migration_progress_tracker.h"
+#include "chrome/browser/extensions/extension_keeplist_chromeos.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -50,8 +52,6 @@ MoveMigrator::MoveMigrator(
 
 MoveMigrator::~MoveMigrator() = default;
 
-// TODO(ythjkt): Add UMA for each step to detect failures and measure time taken
-// for critical steps.
 void MoveMigrator::Migrate() {
   ResumeStep resume_step = GetResumeStep(local_state_, user_id_hash_);
 
@@ -68,6 +68,8 @@ void MoveMigrator::Migrate() {
     if (resume_count > kMoveMigrationResumeCountLimit) {
       LOG(ERROR) << "The number of resume attempt limit has reached. Marking "
                     "move migration as completed.";
+      base::UmaHistogramBoolean(kMoveMigratorMaxResumeReached, true);
+      base::debug::DumpWithoutCrashing();
       SetResumeStep(local_state_, user_id_hash_, ResumeStep::kCompleted);
       resume_step = ResumeStep::kCompleted;
     }
@@ -359,7 +361,7 @@ MoveMigrator::TaskResult MoveMigrator::SetupLacrosDir(
                              timer_for_copy.Elapsed());
 
   if (!base::WriteFile(tmp_user_dir.Append(chrome::kFirstRunSentinel), "")) {
-    LOG(ERROR) << "WriteFile() failed for " << chrome::kFirstRunSentinel;
+    PLOG(ERROR) << "WriteFile() failed for " << chrome::kFirstRunSentinel;
     return {TaskStatus::kSetupLacrosDirWriteFirstRunSentinelFileFailed, errno};
   }
 
@@ -437,10 +439,10 @@ MoveMigrator::TaskResult MoveMigrator::SetupAshSplitDir(
       return {TaskStatus::kSetupAshDirCreateDirFailed, errno};
     }
 
-    for (const char* extension_id :
-         browser_data_migrator_util::kExtensionsBothChromes) {
+    for (const auto& extension_id :
+         extensions::GetExtensionsAndAppsRunInOSAndStandaloneBrowser()) {
       if (!browser_data_migrator_util::MigrateAshIndexedDB(
-              original_profile_dir, split_indexed_db_dir, extension_id,
+              original_profile_dir, split_indexed_db_dir, extension_id.data(),
               /*copy=*/true)) {
         return {TaskStatus::kSetupAshDirCopyIndexedDBFailed, errno};
       }
@@ -798,8 +800,8 @@ MoveMigrator::TaskResult MoveMigrator::CopyBothChromesSubdirs(
     }
 
     // Copy objects that belong to both Ash and Lacros.
-    for (const char* extension_id :
-         browser_data_migrator_util::kExtensionsBothChromes) {
+    for (const auto& extension_id :
+         extensions::GetExtensionsAndAppsRunInOSAndStandaloneBrowser()) {
       base::FilePath original_target_path =
           original_target_dir.Append(extension_id);
 

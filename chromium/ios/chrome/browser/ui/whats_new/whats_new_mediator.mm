@@ -18,10 +18,6 @@
 #import "ios/public/provider/chrome/browser/password_auto_fill/password_auto_fill_api.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface WhatsNewMediator ()
 
 @property(nonatomic, strong) NSMutableArray<WhatsNewItem*>* chromeTipEntries;
@@ -81,7 +77,14 @@
       // Handles actions that open Passwords in iOS Settings.
       ios::provider::PasswordsInOtherAppsOpensSettings();
       break;
-    default:
+    case WhatsNewType::kSearchTabs:
+    case WhatsNewType::kNewOverflowMenu:
+    case WhatsNewType::kSharedHighlighting:
+    case WhatsNewType::kAutofill:
+    case WhatsNewType::kCalendarEvent:
+    case WhatsNewType::kMiniMaps:
+    case WhatsNewType::kChromeActions:
+    case WhatsNewType::kError:
       NOTREACHED();
       break;
   };

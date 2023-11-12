@@ -167,6 +167,8 @@ component("capture_lib") {
 
   if (is_apple) {
     sources += [
+      "video/apple/gpu_memory_buffer_tracker_apple.cc",
+      "video/apple/gpu_memory_buffer_tracker_apple.h",
       "video/apple/pixel_buffer_pool.cc",
       "video/apple/pixel_buffer_pool.h",
       "video/apple/pixel_buffer_transferer.cc",
@@ -184,7 +186,6 @@ component("capture_lib") {
       "video/apple/video_capture_device_frame_receiver.h",
     ]
     deps += [ "//components/crash/core/common:crash_key" ]
-    configs += [ "//build/config/compiler:enable_arc" ]
     frameworks = [
       "AVFoundation.framework",
       "CoreFoundation.framework",
@@ -199,8 +200,6 @@ component("capture_lib") {
 
   if (is_mac) {
     sources += [
-      "video/mac/gpu_memory_buffer_tracker_mac.cc",
-      "video/mac/gpu_memory_buffer_tracker_mac.h",
       "video/mac/uvc_control_mac.h",
       "video/mac/uvc_control_mac.mm",
       "video/mac/video_capture_device_decklink_mac.h",
@@ -211,14 +210,21 @@ component("capture_lib") {
     deps += [ "//third_party/decklink" ]
   }
 
+  if (is_ios) {
+    sources += [
+      "video/ios/pixel_buffer_rotator.cc",
+      "video/ios/pixel_buffer_rotator.h",
+    ]
+  }
+
   if (is_win) {
     sources += [
       "video/win/capability_list_win.cc",
       "video/win/capability_list_win.h",
       "video/win/filter_base_win.cc",
       "video/win/filter_base_win.h",
-      "video/win/gpu_memory_buffer_tracker.cc",
-      "video/win/gpu_memory_buffer_tracker.h",
+      "video/win/gpu_memory_buffer_tracker_win.cc",
+      "video/win/gpu_memory_buffer_tracker_win.h",
       "video/win/metrics.cc",
       "video/win/metrics.h",
       "video/win/pin_base_win.cc",
@@ -228,8 +234,6 @@ component("capture_lib") {
       "video/win/sink_filter_win.h",
       "video/win/sink_input_pin_win.cc",
       "video/win/sink_input_pin_win.h",
-      "video/win/video_capture_buffer_tracker_factory_win.cc",
-      "video/win/video_capture_buffer_tracker_factory_win.h",
       "video/win/video_capture_device_factory_win.cc",
       "video/win/video_capture_device_factory_win.h",
       "video/win/video_capture_device_mf_win.cc",
@@ -274,10 +278,22 @@ component("capture_lib") {
 
   if (is_linux) {
     sources += [
+      "video/linux/v4l2_capture_delegate_gpu_helper.cc",
+      "video/linux/v4l2_capture_delegate_gpu_helper.h",
       "video/linux/v4l2_gpu_memory_buffer_tracker.cc",
       "video/linux/v4l2_gpu_memory_buffer_tracker.h",
-      "video/linux/video_capture_gpu_memory_buffer_manager.cc",
-      "video/linux/video_capture_gpu_memory_buffer_manager.h",
+    ]
+  }
+
+  # Establish GPU Channel
+  if (is_linux || is_win) {
+    sources += [
+      "video/video_capture_gpu_channel_host.cc",
+      "video/video_capture_gpu_channel_host.h",
+    ]
+    deps += [
+      "//gpu/command_buffer/client",
+      "//gpu/ipc/client",
     ]
   }
 
@@ -308,8 +324,8 @@ component("capture_lib") {
       "video/chromeos/capture_metadata_dispatcher.h",
       "video/chromeos/display_rotation_observer.cc",
       "video/chromeos/display_rotation_observer.h",
-      "video/chromeos/gpu_memory_buffer_tracker.cc",
-      "video/chromeos/gpu_memory_buffer_tracker.h",
+      "video/chromeos/gpu_memory_buffer_tracker_cros.cc",
+      "video/chromeos/gpu_memory_buffer_tracker_cros.h",
       "video/chromeos/pixel_format_utils.cc",
       "video/chromeos/pixel_format_utils.h",
       "video/chromeos/request_builder.cc",
@@ -471,7 +487,11 @@ test("capture_unittests") {
   }
 
   if (is_linux) {
-    sources += [ "video/linux/v4l2_gpu_memory_buffer_tracker_unittest.cc" ]
+    sources += [
+      "video/linux/v4l2_capture_delegate_gpu_helper_unittest.cc",
+      "video/linux/v4l2_gpu_memory_buffer_tracker_unittest.cc",
+    ]
+    data += [ "//media/test/data/one_frame_1280x720.mjpeg" ]
   }
 
   if (is_android) {
@@ -519,7 +539,6 @@ test("capture_unittests") {
       "CoreMedia.framework",
       "CoreVideo.framework",
     ]
-    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_mac) {
@@ -535,7 +554,7 @@ test("capture_unittests") {
     sources += [
       "video/win/d3d_capture_test_utils.cc",
       "video/win/d3d_capture_test_utils.h",
-      "video/win/gpu_memory_buffer_tracker_unittest.cc",
+      "video/win/gpu_memory_buffer_tracker_win_unittest.cc",
       "video/win/video_capture_device_factory_win_unittest.cc",
       "video/win/video_capture_device_mf_win_unittest.cc",
     ]

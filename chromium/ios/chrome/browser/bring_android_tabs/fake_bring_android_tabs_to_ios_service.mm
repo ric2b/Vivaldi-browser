@@ -11,10 +11,6 @@
 #import "ios/chrome/browser/synced_sessions/distant_tab.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 FakeBringAndroidTabsToIOSService::FakeBringAndroidTabsToIOSService(
     std::vector<std::unique_ptr<synced_sessions::DistantTab>> tabs,
     segmentation_platform::DeviceSwitcherResultDispatcher* dispatcher,
@@ -38,6 +34,12 @@ synced_sessions::DistantTab* FakeBringAndroidTabsToIOSService::GetTabAtIndex(
   return tabs_[index].get();
 }
 
+void FakeBringAndroidTabsToIOSService::OpenTabsAtIndices(
+    const std::vector<size_t>& indices,
+    UrlLoadingBrowserAgent* url_loader) {
+  opened_tabs_at_indices_ = indices;
+}
+
 void FakeBringAndroidTabsToIOSService::OnBringAndroidTabsPromptDisplayed() {
   displayed_ = true;
 }
@@ -53,4 +55,9 @@ bool FakeBringAndroidTabsToIOSService::displayed() {
 
 bool FakeBringAndroidTabsToIOSService::interacted() {
   return interacted_;
+}
+
+std::vector<size_t> FakeBringAndroidTabsToIOSService::opened_tabs_at_indices()
+    const {
+  return opened_tabs_at_indices_;
 }

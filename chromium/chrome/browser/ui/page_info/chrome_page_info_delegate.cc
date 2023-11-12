@@ -34,7 +34,6 @@
 #include "components/permissions/contexts/bluetooth_chooser_context.h"
 #include "components/permissions/object_permission_context_base.h"
 #include "components/permissions/permission_manager.h"
-#include "components/permissions/permission_result.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
@@ -47,7 +46,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/webui/settings/ash/app_management/app_management_uma.h"
+#include "chrome/browser/ui/webui/ash/settings/app_management/app_management_uma.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -55,6 +54,7 @@
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
 #include "chrome/browser/lookalikes/safety_tip_ui_helper.h"
+#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 #include "chrome/browser/serial/serial_chooser_context.h"
 #include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -175,14 +175,19 @@ std::u16string ChromePageInfoDelegate::GetWarningDetailText() {
 }
 #endif
 
-permissions::PermissionResult ChromePageInfoDelegate::GetPermissionResult(
+content::PermissionResult ChromePageInfoDelegate::GetPermissionResult(
     blink::PermissionType permission,
-    const url::Origin& origin) {
-  content::PermissionResult permission_result =
-      GetProfile()
-          ->GetPermissionController()
-          ->GetPermissionResultForOriginWithoutContext(permission, origin);
-  return permissions::PermissionUtil::ToPermissionResult(permission_result);
+    const url::Origin& origin,
+    const absl::optional<url::Origin>& requesting_origin) {
+  auto* controller = GetProfile()->GetPermissionController();
+
+  if (requesting_origin.has_value()) {
+    return controller->GetPermissionResultForOriginWithoutContext(
+        permission, *requesting_origin, origin);
+  } else {
+    return controller->GetPermissionResultForOriginWithoutContext(permission,
+                                                                  origin);
+  }
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -193,11 +198,15 @@ void ChromePageInfoDelegate::FocusWebContents() {
 
 absl::optional<std::u16string> ChromePageInfoDelegate::GetFpsOwner(
     const GURL& site_url) {
+  if (!PrivacySandboxServiceFactory::GetForProfile(GetProfile()))
+    return absl::nullopt;
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
       ->GetFirstPartySetOwnerForDisplay(site_url);
 }
 
 bool ChromePageInfoDelegate::IsFpsManaged() {
+  if (!PrivacySandboxServiceFactory::GetForProfile(GetProfile()))
+    return false;
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
       ->IsFirstPartySetsDataAccessManaged();
 }
@@ -219,7 +228,8 @@ ChromePageInfoDelegate::CreateCookieControlsController() {
       CookieSettingsFactory::GetForProfile(profile),
       profile->IsOffTheRecord()
           ? CookieSettingsFactory::GetForProfile(profile->GetOriginalProfile())
-          : nullptr);
+          : nullptr,
+      HostContentSettingsMapFactory::GetForProfile(profile));
 }
 
 bool ChromePageInfoDelegate::IsIsolatedWebApp() {
@@ -336,6 +346,17 @@ bool ChromePageInfoDelegate::IsSubresourceFilterActivated(
   return settings_manager->GetSiteActivationFromMetadata(site_url);
 }
 
+bool ChromePageInfoDelegate::HasAutoPictureInPictureBeenRegistered() {
+#if BUILDFLAG(IS_ANDROID)
+  return false;
+#else
+  auto* auto_pip_tab_helper =
+      AutoPictureInPictureTabHelper::FromWebContents(web_contents_);
+  return auto_pip_tab_helper &&
+         auto_pip_tab_helper->HasAutoPictureInPictureBeenRegistered();
+#endif  // BUILDFLAG(IS_ANDROID)
+}
+
 bool ChromePageInfoDelegate::IsContentDisplayedInVrHeadset() {
   return vr::VrTabHelper::IsContentDisplayedInHeadset(web_contents_);
 }
@@ -368,8 +389,15 @@ ChromePageInfoDelegate::GetVisibleSecurityState() {
 }
 
 void ChromePageInfoDelegate::OnCookiesPageOpened() {
-  GetProfile()->GetPrefs()->SetBoolean(prefs::kInContextCookieControlsOpened,
-                                       true);
+  auto* profile = GetProfile();
+  auto cookie_settings = CookieSettingsFactory::GetForProfile(profile);
+  // Don't record the preference if 3PC are allowed by default. Since then
+  // cookie controls are not available in the cookies page.
+  if (!cookie_settings || !cookie_settings->ShouldBlockThirdPartyCookies()) {
+    return;
+  }
+
+  profile->GetPrefs()->SetBoolean(prefs::kInContextCookieControlsOpened, true);
 }
 
 std::unique_ptr<content_settings::PageSpecificContentSettings::Delegate>

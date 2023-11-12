@@ -19,7 +19,6 @@
 #include "base/containers/flat_tree.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
@@ -28,7 +27,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -60,6 +59,7 @@
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_callback_app_identity.h"
+#include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -109,8 +109,12 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_family.h"
+#include "ui/views/test/dialog_test.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
+#include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -121,6 +125,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
+#include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX)
@@ -304,7 +309,7 @@ class DidFinishLoadObserver : public content::WebContentsObserver {
   bool AwaitCorrectPageLoaded() {
     on_load_run_loop_finished_.Run();
     base::test::TestFuture<void> future;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, future.GetCallback());
     EXPECT_TRUE(future.Wait());
     return correct_page_loaded_;
@@ -334,8 +339,9 @@ class ManifestUpdateManagerBrowserTest : public WebAppControllerBrowserTest {
       : update_dialog_scope_(SetIdentityUpdateDialogActionForTesting(
             AppIdentityUpdate::kSkipped)) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+    // TODO(crbug.com/1462253): Also test with Lacros flags enabled.
     scoped_feature_list_.InitWithFeatures(
-        {}, {features::kWebAppsCrosapi, ash::features::kLacrosPrimary});
+        {}, ash::standalone_browser::GetFeatureRefs());
 #endif
   }
   ManifestUpdateManagerBrowserTest(const ManifestUpdateManagerBrowserTest&) =
@@ -692,6 +698,11 @@ class ManifestUpdateManagerBrowserTest : public WebAppControllerBrowserTest {
         SetIdentityUpdateDialogActionForTesting(AppIdentityUpdate::kAllowed);
   }
 
+  void ResetAutomatedAppIdentityUpdateDialogBehavior() {
+    update_dialog_scope_ =
+        SetIdentityUpdateDialogActionForTesting(absl::nullopt);
+  }
+
  protected:
   net::EmbeddedTestServer::HandleRequestCallback request_override_;
 
@@ -822,7 +833,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   base::RunLoop run_loop;
   UpdateCheckResultAwaiter awaiter(url);
-  GetProvider().install_finalizer().UninstallWebApp(
+  GetProvider().scheduler().UninstallWebApp(
       app_id, webapps::WebappUninstallSource::kAppMenu,
       base::BindLambdaForTesting([&](webapps::UninstallResultCode code) {
         EXPECT_EQ(code, webapps::UninstallResultCode::kSuccess);
@@ -1438,6 +1449,108 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
   EXPECT_EQ(GetProvider().registrar_unsafe().GetAppScope(app_id),
             http_server_.GetURL("/"));
+}
+
+IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
+                       UninstallDialogClosesAppUpdateDialogUninstallsApp) {
+  ResetAutomatedAppIdentityUpdateDialogBehavior();
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "$1",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $2
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {"Test app name", kInstallableIconList});
+  AppId app_id = InstallWebApp();
+  EXPECT_EQ("Test app name",
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
+
+  views::NamedWidgetShownWaiter manifest_waiter(
+      views::test::AnyWidgetTestPasskey{},
+      "WebAppIdentityUpdateConfirmationView");
+  OverrideManifest(kManifestTemplate, {"Test app name2", kInstallableIconList});
+
+  UpdateCheckResultAwaiter awaiter(GetAppURL());
+  ui_test_utils::NavigateToURL(browser(), GetAppURL());
+
+  // Wait for the app identity update dialog to show up.
+  auto* manifest_update_widget = manifest_waiter.WaitIfNeededAndGet();
+  EXPECT_NE(manifest_update_widget, nullptr);
+
+  views::NamedWidgetShownWaiter uninstall_waiter(
+      views::test::AnyWidgetTestPasskey{}, "WebAppUninstallDialogDelegateView");
+
+  // Wait for the uninstall dialog to show up after cancelling the app identity
+  // update dialog. We cannot use views::test::CancelDialog here because under
+  // the hood, CancelDialog starts running a callback for the update dialog to
+  // be closed, which does not happen until uninstallation is scheduled, and
+  // uninstallation cannot be scheduled because the callback is running, thus
+  // leading to a deadlock.
+  manifest_update_widget->widget_delegate()->AsDialogDelegate()->CancelDialog();
+  auto* uninstall_widget = uninstall_waiter.WaitIfNeededAndGet();
+  EXPECT_NE(uninstall_widget, nullptr);
+
+  // Accept the uninstall dialog, and verify changes are propagated back to the
+  // manifest update manager with the correct result.
+  views::test::AcceptDialog(uninstall_widget);
+  EXPECT_EQ(std::move(awaiter).AwaitNextResult(),
+            ManifestUpdateResult::kAppIdentityUpdateRejectedAndUninstalled);
+
+  // This is to ensure that the uninstall command that was scheduled also
+  // completes.
+  GetProvider().command_manager().AwaitAllCommandsCompleteForTesting();
+  EXPECT_FALSE(GetProvider().registrar_unsafe().IsInstalled(app_id));
+}
+
+IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
+                       UninstallDialogCancelStillShowsAppUpdateDialog) {
+  ResetAutomatedAppIdentityUpdateDialogBehavior();
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "$1",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $2
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {"Test app name", kInstallableIconList});
+  AppId app_id = InstallWebApp();
+  EXPECT_EQ("Test app name",
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
+
+  views::NamedWidgetShownWaiter manifest_waiter(
+      views::test::AnyWidgetTestPasskey{},
+      "WebAppIdentityUpdateConfirmationView");
+  OverrideManifest(kManifestTemplate, {"App Name 2", kInstallableIconList});
+
+  UpdateCheckResultAwaiter awaiter(GetAppURL());
+  ui_test_utils::NavigateToURL(browser(), GetAppURL());
+
+  auto* manifest_update_widget = manifest_waiter.WaitIfNeededAndGet();
+  EXPECT_NE(manifest_update_widget, nullptr);
+
+  views::NamedWidgetShownWaiter uninstall_waiter(
+      views::test::AnyWidgetTestPasskey{}, "WebAppUninstallDialogDelegateView");
+  manifest_update_widget->widget_delegate()->AsDialogDelegate()->CancelDialog();
+  auto* uninstall_widget = uninstall_waiter.WaitIfNeededAndGet();
+  EXPECT_NE(uninstall_widget, nullptr);
+
+  views::test::WidgetVisibleWaiter update_visible_waiter(
+      manifest_update_widget);
+
+  // If the uninstall dialog is cancelled, then app identity update dialog
+  // should regain visibility.
+  views::test::CancelDialog(uninstall_widget);
+  update_visible_waiter.Wait();
+  views::test::AcceptDialog(manifest_update_widget);
+  EXPECT_EQ(std::move(awaiter).AwaitNextResult(),
+            ManifestUpdateResult::kAppUpdated);
+  EXPECT_EQ("App Name 2",
+            GetProvider().registrar_unsafe().GetAppShortName(app_id));
 }
 
 IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest_UpdateDialog,
@@ -4761,7 +4874,7 @@ class ManifestUpdateManagerBrowserTest_TabStrip
   ManifestUpdateManagerBrowserTest_TabStrip() {
     feature_list_.InitWithFeatures(
         {blink::features::kDesktopPWAsTabStripCustomizations,
-         features::kDesktopPWAsTabStrip},
+         blink::features::kDesktopPWAsTabStrip},
         /*disabled_features=*/{});
   }
   base::test::ScopedFeatureList feature_list_;
@@ -4814,9 +4927,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
 
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/new-tab-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
   EXPECT_EQ(absl::get<blink::Manifest::HomeTabParams>(
                 web_app->tab_strip().value().home_tab)
                 .scope_patterns.size(),
@@ -4847,9 +4958,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
   const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/new-tab-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
   EXPECT_TRUE(absl::holds_alternative<blink::Manifest::HomeTabParams>(
       web_app->tab_strip().value().home_tab));
 
@@ -4860,9 +4969,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
                                       ManifestUpdateResult::kAppUpToDate, 1);
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/new-tab-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
   EXPECT_TRUE(absl::holds_alternative<blink::Manifest::HomeTabParams>(
       web_app->tab_strip().value().home_tab));
 }
@@ -4892,9 +4999,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
   // URL parsed relative to manifest URL, which is in /banners/.
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/banners/old-relative-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
 
   OverrideManifest(kTabStripManifestTemplate,
                    {"/new-tab-url", kInstallableIconList});
@@ -4904,9 +5009,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
                                       ManifestUpdateResult::kAppUpdated, 1);
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/new-tab-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
@@ -4944,9 +5047,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_TabStrip,
   const WebApp* web_app = GetProvider().registrar_unsafe().GetAppById(app_id);
   EXPECT_TRUE(web_app->tab_strip().has_value());
   EXPECT_EQ(http_server_.GetURL("/new-tab-url"),
-            absl::get<blink::Manifest::NewTabButtonParams>(
-                web_app->tab_strip().value().new_tab_button)
-                .url);
+            web_app->tab_strip().value().new_tab_button.url);
   EXPECT_TRUE(absl::holds_alternative<blink::Manifest::HomeTabParams>(
       web_app->tab_strip().value().home_tab));
 

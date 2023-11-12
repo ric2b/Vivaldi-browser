@@ -7,6 +7,7 @@
 
 #include <map>
 
+#include "chrome/browser/apps/app_service/app_icon/icon_effects.h"
 #include "chrome/browser/apps/app_service/package_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/image/image_skia.h"
@@ -14,6 +15,7 @@
 namespace apps {
 
 class PromiseAppIcon;
+using PromiseAppIconPtr = std::unique_ptr<PromiseAppIcon>;
 
 // Stores promise app icons. Each promise app may have several icons of
 // different sizes.
@@ -30,12 +32,25 @@ class PromiseAppIconCache {
   // Checks whether there is at least one icon for a package ID.
   bool DoesPackageIdHaveIcons(const PackageId& package_id);
 
+  // Get the icon for the specified package ID.
+  void GetIconAndApplyEffects(const PackageId& package_id,
+                              int32_t size_hint_in_dip,
+                              IconEffects icon_effects,
+                              LoadIconCallback callback);
+
+  // Removes the icons cached for a specified package ID.
+  void RemoveIconsForPackageId(const PackageId& package_id);
+
   // For testing only. Retrieves pointers to all the registered icons for a
   // package ID.
   std::vector<PromiseAppIcon*> GetIconsForTesting(const PackageId& package_id);
 
  private:
-  std::map<PackageId, std::vector<std::unique_ptr<PromiseAppIcon>>> icon_cache_;
+  // Map of all icons for each promise app registration. The inner map
+  // (std::map<int, PromiseAppIconPtr>) contains all the icons for a promise
+  // app, keyed (and ordered) by the icon width to make it easier to
+  // retrieve a requested icon size.
+  std::map<PackageId, std::map<int, PromiseAppIconPtr>> icon_cache_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

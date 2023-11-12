@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #import "base/apple/bundle_locations.h"
+#import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/safe_mode/safe_mode_app_interface.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
@@ -19,10 +19,6 @@
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
 
@@ -172,7 +168,7 @@ void AssertTryAgainButtonOnPage() {
   [ChromeEarlGrey waitForIncognitoTabCount:1];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_IOS_RETURN_TO_RECENT_TAB_TITLE))]
+                                   IDS_IOS_TAB_RESUMPTION_TITLE))]
       assertWithMatcher:grey_sufficientlyVisible()];
   [SafeModeAppInterface setFailedStartupAttemptCount:0];
 }

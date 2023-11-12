@@ -2,26 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/ash_element_identifiers.h"
 #include "ash/constants/ash_features.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/pill_button.h"
 #include "ash/style/system_dialog_delegate_view.h"
-#include "ash/user_education/user_education_constants.h"
 #include "ash/user_education/views/help_bubble_view_ash.h"
 #include "ash/user_education/welcome_tour/welcome_tour_controller.h"
-#include "ash/user_education/welcome_tour/welcome_tour_dialog.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/app_list/app_list_client_impl.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
-#include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/interaction/element_tracker_views.h"
@@ -54,7 +59,12 @@ MATCHER_P(RootWindow, matcher, "") {
 class WelcomeTourInteractiveUiTest : public InteractiveBrowserTest {
  public:
   WelcomeTourInteractiveUiTest() {
-    scoped_feature_list_.InitAndEnableFeature(ash::features::kWelcomeTour);
+    // NOTE: These tests are not concerned with user eligibility, so explicitly
+    // force user eligibility for the Welcome Tour.
+    scoped_feature_list_.InitWithFeatures(
+        {ash::features::kWelcomeTour,
+         ash::features::kWelcomeTourForceUserEligibility},
+        {});
 
     // TODO(http://b/277091006): Remove after preventing app launches.
     // Prevent the browser from launching as it is not needed to fully exercise
@@ -83,15 +93,58 @@ class WelcomeTourInteractiveUiTest : public InteractiveBrowserTest {
             ash::WelcomeTourController::Get()->GetInitialElementContext()));
   }
 
-  // Returns a builder for an interaction step that waits for the dialog.
-  [[nodiscard]] static auto WaitForDialog() {
-    return WaitForShow(
-        ash::WelcomeTourDialog::kWelcomeTourDialogElementIdForTesting);
+  // Returns a builder for an interaction step that waits for the app list
+  // bubble to hide.
+  [[nodiscard]] static auto WaitForAppListBubbleToHide() {
+    return WaitForHide(ash::HelpBubbleViewAsh::kHelpBubbleElementIdForTesting);
+  }
+
+  // Returns a builder for an interaction step that waits for the browser.
+  [[nodiscard]] static auto WaitForBrowser() {
+    return WaitForShow(kBrowserViewElementId);
+  }
+
+  // Returns a builder for an interaction step that waits for the dialog to have
+  // the expected visibility.
+  [[nodiscard]] static auto WaitForDialogVisibility(bool visible) {
+    return visible ? WaitForShow(ash::kWelcomeTourDialogElementId)
+                   : WaitForHide(ash::kWelcomeTourDialogElementId);
   }
 
   // Returns a builder for an interaction step that waits for a help bubble.
   [[nodiscard]] static auto WaitForHelpBubble() {
     return WaitForShow(ash::HelpBubbleViewAsh::kHelpBubbleElementIdForTesting);
+  }
+
+  // Returns a builder for an interaction step that waits for login user view.
+  [[nodiscard]] static auto WaitForLoginUserView() {
+    return WaitForShow(ash::kLoginUserViewElementId);
+  }
+
+  // Returns a builder for an interaction step that checks the visibility of
+  // app list bubble.
+  [[nodiscard]] static auto CheckAppListBubbleVisibility(bool visible) {
+    return CheckViewProperty(ash::kAppListBubbleViewElementId,
+                             &views::View::GetVisible, visible);
+  }
+
+  // Returns a builder for an interaction step that checks the browser is
+  // for a web app associated with the specified `app_id`.
+  [[nodiscard]] static auto CheckBrowserIsForWebApp(
+      const web_app::AppId& app_id) {
+    return CheckView(kBrowserViewElementId,
+                     [app_id](BrowserView* browser_view) {
+                       return web_app::AppBrowserController::IsForWebApp(
+                           browser_view->browser(), app_id);
+                     });
+  }
+
+  // Returns a builder for an interaction step that checks whether the dialog
+  // accept button is focused.
+  [[nodiscard]] static auto CheckDialogAcceptButtonFocus(bool focused) {
+    return CheckViewProperty(
+        ash::SystemDialogDelegateView::kAcceptButtonIdForTesting,
+        &views::MdTextButton::HasFocus, focused);
   }
 
   // Returns a builder for an interaction step that checks the dialog accept
@@ -152,6 +205,13 @@ class WelcomeTourInteractiveUiTest : public InteractiveBrowserTest {
                              l10n_util::GetStringUTF16(message_id));
   }
 
+  // Returns a builder for an interaction step that checks whether the help
+  // bubble default button is focused.
+  [[nodiscard]] static auto CheckHelpBubbleDefaultButtonFocus(bool focused) {
+    return CheckViewProperty(ash::HelpBubbleViewAsh::kDefaultButtonIdForTesting,
+                             &views::MdTextButton::HasFocus, focused);
+  }
+
   // Returns a builder for an interaction step that checks that the default
   // button text of a help bubble matches the specified `message_id`.
   [[nodiscard]] static auto CheckHelpBubbleDefaultButtonText(int message_id) {
@@ -183,17 +243,18 @@ class WelcomeTourInteractiveUiTest : public InteractiveBrowserTest {
 IN_PROC_BROWSER_TEST_F(WelcomeTourInteractiveUiTest, WelcomeTour) {
   RunTestSequence(
       // Step 0: Dialog.
-      InAnyContext(WaitForDialog()),
-      InSameContext(Steps(CheckDialogAcceptButtonText(),
-                          CheckDialogCancelButtonText(),
-                          CheckDialogDescription(), CheckDialogTitle(),
-                          PressDialogAcceptButton(), FlushEvents())),
+      InAnyContext(WaitForDialogVisibility(true)),
+      InSameContext(Steps(
+          CheckDialogAcceptButtonFocus(true), CheckDialogAcceptButtonText(),
+          CheckDialogCancelButtonText(), CheckDialogDescription(),
+          CheckDialogTitle(), PressDialogAcceptButton(), FlushEvents())),
 
       // Step 1: Shelf.
       InAnyContext(WaitForHelpBubble()),
       InSameContext(Steps(
           CheckHelpBubbleAnchor(ash::kShelfViewElementId),
           CheckHelpBubbleBodyText(IDS_ASH_WELCOME_TOUR_SHELF_BUBBLE_BODY_TEXT),
+          CheckHelpBubbleDefaultButtonFocus(true),
           CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_NEXT_BUTTON),
           PressHelpBubbleDefaultButton(), FlushEvents())),
 
@@ -203,6 +264,7 @@ IN_PROC_BROWSER_TEST_F(WelcomeTourInteractiveUiTest, WelcomeTour) {
           Steps(CheckHelpBubbleAnchor(ash::kUnifiedSystemTrayElementId),
                 CheckHelpBubbleBodyText(
                     IDS_ASH_WELCOME_TOUR_STATUS_AREA_BUBBLE_BODY_TEXT),
+                CheckHelpBubbleDefaultButtonFocus(true),
                 CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_NEXT_BUTTON),
                 PressHelpBubbleDefaultButton(), FlushEvents())),
 
@@ -212,33 +274,68 @@ IN_PROC_BROWSER_TEST_F(WelcomeTourInteractiveUiTest, WelcomeTour) {
           Steps(CheckHelpBubbleAnchor(ash::kHomeButtonElementId),
                 CheckHelpBubbleBodyText(
                     IDS_ASH_WELCOME_TOUR_HOME_BUTTON_BUBBLE_BODY_TEXT),
+                CheckHelpBubbleDefaultButtonFocus(true),
                 CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_NEXT_BUTTON),
                 PressHelpBubbleDefaultButton(), FlushEvents())),
 
       // Step 4: Search box.
       InAnyContext(WaitForHelpBubble()),
       InSameContext(
-          Steps(CheckHelpBubbleAnchor(ash::kSearchBoxViewElementId),
+          Steps(CheckAppListBubbleVisibility(true),
+                CheckHelpBubbleAnchor(ash::kSearchBoxViewElementId),
                 CheckHelpBubbleBodyText(
                     IDS_ASH_WELCOME_TOUR_SEARCH_BOX_BUBBLE_BODY_TEXT),
+                CheckHelpBubbleDefaultButtonFocus(true),
                 CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_NEXT_BUTTON),
                 PressHelpBubbleDefaultButton(), FlushEvents())),
 
       // Step 5: Settings app.
       InAnyContext(WaitForHelpBubble()),
       InSameContext(
-          Steps(CheckHelpBubbleAnchor(ash::kSettingsAppElementId),
+          Steps(CheckAppListBubbleVisibility(true),
+                CheckHelpBubbleAnchor(ash::kSettingsAppElementId),
                 CheckHelpBubbleBodyText(
                     IDS_ASH_WELCOME_TOUR_SETTINGS_APP_BUBBLE_BODY_TEXT),
+                CheckHelpBubbleDefaultButtonFocus(true),
                 CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_NEXT_BUTTON),
                 PressHelpBubbleDefaultButton(), FlushEvents())),
 
       // Step 6: Explore app.
       InAnyContext(WaitForHelpBubble()),
       InSameContext(
-          Steps(CheckHelpBubbleAnchor(ash::kExploreAppElementId),
+          Steps(CheckAppListBubbleVisibility(true),
+                CheckHelpBubbleAnchor(ash::kExploreAppElementId),
                 CheckHelpBubbleBodyText(
                     IDS_ASH_WELCOME_TOUR_EXPLORE_APP_BUBBLE_BODY_TEXT),
-                CheckHelpBubbleDefaultButtonText(IDS_TUTORIAL_CLOSE_TUTORIAL),
-                PressHelpBubbleDefaultButton(), FlushEvents())));
+                CheckHelpBubbleDefaultButtonFocus(true),
+                CheckHelpBubbleDefaultButtonText(
+                    IDS_ASH_WELCOME_TOUR_COMPLETE_BUTTON_TEXT),
+                PressHelpBubbleDefaultButton(), FlushEvents())),
+
+      // Step 7: Explore app window.
+      InAnyContext(WaitForBrowser()),
+      InSameContext(Steps(WaitForAppListBubbleToHide(),
+                          CheckBrowserIsForWebApp(web_app::kHelpAppId))));
+}
+
+// An interactive UI test that locks the screen during the Welcome Tour.
+IN_PROC_BROWSER_TEST_F(WelcomeTourInteractiveUiTest,
+                       LockScreenDuringWelcomeTour) {
+  RunTestSequence(
+      // Wait for the Welcome Tour dialog to show.
+      InAnyContext(WaitForDialogVisibility(true)),
+
+      InSameContext(Steps(
+          // Lock screen through accelerator.
+          Do([]() {
+            ui::test::EventGenerator(ash::Shell::GetPrimaryRootWindow())
+                .PressAndReleaseKey(ui::KeyboardCode::VKEY_L,
+                                    ui::EF_COMMAND_DOWN);
+          }),
+
+          // Wait for the Welcome Tour dialog to hide.
+          WaitForDialogVisibility(false))),
+
+      // Wait for the login user view to show.
+      InAnyContext(WaitForLoginUserView()));
 }

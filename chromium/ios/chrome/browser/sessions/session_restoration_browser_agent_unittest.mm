@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
-#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/session_restoration_observer.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
@@ -44,9 +43,10 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// To get access to web::features::kEnableSessionSerializationOptimizations.
+// TODO(crbug.com/1383087): remove once the feature is fully launched.
+#import "base/test/scoped_feature_list.h"
+#import "ios/web/common/features.h"
 
 namespace {
 
@@ -139,10 +139,11 @@ class TestRestorationObserver : public SessionRestorationObserver {
 
 class SessionRestorationBrowserAgentTest : public PlatformTest {
  public:
-  SessionRestorationBrowserAgentTest()
-      : test_session_service_([[TestSessionService alloc] init]) {
-    DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  SessionRestorationBrowserAgentTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        web::features::kEnableSessionSerializationOptimizations);
 
+    test_session_service_ = [[TestSessionService alloc] init];
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
@@ -223,6 +224,7 @@ class SessionRestorationBrowserAgentTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
+  base::test::ScopedFeatureList scoped_feature_list_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<Browser> browser_;
@@ -688,11 +690,10 @@ TEST_F(SessionRestorationBrowserAgentTest, SaveAndRestoreEmptySession) {
 
   // Restore, expect that there are no sessions.
   const base::FilePath& state_path = chrome_browser_state_->GetStatePath();
-  SessionIOS* session =
+  SessionWindowIOS* session_window =
       [test_session_service_ loadSessionWithSessionID:session_id()
                                             directory:state_path];
-  ASSERT_EQ(1u, session.sessionWindows.count);
-  SessionWindowIOS* session_window = session.sessionWindows[0];
+
   session_restoration_agent_->RestoreSessionWindow(
       session_window, SessionRestorationScope::kAll);
 
@@ -725,11 +726,9 @@ TEST_F(SessionRestorationBrowserAgentTest, DISABLED_SaveAndRestoreSession) {
   browser_->GetWebStateList()->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
 
   const base::FilePath& state_path = chrome_browser_state_->GetStatePath();
-  SessionIOS* session =
+  SessionWindowIOS* session_window =
       [test_session_service_ loadSessionWithSessionID:session_id()
                                             directory:state_path];
-  ASSERT_EQ(1u, session.sessionWindows.count);
-  SessionWindowIOS* session_window = session.sessionWindows[0];
 
   // Restore from saved session.
   session_restoration_agent_->RestoreSessionWindow(
@@ -770,11 +769,10 @@ TEST_F(SessionRestorationBrowserAgentTest, SaveInProgressAndRestoreSession) {
   browser_->GetWebStateList()->CloseAllWebStates(WebStateList::CLOSE_NO_FLAGS);
 
   const base::FilePath& state_path = chrome_browser_state_->GetStatePath();
-  SessionIOS* session =
+  SessionWindowIOS* session_window =
       [test_session_service_ loadSessionWithSessionID:session_id()
                                             directory:state_path];
-  ASSERT_EQ(1u, session.sessionWindows.count);
-  SessionWindowIOS* session_window = session.sessionWindows[0];
+
   session_restoration_agent_->RestoreSessionWindow(
       session_window, SessionRestorationScope::kAll);
   ASSERT_EQ(5, browser_->GetWebStateList()->count());

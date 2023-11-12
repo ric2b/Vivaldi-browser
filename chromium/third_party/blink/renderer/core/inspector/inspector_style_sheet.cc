@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/css/css_media_rule.h"
 #include "third_party/blink/renderer/core/css/css_position_fallback_rule.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_rule.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_scope_rule.h"
@@ -50,7 +51,9 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_observer.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
+#include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css/properties/shorthand.h"
+#include "third_party/blink/renderer/core/css/property_registry.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -273,6 +276,32 @@ void StyleSheetHandler::EndRuleBody(unsigned offset) {
 }
 
 void StyleSheetHandler::AddNewRuleToSourceTree(CSSRuleSourceData* rule) {
+  // After a rule is parsed, if it doesn't have a header range
+  // and if it is a style rule it means that this is a "nested group
+  // rule"[1][2]. When there are property declarations in this rule there is an
+  // implicit nested rule is created for this to hold these declarations[3].
+  // However, when there aren't any property declarations in this rule
+  // there won't be an implicit nested rule for it and it will only
+  // contain parsed child rules[3].
+  // So, for that case, we are not adding the source data for the non
+  // existent implicit nested rule since it won't exist in the parsed
+  // CSS rules from the parser itself.
+  //
+  // [1]: https://drafts.csswg.org/css-nesting-1/#nested-group-rules
+  // [2]:
+  // https://source.chromium.org/chromium/chromium/src/+/refs/heads/main:third_party/blink/renderer/core/css/parser/css_parser_impl.cc;l=2122;drc=255b4e7036f1326f2219bd547d3d6dcf76064870
+  // [3]:
+  // https://source.chromium.org/chromium/chromium/src/+/refs/heads/main:third_party/blink/renderer/core/css/parser/css_parser_impl.cc;l=2131;drc=255b4e7036f1326f2219bd547d3d6dcf76064870
+  if (rule->rule_header_range.length() == 0 &&
+      (rule->type == StyleRule::RuleType::kStyle && rule->property_data.empty())) {
+    // Add the source data for the child rules since they exist in the
+    // rule data coming from the parser.
+    for (auto& child_rule : rule->child_rules) {
+      AddNewRuleToSourceTree(child_rule);
+    }
+    return;
+  }
+
   if (current_rule_data_stack_.empty())
     result_->push_back(rule);
   else
@@ -658,6 +687,7 @@ void FlattenSourceData(const CSSRuleSourceDataList& data_list,
       case StyleRule::kKeyframe:
       case StyleRule::kFontFeature:
       case StyleRule::kTry:
+      case StyleRule::kViewTransitions:
         result->push_back(data);
         break;
       case StyleRule::kStyle:
@@ -730,6 +760,7 @@ void CollectFlatRules(RuleList rule_list, CSSRuleVector* result) {
       case CSSRule::kKeyframeRule:
       case CSSRule::kFontFeatureRule:
       case CSSRule::kTryRule:
+      case CSSRule::kViewTransitionsRule:
         result->push_back(rule);
         break;
       case CSSRule::kStyleRule:
@@ -1678,7 +1709,8 @@ void InspectorStyleSheet::ParseText(const String& text) {
       MakeGarbageCollected<CSSRuleSourceDataList>();
   auto* style_sheet = MakeGarbageCollected<StyleSheetContents>(
       page_style_sheet_->Contents()->ParserContext());
-  StyleSheetHandler handler(text, page_style_sheet_->OwnerDocument(), rule_tree,
+  Document* owner_document = page_style_sheet_->OwnerDocument();
+  StyleSheetHandler handler(text, owner_document, rule_tree,
                             StyleSheetHandler::IssueReportingContext{
                                 page_style_sheet_->BaseURL(),
                                 page_style_sheet_->StartPositionInSource()});
@@ -1704,9 +1736,44 @@ void InspectorStyleSheet::ParseText(const String& text) {
 
   source_data_ = MakeGarbageCollected<CSSRuleSourceDataList>();
   FlattenSourceData(*rule_tree, source_data_.Get());
+
   // The number of rules parsed should be equal to the number of source data
   // entries:
   DCHECK_EQ(parsed_flat_rules_.size(), source_data_->size());
+
+  if (owner_document) {
+    const auto* property_registry = owner_document->GetPropertyRegistry();
+
+    if (property_registry) {
+      for (const auto& rule_source_data : *source_data_) {
+        for (auto& property_source_data : rule_source_data->property_data) {
+          if (!property_source_data.name.StartsWith("--") ||
+              !property_source_data.parsed_ok) {
+            continue;
+          }
+
+          // The defaulting keywords are always allowed
+          if (css_parsing_utils::IsCSSWideKeyword(property_source_data.value)) {
+            continue;
+          }
+
+          const auto* registration = property_registry->Registration(
+              AtomicString(property_source_data.name));
+          if (!registration) {
+            continue;
+          }
+          CSSTokenizer tokenizer(property_source_data.value);
+          Vector<CSSParserToken, 32> tokens = tokenizer.TokenizeToEOF();
+          CSSTokenizedValue tokenized_value{CSSParserTokenRange(tokens),
+                                            property_source_data.name};
+          if (!registration->Syntax().Parse(
+                  tokenized_value, *style_sheet->ParserContext(), false)) {
+            property_source_data.parsed_ok = false;
+          }
+        }
+      }
+    }
+  }
 }
 
 // The stylesheet text might be out of sync with `page_style_sheet_` rules.
@@ -1949,18 +2016,6 @@ InspectorStyleSheet::BuildObjectForRuleWithoutAncestorData(CSSStyleRule* rule) {
           .setStyle(BuildObjectForStyle(rule->style()))
           .build();
 
-  auto nesting_selectors = std::make_unique<protocol::Array<String>>();
-  CSSRule* ancestor_rule = rule->parentRule();
-  while (ancestor_rule) {
-    if (auto* style_rule = DynamicTo<CSSStyleRule>(ancestor_rule)) {
-      nesting_selectors->emplace_back(style_rule->selectorText());
-    }
-    ancestor_rule = ancestor_rule->parentRule();
-  }
-  if (nesting_selectors->size() > 0) {
-    result->setNestingSelectors(std::move(nesting_selectors));
-  }
-
   if (CanBind(origin_)) {
     if (!Id().empty())
       result->setStyleSheetId(Id());
@@ -2005,6 +2060,25 @@ InspectorStyleSheet::BuildObjectForTryRule(CSSTryRule* try_rule) {
   if (CanBind(origin_) && !Id().empty()) {
     result->setStyleSheetId(Id());
   }
+  return result;
+}
+
+std::unique_ptr<protocol::CSS::CSSPropertyRule>
+InspectorStyleSheet::BuildObjectForPropertyRule(
+    CSSPropertyRule* property_rule) {
+  std::unique_ptr<protocol::CSS::Value> name_text =
+      protocol::CSS::Value::create().setText(property_rule->name()).build();
+  CSSRuleSourceData* source_data = SourceDataForRule(property_rule);
+  if (source_data)
+    name_text->setRange(BuildSourceRangeObject(source_data->rule_header_range));
+  std::unique_ptr<protocol::CSS::CSSPropertyRule> result =
+      protocol::CSS::CSSPropertyRule::create()
+          .setPropertyName(std::move(name_text))
+          .setOrigin(origin_)
+          .setStyle(BuildObjectForStyle(property_rule->Style()))
+          .build();
+  if (CanBind(origin_) && !Id().empty())
+    result->setStyleSheetId(Id());
   return result;
 }
 

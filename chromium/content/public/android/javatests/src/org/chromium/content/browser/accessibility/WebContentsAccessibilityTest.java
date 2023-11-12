@@ -49,6 +49,14 @@ import static org.chromium.content.browser.accessibility.AccessibilityContentShe
 import static org.chromium.content.browser.accessibility.AccessibilityContentShellTestUtils.sRangeInfoMatcher;
 import static org.chromium.content.browser.accessibility.AccessibilityContentShellTestUtils.sTextMatcher;
 import static org.chromium.content.browser.accessibility.AccessibilityContentShellTestUtils.sViewIdResourceNameMatcher;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_INITIAL;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_SUCCESSIVE;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_INITIAL;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_SUCCESSIVE;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_INITIAL;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_SUCCESSIVE;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_INITIAL;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_SUCCESSIVE;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.CACHE_MAX_NODES_HISTOGRAM;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.CACHE_PERCENTAGE_RETRIEVED_FROM_CACHE_HISTOGRAM;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.EVENTS_DROPPED_HISTOGRAM;
@@ -60,6 +68,9 @@ import static org.chromium.content.browser.accessibility.AccessibilityHistogramR
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_BASIC;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_COMPLETE;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_FORM_CONTROLS;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.USAGE_ACCESSIBILITY_ALWAYS_ON_TIME;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.USAGE_FOREGROUND_TIME;
+import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.USAGE_NATIVE_INITIALIZED_TIME;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_DATA_REQUEST_IMAGE_DATA_KEY;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_CHROME_ROLE;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_IMAGE_DATA;
@@ -156,9 +167,13 @@ public class WebContentsAccessibilityTest {
             "Expected focus to be on a different node than it is.";
 
     // ContentFeatureList maps used for various tests.
-    private static final Map<String, Boolean> ON_DEMAND_ON_AXMODES_ON =
-            Map.of(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS, true,
-                    ContentFeatureList.ACCESSIBILITY_PERFORMANCE_FILTERING, true);
+    private static final Map<String, Boolean> AXMODES_ON_PERF_TEST_OFF =
+            Map.of(ContentFeatureList.ACCESSIBILITY_PERFORMANCE_FILTERING, true,
+                    ContentFeatureList.ACCESSIBILITY_PERFORMANCE_TESTING, false);
+    private static final Map<String, Boolean> AUTO_DISABLE_V2_ON =
+            Map.of(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2, true);
+    private static final Map<String, Boolean> PERF_TEST_OFF =
+            Map.of(ContentFeatureList.ACCESSIBILITY_PERFORMANCE_TESTING, false);
 
     // Constant values for unit tests
     private static final int UNSUPPRESSED_EXPECTED_COUNT = 15;
@@ -400,18 +415,18 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Complete.
+     * Test that UMA histograms are recorded for AX Mode Complete.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeComplete() throws Throwable {
+    public void testUMAHistograms_AXModeComplete() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTML("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and accessibility state.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setIsScreenReaderEnabledForTesting(true);
             AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
@@ -435,18 +450,18 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Form Controls.
+     * Test that UMA histograms are recorded for AX Mode Form Controls.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeFormControls() throws Throwable {
+    public void testUMAHistograms_AXModeFormControls() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTMLForFormControlsMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and accessibility state.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setIsScreenReaderEnabledForTesting(false);
             AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(true);
@@ -471,18 +486,18 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Basic.
+     * Test that UMA histograms are recorded for AX Mode Basic.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeBasic() throws Throwable {
+    public void testUMAHistograms_AXModeBasic() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTMLForBasicMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and screen reader state.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setIsScreenReaderEnabledForTesting(false);
             AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
@@ -507,19 +522,18 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Complete
-     * when 100% of events are dropped.
+     * Test that UMA histograms are recorded for AX Mode Complete when 100% of events are dropped.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeComplete_100Percent() throws Throwable {
+    public void testUMAHistograms_AXModeComplete_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTML("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and screen reader state, set event type masks to empty.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
             AccessibilityState.setIsScreenReaderEnabledForTesting(true);
@@ -545,19 +559,19 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Form Controls
-     * when 100% of events are dropped.
+     * Test that UMA histograms are recorded for AX Mode Form Controls when 100% of events are
+     * dropped.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeFormControls_100Percent() throws Throwable {
+    public void testUMAHistograms_AXModeFormControls_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTMLForFormControlsMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and screen reader state, set event type masks to empty.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
             AccessibilityState.setIsScreenReaderEnabledForTesting(false);
@@ -583,19 +597,18 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Test that UMA histograms are recorded for the OnDemand AT feature and AX Mode Basic
-     * when 100% of events are dropped.
+     * Test that UMA histograms are recorded for AX Mode Basic when 100% of events are dropped.
      */
     @Test
     @SmallTest
-    public void testUMAHistograms_OnDemand_AXModeBasic_100Percent() throws Throwable {
+    public void testUMAHistograms_AXModeBasic_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
         setupTestWithHTMLForBasicMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and screen reader state, set event type masks to empty.
-        FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
+        FeatureList.setTestFeatures(AXMODES_ON_PERF_TEST_OFF);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
             AccessibilityState.setIsScreenReaderEnabledForTesting(false);
@@ -632,14 +645,114 @@ public class WebContentsAccessibilityTest {
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
+        // Set the correct performance testing state so the cache is used.
+        FeatureList.setTestFeatures(PERF_TEST_OFF);
+
         var histogramWatcher =
                 HistogramWatcher.newBuilder()
-                        .expectIntRecord(CACHE_MAX_NODES_HISTOGRAM, 3)
+                        .expectIntRecord(CACHE_MAX_NODES_HISTOGRAM, 4)
                         .expectAnyRecord(CACHE_PERCENTAGE_RETRIEVED_FROM_CACHE_HISTOGRAM)
                         .build();
 
         performHistogramActions();
 
+        histogramWatcher.assertExpected();
+    }
+
+    /**
+     * Test that UMA histograms are recorded when an instance has disabled/re-enabled accessibility
+     * with the Auto-disable Accessibility feature.
+     */
+    @Test
+    @SmallTest
+    public void testUMAHistograms_AutoDisableAccessibilityV2() throws Throwable {
+        setupTestWithHTML("<p>This is a test</p>");
+        waitForNodeMatching(sTextMatcher, "This is a test");
+
+        FeatureList.setTestFeatures(AUTO_DISABLE_V2_ON);
+
+        // The test suite always initializes native, so first we will disable it manually.
+        var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_INITIAL)
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_INITIAL)
+                        .expectAnyRecord(USAGE_NATIVE_INITIALIZED_TIME)
+                        .expectNoRecords(USAGE_ACCESSIBILITY_ALWAYS_ON_TIME)
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_SUCCESSIVE)
+                        .expectNoRecords(
+                                AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_SUCCESSIVE)
+                        .expectNoRecords(USAGE_FOREGROUND_TIME)
+                        .build();
+
+        // The test suite always initializes native, so mock a call to disable accessibility. We
+        // must update AccessibilityState to ensure the AXMode is propagated through to C++.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.mWcax.forceAutoDisableAccessibilityForTesting();
+            AccessibilityState.setIsAnyAccessibilityServiceEnabledForTesting(false);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+        });
+
+        // Assert that we record initial enabled time and that disabled was called once.
+        histogramWatcher.assertExpected();
+
+        histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_INITIAL)
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_INITIAL)
+                        .expectNoRecords(USAGE_FOREGROUND_TIME)
+                        .expectNoRecords(USAGE_NATIVE_INITIALIZED_TIME)
+                        .expectNoRecords(USAGE_ACCESSIBILITY_ALWAYS_ON_TIME)
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_SUCCESSIVE)
+                        .expectNoRecords(
+                                AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_SUCCESSIVE)
+                        .build();
+
+        // To re-enable native accessibility, we need to make a request from the framework.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AccessibilityState.setIsScreenReaderEnabledForTesting(true);
+            AccessibilityState.setIsAnyAccessibilityServiceEnabledForTesting(true);
+            mActivityTestRule.mWcax.getAccessibilityNodeProvider();
+        });
+
+        // Assert that we record initial disabled time and that re-enabled was called once.
+        histogramWatcher.assertExpected();
+
+        // We can disable accessibility again, and see entries in the 'successive' histograms.
+        histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_INITIAL)
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_INITIAL)
+                        .expectAnyRecord(USAGE_NATIVE_INITIALIZED_TIME)
+                        .expectNoRecords(USAGE_ACCESSIBILITY_ALWAYS_ON_TIME)
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_ENABLED_TIME_SUCCESSIVE)
+                        .expectAnyRecord(
+                                AUTO_DISABLE_ACCESSIBILITY_DISABLE_METHOD_CALLED_SUCCESSIVE)
+                        .expectNoRecords(USAGE_FOREGROUND_TIME)
+                        .build();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.mWcax.forceAutoDisableAccessibilityForTesting();
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+            AccessibilityState.setIsAnyAccessibilityServiceEnabledForTesting(false);
+        });
+        histogramWatcher.assertExpected();
+
+        // Finally re-enable accessibility again to verify 'successive' histograms.
+        histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_INITIAL)
+                        .expectNoRecords(AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_INITIAL)
+                        .expectNoRecords(USAGE_FOREGROUND_TIME)
+                        .expectNoRecords(USAGE_NATIVE_INITIALIZED_TIME)
+                        .expectNoRecords(USAGE_ACCESSIBILITY_ALWAYS_ON_TIME)
+                        .expectAnyRecord(AUTO_DISABLE_ACCESSIBILITY_DISABLED_TIME_SUCCESSIVE)
+                        .expectAnyRecord(
+                                AUTO_DISABLE_ACCESSIBILITY_REENABLE_METHOD_CALLED_SUCCESSIVE)
+                        .build();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AccessibilityState.setIsScreenReaderEnabledForTesting(true);
+            AccessibilityState.setIsAnyAccessibilityServiceEnabledForTesting(true);
+            mActivityTestRule.mWcax.getAccessibilityNodeProvider();
+        });
         histogramWatcher.assertExpected();
     }
 
@@ -721,6 +834,27 @@ public class WebContentsAccessibilityTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> mActivityTestRule.mWcax.restoreFocus());
         CriteriaHelper.pollUiThread(
                 () -> createAccessibilityNodeInfo(vvid2).isAccessibilityFocused());
+    }
+
+    /**
+     * Tests that Auto-disable Accessibility timers are not set for instances that are not
+     * candidates for the feature (e.g. WebView, CCT).
+     */
+    @Test
+    @SmallTest
+    public void testAutoDisableAccessibility_candidatesCheck() throws Throwable {
+        setupTestWithHTML("<p>This is a test</p>");
+        waitForNodeMatching(sTextMatcher, "This is a test");
+
+        // Enable feature, but set this instance as not a candidate.
+        FeatureList.setTestFeatures(AUTO_DISABLE_V2_ON);
+        mActivityTestRule.mWcax.setIsAutoDisableAccessibilityCandidateForTesting(false);
+
+        // Changing the accessibility state will refresh the native state.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { AccessibilityState.setIsTextShowPasswordEnabledForTesting(true); });
+
+        Assert.assertFalse(mActivityTestRule.mWcax.hasAnyPendingTimersForTesting());
     }
 
     // ------------------ Tests of AccessibilityNodeInfo caching mechanism ------------------ //
@@ -1676,8 +1810,8 @@ public class WebContentsAccessibilityTest {
         // Build a simple web page with a div and overflow:scroll
         setupTestWithHTML(
                 "<div id='div1' title='1234' style='overflow:scroll; width: 200px; height:50px'>\n"
-                + "  <p id='p1'>Example Paragraph 1</p>\n"
-                + "  <p id='p2'>Example Paragraph 2</p>\n"
+                + "  <p id='p1' tabindex=0>Example Paragraph 1</p>\n"
+                + "  <p id='p2' tabindex=0>Example Paragraph 2</p>\n"
                 + "</div>");
 
         // Define our root node and paragraph node IDs by looking for their ids.

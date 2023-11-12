@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Restaurar Configurações</translation>
 <translation id="4478664379124702289">Salvar Lin&amp;k Como...</translation>
 <translation id="4520385623207007473">Cookies em uso</translation>
+<translation id="456449593072900590">Excluir ao sair</translation>
 <translation id="4580596421317071374">As senhas são salvas no <ph name="GOOGLE_PASSWORD_MANAGER" /> neste dispositivo.</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicativos e extensões só podem ser modificados pelo administrador (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Colorido</translation>
 <translation id="5485102783864353244">Adicionar aplicativo</translation>
 <translation id="5486561344817861625">Simular Reinicialização do Navegador</translation>
-<translation id="5487521232677179737">Excluir Dados</translation>
 <translation id="5509693895992845810">Salvar &amp;Como...</translation>
 <translation id="5521078259930077036">Esta é a página inicial que você esperava?</translation>
 <translation id="5542132724887566711">Perfil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Desconhecido</translation>
 <translation id="5851868085455377790">Emissor</translation>
 <translation id="5860491529813859533">Ativar</translation>
-<translation id="5867841422488265304">Pesquisar ou digitar endereço da web</translation>
 <translation id="5910363049092958439">Sal&amp;var Imagem Como...</translation>
 <translation id="5914724413750400082">Módulo (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Verificar ortografia ao digitar</translation>
-<translation id="73786666777299047">Abrir a Chrome Web Store</translation>
 <translation id="7385854874724088939">Ocorreu um erro durante a impressão.  Verifique a sua impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória da GPU</translation>
 <translation id="7421925624202799674">Exibir Código Fonte da Página</translation>
@@ -442,6 +440,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8382913212082956454">Copiar &amp;endereço de e-mail</translation>
 <translation id="8434480141477525001">Porta de Depuração de Cliente Nativo</translation>
 <translation id="8449008133205184768">Colar com o Mesmo Estilo</translation>
+<translation id="8477178913400731244">Excluir dados</translation>
 <translation id="8477384620836102176">&amp;Geral</translation>
 <translation id="8496717697661868878">Executar Este Plug-in</translation>
 <translation id="8512476990829870887">Encerrar processo</translation>

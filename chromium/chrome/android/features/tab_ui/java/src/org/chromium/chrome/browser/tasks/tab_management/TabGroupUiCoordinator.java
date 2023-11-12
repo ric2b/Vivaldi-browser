@@ -19,21 +19,18 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
-import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -62,6 +59,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     static final String COMPONENT_NAME = "TabStrip";
     private final Activity mActivity;
     private final Context mContext;
+    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
     private final PropertyModel mModel;
     private final IncognitoStateProvider mIncognitoStateProvider;
     private final TabGroupUiToolbarView mToolbarView;
@@ -89,6 +87,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
      * Creates a new {@link TabGroupUiCoordinator}
      */
     public TabGroupUiCoordinator(@NonNull Activity activity, @NonNull ViewGroup parentView,
+            @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull IncognitoStateProvider incognitoStateProvider,
             @NonNull ScrimCoordinator scrimCoordinator,
             @NonNull ObservableSupplier<Boolean> omniboxFocusStateSupplier,
@@ -104,6 +103,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         try (TraceEvent e = TraceEvent.scoped("TabGroupUiCoordinator.constructor")) {
             mActivity = activity;
             mContext = parentView.getContext();
+            mBrowserControlsStateProvider = browserControlsStateProvider;
             mIncognitoStateProvider = incognitoStateProvider;
             mScrimCoordinator = scrimCoordinator;
             mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
@@ -130,10 +130,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         assert mTabGridDialogControllerSupplier != null;
         if (mTabGridDialogCoordinator != null) return;
 
-        mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity, mTabModelSelector,
-                mTabContentManager, mTabCreatorManager, mActivity.findViewById(R.id.coordinator),
-                null, null, null, mScrimCoordinator, mTabStripCoordinator.getTabGroupTitleEditor(),
-                mRootView);
+        mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity,
+                mBrowserControlsStateProvider, mTabModelSelector, mTabContentManager,
+                mTabCreatorManager, mActivity.findViewById(R.id.coordinator), null, null, null,
+                mScrimCoordinator, mTabStripCoordinator.getTabGroupTitleEditor(), mRootView);
         mTabGridDialogControllerSupplier.set(mTabGridDialogCoordinator);
     }
 
@@ -146,8 +146,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             Callback<Object> onModelTokenChange) {
         try (TraceEvent e = TraceEvent.scoped("TabGroupUiCoordinator.initializeWithNative")) {
             mTabStripCoordinator = new TabListCoordinator(TabListCoordinator.TabListMode.STRIP,
-                    mContext, mTabModelSelector, null, null, false, null, null,
-                    TabProperties.UiType.STRIP, null, null, mTabListContainerView, true,
+                    mContext, mBrowserControlsStateProvider, mTabModelSelector, null, null, false,
+                    null, null, TabProperties.UiType.STRIP, null, null, mTabListContainerView, true,
                     COMPONENT_NAME, mRootView, onModelTokenChange);
             mTabStripCoordinator.initWithNative(mDynamicResourceLoaderSupplier.get());
 
@@ -158,8 +158,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
             // TODO(crbug.com/972217): find a way to enable interactions between grid tab switcher
             //  and the dialog here.
-            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(activity)
-                    && mScrimCoordinator != null) {
+            if (mScrimCoordinator != null) {
                 mTabGridDialogControllerSupplier =
                         new OneshotSupplierImpl<>() {
                             @Override
@@ -192,7 +191,6 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                 @Override
                 public void restoreCompleted() {
                     recordTabGroupCount();
-                    recordSessionCount();
                     mTabModelSelector.getModel(false).removeObserver(this);
                 }
             });
@@ -218,10 +216,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                 && mBottomSheetController.getSheetState()
                         == BottomSheetController.SheetState.HIDDEN) {
             TabGroupUtils.maybeShowIPH(FeatureConstants.TAB_GROUPS_TAP_TO_SEE_ANOTHER_TAB_FEATURE,
-                    mTabStripCoordinator.getContainerView(),
-                    TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)
-                            ? mBottomSheetController
-                            : null);
+                    mTabStripCoordinator.getContainerView(), mBottomSheetController);
         }
         mTabStripCoordinator.resetWithListOfTabs(tabs);
     }
@@ -286,7 +281,6 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         if (!mIsWarmOnResumeSupplier.get()) return;
 
         recordTabGroupCount();
-        recordSessionCount();
     }
 
     private void recordTabGroupCount() {
@@ -294,73 +288,13 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         if (ChromeApplicationImpl.isVivaldi()) return;
 
         if (mTabModelSelector == null) return;
+
         TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
-
-        TabModelFilter normalTabModelFilter = provider.getTabModelFilter(false);
-
-        if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
-            String actualType = normalTabModelFilter == null
-                    ? "null"
-                    : normalTabModelFilter.getClass().getName();
-            assert false
-                : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
-                  + actualType;
-
-            return;
-        }
-
         TabGroupModelFilter normalFilter = (TabGroupModelFilter) provider.getTabModelFilter(false);
         TabGroupModelFilter incognitoFilter =
                 (TabGroupModelFilter) provider.getTabModelFilter(true);
         int groupCount = normalFilter.getTabGroupCount() + incognitoFilter.getTabGroupCount();
         RecordHistogram.recordCount1MHistogram("TabGroups.UserGroupCount", groupCount);
-        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
-            int namedGroupCount = 0;
-            for (int i = 0; i < normalFilter.getTabGroupCount(); i++) {
-                int rootId = CriticalPersistedTabData.from(normalFilter.getTabAt(i)).getRootId();
-                if (TabGroupTitleUtils.getTabGroupTitle(rootId) != null) {
-                    namedGroupCount += 1;
-                }
-            }
-            for (int i = 0; i < incognitoFilter.getTabGroupCount(); i++) {
-                int rootId = CriticalPersistedTabData.from(incognitoFilter.getTabAt(i)).getRootId();
-                if (TabGroupTitleUtils.getTabGroupTitle(rootId) != null) {
-                    namedGroupCount += 1;
-                }
-            }
-            RecordHistogram.recordCount1MHistogram(
-                    "TabGroups.UserNamedGroupCount", namedGroupCount);
-        }
-    }
-
-    private void recordSessionCount() {
-        // Note(david@vivaldi.com): Nothing will be recorded.
-        if (ChromeApplicationImpl.isVivaldi()) return;
-
-        TabModelFilter normalTabModelFilter =
-                mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
-
-        if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
-            String actualType = normalTabModelFilter == null
-                    ? "null"
-                    : normalTabModelFilter.getClass().getName();
-            assert false
-                : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
-                  + actualType;
-
-            return;
-        }
-
-        LayoutStateProvider layoutStateProvider = mLayoutStateProviderSupplier.get();
-        if (layoutStateProvider != null
-                && layoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER)) {
-            return;
-        }
-
-        Tab currentTab = mTabModelSelector.getCurrentTab();
-        if (currentTab == null) return;
-        TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
-        ((TabGroupModelFilter) provider.getCurrentTabModelFilter()).recordSessionsCount(currentTab);
     }
 
     @Override

@@ -12,7 +12,6 @@
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/ios/shared_password_controller.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
 #import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
@@ -29,15 +28,10 @@
 #import "ios/chrome/common/ui/reauthentication/reauthentication_event.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_protocol.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using PasswordSuggestionBottomSheetExitReason::kDismissal;
 using PasswordSuggestionBottomSheetExitReason::kUsePasswordSuggestion;
@@ -74,8 +68,18 @@ using ReauthenticationEvent::kSuccess;
 
   // The WebStateList observed by this mediator and the observer bridge.
   raw_ptr<WebStateList> _webStateList;
-  std::unique_ptr<web::WebStateObserverBridge> _observer;
+
+  // Bridge and forwarder for observing WebState events. The forwarder is a
+  // scoped observation, so the bridge will automatically be removed from the
+  // relevant observer list.
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<ActiveWebStateObservationForwarder> _forwarder;
+
+  // Bridge for observing WebStateList events.
+  std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
+  std::unique_ptr<
+      base::ScopedObservation<WebStateList, WebStateListObserverBridge>>
+      _webStateListObservation;
 
   // Vector of credentials related to the current page.
   std::vector<password_manager::CredentialUIEntry> _credentials;
@@ -86,9 +90,6 @@ using ReauthenticationEvent::kSuccess;
 
   // Whether to disable the bottom sheet on exit. Default is false.
   bool _disableBottomSheetOnExit;
-
-  // Web Frame associated with this bottom sheet.
-  std::string _frameId;
 
   // FaviconLoader is a keyed service that uses LargeIconService to retrieve
   // favicon images.
@@ -118,7 +119,6 @@ using ReauthenticationEvent::kSuccess;
   if (self = [super init]) {
     _needsRefocus = true;
     _disableBottomSheetOnExit = false;
-    _frameId = params.frame_id;
     _faviconLoader = faviconLoader;
     _prefService = prefService;
     _reauthenticationModule = reauthModule;
@@ -131,9 +131,14 @@ using ReauthenticationEvent::kSuccess;
     web::WebState* activeWebState = _webStateList->GetActiveWebState();
 
     // Create and register the observers.
-    _observer = std::make_unique<web::WebStateObserverBridge>(self);
+    _webStateObserver = std::make_unique<web::WebStateObserverBridge>(self);
     _forwarder = std::make_unique<ActiveWebStateObservationForwarder>(
-        _webStateList, _observer.get());
+        _webStateList, _webStateObserver.get());
+    _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
+    _webStateListObservation = std::make_unique<
+        base::ScopedObservation<WebStateList, WebStateListObserverBridge>>(
+        _webStateListObserver.get());
+    _webStateListObservation->Observe(_webStateList);
 
     if (activeWebState) {
       FormSuggestionTabHelper* tabHelper =
@@ -170,8 +175,11 @@ using ReauthenticationEvent::kSuccess;
 - (void)disconnect {
   _prefService = nullptr;
   _faviconLoader = nullptr;
+
+  _webStateListObservation = nullptr;
+  _webStateListObserver = nullptr;
   _forwarder = nullptr;
-  _observer = nullptr;
+  _webStateObserver = nullptr;
   _webStateList = nullptr;
 }
 
@@ -269,16 +277,18 @@ using ReauthenticationEvent::kSuccess;
     [self incrementDismissCount];
 
     web::WebState* activeWebState = _webStateList->GetActiveWebState();
-    AutofillBottomSheetJavaScriptFeature* feature =
-        AutofillBottomSheetJavaScriptFeature::GetInstance();
-    web::WebFramesManager* framesManager =
-        feature->GetWebFramesManager(activeWebState);
-    if (framesManager) {
-      web::WebFrame* frame = framesManager->GetFrameWithId(_frameId);
-      AutofillBottomSheetTabHelper::FromWebState(activeWebState)
-          ->DetachPasswordListeners(frame, _needsRefocus);
-      [self disconnect];
+    if (!activeWebState) {
+      return;
     }
+
+    AutofillBottomSheetTabHelper* tabHelper =
+        AutofillBottomSheetTabHelper::FromWebState(activeWebState);
+    if (!tabHelper) {
+      return;
+    }
+
+    tabHelper->DetachPasswordListenersForAllFrames(_needsRefocus);
+    [self disconnect];
   }
 }
 
@@ -311,7 +321,11 @@ using ReauthenticationEvent::kSuccess;
 
 - (void)loadFaviconWithBlockHandler:
     (FaviconLoader::FaviconAttributesCompletionBlock)faviconLoadedBlock {
-  CHECK(_faviconLoader);
+  if (!_faviconLoader) {
+    // Mediator is disconnecting (bottom sheet is being closed). No need to
+    // fetch for the favicon anymore.
+    return;
+  }
   if (!_URL.is_empty()) {
     _faviconLoader->FaviconForPageUrl(
         _URL, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
@@ -325,63 +339,29 @@ using ReauthenticationEvent::kSuccess;
 
 - (void)didChangeWebStateList:(WebStateList*)webStateList
                        change:(const WebStateListChange&)change
-                    selection:(const WebStateSelection&)selection {
+                       status:(const WebStateListStatus&)status {
   DCHECK_EQ(_webStateList, webStateList);
-  switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
-      // TODO(crbug.com/1442546): Move the implementation from
-      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason to
-      // here. Note that here is reachable only when `reason` ==
-      // ActiveWebStateChangeReason::Activated.
-      break;
-    case WebStateListChange::Type::kDetach:
-      // Do nothing when a WebState is detached.
-      break;
-    case WebStateListChange::Type::kMove:
-      // Do nothing when a WebState is moved.
-      break;
-    case WebStateListChange::Type::kReplace: {
-      if (selection.index == webStateList->active_index()) {
-        [self onWebStateLost];
-      }
-      break;
-    }
-    case WebStateListChange::Type::kInsert:
-      // Do nothing when a new WebState is inserted.
-      break;
+  if (status.active_web_state_change()) {
+    [self onWebStateChange];
   }
-}
-
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
-  DCHECK_EQ(_webStateList, webStateList);
-  [self onWebStateLost];
 }
 
 - (void)webStateListDestroyed:(WebStateList*)webStateList {
   DCHECK_EQ(webStateList, _webStateList);
-  _forwarder = nullptr;
-  _observer = nullptr;
-  _webStateList = nullptr;
-  [self onWebStateLost];
+  // `disconnect` cleans up all references to `_webStateList` and objects that
+  // depend on it.
+  [self disconnect];
+  [self onWebStateChange];
 }
 
 #pragma mark - CRWWebStateObserver
 
 - (void)webStateDestroyed:(web::WebState*)webState {
-  [self onWebStateLost];
-}
-
-- (void)webState:(web::WebState*)webState
-    didFinishNavigation:(web::NavigationContext*)navigation {
-  [self onWebStateLost];
+  [self onWebStateChange];
 }
 
 - (void)renderProcessGoneForWebState:(web::WebState*)webState {
-  [self onWebStateLost];
+  [self onWebStateChange];
 }
 
 #pragma mark - PasswordFetcherDelegate
@@ -399,7 +379,7 @@ using ReauthenticationEvent::kSuccess;
 
 #pragma mark - Private
 
-- (void)onWebStateLost {
+- (void)onWebStateChange {
   _needsRefocus = false;
   _disableBottomSheetOnExit = false;
   [self.consumer dismiss];

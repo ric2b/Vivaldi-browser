@@ -6,15 +6,15 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_features.h"
-#import "ios/chrome/browser/bookmarks/account_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -37,10 +37,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface BookmarksFolderChooserCoordinator () <
     BookmarksFolderChooserMediatorDelegate,
@@ -147,7 +143,7 @@ using vivaldi::IsVivaldiRunning;
   currentBrowserState = browserState;
   // End Vivaldi
 
-  bookmarks::BookmarkModel* profileModel =
+  bookmarks::BookmarkModel* localOrSyncableModel =
       ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
           browserState);
   bookmarks::BookmarkModel* accountModel =
@@ -157,11 +153,11 @@ using vivaldi::IsVivaldiRunning;
   syncer::SyncService* syncService =
       SyncServiceFactory::GetForBrowserState(browserState);
   _mediator = [[BookmarksFolderChooserMediator alloc]
-      initWithProfileBookmarkModel:profileModel
-              accountBookmarkModel:accountModel
-                       editedNodes:std::move(_hiddenNodes)
-             authenticationService:authenticationService
-                       syncService:syncService];
+      initWithLocalOrSyncableBookmarkModel:localOrSyncableModel
+                      accountBookmarkModel:accountModel
+                               editedNodes:std::move(_hiddenNodes)
+                     authenticationService:authenticationService
+                               syncService:syncService];
   _hiddenNodes.clear();
   _mediator.delegate = self;
   _mediator.selectedFolderNode = _selectedFolder;

@@ -2,7 +2,6 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
 source_set("vivaldi_promo") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "vivaldi_promo_constants.h",
     "vivaldi_promo_constants.mm",

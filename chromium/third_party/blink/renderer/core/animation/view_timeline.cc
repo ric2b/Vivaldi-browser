@@ -10,7 +10,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_timeline.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_timeline_options.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
-#include "third_party/blink/renderer/core/animation/view_timeline_attachment.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -23,8 +22,12 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/layout_inline.h"
+#include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/svg/svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/platform/geometry/calculation_value.h"
 
 namespace blink {
@@ -116,11 +119,18 @@ const CSSValuePair* ParseInsetPair(Document& document, const String str_value) {
 }
 
 bool IsStyleDependent(const CSSValue* value) {
-  if (!value)
+  if (!value) {
     return false;
+  }
 
   if (const CSSPrimitiveValue* css_primitive_value =
           DynamicTo<CSSPrimitiveValue>(value)) {
+    if (!value->IsNumericLiteralValue()) {
+      // Err on the side of caution with a math expression. No strict guarantee
+      // that we can extract a style-invariant length.
+      return true;
+    }
+
     return !css_primitive_value->IsPx() && !css_primitive_value->IsPercentage();
   }
 
@@ -139,6 +149,23 @@ Length InsetValueToLength(const CSSValue* inset_value,
   if (inset_value->IsIdentifierValue()) {
     DCHECK_EQ(To<CSSIdentifierValue>(inset_value)->GetValueID(),
               CSSValueID::kAuto);
+    return Length(Length::Type::kAuto);
+  }
+
+  // If the subject is detached from the document, we cannot resolve the style,
+  // and thus cannot construct length conversion data. Nonetheless, we can
+  // evaluate the length in trivial cases and rely on the inset value being
+  // marked as style dependent otherwise.
+  if (!subject->GetComputedStyle()) {
+    if (const CSSNumericLiteralValue* literal_value =
+            DynamicTo<CSSNumericLiteralValue>(inset_value)) {
+      if (literal_value->IsPx()) {
+        return Length(literal_value->DoubleValue(), Length::Type::kFixed);
+      } else if (literal_value->IsPercentage()) {
+        return Length(literal_value->DoubleValue(), Length::Type::kPercent);
+      }
+    }
+    DCHECK(IsStyleDependent(inset_value));
     return Length(Length::Type::kAuto);
   }
 
@@ -270,9 +297,11 @@ ViewTimeline::ViewTimeline(Document* document,
                            Element* subject,
                            ScrollAxis axis,
                            TimelineInset inset)
-    : ScrollTimeline(
-          document,
-          MakeGarbageCollected<ViewTimelineAttachment>(subject, axis, inset)) {}
+    : ScrollTimeline(document,
+                     ReferenceType::kNearestAncestor,
+                     /* reference_element */ subject,
+                     axis),
+      inset_(inset) {}
 
 void ViewTimeline::CalculateOffsets(PaintLayerScrollableArea* scrollable_area,
                                     ScrollOrientation physical_orientation,
@@ -284,28 +313,31 @@ void ViewTimeline::CalculateOffsets(PaintLayerScrollableArea* scrollable_area,
   DCHECK(ComputeIsResolved(state->resolved_source));
   DCHECK(subject());
 
-  absl::optional<LayoutSize> subject_size = SubjectSize();
+  absl::optional<gfx::SizeF> subject_size = SubjectSize();
+  if (!subject_size) {
+    // Subject size may be null if the type of subject element is not supported.
+    return;
+  }
+
   absl::optional<gfx::PointF> subject_position =
       SubjectPosition(state->resolved_source);
   DCHECK(subject_position);
-  DCHECK(subject_size);
 
   // TODO(crbug.com/1448801): Handle nested sticky elements.
-
   double target_offset = physical_orientation == kHorizontalScroll
                              ? subject_position->x()
                              : subject_position->y();
   double target_size;
   LayoutUnit viewport_size;
   if (physical_orientation == kHorizontalScroll) {
-    target_size = subject_size->Width().ToDouble();
+    target_size = subject_size->width();
     viewport_size = scrollable_area->LayoutContentRect().Width();
   } else {
-    target_size = subject_size->Height().ToDouble();
+    target_size = subject_size->height();
     viewport_size = scrollable_area->LayoutContentRect().Height();
   }
 
-  Element* source = CurrentAttachment()->ComputeSourceNoLayout();
+  Element* source = ComputeSourceNoLayout();
   DCHECK(source);
   TimelineInset inset = ResolveAuto(GetInset(), *source, GetAxis());
 
@@ -402,30 +434,30 @@ void ViewTimeline::ApplyStickyAdjustments(ScrollOffsets& scroll_offsets,
   // The maximum adjustment from each offset property is the available room
   // from the opposite edge of the sticky element in its static position.
   if (is_horizontal) {
-    if (constraints->is_anchored_left) {
+    if (constraints->left_inset) {
       max_forward_adjust = (container.Right() - sticky_rect.Right()).ToDouble();
       forward_stickiness =
-          ComputeStickinessRange(constraints->left_offset, sticky_rect.X(),
+          ComputeStickinessRange(*constraints->left_inset, sticky_rect.X(),
                                  viewport_size, target_size, target_offset);
     }
-    if (constraints->is_anchored_right) {
+    if (constraints->right_inset) {
       max_backward_adjust = (container.X() - sticky_rect.X()).ToDouble();
       backward_stickiness = ComputeStickinessRange(
-          viewport_size - constraints->right_offset - sticky_rect.Width(),
+          viewport_size - *constraints->right_inset - sticky_rect.Width(),
           sticky_rect.X(), viewport_size, target_size, target_offset);
     }
   } else {  // Vertical.
-    if (constraints->is_anchored_top) {
+    if (constraints->top_inset) {
       max_forward_adjust =
           (container.Bottom() - sticky_rect.Bottom()).ToDouble();
       forward_stickiness =
-          ComputeStickinessRange(constraints->top_offset, sticky_rect.Y(),
+          ComputeStickinessRange(*constraints->top_inset, sticky_rect.Y(),
                                  viewport_size, target_size, target_offset);
     }
-    if (constraints->is_anchored_bottom) {
+    if (constraints->bottom_inset) {
       max_backward_adjust = (container.Y() - sticky_rect.Y()).ToDouble();
       backward_stickiness = ComputeStickinessRange(
-          viewport_size - constraints->bottom_offset - sticky_rect.Height(),
+          viewport_size - *constraints->bottom_inset - sticky_rect.Height(),
           sticky_rect.Y(), viewport_size, target_size, target_offset);
     }
   }
@@ -465,16 +497,34 @@ void ViewTimeline::ApplyStickyAdjustments(ScrollOffsets& scroll_offsets,
   }
 }
 
-absl::optional<LayoutSize> ViewTimeline::SubjectSize() const {
+absl::optional<gfx::SizeF> ViewTimeline::SubjectSize() const {
   if (!subject()) {
     return absl::nullopt;
   }
-  LayoutBox* subject_layout_box = subject()->GetLayoutBox();
-  if (!subject_layout_box) {
+  LayoutObject* subject_layout_object = subject()->GetLayoutObject();
+  if (!subject_layout_object) {
     return absl::nullopt;
   }
 
-  return subject_layout_box->Size();
+  if (subject_layout_object->IsBox()) {
+    LayoutRect rect = To<LayoutBox>(subject_layout_object)->BorderBoxRect();
+    return gfx::SizeF(rect.Width().ToDouble(), rect.Height().ToDouble());
+  }
+
+  if (subject_layout_object->IsLayoutInline()) {
+    gfx::RectF rect =
+        To<LayoutInline>(subject_layout_object)->LocalBoundingBoxRectF();
+    return gfx::SizeF(rect.width(), rect.height());
+  }
+
+  if (subject_layout_object->IsSVGChild()) {
+    PhysicalRect rect = SVGLayoutSupport::VisualRectInAncestorSpace(
+        *subject_layout_object,
+        *To<SVGElement>(subject())->ownerSVGElement()->GetLayoutBox());
+    return gfx::SizeF(rect.Width().ToDouble(), rect.Height().ToDouble());
+  }
+
+  return absl::nullopt;
 }
 
 absl::optional<gfx::PointF> ViewTimeline::SubjectPosition(
@@ -482,15 +532,15 @@ absl::optional<gfx::PointF> ViewTimeline::SubjectPosition(
   if (!subject() || !resolved_source) {
     return absl::nullopt;
   }
-  LayoutBox* subject_layout_box = subject()->GetLayoutBox();
+  LayoutObject* subject_layout_object = subject()->GetLayoutObject();
   LayoutBox* source_layout_box = resolved_source->GetLayoutBox();
-  if (!subject_layout_box || !source_layout_box) {
+  if (!subject_layout_object || !source_layout_box) {
     return absl::nullopt;
   }
   MapCoordinatesFlags flags =
       kIgnoreScrollOffset | kIgnoreStickyOffset | kIgnoreTransforms;
   gfx::PointF subject_pos =
-      gfx::PointF(subject_layout_box->LocalToAncestorPoint(
+      gfx::PointF(subject_layout_object->LocalToAncestorPoint(
           PhysicalOffset(), source_layout_box, flags));
 
   // We call LayoutObject::ClientLeft/Top directly and avoid
@@ -500,8 +550,10 @@ absl::optional<gfx::PointF> ViewTimeline::SubjectPosition(
   //   and clientLeft/Top also attempt to update style/layout.
   // - Those functions return the unzoomed values, and we require the zoomed
   //   values.
-  return gfx::PointF(subject_pos.x() - source_layout_box->ClientLeft().Round(),
-                     subject_pos.y() - source_layout_box->ClientTop().Round());
+
+  return gfx::PointF(
+      subject_pos.x() - source_layout_box->ClientLeft().ToDouble(),
+      subject_pos.y() - source_layout_box->ClientTop().ToDouble());
 }
 
 // https://www.w3.org/TR/scroll-animations-1/#named-range-getTime
@@ -557,8 +609,7 @@ CSSNumericValue* ViewTimeline::getCurrentTime(const String& rangeName) {
 }
 
 Element* ViewTimeline::subject() const {
-  return CurrentAttachment() ? CurrentAttachment()->GetReferenceElement()
-                             : nullptr;
+  return GetReferenceElement();
 }
 
 bool ViewTimeline::Matches(Element* subject,
@@ -568,20 +619,11 @@ bool ViewTimeline::Matches(Element* subject,
                                /* reference_element */ subject, axis)) {
     return false;
   }
-  const auto* attachment =
-      DynamicTo<ViewTimelineAttachment>(CurrentAttachment());
-  DCHECK(attachment);
-  return attachment->GetInset() == inset;
+  return inset_ == inset;
 }
 
 const TimelineInset& ViewTimeline::GetInset() const {
-  if (const auto* attachment =
-          DynamicTo<ViewTimelineAttachment>(CurrentAttachment())) {
-    return attachment->GetInset();
-  }
-
-  DEFINE_STATIC_LOCAL(TimelineInset, default_inset, ());
-  return default_inset;
+  return inset_;
 }
 
 double ViewTimeline::ToFractionalOffset(

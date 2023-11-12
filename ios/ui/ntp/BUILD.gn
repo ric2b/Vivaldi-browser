@@ -38,6 +38,7 @@ source_set("vivaldi_ntp") {
     "//ios/third_party/material_components_ios",
     "//vivaldi/ios/ui/ntp/cells",
     "//vivaldi/ios/ui/ntp/top_menu",
+    "//vivaldi/ios/ui/thumbnail:thumbnail",
     "resources:vivaldi_ntp_background_color",
     "resources:vivaldi_private_ntp_background_color",
     "resources:vivaldi_ntp_searchbar_background_color",
@@ -64,6 +65,4 @@ source_set("vivaldi_ntp") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

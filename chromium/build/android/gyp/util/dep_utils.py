@@ -76,8 +76,8 @@ class ClassLookupIndex:
   """A map from full Java class to its build targets.
 
   A class might be in multiple targets if it's bytecode rewritten."""
-  def __init__(self, abs_build_output_dir: pathlib.Path, should_build: bool):
-    self._abs_build_output_dir = abs_build_output_dir
+  def __init__(self, build_output_dir: pathlib.Path, should_build: bool):
+    self._abs_build_output_dir = build_output_dir.resolve().absolute()
     self._should_build = should_build
     self._class_index = self._index_root()
 
@@ -223,7 +223,7 @@ class ClassLookupIndex:
 
         full_class_names.update(
             jar_utils.extract_full_class_names_from_jar(
-                self._abs_build_output_dir, abs_unprocessed_jar_path))
+                abs_unprocessed_jar_path))
 
     return full_class_names
 

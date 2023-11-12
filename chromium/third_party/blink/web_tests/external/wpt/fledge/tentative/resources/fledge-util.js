@@ -1,17 +1,19 @@
 "use strict;"
 
-const FULL_URL = window.location.href;
-const BASE_URL = FULL_URL.substring(0, FULL_URL.lastIndexOf('/') + 1);
+const BASE_URL = document.baseURI.substring(0, document.baseURI.lastIndexOf('/') + 1);
 const BASE_PATH = (new URL(BASE_URL)).pathname;
 
 const DEFAULT_INTEREST_GROUP_NAME = 'default name';
 
-// Unlike other URLs, the trustedBiddingSignalsUrl can't have a query string
-// that's set by tests, since FLEDGE controls it entirely, so tests that
-// exercise it use a fixed URL string. Special keys and interest group names
-// control the response.
+// Unlike other URLs, trusted signals URLs can't have query strings
+// that are set by tests, since FLEDGE controls it entirely, so tests that
+// exercise them use a fixed URL string. Note that FLEDGE adds query
+// params when requesting these URLs, and the python scripts use these
+// to construct the response.
 const TRUSTED_BIDDING_SIGNALS_URL =
     `${BASE_URL}resources/trusted-bidding-signals.py`;
+const TRUSTED_SCORING_SIGNALS_URL =
+    `${BASE_URL}resources/trusted-scoring-signals.py`;
 
 // Creates a URL that will be sent to the URL request tracker script.
 // `uuid` is used to identify the stash shard to use.
@@ -99,7 +101,11 @@ async function waitForObservedRequests(uuid, expectedRequests) {
     // all expected requests and exit.
     let trackedRequests = trackerData.trackedRequests;
     if (trackedRequests.length == expectedRequests.length) {
-      assert_array_equals(trackedRequests.sort(), expectedRequests);
+      // Hide the uuid content in order to have a static expected file.
+      assert_array_equals(trackedRequests.sort().map((url) =>
+                            url.replace(uuid, '<uuid>')),
+                            expectedRequests.map((url) =>
+                            url.replace(uuid, '<uuid>')));
       break;
     }
 
@@ -107,7 +113,9 @@ async function waitForObservedRequests(uuid, expectedRequests) {
     // compare what's been received so far, to have a greater chance to fail
     // rather than hang on error.
     for (const trackedRequest of trackedRequests) {
-      assert_in_array(trackedRequest, expectedRequests);
+      assert_in_array(trackedRequest.replace(uuid, '<uuid>'),
+                      expectedRequests.sort().map((url) =>
+                      url.replace(uuid, '<uuid>')));
     }
   }
 }
@@ -118,7 +126,7 @@ async function waitForObservedRequests(uuid, expectedRequests) {
 // run, unless it returns something or throws.
 //
 // The default reportWin() method is empty.
-function createBiddingScriptUrl(params = {}) {
+function createBiddingScriptURL(params = {}) {
   let url = new URL(`${BASE_URL}resources/bidding-logic.sub.py`);
   if (params.generateBid)
     url.searchParams.append('generateBid', params.generateBid);
@@ -138,7 +146,7 @@ function createBiddingScriptUrl(params = {}) {
 // returns something or throws.
 //
 // The default reportResult() method is empty.
-function createDecisionScriptUrl(uuid, params = {}) {
+function createDecisionScriptURL(uuid, params = {}) {
   let url = new URL(`${BASE_URL}resources/decision-logic.sub.py`);
   url.searchParams.append('uuid', uuid);
   if (params.scoreAd)
@@ -153,11 +161,14 @@ function createDecisionScriptUrl(uuid, params = {}) {
 // Creates a renderUrl for an ad that runs the passed in "script". "uuid" has
 // no effect, beyond making the URL distinct between tests, and being verified
 // by the decision logic script before accepting a bid. "uuid" is expected to
-// be last.
-function createRenderUrl(uuid, script) {
+// be last.  "signalsParams" also has no effect, but is used by
+// trusted-scoring-signals.py to affect the response.
+function createRenderUrl(uuid, script, signalsParams) {
   let url = new URL(`${BASE_URL}resources/fenced-frame.sub.py`);
   if (script)
     url.searchParams.append('script', script);
+  if (signalsParams)
+    url.searchParams.append('signalsParams', signalsParams);
   url.searchParams.append('uuid', uuid);
   return url.toString();
 }
@@ -171,20 +182,18 @@ function createRenderUrl(uuid, script) {
 //
 // `interestGroupOverrides` may be used to override fields in the joined
 // interest group.
-async function joinInterestGroup(test, uuid, interestGroupOverrides = {}) {
-  const INTEREST_GROUP_LIFETIME_SECS = 60;
-
+async function joinInterestGroup(test, uuid, interestGroupOverrides = {},
+                                 durationSeconds = 60) {
   let interestGroup = {
     owner: window.location.origin,
     name: DEFAULT_INTEREST_GROUP_NAME,
-    biddingLogicUrl: createBiddingScriptUrl(
-        { reportWin: `sendReportTo('${createBidderReportUrl(uuid)}');` }),
+    biddingLogicURL: createBiddingScriptURL(
+      { reportWin: `sendReportTo('${createBiddingScriptURL(uuid)}');` }),
     ads: [{renderUrl: createRenderUrl(uuid)}],
     ...interestGroupOverrides
   };
 
-  await navigator.joinAdInterestGroup(interestGroup,
-                                      INTEREST_GROUP_LIFETIME_SECS);
+  await navigator.joinAdInterestGroup(interestGroup, durationSeconds);
   test.add_cleanup(
       async () => {await navigator.leaveAdInterestGroup(interestGroup)});
 }
@@ -213,7 +222,7 @@ async function leaveInterestGroup(interestGroupOverrides = {}) {
 async function runBasicFledgeAuction(test, uuid, auctionConfigOverrides = {}) {
   let auctionConfig = {
     seller: window.location.origin,
-    decisionLogicUrl: createDecisionScriptUrl(
+    decisionLogicURL: createDecisionScriptURL(
         uuid,
         { reportResult: `sendReportTo('${createSellerReportUrl(uuid)}');` }),
     interestGroupBuyers: [window.location.origin],
@@ -241,10 +250,10 @@ async function runBasicFledgeAuctionAndNavigate(test, uuid,
 }
 
 // Joins an interest group and runs an auction, expecting a winner to be
-// returned. "testConfig" can optionally modify the interest group or
+// returned. "testConfig" can optionally modify the uuid, interest group or
 // auctionConfig.
 async function runBasicFledgeTestExpectingWinner(test, testConfig = {}) {
-  const uuid = generateUuid(test);
+  const uuid = testConfig.uuid ? testConfig.uuid : generateUuid(test);
   await joinInterestGroup(test, uuid, testConfig.interestGroupOverrides);
   let config = await runBasicFledgeAuction(
       test, uuid, testConfig.auctionConfigOverrides);
@@ -253,10 +262,10 @@ async function runBasicFledgeTestExpectingWinner(test, testConfig = {}) {
 }
 
 // Joins an interest group and runs an auction, expecting no winner to be
-// returned. "testConfig" can optionally modify the interest group or
+// returned. "testConfig" can optionally modify the uuid, interest group or
 // auctionConfig.
 async function runBasicFledgeTestExpectingNoWinner(test, testConfig = {}) {
-  const uuid = generateUuid(test);
+  const uuid = testConfig.uuid ? testConfig.uuid : generateUuid(test);
   await joinInterestGroup(test, uuid, testConfig.interestGroupOverrides);
   let result = await runBasicFledgeAuction(
       test, uuid, testConfig.auctionConfigOverrides);
@@ -271,14 +280,35 @@ async function runBasicFledgeTestExpectingNoWinner(test, testConfig = {}) {
 // the corresponding reporting method, the report is sent to an error URL.
 // Otherwise, the corresponding 'reportResult' / 'reportWin' values are run.
 //
+// `codeToInsert` is a JS object that contains the following fields to control
+// the code generated for the auction worklet:
+// scoreAd - function body for scoreAd() seller worklet function
+// reportResult - function body for reportResult() seller worklet function
+// generateBid - function body for generateBid() buyer worklet function
+// reportWin - function body for reportWin() buyer worklet function
+//
+// Additionally the following fields can be added to check for errors during the
+// execution of the corresponding worklets:
+// reportWinSuccessCondition - boolean condition added to reportWin() in the
+// buyer worklet that triggers a sendReportTo() to an 'error' URL if not met.
+// reportResultSuccessCondition - boolean condition added to reportResult() in
+// the seller worklet that triggers a sendReportTo() to an 'error' URL if not
+// met.
+//
 // `renderUrlOverride` allows the ad URL of the joined InterestGroup to
 // to be set by the caller.
 //
 // Requesting error report URLs causes waitForObservedRequests() to throw
 // rather than hang.
-async function runReportTest(test, uuid, reportResultSuccessCondition,
-                             reportResult, reportWinSuccessCondition, reportWin,
-                             expectedReportUrls, renderUrlOverride) {
+async function runReportTest(test, uuid, codeToInsert, expectedReportUrls,
+                             renderUrlOverride) {
+  let scoreAd = codeToInsert.scoreAd;
+  let reportResultSuccessCondition = codeToInsert.reportResultSuccessCondition;
+  let reportResult = codeToInsert.reportResult;
+  let generateBid = codeToInsert.generateBid;
+  let reportWinSuccessCondition = codeToInsert.reportWinSuccessCondition;
+  let reportWin = codeToInsert.reportWin;
+
   if (reportResultSuccessCondition) {
     reportResult = `if (!(${reportResultSuccessCondition})) {
                       sendReportTo('${createSellerReportUrl(uuid, 'error')}');
@@ -286,11 +316,16 @@ async function runReportTest(test, uuid, reportResultSuccessCondition,
                     }
                     ${reportResult}`;
   }
-  let decisionScriptUrlParams = {};
+  let decisionScriptURLParams = {};
+
+  if (scoreAd !== undefined) {
+    decisionScriptURLParams.scoreAd = scoreAd;
+  }
+
   if (reportResult !== null)
-    decisionScriptUrlParams.reportResult = reportResult;
+    decisionScriptURLParams.reportResult = reportResult;
   else
-    decisionScriptUrlParams.error = 'no-reportResult';
+    decisionScriptURLParams.error = 'no-reportResult';
 
   if (reportWinSuccessCondition) {
     reportWin = `if (!(${reportWinSuccessCondition})) {
@@ -299,21 +334,27 @@ async function runReportTest(test, uuid, reportResultSuccessCondition,
                  }
                  ${reportWin}`;
   }
-  let biddingScriptUrlParams = {};
+  let biddingScriptURLParams = {};
+
+  if (generateBid !== undefined) {
+    biddingScriptURLParams.generateBid = generateBid;
+  }
+
   if (reportWin !== null)
-    biddingScriptUrlParams.reportWin = reportWin;
+    biddingScriptURLParams.reportWin = reportWin;
   else
-    biddingScriptUrlParams.error = 'no-reportWin';
+    biddingScriptURLParams.error = 'no-reportWin';
 
   let interestGroupOverrides =
-      { biddingLogicUrl: createBiddingScriptUrl(biddingScriptUrlParams) };
+    { biddingLogicURL: createBiddingScriptURL(biddingScriptURLParams) };
   if (renderUrlOverride)
     interestGroupOverrides.ads = [{renderUrl: renderUrlOverride}]
 
   await joinInterestGroup(test, uuid, interestGroupOverrides);
   await runBasicFledgeAuctionAndNavigate(
       test, uuid,
-      { decisionLogicUrl: createDecisionScriptUrl(
-                              uuid, decisionScriptUrlParams) });
+    {
+      decisionLogicURL: createDecisionScriptURL(
+                              uuid, decisionScriptURLParams) });
   await waitForObservedRequests(uuid, expectedReportUrls);
 }

@@ -44,6 +44,8 @@ import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.test.util.ToolbarUnitTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.components.security_state.SecurityStateModelJni;
@@ -60,7 +62,7 @@ import java.util.concurrent.ExecutionException;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 @Batch(Batch.UNIT_TESTS)
-@Features.DisableFeatures({ChromeFeatureList.OMNIBOX_UPDATED_CONNECTION_SECURITY_INDICATORS})
+@DisableFeatures({ChromeFeatureList.OMNIBOX_UPDATED_CONNECTION_SECURITY_INDICATORS})
 public final class ToolbarSecurityIconTest {
     private static final boolean IS_SMALL_DEVICE = true;
     private static final boolean IS_OFFLINE_PAGE = true;
@@ -110,15 +112,14 @@ public final class ToolbarSecurityIconTest {
         mocker.mock(org.chromium.chrome.browser.toolbar.LocationBarModelJni.TEST_HOOKS,
                 mLocationBarModelJni);
 
-        String exampleUrl = JUnitTestGURLs.EXAMPLE_URL;
-        GURL exampleGurl = JUnitTestGURLs.getGURL(exampleUrl);
-        doReturn(exampleGurl)
+        GURL exampleUrl = JUnitTestGURLs.EXAMPLE_URL;
+        doReturn(exampleUrl)
                 .when(mLocationBarModelJni)
                 .getUrlOfVisibleNavigationEntry(Mockito.anyLong(), Mockito.any());
-        doReturn(exampleUrl)
+        doReturn(exampleUrl.getSpec())
                 .when(mLocationBarModelJni)
                 .getFormattedFullURL(Mockito.anyLong(), Mockito.any());
-        doReturn(exampleUrl)
+        doReturn(exampleUrl.getSpec())
                 .when(mLocationBarModelJni)
                 .getURLForDisplay(Mockito.anyLong(), Mockito.any());
         doReturn((new Random()).nextLong()).when(mLocationBarModelJni).init(Mockito.any());
@@ -187,6 +188,7 @@ public final class ToolbarSecurityIconTest {
     @SmallTest
     @UiThreadTest
     @Feature({"Omnibox"})
+    @DisableFeatures(ChromeFeatureList.RED_INTERSTITIAL_FACELIFT)
     public void testGetSecurityIconResource() {
         for (int securityLevel : SECURITY_LEVELS) {
             assertEquals("Wrong phone resource for security level " + securityLevel,
@@ -249,6 +251,20 @@ public final class ToolbarSecurityIconTest {
     @Test
     @SmallTest
     @UiThreadTest
+    @Feature({"Omnibox"})
+    @EnableFeatures(ChromeFeatureList.RED_INTERSTITIAL_FACELIFT)
+    public void testDangerousSecurityIconResourceRedInterstitialFaceliftEnabled() {
+        assertEquals(R.drawable.omnibox_dangerous,
+                mLocationBarModel.getSecurityIconResource(ConnectionSecurityLevel.DANGEROUS,
+                        IS_SMALL_DEVICE, !IS_OFFLINE_PAGE, !IS_PAINT_PREVIEW));
+        assertEquals(R.drawable.omnibox_dangerous,
+                mLocationBarModel.getSecurityIconResource(ConnectionSecurityLevel.DANGEROUS,
+                        !IS_SMALL_DEVICE, !IS_OFFLINE_PAGE, !IS_PAINT_PREVIEW));
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
     public void testGetSecurityIconColorWithSecurityLevel_DangerousWebsite() {
         assertEquals(R.color.default_red,
                 mLocationBarModel.getSecurityIconColorWithSecurityLevel(
@@ -261,7 +277,7 @@ public final class ToolbarSecurityIconTest {
     @SmallTest
     @UiThreadTest
     public void testGetSecurityIconColorWithSecurityLevel_DangerousWebsiteWithIncognito() {
-        assertEquals(R.color.baseline_error_200,
+        assertEquals(R.color.baseline_error_80,
                 mLocationBarModel.getSecurityIconColorWithSecurityLevel(
                         /*connectionSecurityLevel*/ ConnectionSecurityLevel.DANGEROUS,
                         /*brandedColorScheme*/ BrandedColorScheme.APP_DEFAULT,

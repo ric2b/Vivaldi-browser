@@ -37,6 +37,23 @@ namespace blink {
 
 namespace {
 
+inline LineBreakStrictness StrictnessFromLineBreak(LineBreak line_break) {
+  switch (line_break) {
+    case LineBreak::kAuto:
+    case LineBreak::kAfterWhiteSpace:
+    case LineBreak::kAnywhere:
+      return LineBreakStrictness::kDefault;
+    case LineBreak::kNormal:
+      return LineBreakStrictness::kNormal;
+    case LineBreak::kStrict:
+      return LineBreakStrictness::kStrict;
+    case LineBreak::kLoose:
+      return LineBreakStrictness::kLoose;
+  }
+  NOTREACHED();
+  return LineBreakStrictness::kDefault;
+}
+
 // Returns smallest negative left and right bearing in `box_fragment`.
 // This function is used for calculating side bearing.
 NGLineBoxStrut ComputeNegativeSideBearings(
@@ -684,6 +701,8 @@ void NGLineBreaker::PrepareNextLine(NGLineInfo* line_info) {
   //   <p>...<span>....</span></p>
   // When the line wraps in <span>, the 2nd line needs to start with the style
   // of the <span>.
+  override_break_anywhere_ = false;
+  disable_phrase_ = false;
   disable_score_line_break_ = false;
   if (!current_style_)
     SetCurrentStyle(line_info->LineStyle());
@@ -903,8 +922,9 @@ bool NGLineBreaker::CanBreakAfterAtomicInline(const NGInlineItem& item) const {
   if (item.IsImage())
     return !sticky_images_quirk_;
 
-  if (item.IsRubyRun())
+  if (item.IsRubyColumn()) {
     return break_iterator_.IsBreakable(item.EndOffset());
+  }
 
   // Handles text combine
   // See "fast/writing-mode/text-combine-line-break.html".
@@ -951,8 +971,9 @@ bool NGLineBreaker::CanBreakAfter(const NGInlineItem& item) const {
   if (!atomic_inline_item)
     return can_break_after;
 
-  if (atomic_inline_item->IsRubyRun())
+  if (atomic_inline_item->IsRubyColumn()) {
     return can_break_after;
+  }
 
   // We can not break before sticky images quirk was applied.
   if (UNLIKELY(Text()[atomic_inline_item->StartOffset()] ==
@@ -2561,7 +2582,7 @@ void NGLineBreaker::HandleAtomicInline(const NGInlineItem& item,
 
   position_ += item_result->inline_size;
 
-  if (item.IsRubyRun()) {
+  if (item.IsRubyColumn()) {
     NGAnnotationOverhang overhang = GetOverhang(*item_result);
     if (overhang.end > LayoutUnit()) {
       item_result->pending_end_overhang = overhang.end;
@@ -3059,7 +3080,7 @@ void NGLineBreaker::HandleOverflow(NGLineInfo* line_info) {
           }
           continue;
         }
-        scoped_refptr<const ComputedStyle> was_current_style = current_style_;
+        const ComputedStyle* was_current_style = current_style_;
         SetCurrentStyle(*item.Style());
         const NGInlineItemResult item_result_before = *item_result;
         BreakText(item_result, item, *item.TextShapeResult(),
@@ -3105,19 +3126,21 @@ void NGLineBreaker::HandleOverflow(NGLineInfo* line_info) {
 
   // Reaching here means that the rewind point was not found.
 
+  if (break_iterator_.BreakType() == LineBreakType::kPhrase &&
+      !disable_phrase_ && mode_ == NGLineBreakerMode::kContent) {
+    // If the phrase line break overflowed, retry with the normal line break.
+    disable_phrase_ = true;
+    break_iterator_.SetBreakType(LineBreakType::kNormal);
+    RetryAfterOverflow(line_info, item_results);
+    return;
+  }
+
   if (!override_break_anywhere_ && has_break_anywhere_if_overflow) {
     // Overflow occurred but `overflow-wrap` is set. Change the break type and
     // retry the line breaking.
     override_break_anywhere_ = true;
     break_iterator_.SetBreakType(LineBreakType::kBreakCharacter);
-    // `NGScoreLineBreaker` doesn't support multi-pass line breaking.
-    disable_score_line_break_ = true;
-    state_ = LineBreakState::kContinue;
-    // TODO(kojii): Not all items need to rewind, but such case is rare and
-    // rewinding all items simplifes the code.
-    if (!item_results->empty())
-      Rewind(0, line_info);
-    ResetRewindLoopDetector();
+    RetryAfterOverflow(line_info, item_results);
     return;
   }
 
@@ -3152,6 +3175,20 @@ void NGLineBreaker::HandleOverflow(NGLineInfo* line_info) {
                                 return !item_result.can_break_after;
                               }));
   state_ = LineBreakState::kOverflow;
+}
+
+void NGLineBreaker::RetryAfterOverflow(NGLineInfo* line_info,
+                                       NGInlineItemResults* item_results) {
+  // `NGScoreLineBreaker` doesn't support multi-pass line breaking.
+  disable_score_line_break_ = true;
+
+  state_ = LineBreakState::kContinue;
+  // TODO(kojii): Not all items need to rewind, but such case is rare and
+  // rewinding all items simplifes the code.
+  if (!item_results->empty()) {
+    Rewind(0, line_info);
+  }
+  ResetRewindLoopDetector();
 }
 
 // Rewind to |new_end| on overflow. If trailable items follow at |new_end|, they
@@ -3389,56 +3426,80 @@ const ComputedStyle& NGLineBreaker::ComputeCurrentStyle(
 }
 
 void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
-  if (&style == current_style_.get()) {
-#if DCHECK_IS_ON()
+  if (&style == current_style_) {
+#if EXPENSIVE_DCHECKS_ARE_ON()
     // Check that cache fields are already setup correctly.
     DCHECK_EQ(auto_wrap_, ShouldAutoWrap(style));
     if (auto_wrap_) {
       DCHECK_EQ(break_iterator_.IsSoftHyphenEnabled(),
                 style.GetHyphens() != Hyphens::kNone);
-      DCHECK_EQ(break_iterator_.Locale(), style.LocaleForLineBreakIterator());
+      DCHECK_EQ(break_iterator_.Locale(), style.GetFontDescription().Locale());
     }
     ShapeResultSpacing<String> spacing(spacing_.Text(), is_svg_text_);
     spacing.SetSpacing(style.GetFont().GetFontDescription());
     DCHECK_EQ(spacing.LetterSpacing(), spacing_.LetterSpacing());
     DCHECK_EQ(spacing.WordSpacing(), spacing_.WordSpacing());
-#endif
+#endif  //  EXPENSIVE_DCHECKS_ARE_ON()
     return;
   }
   current_style_ = &style;
 
-  auto_wrap_ = ShouldAutoWrap(style);
+  const FontDescription& font_description = style.GetFontDescription();
+  spacing_.SetSpacing(font_description);
 
+  auto_wrap_ = ShouldAutoWrap(style);
   if (auto_wrap_) {
     DCHECK(!is_text_combine_);
-    LineBreakType line_break_type;
-    EWordBreak word_break = style.WordBreak();
-    switch (word_break) {
-      case EWordBreak::kNormal:
-        line_break_type = LineBreakType::kNormal;
-        break;
-      case EWordBreak::kBreakAll:
-        line_break_type = LineBreakType::kBreakAll;
-        break;
-      case EWordBreak::kBreakWord:
-        line_break_type = LineBreakType::kNormal;
-        break;
-      case EWordBreak::kKeepAll:
-        line_break_type = LineBreakType::kKeepAll;
-        break;
+    break_iterator_.SetLocale(font_description.Locale());
+    const LineBreak line_break = style.GetLineBreak();
+    if (UNLIKELY(line_break == LineBreak::kAnywhere)) {
+      break_iterator_.SetStrictness(LineBreakStrictness::kDefault);
+      break_iterator_.SetBreakType(LineBreakType::kBreakCharacter);
+      break_anywhere_if_overflow_ = false;
+    } else {
+      break_iterator_.SetStrictness(StrictnessFromLineBreak(line_break));
+      LineBreakType line_break_type;
+      switch (style.WordBreak()) {
+        case EWordBreak::kNormal:
+          line_break_type = LineBreakType::kNormal;
+          break_anywhere_if_overflow_ = false;
+          break;
+        case EWordBreak::kBreakAll:
+          line_break_type = LineBreakType::kBreakAll;
+          break_anywhere_if_overflow_ = false;
+          break;
+        case EWordBreak::kBreakWord:
+          line_break_type = LineBreakType::kNormal;
+          break_anywhere_if_overflow_ = true;
+          break;
+        case EWordBreak::kKeepAll:
+          line_break_type = LineBreakType::kKeepAll;
+          break_anywhere_if_overflow_ = false;
+          break;
+        case EWordBreak::kAutoPhrase:
+          DCHECK(RuntimeEnabledFeatures::CSSPhraseLineBreakEnabled());
+          if (UNLIKELY(disable_phrase_)) {
+            line_break_type = LineBreakType::kNormal;
+          } else {
+            line_break_type = LineBreakType::kPhrase;
+          }
+          break_anywhere_if_overflow_ = false;
+          break;
+      }
+      if (!break_anywhere_if_overflow_) {
+        // `overflow-wrap: anywhere` affects both layout and min-content, while
+        // `break-word` affects layout but not min-content.
+        const EOverflowWrap overflow_wrap = style.OverflowWrap();
+        break_anywhere_if_overflow_ =
+            overflow_wrap == EOverflowWrap::kAnywhere ||
+            (overflow_wrap == EOverflowWrap::kBreakWord &&
+             mode_ == NGLineBreakerMode::kContent);
+      }
+      if (UNLIKELY(override_break_anywhere_ && break_anywhere_if_overflow_)) {
+        line_break_type = LineBreakType::kBreakCharacter;
+      }
+      break_iterator_.SetBreakType(line_break_type);
     }
-    EOverflowWrap overflow_wrap = style.OverflowWrap();
-    break_anywhere_if_overflow_ =
-        word_break == EWordBreak::kBreakWord ||
-        overflow_wrap == EOverflowWrap::kAnywhere ||
-        // `overflow-/word-wrap: break-word` affects layout but not min-content.
-        (overflow_wrap == EOverflowWrap::kBreakWord &&
-         mode_ == NGLineBreakerMode::kContent);
-    if (UNLIKELY((override_break_anywhere_ && break_anywhere_if_overflow_) ||
-                 style.GetLineBreak() == LineBreak::kAnywhere)) {
-      line_break_type = LineBreakType::kBreakCharacter;
-    }
-    break_iterator_.SetBreakType(line_break_type);
 
     break_iterator_.EnableSoftHyphen(style.GetHyphens() != Hyphens::kNone);
     hyphenation_ = style.GetHyphenationWithLimits();
@@ -3449,11 +3510,7 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
     } else {
       break_iterator_.SetBreakSpace(BreakSpaceType::kAfterSpaceRun);
     }
-
-    break_iterator_.SetLocale(style.LocaleForLineBreakIterator());
   }
-
-  spacing_.SetSpacing(style.GetFont().GetFontDescription());
 }
 
 bool NGLineBreaker::IsPreviousItemOfType(NGInlineItem::NGInlineItemType type) {
@@ -3537,7 +3594,7 @@ const NGInlineBreakToken* NGLineBreaker::CreateBreakToken(
     // in inline in the current fragmentainer (and the block-in-inline part
     // won't be seen there).
     sub_break_token = NGInlineBreakToken::Create(
-        node_, current_style_.get(), current_, flags, sub_break_token);
+        node_, current_style_, current_, flags, sub_break_token);
 
     // Move past the block in inline, since we stopped at it. This is where
     // regular inline content will resume.
@@ -3545,8 +3602,8 @@ const NGInlineBreakToken* NGLineBreaker::CreateBreakToken(
     MoveToNextOf(items[current_.item_index]);
   }
 
-  return NGInlineBreakToken::Create(node_, current_style_.get(), current_,
-                                    flags, sub_break_token);
+  return NGInlineBreakToken::Create(node_, current_style_, current_, flags,
+                                    sub_break_token);
 }
 
 }  // namespace blink

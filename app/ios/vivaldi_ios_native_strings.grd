@@ -210,16 +210,28 @@ locale.  The strings in this file are specific to iOS.
         Recently Closed Tabs are Unavailable
       </message>
       <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE" desc="Message shown in the Incognito Tabs page when the grid is empty, explaining that the user can open a new tab.">
-        Tap the plus icon below to create a new private tab.
+        Searches, sites visited, cookies, and temporary files won't be stored by Vivaldi when using Private Tabs.
       </message>
       <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE" desc="Title shown above a message on the Incognito tab switcher when there are no Incognito tabs. [iOS only]">
         Private Tabs
       </message>
       <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_TITLE" desc="Title shown above a message on the synced tab switcher when there are no items. [iOS only]">
-        Synced Tabs
+        No Synced Tabs
       </message>
       <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_MESSAGE" desc="Message shown underneath a title on the synced tab switcher when there are no item.">
+        You currently have no tabs synchronized from other devices.
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_TITLE" desc="Title shown above a message on the synced tab switcher when the user is not logged in. [iOS only]">
+        Synced Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_MESSAGE" desc="Message shown underneath a title on the synced tab switcher when user is not logged in. [iOS only]">
         Synchronized tabs from other devices will appear here. Sign in to Sync to use this service.
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_ENABLE_SYNC_MESSAGE" desc="Message shown underneath a title on the synced tab switcher when user is logged in but sync is disabled. [iOS only]">
+        To see tabs from other devices, you need to enable Sync.
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_SYNC_IN_PROGRESS_MESSAGE" desc="Message shown underneath a title on the synced tab switcher sync is in progress. [iOS only]">
+        Fetching tabs and history...
       </message>
       <message name="IDS_VIVALDI_TAB_GRID_REGULAR_TABS_TITLE" desc="The accessibility label of the Regular Tabs page (as opposed to the Private Tabs page) in the tab grid UI">
         Tabs
@@ -232,6 +244,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE" desc="The accessibility label of the Recently Closed Tabs page in the tab grid UI.">
         Recently Closed Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_TITLE" desc="Title for the state when recent tabs page contains neither recently closed tabs or synced tabs from other devices.">
+        No recent tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_DESCRIPTION" desc="Description for the state when recent tabs page contains neither recently closed tabs or synced tabs from other devices.">
+        Recently visited tabs will appear here
       </message>
       <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWNOTE" desc="The iOS context menu item for adding a new note. ">
         New Note
@@ -484,6 +502,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
         Search or type web address
       </message>
+      <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS_WITH_SEARCH_ENGINE" desc="Prompt to enter text into the text field after search engine shortcut is activate that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
+        Search with <ph name="SEARCH_ENGINE">$1</ph>
+      </message>
       <!-- BOOKMARK EDITOR -->
       <message name="IDS_IOS_USE_AS_SPEED_DIAL_FOLDER" desc="Description for the bookmark folder editor 'Use as Speed Dial Folder' option">
         Use as Speed Dial Folder
@@ -583,6 +604,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_ACCOUNT_LOG_IN" desc="(Vivaldi) Confirming sync account credentials.">
         Log In
       </message>
+      <message name="IDS_VIVALDI_ACCOUNT_REGISTER" desc="(Vivaldi) Title for Register button">
+        Register
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ENABLE_SYNC" desc="(Vivaldi) Title for Enable sync button on tab switcher remote tabs">
+        Enable Sync
+      </message>
       <message name="IDS_VIVALDI_ACCOUNT_LOG_IN_TITLE" desc="(Vivaldi) Sync account log in title.">
         Log in to your Account
       </message>
@@ -594,6 +621,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_DECRYPTION_TEXT" desc="(Vivaldi) Text used to tell the user what to do on the encryption password screen.">
         Your sync data is encrypted. Provide your encryption password in order to decrypt the data.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ENCRYPTION_FILE_PERMISSION_ERROR" desc="(Vivaldi) Message shown when vivaldi does not have permission to open the chosen backup encryption key file.">
+        Permission to open file denied
       </message>
       <message name="IDS_VIVALDI_ACCOUNT_USERNAME" desc="(Vivaldi) Username field in sync account set up.">
         Username
@@ -769,6 +799,15 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_CREATE_ACCOUNT_TEXT" desc="(Vivaldi) Request the creation of a new vivaldi account.">
         New to Vivaldi? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Create an Account ➔<ph name="END_LINK">END_LINK</ph>
       </message>
+      <message name="IDS_VIVALDI_FORGOT_USERNAME_PASSWORD_TEXT" desc="(Vivaldi) Title for the footer that contains forgot username or password button in login page.">
+        Forgot <ph name="BEGIN_LINK">BEGIN_LINK</ph>Username<ph name="END_LINK">END_LINK</ph> or <ph name="BEGIN_LINK">BEGIN_LINK</ph>Password<ph name="END_LINK">END_LINK</ph>?
+      </message>
+      <message name="IDS_VIVALDI_RECOVER_USERNAME_TEXT" desc="(Vivaldi) Title for the modal presented on forgot username button tap from login page.">
+        Recover Username
+      </message>
+      <message name="IDS_VIVALDI_RECOVER_PASSOWRD_TEXT" desc="(Vivaldi) Title for the modal presented on forgot password button tap from login page.">
+        Recover Password
+      </message>
       <message name="IDS_VIVALDI_SYNC_CREATE_ACCOUNT_TITLE" desc="(Vivaldi) Title of view to create an account.">
         Create an Account
       </message>
@@ -803,11 +842,23 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SYNC_AUTOFILL_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
         Sync form autofill information
       </message>
+      <message name="IDS_VIVALDI_SYNC_TABS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
+        Tabs
+      </message>
+      <message name="IDS_VIVALDI_SYNC_TABS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync open tabs from other devices
+      </message>
       <message name="IDS_VIVALDI_SYNC_TYPED_URLS" desc="(Vivaldi) Title of switch for choosing whether the given datatype gets synced.">
         History
       </message>
       <message name="IDS_VIVALDI_SYNC_TYPED_URLS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
-        Sync typed URLs and open tabs
+        Sync typed URLs
+      </message>
+      <message name="IDS_VIVALDI_SYNC_READING_LIST_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync the Reading List
+      </message>
+      <message name="IDS_VIVALDI_SYNC_NOTES_LIST_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
+        Sync Vivaldi Notes (attachments are not syncable)
       </message>
       <message name="IDS_VIVALDI_SYNC_CANCEL_CLEAR_SERVER_DATA_MESSAGE" desc="(Vivaldi) Cancel button of the dialog showing up to ask the user to confirm the clearing of server-side data.">
         Cancel
@@ -887,10 +938,10 @@ locale.  The strings in this file are specific to iOS.
       <!-- End Sync -->
       <!-- AD AND TRACKER BLOCKER -->
       <message name="IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker settings">
-        Ad and Tracker blocker
+        Tracker and Ad Blocking
       </message>
       <message name="IDS_IOS_TRACKER_SHIELD_ACCNAME" desc="The accessible name for the vivaldi tracker blocker shield button of the omnibox.">
-        Ad and Tracker blocker summary
+        Tracker and Ad Blocking
       </message>
       <message name="IDS_IOS_TRACKER_BLOCKED_TEXT" desc="Label for blocked tracker (singular) counter in the blocker popup window">
         Tracker blocked
@@ -946,9 +997,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_MANAGE_DEFAULT_SETTINGS" desc="Push button in the blocker popup window">
         Manage Privacy Settings
       </message>
-      <message name="IDS_PREFS_ADS_TRACKING" desc="General Ads and Tracking Blocker preference">
-        Tracker and Ad Blocking
-      </message>
       <message name="IDS_BLOCK_PREF_CATEGORY_TRACKING_PROTECTION_LEVEL" desc="Blocker preference category: DEFAULT TRACKING PROTECTION LEVEL">
         DEFAULT BLOCKING LEVEL
       </message>
@@ -986,7 +1034,7 @@ locale.  The strings in this file are specific to iOS.
         Import
       </message>
       <message name="IDS_VIVALDI_IOS_MANAGE_BLOCKER_SETTINGS" desc="Push button in the blocker popup window">
-        Manage Blocker Settings
+        Manage Default Settings
       </message>
       <message name="IDS_VIVALDI_IOS_BLOCKING_TRACKERS" desc="Message to show in blocker summary when trackers blocking is active.">
         Blocking Trackers
@@ -1130,17 +1178,20 @@ locale.  The strings in this file are specific to iOS.
         Applying New Blocker Settings...
       </message>
       <!-- END AD AND TRACKER BLOCKER -->
-      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Bookmarks screen when there are no bookmarks">
         Add your first bookmark by tapping the plus icon below
       </message>
-      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
+      <message name="IDS_VIVALDI_BOOKMARK_EMPTY_TITLE" desc="Title shown on the Bookmarks screen when there are no bookmarks.">
         You'll find your bookmarks here
       </message>
-      <message name="IDS_VIVALDI_HISTORY_EMPTY_TITLE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
+      <message name="IDS_VIVALDI_HISTORY_EMPTY_TITLE" desc="Message shown on the History screen when there are no history">
         History
       </message>
-      <message name="IDS_VIVALDI_HISTORY_EMPTY_MESSAGE" desc="Title shown on the Note screen when there are no Notes.">
+      <message name="IDS_VIVALDI_HISTORY_EMPTY_MESSAGE" desc="Message shown on the History screen when there are no history.">
         Once you start browsing, your history will appear here
+      </message>
+      <message name="IDS_VIVALDI_HISTORY_EMPTY_MESSAGE_PRIVATE_TAB" desc="Message shown on the History screen in private tabs. In private tabs history is not recorded.">
+        Vivaldi does not record browsing history while using Private Tabs
       </message>
       <message name="IDS_VIVALDI_NOTE_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
          Add your first note by tapping the plus icon below
@@ -1357,6 +1408,34 @@ locale.  The strings in this file are specific to iOS.
         Choose between full desktop tabs, or the simplified tab switcher.
       </message>
       <!-- END ONBOARDING -->
+      <!-- CUSTOM APP ICON -->
+       <message name="IDS_VIVALDI_IOS_APP_ICON_TITLE" desc="Title for App Icon Button in Settings">
+        App Icon
+      </message>
+      <!-- END CUSTOM APP ICON -->
+      <!-- SEARCH ENGINE SETTINGS -->
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_STANDARD_TAB_TITLE" desc="(Vivaldi) Title of the standard tab button on the search engine settings UI.">
+        Standard Tab
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_PRIVATE_TAB_TITLE" desc="(Vivaldi) Title of the private tab button on the search engine settings UI.">
+         Private Tab
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_RESTORE_DEFAULT_BUTTON_TITLE" desc="(Vivaldi) Title of the restore defaults toolbar button on the search engine list UI.">
+         Restore Defaults
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_DEFAULT_TITLE" desc="(Vivaldi) Title of the dialog showing up to ask the user to confirm the restore the search engine list to defaults.">
+         Restore Default Search Engines
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_DEFAULT_MESSAGE" desc="(Vivaldi) Description of the dialog showing up to ask the user to confirm the restore the search engine list to defaults.">
+        Search engines will be reset to default settings, which will also reset your custom search engines.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_BUTTON_TITLE" desc="(Vivaldi) Title of the restore button on the dialog showing up to ask the user to confirm the restore the search engine list to defaults.">
+         Restore
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_CANCEL_BUTTON_TITLE" desc="(Vivaldi) Cancel button of the dialog showing up to ask the user to confirm the restore the search engine list to defaults.">
+        Cancel
+      </message>
+      <!-- END SEARCH ENGINE SETTINGS -->
     </messages>
   </release>
 </grit>

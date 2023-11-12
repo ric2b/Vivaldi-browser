@@ -195,6 +195,7 @@ class COMPONENT_EXPORT(EVDEV) DeviceEventDispatcherEvdev {
   virtual void DispatchTouchEvent(const TouchEventParams& params) = 0;
   virtual void DispatchGamepadEvent(const GamepadEvent& event) = 0;
   virtual void DispatchMicrophoneMuteSwitchValueChanged(bool muted) = 0;
+  virtual void DispatchAnyKeysPressedUpdated(bool any) = 0;
 
   // Device lifecycle events.
   virtual void DispatchKeyboardDevicesUpdated(
@@ -210,6 +211,8 @@ class COMPONENT_EXPORT(EVDEV) DeviceEventDispatcherEvdev {
   virtual void DispatchTouchpadDevicesUpdated(
       const std::vector<TouchpadDevice>& devices,
       bool has_haptic_touchpad) = 0;
+  virtual void DispatchGraphicsTabletDevicesUpdated(
+      const std::vector<InputDevice>& devices) = 0;
   virtual void DispatchDeviceListsComplete() = 0;
   virtual void DispatchStylusStateChanged(StylusState stylus_state) = 0;
   virtual void DispatchGamepadDevicesUpdated(

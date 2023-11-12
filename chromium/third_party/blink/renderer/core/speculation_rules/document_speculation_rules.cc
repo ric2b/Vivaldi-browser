@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/state_transitions.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -137,6 +139,19 @@ absl::optional<Referrer> GetReferrer(SpeculationRule* rule,
 
   return referrer;
 }
+
+// The reason for calling |UpdateSpeculationCandidates| for metrics.
+// Currently, this is designed to measure the impact of
+// |kRetriggerPreloadingOnBFCacheRestoration|(crbug.com/1449163) so that
+// other update reasons (such as ruleset insertion/removal etc...) will be
+// tentatively classified as |kOther|.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class UpdateSpeculationCandidatesReason {
+  kOther = 0,
+  kRestoredFromBFCache = 1,
+  kMaxValue = kRestoredFromBFCache,
+};
 
 }  // namespace
 
@@ -431,7 +446,19 @@ void DocumentSpeculationRules::DisplayLockedElementDisconnected(Element* root) {
 }
 
 void DocumentSpeculationRules::DocumentRestoredFromBFCache() {
+  CHECK(base::FeatureList::IsEnabled(
+      blink::features::kRetriggerPreloadingOnBFCacheRestoration));
+  first_update_after_restored_from_bfcache_ = true;
   QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::InitiatePreview(const KURL& url) {
+  CHECK(base::FeatureList::IsEnabled(features::kLinkPreview));
+
+  auto* host = GetHost();
+  if (host) {
+    host->InitiatePreview(url);
+  }
 }
 
 void DocumentSpeculationRules::Trace(Visitor* visitor) const {
@@ -579,6 +606,20 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
   // Add candidates derived from document rule predicates.
   AddLinkBasedSpeculationCandidates(candidates);
 
+  // Remove candidates for links to fragments in the current document. These are
+  // unlikely to be useful to preload, because such navigations are likely to
+  // trigger fragment navigation (see
+  // |FrameLoader::ShouldPerformFragmentNavigation|).
+  // Note that the document's URL is not necessarily the same as the base URL
+  // (e,g., when a <base> element is present in the document).
+  const KURL& document_url = GetSupplementable()->Url();
+  auto* last = base::ranges::remove_if(candidates, [&](const auto& candidate) {
+    const KURL& url = candidate->url();
+    return url.HasFragmentIdentifier() &&
+           EqualIgnoringFragmentIdentifier(url, document_url);
+  });
+  candidates.Shrink(base::checked_cast<wtf_size_t>(last - candidates.begin()));
+
   if (!sent_is_part_of_no_vary_search_trial_ &&
       RuntimeEnabledFeatures::NoVarySearchPrefetchEnabled(execution_context)) {
     sent_is_part_of_no_vary_search_trial_ = true;
@@ -612,6 +653,17 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
   if (eagerness_set.Has(SpeculationEagerness::kEager)) {
     UseCounter::Count(GetSupplementable(),
                       WebFeature::kSpeculationRulesEagernessEager);
+  }
+
+  if (base::FeatureList::IsEnabled(
+          blink::features::kRetriggerPreloadingOnBFCacheRestoration)) {
+    base::UmaHistogramEnumeration(
+        "Preloading.Experimental.UpdateSpeculationCandidatesReason",
+        first_update_after_restored_from_bfcache_
+            ? UpdateSpeculationCandidatesReason::kRestoredFromBFCache
+            : UpdateSpeculationCandidatesReason::kOther);
+
+    first_update_after_restored_from_bfcache_ = false;
   }
 }
 

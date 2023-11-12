@@ -72,6 +72,7 @@ class PLATFORM_EXPORT Length {
     kFillAvailable,
     kFitContent,
     kCalculated,
+    kFlex,
     kExtendToZoom,
     kDeviceWidth,
     kDeviceHeight,
@@ -160,6 +161,7 @@ class PLATFORM_EXPORT Length {
   static Length Percent(NUMBER_TYPE number) {
     return Length(number, kPercent);
   }
+  static Length Flex(double value) { return Length(value, kFlex); }
 
   // FIXME: Make this private (if possible) or at least rename it
   // (http://crbug.com/432707).
@@ -245,11 +247,6 @@ class PLATFORM_EXPORT Length {
     return GetType() == kAuto || IsContentOrIntrinsic();
   }
 
-  // NOTE: This shouldn't be use in NG code.
-  bool IsContentOrIntrinsicOrFillAvailable() const {
-    return IsContentOrIntrinsic() || GetType() == kFillAvailable;
-  }
-
   bool IsSpecified() const {
     return GetType() == kFixed || GetType() == kPercent ||
            GetType() == kCalculated;
@@ -271,6 +268,7 @@ class PLATFORM_EXPORT Length {
     return GetType() == kPercent || GetType() == kCalculated ||
            GetType() == kFillAvailable;
   }
+  bool IsFlex() const { return GetType() == kFlex; }
   bool IsExtendToZoom() const { return GetType() == kExtendToZoom; }
   bool IsDeviceWidth() const { return GetType() == kDeviceWidth; }
   bool IsDeviceHeight() const { return GetType() == kDeviceHeight; }

@@ -10,10 +10,10 @@
 #include <stdint.h>
 #include <tuple>
 
+#include "base/apple/scoped_cftyperef.h"
+#include "base/apple/scoped_nsautorelease_pool.h"
 #include "base/command_line.h"
 #include "base/containers/queue.h"
-#include "base/mac/scoped_cftyperef.h"
-#include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -65,10 +65,6 @@
 #include "ui/events/test/cocoa_test_event_utils.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/latency/latency_info.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using testing::_;
 
@@ -244,7 +240,8 @@ blink::WebPointerProperties::PointerType GetPointerType(
 NSEvent* MockTabletEventWithParams(CGEventType type,
                                    bool is_entering_proximity,
                                    NSPointingDeviceType device_type) {
-  base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreate(/*source=*/nullptr));
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(
+      CGEventCreate(/*source=*/nullptr));
   CGEventSetType(cg_event, type);
   CGEventSetIntegerValueField(cg_event, kCGTabletProximityEventEnterProximity,
                               is_entering_proximity);
@@ -264,7 +261,7 @@ NSEvent* MockMouseEventWithParams(CGEventType mouse_type,
   // an NSEvent, below, flips the location back to bottom left origin.
   CGPoint cg_location =
       CGPointMake(location.x, NSHeight(NSScreen.screens[0].frame) - location.y);
-  base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateMouseEvent(
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateMouseEvent(
       /*source=*/nullptr, mouse_type, cg_location, button));
   CGEventSetIntegerValueField(cg_event, kCGMouseEventSubtype, subtype);
   CGEventSetIntegerValueField(cg_event, kCGTabletProximityEventEnterProximity,
@@ -440,8 +437,9 @@ gfx::Rect GetExpectedRect(const gfx::Point& origin,
 // should correspond to a method in |MockPhaseMethods| that returns the desired
 // phase.
 NSEvent* MockScrollWheelEventWithPhase(SEL mockPhaseSelector, int32_t delta) {
-  base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateScrollWheelEvent(
-      /*source=*/nullptr, kCGScrollEventUnitLine, 1, delta, 0));
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(
+      CGEventCreateScrollWheelEvent(
+          /*source=*/nullptr, kCGScrollEventUnitLine, 1, delta, 0));
   CGEventTimestamp timestamp = 0;
   CGEventSetTimestamp(cg_event, timestamp);
   NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
@@ -456,8 +454,9 @@ NSEvent* MockScrollWheelEventWithMomentumPhase(SEL mockPhaseSelector,
   // Create a fake event with phaseNone. This is for resetting the phase info
   // of CGEventRef.
   MockScrollWheelEventWithPhase(@selector(phaseNone), 0);
-  base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateScrollWheelEvent(
-      /*source=*/nullptr, kCGScrollEventUnitLine, 1, delta, 0));
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(
+      CGEventCreateScrollWheelEvent(
+          /*source=*/nullptr, kCGScrollEventUnitLine, 1, delta, 0));
   CGEventTimestamp timestamp = 0;
   CGEventSetTimestamp(cg_event, timestamp);
   NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
@@ -564,7 +563,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
  private:
   // This class isn't derived from PlatformTest.
-  base::mac::ScopedNSAutoreleasePool pool_;
+  base::apple::ScopedNSAutoreleasePool pool_;
 
   base::SimpleTestTickClock mock_clock_;
 };
@@ -740,8 +739,8 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
 
   // If the firstRectForCharacterRange is failed in renderer, empty rect vector
   // is sent. Make sure this does not crash.
-  rwhv_mac_->ImeCompositionRangeChanged(gfx::Range(10, 12),
-                                        std::vector<gfx::Rect>());
+  rwhv_mac_->ImeCompositionRangeChanged(
+      gfx::Range(10, 12), std::vector<gfx::Rect>(), absl::nullopt);
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
       gfx::Range(10, 11), &rect, nullptr));
 
@@ -755,7 +754,8 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionSinglelineCase) {
                                kCompositionLength,
                                std::vector<size_t>(),
                                &composition_bounds);
-  rwhv_mac_->ImeCompositionRangeChanged(kCompositionRange, composition_bounds);
+  rwhv_mac_->ImeCompositionRangeChanged(kCompositionRange, composition_bounds,
+                                        absl::nullopt);
 
   // Out of range requests will return caret position.
   EXPECT_FALSE(rwhv_mac_->GetCachedFirstRectForCharacterRange(
@@ -813,7 +813,8 @@ TEST_F(RenderWidgetHostViewMacTest, UpdateCompositionMultilineCase) {
                                kCompositionLength,
                                break_points,
                                &composition_bounds);
-  rwhv_mac_->ImeCompositionRangeChanged(kCompositionRange, composition_bounds);
+  rwhv_mac_->ImeCompositionRangeChanged(kCompositionRange, composition_bounds,
+                                        absl::nullopt);
 
   // Range doesn't contain line breaking point.
   gfx::Range range;
@@ -898,7 +899,7 @@ TEST_F(RenderWidgetHostViewMacTest, CompositionEventAfterDestroy) {
   const gfx::Rect composition_bounds(0, 0, 30, 40);
   const gfx::Range range(0, 1);
   rwhv_mac_->ImeCompositionRangeChanged(
-      range, std::vector<gfx::Rect>(1, composition_bounds));
+      range, std::vector<gfx::Rect>(1, composition_bounds), absl::nullopt);
 
   NSRange actual_range = NSMakeRange(0, 0);
 
@@ -1801,6 +1802,9 @@ TEST_F(InputMethodMacTest, SetMarkedText) {
 // This test makes sure that selectedRange and markedRange are updated correctly
 // in various scenarios.
 TEST_F(InputMethodMacTest, MarkedRangeSelectedRange) {
+  if (!base::FeatureList::IsEnabled(features::kMacImeLiveConversionFix)) {
+    return;
+  }
   // If the replacement range is valid, the range should be replaced with the
   // new text.
   {

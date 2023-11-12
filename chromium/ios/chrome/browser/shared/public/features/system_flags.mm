@@ -19,11 +19,8 @@
 #import "components/variations/variations_associated_data.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #import "ios/chrome/browser/flags/chrome_switches.h"
+#import "ios/chrome/browser/safety_check/ios_chrome_safety_check_manager_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -31,12 +28,20 @@ NSString* const kAlternateDiscoverFeedServerURL =
     @"AlternateDiscoverFeedServerURL";
 NSString* const kEnableStartupCrash = @"EnableStartupCrash";
 NSString* const kFirstRunForceEnabled = @"FirstRunForceEnabled";
+NSString* const kUpgradePromoForceEnabled = @"UpgradePromoForceEnabled";
 NSString* const kOriginServerHost = @"AlternateOriginServerHost";
 NSString* const kWhatsNewPromoStatus = @"WhatsNewPromoStatus";
 NSString* const kClearApplicationGroup = @"ClearApplicationGroup";
 NSString* const kNextPromoForDisplayOverride = @"NextPromoForDisplayOverride";
 NSString* const kForceExperienceForDeviceSwitcherExperimentalSettings =
     @"ForceExperienceForDeviceSwitcher";
+NSString* const kSafetyCheckUpdateChromeStateOverride =
+    @"SafetyCheckUpdateChromeStateOverride";
+NSString* const kSafetyCheckPasswordStateOverride =
+    @"SafetyCheckPasswordStateOverride";
+NSString* const kSafetyCheckSafeBrowsingStateOverride =
+    @"SafetyCheckSafeBrowsingStateOverride";
+NSString* const kSimulatePostDeviceRestore = @"SimulatePostDeviceRestore";
 BASE_FEATURE(kEnableThirdPartyKeyboardWorkaround,
              "EnableThirdPartyKeyboardWorkaround",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -48,6 +53,11 @@ namespace experimental_flags {
 bool AlwaysDisplayFirstRun() {
   return
       [[NSUserDefaults standardUserDefaults] boolForKey:kFirstRunForceEnabled];
+}
+
+bool AlwaysDisplayUpgradePromo() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:kUpgradePromoForceEnabled];
 }
 
 NSString* GetOriginServerHost() {
@@ -147,6 +157,30 @@ NSString* GetForcedPromoToDisplay() {
       stringForKey:kNextPromoForDisplayOverride];
 }
 
+absl::optional<UpdateChromeSafetyCheckState> GetUpdateChromeSafetyCheckState() {
+  std::string state =
+      base::SysNSStringToUTF8([[NSUserDefaults standardUserDefaults]
+          stringForKey:kSafetyCheckUpdateChromeStateOverride]);
+
+  return UpdateChromeSafetyCheckStateForName(state);
+}
+
+absl::optional<PasswordSafetyCheckState> GetPasswordSafetyCheckState() {
+  std::string state =
+      base::SysNSStringToUTF8([[NSUserDefaults standardUserDefaults]
+          stringForKey:kSafetyCheckPasswordStateOverride]);
+
+  return PasswordSafetyCheckStateForName(state);
+}
+
+absl::optional<SafeBrowsingSafetyCheckState> GetSafeBrowsingSafetyCheckState() {
+  std::string state =
+      base::SysNSStringToUTF8([[NSUserDefaults standardUserDefaults]
+          stringForKey:kSafetyCheckSafeBrowsingStateOverride]);
+
+  return SafeBrowsingSafetyCheckStateForName(state);
+}
+
 std::string GetSegmentForForcedDeviceSwitcherExperience() {
   // Checks iOS Experimental Settings.
   std::string segment =
@@ -162,6 +196,11 @@ std::string GetSegmentForForcedDeviceSwitcherExperience() {
     }
   }
   return segment;
+}
+
+bool SimulatePostDeviceRestore() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:kSimulatePostDeviceRestore];
 }
 
 }  // namespace experimental_flags

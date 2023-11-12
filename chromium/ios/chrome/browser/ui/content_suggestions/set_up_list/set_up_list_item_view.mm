@@ -9,6 +9,7 @@
 #import "base/task/sequenced_task_runner.h"
 #import "base/time/time.h"
 #import "components/password_manager/core/common/password_manager_features.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/browser/ntp/set_up_list_item_type.h"
 #import "ios/chrome/browser/shared/ui/elements/crossfade_label.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -21,12 +22,9 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/dynamic_type_util.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -84,10 +82,10 @@ struct ViewConfig {
     _complete = data.complete;
     if (data.compactLayout) {
       // ViewConfig for a compact layout.
-      const int syncString =
+      int syncString =
           base::FeatureList::IsEnabled(
-              password_manager::features::kEnablePasswordsAccountStorage)
-              ? IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_SHORT_DESCRIPTION_NO_PASSWORDS
+              syncer::kReplaceSyncPromosWithSignInPromos)
+              ? IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_SHORT_DESCRIPTION_NO_SYNC
               : IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_SHORT_DESCRIPTION;
       _config = {
           YES,
@@ -99,12 +97,16 @@ struct ViewConfig {
           UIFontTextStyleCaption2,
           kCompactTextSpacing,
       };
-
     } else if (data.heroCellMagicStackLayout) {
+      int syncString =
+          base::FeatureList::IsEnabled(
+              syncer::kReplaceSyncPromosWithSignInPromos)
+              ? IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL
+              : IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_MAGIC_STACK_DESCRIPTION;
       _config = {
           NO,
           YES,
-          IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_MAGIC_STACK_DESCRIPTION,
+          syncString,
           IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION,
           IDS_IOS_SET_UP_LIST_AUTOFILL_MAGIC_STACK_DESCRIPTION,
           UIFontTextStyleSubheadline,
@@ -113,11 +115,10 @@ struct ViewConfig {
       };
     } else {
       // Normal ViewConfig.
-      const int syncString =
-          base::FeatureList::IsEnabled(
-              password_manager::features::kEnablePasswordsAccountStorage)
-              ? IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_DESCRIPTION_NO_PASSWORDS
-              : IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_DESCRIPTION;
+      int syncString = base::FeatureList::IsEnabled(
+                           syncer::kReplaceSyncPromosWithSignInPromos)
+                           ? IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL
+                           : IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_DESCRIPTION;
       _config = {
           NO,
           NO,
@@ -317,7 +318,12 @@ struct ViewConfig {
 - (NSString*)titleText {
   switch (_type) {
     case SetUpListItemType::kSignInSync:
-      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_TITLE);
+      return base::FeatureList::IsEnabled(
+                 syncer::kReplaceSyncPromosWithSignInPromos)
+                 ? l10n_util::GetNSString(
+                       IDS_IOS_CONSISTENCY_PROMO_DEFAULT_ACCOUNT_TITLE)
+                 : l10n_util::GetNSString(
+                       IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_TITLE);
     case SetUpListItemType::kDefaultBrowser:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_TITLE);
     case SetUpListItemType::kAutofill:

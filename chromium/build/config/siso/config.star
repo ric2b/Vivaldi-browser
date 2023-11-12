@@ -1,5 +1,5 @@
 # -*- bazel-starlark -*-
-# Copyright 2023 The Chromium Authors. All rights reserved.
+# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Config module for checking siso -config flags."""
@@ -8,9 +8,6 @@ load("@builtin//struct.star", "module")
 
 __KNOWN_CONFIG_OPTIONS = [
     "remote_all",
-    "remote_android",
-    "remote_nasm",
-    "rewrapper_to_reproxy",
 ]
 
 def __check(ctx):

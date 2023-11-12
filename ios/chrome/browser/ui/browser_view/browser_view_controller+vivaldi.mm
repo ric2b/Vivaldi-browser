@@ -8,7 +8,7 @@
 #import <memory>
 #import <objc/runtime.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -60,7 +60,7 @@ NoteInteractionController* _noteInteractionController;
 
   if ([firstResponder isKindOfClass:[OmniboxTextFieldIOS class]]) {
     OmniboxTextFieldIOS* field =
-      base::mac::ObjCCast<OmniboxTextFieldIOS>(firstResponder);
+      base::apple::ObjCCast<OmniboxTextFieldIOS>(firstResponder);
     NSString* text = [field textInRange:field.selectedTextRange];
     if (notesModel) {
       const vivaldi::NoteNode* defaultNoteFolder =

@@ -38,6 +38,10 @@
 #define VIVALDI_PREFERENCE_OVERRIDE_FILE
 #endif
 
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/browser_process.h"
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+
 #ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
 #include "components/datasource/vivaldi_theme_io.h"
 #endif
@@ -417,12 +421,13 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
                                    flags);
       break;
     case PrefKind::kList:
-      registry->RegisterListPref(current_path, std::move(default_value.GetList()), flags);
+      registry->RegisterListPref(current_path,
+                                 std::move(default_value.GetList()), flags);
 
       break;
     case PrefKind::kDictionary:
-      registry->RegisterDictionaryPref(current_path, std::move(default_value.GetDict()),
-                                       flags);
+      registry->RegisterDictionaryPref(
+          current_path, std::move(default_value.GetDict()), flags);
       break;
     default:
       NOTREACHED();
@@ -577,7 +582,8 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
           error(verify_error);
           break;
         }
-        std::string* theme_id = elem.GetDict().FindString(vivaldi_theme_io::kIdKey);
+        std::string* theme_id =
+            elem.GetDict().FindString(vivaldi_theme_io::kIdKey);
         if (base::StartsWith(*theme_id, vivaldi_theme_io::kVivaldiIdPrefix)) {
           error(std::string("id of an extra theme cannot start with ") +
                 vivaldi_theme_io::kVivaldiIdPrefix + ". Use " +
@@ -703,6 +709,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   registry->RegisterDictionaryPref(
       vivaldiprefs::kVivaldiAccountPendingRegistration);
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiAddressBarSearchDirectMatchEnabled,
+      g_browser_process->GetApplicationLocale() == "en-US",
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
   registry->RegisterDictionaryPref(vivaldiprefs::kVivaldiPIPPlacement);

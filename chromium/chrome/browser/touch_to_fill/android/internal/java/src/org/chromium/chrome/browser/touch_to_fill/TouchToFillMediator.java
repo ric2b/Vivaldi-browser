@@ -30,7 +30,7 @@ import android.content.Context;
 import androidx.annotation.Px;
 
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
+import org.chromium.chrome.browser.password_manager.PasswordManagerResourceProviderFactory;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillComponent.UserAction;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FaviconOrFallback;
@@ -54,6 +54,9 @@ import org.chromium.url.GURL;
 
 import java.util.List;
 
+// Vivaldi
+import org.vivaldi.browser.screen_lock.ScreenLock;
+
 /**
  * Contains the logic for the TouchToFill component. It sets the state of the model and reacts to
  * events like clicks.
@@ -63,7 +66,6 @@ class TouchToFillMediator {
             "PasswordManager.TouchToFill.DismissalReason";
     static final String UMA_TOUCH_TO_FILL_CREDENTIAL_INDEX =
             "PasswordManager.TouchToFill.CredentialIndex";
-    static final String UMA_TOUCH_TO_FILL_USER_ACTION = "PasswordManager.TouchToFill.UserAction";
 
     private Context mContext;
     private TouchToFillComponent.Delegate mDelegate;
@@ -95,8 +97,6 @@ class TouchToFillMediator {
 
         mManagePasskeysHidesPasswords = managePasskeysHidesPasswords;
 
-        TouchToFillResourceProvider resourceProvider = new TouchToFillResourceProviderImpl();
-
         ListModel<ListItem> sheetItems = mModel.get(SHEET_ITEMS);
         sheetItems.clear();
 
@@ -108,7 +108,11 @@ class TouchToFillMediator {
                                         url, SchemeDisplay.OMIT_HTTP_AND_HTTPS))
                         .with(ORIGIN_SECURE, isOriginSecure)
                         .with(SHOW_SUBMIT_SUBTITLE, triggerSubmission)
-                        .with(IMAGE_DRAWABLE_ID, resourceProvider.getHeaderImageDrawableId())
+                        // TODO(crbug.com/1471888): Use the TTF resource provider instead and use a
+                        // 32dp icon.
+                        .with(IMAGE_DRAWABLE_ID,
+                                PasswordManagerResourceProviderFactory.create()
+                                        .getPasswordManagerIcon())
                         .build()));
 
         mWebAuthnCredentials = webAuthnCredentials;
@@ -157,8 +161,7 @@ class TouchToFillMediator {
 
     private String getManageButtonText(
             List<Credential> credentials, List<WebAuthnCredential> webAuthnCredentials) {
-        if (!PasswordManagerHelper.usesUnifiedPasswordManagerUI()
-                || webAuthnCredentials.size() == 0) {
+        if (webAuthnCredentials.size() == 0) {
             return mContext.getString(R.string.manage_passwords);
         }
 
@@ -189,8 +192,6 @@ class TouchToFillMediator {
     }
 
     private void requestWebAuthnIconOrFallbackImage(PropertyModel credentialModel, GURL url) {
-        WebAuthnCredential credential = credentialModel.get(WEBAUTHN_CREDENTIAL);
-
         // WebAuthn credentials have already been filtered to match the current site's URL.
         final String iconOrigin = url.getSpec();
 
@@ -222,9 +223,6 @@ class TouchToFillMediator {
             // the recording.
             RecordHistogram.recordCount100Histogram(UMA_TOUCH_TO_FILL_CREDENTIAL_INDEX, index);
         }
-
-        RecordHistogram.recordEnumeratedHistogram(
-                UMA_TOUCH_TO_FILL_USER_ACTION, userAction, UserAction.MAX_VALUE + 1);
     }
 
     private void onSelectedCredential(Credential credential) {
@@ -246,23 +244,17 @@ class TouchToFillMediator {
         mModel.set(VISIBLE, false);
         RecordHistogram.recordEnumeratedHistogram(UMA_TOUCH_TO_FILL_DISMISSAL_REASON, reason,
                 BottomSheetController.StateChangeReason.MAX_VALUE + 1);
-        RecordHistogram.recordEnumeratedHistogram(
-                UMA_TOUCH_TO_FILL_USER_ACTION, UserAction.DISMISS, UserAction.MAX_VALUE + 1);
         mDelegate.onDismissed();
     }
 
     private void onManagePasswordSelected() {
         mModel.set(VISIBLE, false);
-        RecordHistogram.recordEnumeratedHistogram(UMA_TOUCH_TO_FILL_USER_ACTION,
-                UserAction.SELECT_MANAGE_PASSWORDS, UserAction.MAX_VALUE + 1);
         boolean passkeysShown = (mWebAuthnCredentials.size() > 0);
         mDelegate.onManagePasswordsSelected(passkeysShown);
     }
 
     private void onHybridSignInSelected() {
         mModel.set(VISIBLE, false);
-        RecordHistogram.recordEnumeratedHistogram(
-                UMA_TOUCH_TO_FILL_USER_ACTION, UserAction.SELECT_HYBRID, UserAction.MAX_VALUE + 1);
         mDelegate.onHybridSignInSelected();
     }
 
@@ -278,18 +270,30 @@ class TouchToFillMediator {
     private PropertyModel createModel(Credential credential, boolean triggerSubmission) {
         return new PropertyModel.Builder(CredentialProperties.ALL_KEYS)
                 .with(CREDENTIAL, credential)
-                .with(ON_CLICK_LISTENER, this::onSelectedCredential)
+                .with(ON_CLICK_LISTENER, this::onSelectedCredentialVivaldi)
                 .with(FORMATTED_ORIGIN, credential.getDisplayName())
                 .with(SHOW_SUBMIT_BUTTON, triggerSubmission)
                 .build();
     }
 
     private PropertyModel createWebAuthnModel(WebAuthnCredential credential) {
-        TouchToFillResourceProvider resourceProvider = new TouchToFillResourceProviderImpl();
         return new PropertyModel.Builder(WebAuthnCredentialProperties.ALL_KEYS)
                 .with(WEBAUTHN_CREDENTIAL, credential)
                 .with(ON_WEBAUTHN_CLICK_LISTENER, this::onSelectedWebAuthnCredential)
                 .with(SHOW_WEBAUTHN_SUBMIT_BUTTON, false)
                 .build();
+    }
+
+    /**
+     * Vivaldi: Wrapper method which calls onSelectedCredential() with a previous authentication
+     * check.
+     */
+    private void onSelectedCredentialVivaldi(Credential credential) {
+        if (ScreenLock.getInstance().canReauthenticate()) {
+            ScreenLock.getInstance().reauthenticate(result -> {
+                if (result) onSelectedCredential(credential);
+            });
+        } else
+            onSelectedCredential(credential);
     }
 }

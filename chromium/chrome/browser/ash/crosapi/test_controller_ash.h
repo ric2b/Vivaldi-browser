@@ -121,6 +121,21 @@ class TestControllerAsh : public mojom::TestController,
   void SetAssistiveTechnologyEnabled(mojom::AssistiveTechnologyType at_type,
                                      bool enabled) override;
 
+  void GetAppListItemAttributes(
+      const std::string& item_id,
+      GetAppListItemAttributesCallback callback) override;
+
+  void SetAppListItemAttributes(
+      const std::string& item_id,
+      mojom::AppListItemAttributesPtr attributes,
+      SetAppListItemAttributesCallback callback) override;
+
+  void CloseAllAshBrowserWindowsAndConfirm(
+      CloseAllAshBrowserWindowsAndConfirmCallback callback) override;
+
+  void CheckAtLeastOneAshBrowserWindowOpen(
+      CheckAtLeastOneAshBrowserWindowOpenCallback callback) override;
+
   mojo::Remote<mojom::StandaloneBrowserTestController>&
   GetStandaloneBrowserTestController() {
     DCHECK(standalone_browser_test_controller_.is_bound());
@@ -136,6 +151,8 @@ class TestControllerAsh : public mojom::TestController,
  private:
   class OverviewWaiter;
   class AshUtteranceEventDelegate;
+  class SelfOwnedAshBrowserWindowCloser;
+  class SelfOwnedAshBrowserWindowOpenWaiter;
 
   // Called when a Tts utterance is finished.
   void OnAshUtteranceFinished(int utterance_id);

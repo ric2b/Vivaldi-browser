@@ -26,6 +26,8 @@ enum ViewID {
 
   // Accessibility feature pod button in main view.
   VIEW_ID_ACCESSIBILITY_TRAY_ITEM,
+  // The entry to add esim in the quick settings network subpage.
+  VIEW_ID_ADD_ESIM_ENTRY,
   // System tray AddUserButton in UserChooserView.
   VIEW_ID_ADD_USER_BUTTON,
   VIEW_ID_BLUETOOTH_DEFAULT_VIEW,
@@ -36,17 +38,26 @@ enum ViewID {
   VIEW_ID_CAST_SELECT_VIEW,
 
   // Game Dashboard elements
+  VIEW_ID_GD_CONTROLS_DETAILS_ROW,
+  VIEW_ID_GD_CONTROLS_HINT_SWITCH,
+  VIEW_ID_GD_CONTROLS_SETUP_BUTTON,
   VIEW_ID_GD_CONTROLS_TILE,
   VIEW_ID_GD_FEEDBACK_BUTTON,
   VIEW_ID_GD_GENERAL_SETTINGS_BUTTON,
   VIEW_ID_GD_HELP_BUTTON,
-  VIEW_ID_GD_RECORD_TILE,
+  VIEW_ID_GD_RECORD_GAME_TILE,
   VIEW_ID_GD_SCREEN_SIZE_TILE,
   VIEW_ID_GD_SCREENSHOT_TILE,
   VIEW_ID_GD_TOOLBAR_TILE,
 
+  // IME menu buble elements.
+  VIEW_ID_IME_BUTTONS_VIEW,
+  VIEW_ID_IME_LIST_VIEW_SCROLLER,
+  VIEW_ID_IME_MENU_LIST_VIEW,
+  VIEW_ID_IME_TITLE_VIEW,
+
   // The entry to add wifi network in the quick settings network subpage.
-  VIEW_ID_JOIN_NETWORK_ENTRY,
+  VIEW_ID_JOIN_WIFI_NETWORK_ENTRY,
 
   VIEW_ID_MEDIA_TRAY_VIEW,
 

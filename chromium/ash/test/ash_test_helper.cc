@@ -60,8 +60,9 @@
 #include "ui/base/ime/ash/mock_input_method_manager_impl.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/display/display_switches.h"
-#include "ui/display/fake/fake_display_delegate.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/manager/test/fake_display_delegate.h"
+#include "ui/display/manager/util/display_manager_test_util.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/display/util/display_util.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -428,6 +429,10 @@ void AshTestHelper::SetUp(InitParams init_params) {
   AccelerometerReader::GetInstance()->SetECLidAngleDriverStatusForTesting(
       ECLidAngleDriverStatus::NOT_SUPPORTED);
 
+  if (TabletMode::IsBoardTypeMarkedAsTabletCapable()) {
+    shell->tablet_mode_controller()->OnDeviceListsComplete();
+  }
+
   // Call `StabilizeUIForPixelTest()` after the user session is activated (if
   // any) in the test setup.
   if (pixel_test_helper_) {
@@ -443,12 +448,18 @@ display::Display AshTestHelper::GetSecondaryDisplay() const {
 }
 
 void AshTestHelper::SimulateUserLogin(const AccountId& account_id,
-                                      user_manager::UserType user_type) {
+                                      user_manager::UserType user_type,
+                                      bool is_new_profile) {
   session_controller_client_->AddUserSession(
-      account_id, account_id.GetUserEmail(), user_type);
+      account_id, account_id.GetUserEmail(), user_type,
+      /*provide_pref_service=*/true, is_new_profile);
   session_controller_client_->SwitchActiveUser(account_id);
   session_controller_client_->SetSessionState(
       session_manager::SessionState::ACTIVE);
+
+  if (pixel_test_helper_) {
+    pixel_test_helper_->StabilizeUi();
+  }
 }
 
 void AshTestHelper::StabilizeUIForPixelTest() {

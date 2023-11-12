@@ -25,9 +25,12 @@ ImageServiceConsentHelper::ImageServiceConsentHelper(
   if (base::FeatureList::IsEnabled(kImageServiceObserveSyncDownloadStatus)) {
     sync_service_observer_.Observe(sync_service);
   } else if (model_type == syncer::ModelType::BOOKMARKS) {
+    // TODO(crbug.com/1463438): Migrate to require_sync_feature_enabled = false.
     consent_throttle_ = std::make_unique<unified_consent::ConsentThrottle>(
         unified_consent::UrlKeyedDataCollectionConsentHelper::
-            NewPersonalizedBookmarksDataCollectionConsentHelper(sync_service),
+            NewPersonalizedBookmarksDataCollectionConsentHelper(
+                sync_service,
+                /*require_sync_feature_enabled=*/true),
         kTimeout);
   } else if (model_type == syncer::ModelType::HISTORY_DELETE_DIRECTIVES) {
     consent_throttle_ = std::make_unique<unified_consent::ConsentThrottle>(
@@ -58,10 +61,8 @@ void ImageServiceConsentHelper::EnqueueRequest(
   if (!request_processing_timer_.IsRunning()) {
     request_processing_timer_.Start(
         FROM_HERE, kTimeout,
-        base::BindOnce(
-            &ImageServiceConsentHelper::OnTimeoutExpired,
-            // Unretained usage here okay, because this object owns the timer.
-            base::Unretained(this)));
+        base::BindOnce(&ImageServiceConsentHelper::OnTimeoutExpired,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 }
 

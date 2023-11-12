@@ -28,8 +28,6 @@ public class ScrollingStripStacker extends StripStacker {
                 }
             }
             tab.setDrawY(tab.getOffsetY());
-            tab.setVisiblePercentage(1.f);
-            tab.setContentOffsetX(0.f);
         }
     }
 

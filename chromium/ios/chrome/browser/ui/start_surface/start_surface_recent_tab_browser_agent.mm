@@ -6,11 +6,9 @@
 
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
+#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 #pragma mark - StartSurfaceBrowserAgent
 
@@ -32,6 +30,7 @@ void StartSurfaceRecentTabBrowserAgent::SaveMostRecentTab() {
   web::WebState* active_web_state =
       browser_->GetWebStateList()->GetActiveWebState();
   if (most_recent_tab_ != active_web_state) {
+    RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kTabResumption);
     most_recent_tab_ = active_web_state;
     DCHECK(favicon::WebFaviconDriver::FromWebState(most_recent_tab_));
     if (favicon_driver_observer_.IsObserving()) {
@@ -68,12 +67,12 @@ void StartSurfaceRecentTabBrowserAgent::BrowserDestroyed(Browser* browser) {
 
 #pragma mark - WebStateListObserver
 
-void StartSurfaceRecentTabBrowserAgent::WebStateListChanged(
+void StartSurfaceRecentTabBrowserAgent::WebStateListDidChange(
     WebStateList* web_state_list,
     const WebStateListChange& change,
-    const WebStateSelection& selection) {
+    const WebStateListStatus& status) {
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
+    case WebStateListChange::Type::kStatusOnly:
       // Do nothing when a WebState is selected and its status is updated.
       break;
     case WebStateListChange::Type::kDetach: {

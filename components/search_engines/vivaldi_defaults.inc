@@ -6,7 +6,7 @@
 // based on the order of these lists, excluding the first two entries.
 const PrepopulatedEngine* const engines_default[] = {
     &duckduckgo,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -18,7 +18,7 @@ const PrepopulatedEngine* const engines_default[] = {
 
 const PrepopulatedEngine* const engines_be_BY[] = {
     &yandex_by,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yandex_by,
     &google,
     &ozon,
@@ -31,7 +31,7 @@ const PrepopulatedEngine* const engines_be_BY[] = {
 };
 const PrepopulatedEngine* const engines_bg_BG[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -42,7 +42,7 @@ const PrepopulatedEngine* const engines_bg_BG[] = {
 };
 const PrepopulatedEngine* const engines_cs_CZ[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -53,7 +53,7 @@ const PrepopulatedEngine* const engines_cs_CZ[] = {
 };
 const PrepopulatedEngine* const engines_da_DK[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_dk,
     &duckduckgo,
@@ -64,7 +64,7 @@ const PrepopulatedEngine* const engines_da_DK[] = {
 };
 const PrepopulatedEngine* const engines_de_DE[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_de,
     &duckduckgo,
@@ -77,7 +77,7 @@ const PrepopulatedEngine* const engines_de_DE[] = {
 };
 const PrepopulatedEngine* const engines_de_AT[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_at,
     &duckduckgo,
@@ -88,7 +88,7 @@ const PrepopulatedEngine* const engines_de_AT[] = {
 };
 const PrepopulatedEngine* const engines_de_CH[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_ch,
     &duckduckgo,
@@ -99,7 +99,7 @@ const PrepopulatedEngine* const engines_de_CH[] = {
 };
 const PrepopulatedEngine* const engines_el_GR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -110,7 +110,7 @@ const PrepopulatedEngine* const engines_el_GR[] = {
 };
 const PrepopulatedEngine* const engines_en_CA[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_ca,
     &duckduckgo,
@@ -123,7 +123,7 @@ const PrepopulatedEngine* const engines_en_CA[] = {
 };
 const PrepopulatedEngine* const engines_en_GB[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_uk,
     &duckduckgo,
@@ -136,7 +136,7 @@ const PrepopulatedEngine* const engines_en_GB[] = {
 };
 const PrepopulatedEngine* const engines_en_IE[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_ie,
     &duckduckgo,
@@ -147,7 +147,7 @@ const PrepopulatedEngine* const engines_en_IE[] = {
 };
 const PrepopulatedEngine* const engines_en_IN[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_in,
     &duckduckgo,
@@ -158,7 +158,7 @@ const PrepopulatedEngine* const engines_en_IN[] = {
 };
 const PrepopulatedEngine* const engines_en_PH[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_ph,
     &bing,
     &duckduckgo,
@@ -169,7 +169,7 @@ const PrepopulatedEngine* const engines_en_PH[] = {
 };
 const PrepopulatedEngine* const engines_en_SG[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_sg,
     &bing,
     &duckduckgo,
@@ -194,7 +194,7 @@ const PrepopulatedEngine* const engines_en_US[] = {
 };
 const PrepopulatedEngine* const engines_es_ES[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_es,
     &duckduckgo,
@@ -206,7 +206,7 @@ const PrepopulatedEngine* const engines_es_ES[] = {
 };
 const PrepopulatedEngine* const engines_es_AR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_ar,
     &bing,
     &duckduckgo,
@@ -217,7 +217,7 @@ const PrepopulatedEngine* const engines_es_AR[] = {
 };
 const PrepopulatedEngine* const engines_es_CL[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_cl,
     &bing,
     &duckduckgo,
@@ -228,7 +228,7 @@ const PrepopulatedEngine* const engines_es_CL[] = {
 };
 const PrepopulatedEngine* const engines_es_CO[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_co,
     &bing,
     &duckduckgo,
@@ -239,7 +239,7 @@ const PrepopulatedEngine* const engines_es_CO[] = {
 };
 const PrepopulatedEngine* const engines_es_PE[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_pe,
     &bing,
     &duckduckgo,
@@ -250,7 +250,7 @@ const PrepopulatedEngine* const engines_es_PE[] = {
 };
 const PrepopulatedEngine* const engines_es_MX[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_mx,
     &bing,
     &duckduckgo,
@@ -261,7 +261,7 @@ const PrepopulatedEngine* const engines_es_MX[] = {
 };
 const PrepopulatedEngine* const engines_es_VE[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_ve,
     &bing,
     &duckduckgo,
@@ -272,7 +272,7 @@ const PrepopulatedEngine* const engines_es_VE[] = {
 };
 const PrepopulatedEngine* const engines_fi_FI[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_fi,
     &duckduckgo,
@@ -283,7 +283,7 @@ const PrepopulatedEngine* const engines_fi_FI[] = {
 };
 const PrepopulatedEngine* const engines_fr_FR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_fr,
     &duckduckgo,
@@ -295,7 +295,7 @@ const PrepopulatedEngine* const engines_fr_FR[] = {
 };
 const PrepopulatedEngine* const engines_hr_HR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -306,7 +306,7 @@ const PrepopulatedEngine* const engines_hr_HR[] = {
 };
 const PrepopulatedEngine* const engines_hu_HU[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -317,7 +317,7 @@ const PrepopulatedEngine* const engines_hu_HU[] = {
 };
 const PrepopulatedEngine* const engines_id_ID[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_id,
     &duckduckgo,
@@ -328,7 +328,7 @@ const PrepopulatedEngine* const engines_id_ID[] = {
 };
 const PrepopulatedEngine* const engines_it_IT[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_it,
     &duckduckgo,
@@ -350,7 +350,7 @@ const PrepopulatedEngine* const engines_ja_JP[] = {
 };
 const PrepopulatedEngine* const engines_ko_KR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -361,7 +361,7 @@ const PrepopulatedEngine* const engines_ko_KR[] = {
 };
 const PrepopulatedEngine* const engines_lt_LT[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -372,7 +372,7 @@ const PrepopulatedEngine* const engines_lt_LT[] = {
 };
 const PrepopulatedEngine* const engines_nb_NO[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_no,
     &duckduckgo,
@@ -383,7 +383,7 @@ const PrepopulatedEngine* const engines_nb_NO[] = {
 };
 const PrepopulatedEngine* const engines_nn_NO[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_no,
     &duckduckgo,
@@ -394,7 +394,7 @@ const PrepopulatedEngine* const engines_nn_NO[] = {
 };
 const PrepopulatedEngine* const engines_pl_PL[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -405,7 +405,7 @@ const PrepopulatedEngine* const engines_pl_PL[] = {
 };
 const PrepopulatedEngine* const engines_pt_BR[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_br,
     &duckduckgo,
@@ -416,7 +416,7 @@ const PrepopulatedEngine* const engines_pt_BR[] = {
 };
 const PrepopulatedEngine* const engines_pt_PT[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -427,7 +427,7 @@ const PrepopulatedEngine* const engines_pt_PT[] = {
 };
 const PrepopulatedEngine* const engines_ro_RO[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -450,7 +450,7 @@ const PrepopulatedEngine* const engines_ru_RU[] = {
 };
 const PrepopulatedEngine* const engines_sv_SE[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_se,
     &duckduckgo,
@@ -461,7 +461,7 @@ const PrepopulatedEngine* const engines_sv_SE[] = {
 };
 const PrepopulatedEngine* const engines_sk_SK[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -472,7 +472,7 @@ const PrepopulatedEngine* const engines_sk_SK[] = {
 };
 const PrepopulatedEngine* const engines_sr_RS[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo,
     &duckduckgo,
@@ -483,7 +483,7 @@ const PrepopulatedEngine* const engines_sr_RS[] = {
 };
 const PrepopulatedEngine* const engines_th_TH[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_th,
     &bing,
     &duckduckgo,
@@ -494,7 +494,7 @@ const PrepopulatedEngine* const engines_th_TH[] = {
 };
 const PrepopulatedEngine* const engines_tr_TR[] = {
     &duckduckgo,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yandex_tr,
     &google,
@@ -508,7 +508,7 @@ const PrepopulatedEngine* const engines_tr_TR[] = {
 };
 const PrepopulatedEngine* const engines_uk_UA[] = {
     &duckduckgo,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &google,
     &wikipedia_uk,
     &ebay,
@@ -519,7 +519,7 @@ const PrepopulatedEngine* const engines_uk_UA[] = {
 };
 const PrepopulatedEngine* const engines_vi_VN[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_vn,
     &duckduckgo,
@@ -541,7 +541,7 @@ const PrepopulatedEngine* const engines_zh_CN[] = {
 };
 const PrepopulatedEngine* const engines_zn_HK[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &yahoo_hk,
     &bing,
     &duckduckgo,
@@ -552,7 +552,7 @@ const PrepopulatedEngine* const engines_zn_HK[] = {
 };
 const PrepopulatedEngine* const engines_zh_TW[] = {
     &bing,  // default
-    &duckduckgo,  // defaultPrivate
+    &startpage_com,  // defaultPrivate
     &bing,
     &yahoo_tw,
     &duckduckgo,

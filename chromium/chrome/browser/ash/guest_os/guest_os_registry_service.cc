@@ -437,6 +437,10 @@ bool GuestOsRegistryService::Registration::CanUninstall() const {
   return false;
 }
 
+guest_os::GuestId GuestOsRegistryService::Registration::ToGuestId() const {
+  return guest_os::GuestId(VmType(), VmName(), ContainerName());
+}
+
 base::Time GuestOsRegistryService::Registration::InstallTime() const {
   return GetTime(guest_os::prefs::kAppInstallTimeKey);
 }
@@ -926,7 +930,7 @@ void GuestOsRegistryService::ClearApplicationList(
 void GuestOsRegistryService::UpdateApplicationList(
     const vm_tools::apps::ApplicationList& app_list) {
   VLOG(3) << "Received ApplicationList : " << ToString(app_list);
-  // TODO(b/247636749): Special-case Bruschetta VMs until cicerone is updated to
+  // TODO(b/294316866): Special-case Bruschetta VMs until cicerone is updated to
   // use the correct vm_type.
   vm_tools::apps::VmType vm_type = app_list.vm_type();
   if (app_list.vm_name() == bruschetta::kBruschettaVmName) {

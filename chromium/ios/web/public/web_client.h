@@ -162,6 +162,9 @@ class WebClient {
   // Instructs the embedder to return a container that is attached to a window.
   virtual UIView* GetWindowedContainer();
 
+  // Enables the web-exposed Fullscreen API.
+  virtual bool EnableFullscreenAPI() const;
+
   // Enables the logic to handle long press context menu with UIContextMenu.
   virtual bool EnableLongPressUIContextMenu() const;
 
@@ -194,16 +197,6 @@ class WebClient {
   // Returns whether `url1` and `url2` are actually pointing to the same page.
   virtual bool IsPointingToSameDocument(const GURL& url1,
                                         const GURL& url2) const;
-
-  // Provides a searchable object for the given `web_state` instance.
-  virtual id<CRWFindSession> CreateFindSessionForWebState(
-      web::WebState* web_state) const API_AVAILABLE(ios(16));
-
-  // Starts a text search in `web_state`.
-  virtual void StartTextSearchInWebState(web::WebState* web_state);
-
-  // Stops the ongoing text search in `web_state`.
-  virtual void StopTextSearchInWebState(web::WebState* web_state);
 
   // Returns true if mixed content on HTTPS documents should be upgraded if
   // possible.

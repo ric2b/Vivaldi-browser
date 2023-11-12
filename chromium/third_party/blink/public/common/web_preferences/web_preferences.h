@@ -116,8 +116,9 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool should_print_backgrounds;
   bool should_clear_document_background;
   bool enable_scroll_animator;
-  bool threaded_scrolling_enabled;
   bool prefers_reduced_motion;
+  bool prefers_reduced_transparency;
+  bool inverted_colors;
   bool touch_event_feature_detection_enabled;
   int pointer_events_max_touch_points;
   int available_pointer_types;
@@ -151,7 +152,6 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
   bool spatial_navigation_enabled;
-  bool navigate_on_drag_drop;
   bool fake_no_alloc_direct_call_for_testing_enabled;
   blink::mojom::V8CacheOptions v8_cache_options;
   bool record_whole_document;
@@ -218,6 +218,8 @@ struct BLINK_COMMON_EXPORT WebPreferences {
 
 #if BUILDFLAG(IS_ANDROID)
   float font_scale_factor;
+  int font_weight_adjustment;
+  int text_size_contrast_factor;
   float device_scale_adjustment;
   bool force_enable_zoom;
   GURL default_video_poster_url;

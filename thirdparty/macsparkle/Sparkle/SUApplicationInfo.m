@@ -41,13 +41,14 @@
         if (@available(macOS 11, *)) {
             UTType *contentType = isMainBundle ? UTTypeApplication : UTTypeBundle;
             icon = [[NSWorkspace sharedWorkspace] iconForContentType:contentType];
-        } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        }
+#if MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_11_0
+        else
+        {
             NSString *fileType = isMainBundle ? (__bridge NSString *)kUTTypeApplication : (__bridge NSString *)kUTTypeBundle;
             icon = [[NSWorkspace sharedWorkspace] iconForFileType:fileType];
-#pragma clang diagnostic pop
         }
+#endif
     }
     return icon;
 }

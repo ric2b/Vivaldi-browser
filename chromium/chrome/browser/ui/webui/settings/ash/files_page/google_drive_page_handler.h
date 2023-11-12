@@ -7,6 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ui/webui/settings/ash/files_page/mojom/google_drive_handler.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -35,16 +36,19 @@ class GoogleDrivePageHandler : public google_drive::mojom::PageHandler,
  private:
   // google_drive::mojom::PageHandler:
   void CalculateRequiredSpace() override;
-  void GetTotalPinnedSize(GetTotalPinnedSizeCallback callback) override;
+  void GetContentCacheSize(GetContentCacheSizeCallback callback) override;
   void ClearPinnedFiles(ClearPinnedFilesCallback callback) override;
+  void RecordBulkPinningEnabledMetric() override;
 
   // drive::DriveIntegrationServiceObserver
+  void OnDriveIntegrationServiceDestroyed() override;
   void OnBulkPinProgress(const drivefs::pinning::Progress& progress) override;
 
   void NotifyServiceUnavailable();
   void NotifyProgress(const drivefs::pinning::Progress& progress);
 
-  void OnGetTotalPinnedSize(GetTotalPinnedSizeCallback callback, int64_t size);
+  void OnGetContentCacheSize(GetContentCacheSizeCallback callback,
+                             int64_t size);
   void OnClearPinnedFiles(ClearPinnedFilesCallback callback,
                           drive::FileError error);
 
@@ -54,6 +58,10 @@ class GoogleDrivePageHandler : public google_drive::mojom::PageHandler,
 
   mojo::Remote<google_drive::mojom::Page> page_;
   mojo::Receiver<google_drive::mojom::PageHandler> receiver_{this};
+
+  base::ScopedObservation<drive::DriveIntegrationService,
+                          drive::DriveIntegrationServiceObserver>
+      drive_observer_{this};
 
   base::WeakPtrFactory<GoogleDrivePageHandler> weak_ptr_factory_{this};
 };

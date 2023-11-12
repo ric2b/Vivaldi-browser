@@ -35,8 +35,6 @@ enum ControlPart {
   kAutoPart,
   kCheckboxPart,
   kRadioPart,
-  kPushButtonPart,
-  kSquareButtonPart,
   kButtonPart,
   kListboxPart,
   kMediaControlPart,
@@ -44,21 +42,23 @@ enum ControlPart {
   kMenulistButtonPart,
   kMeterPart,
   kProgressBarPart,
-  kSliderHorizontalPart,
-  kSliderVerticalPart,
   kSearchFieldPart,
   kTextFieldPart,
   kTextAreaPart,
   // Order matters when determinating what keyword is valid in the CSSParser.
-  // Values after kTextAreaPart are not recognized as appearance values.
+  // Values after kTextAreaPart should not be recognized as appearance values.
   kInnerSpinButtonPart,
   kMediaSliderPart,
   kMediaSliderThumbPart,
   kMediaVolumeSliderPart,
   kMediaVolumeSliderThumbPart,
+  kPushButtonPart,
+  kSquareButtonPart,
+  kSliderHorizontalPart,
   kSliderThumbHorizontalPart,
   kSliderThumbVerticalPart,
   kSearchFieldCancelButtonPart,
+  kSliderVerticalPart,
 };
 
 }  // namespace blink

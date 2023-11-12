@@ -1,11 +1,9 @@
-# TODO(crbug.com/1111979) Enable all tests on lacros.
--DeclarativeContentApiTest.RulesPersistence
--ExternalProtocolDialogBrowserTest.TestFocus
--FolderUploadConfirmationViewTest.InitiallyFocusesCancel
--ProfileListDesktopBrowserTest.SwitchToProfile
 # crbug.com/1121486
 # Following tests were flaky. We disable them first until we have time to investigate.
 -All/HostedOrWebAppTest.CtrlClickLink/HostedApp
 -All/HostedOrWebAppTest.CtrlClickLink/WebApp
--ContentSettingsTest.AllowCookiesForASessionUsingExceptions
 -CustomTabBarViewBrowserTest.BackToAppButtonIsNotVisibleInOutOfScopePopups
+
+# crbug.com/1473417:
+-All/OfferNotificationBubbleViewPixelBrowserTest.InvokeUi_show_notification_bubble/FreeListingOffer_default
+-All/OfferNotificationBubbleViewPixelBrowserTest.InvokeUi_show_notification_bubble/FreeListingOffer_on_navigation

@@ -5,6 +5,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_multitask_menu_controller.h"
 
 #include "ash/accelerators/debug_commands.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_multitask_cue_controller.h"
@@ -13,6 +14,7 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/functional/bind.h"
+#include "chromeos/components/kiosk/kiosk_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/event_target.h"
 #include "ui/events/types/event_type.h"
@@ -64,6 +66,12 @@ TabletModeMultitaskMenuController::~TabletModeMultitaskMenuController() {
 
 // static
 bool TabletModeMultitaskMenuController::CanShowMenu(aura::Window* window) {
+  // Cannot show the menu in the lock screen, or in app/kiosk mode.
+  if (Shell::Get()->session_controller()->IsScreenLocked() ||
+      chromeos::IsKioskSession()) {
+    return false;
+  }
+
   auto* window_state = WindowState::Get(window);
   return window_state && window_state->CanMaximize() &&
          window_state->CanResize() && !window_state->IsFloated() &&
@@ -73,12 +81,26 @@ bool TabletModeMultitaskMenuController::CanShowMenu(aura::Window* window) {
 void TabletModeMultitaskMenuController::ShowMultitaskMenu(
     aura::Window* window) {
   MaybeCreateMultitaskMenu(window);
-  multitask_menu_->Animate(/*show=*/true);
+  if (multitask_menu_) {
+    multitask_menu_->Animate(/*show=*/true);
+  }
 }
 
 void TabletModeMultitaskMenuController::ResetMultitaskMenu() {
   multitask_cue_controller_->ResetPosition();
   multitask_menu_.reset();
+}
+
+void TabletModeMultitaskMenuController::OnTouchEvent(ui::TouchEvent* event) {
+  if (is_drag_active_) {
+    if (!reserved_for_gesture_sent_) {
+      reserved_for_gesture_sent_ = true;
+      event->set_flags(event->flags() | ui::EF_RESERVED_FOR_GESTURE);
+      return;
+    }
+    event->StopPropagation();
+    event->ForceProcessGesture();
+  }
 }
 
 void TabletModeMultitaskMenuController::OnGestureEvent(
@@ -104,8 +126,10 @@ void TabletModeMultitaskMenuController::OnGestureEvent(
         return;
       }
       is_drag_active_ = false;
+      reserved_for_gesture_sent_ = false;
       if (details.scroll_y_hint() > 0 && HitTestRect(window, screen_location)) {
         // We may need to recreate `multitask_menu_` on the new target window.
+        target_window_for_test_ = window;
         multitask_menu_ =
             std::make_unique<TabletModeMultitaskMenu>(this, window);
         multitask_cue_controller_->OnMenuOpened(window);
@@ -141,6 +165,7 @@ void TabletModeMultitaskMenuController::OnGestureEvent(
         event->SetHandled();
       }
       is_drag_active_ = false;
+      reserved_for_gesture_sent_ = false;
       break;
     case ui::ET_SCROLL_FLING_START:
       if (!is_drag_active_) {
@@ -149,9 +174,12 @@ void TabletModeMultitaskMenuController::OnGestureEvent(
       // Normally ET_GESTURE_SCROLL_BEGIN will fire first and have already
       // created the multitask menu, however occasionally ET_SCROLL_FLING_START
       // may fire first (https://crbug.com/821237).
+      target_window_for_test_ = window;
       MaybeCreateMultitaskMenu(window);
-      multitask_menu_->Animate(details.velocity_y() > 0);
-      event->SetHandled();
+      if (multitask_menu_) {
+        multitask_menu_->Animate(details.velocity_y() > 0);
+        event->SetHandled();
+      }
       break;
     default:
       if (is_drag_active_ && multitask_menu_) {
@@ -164,7 +192,7 @@ void TabletModeMultitaskMenuController::OnGestureEvent(
 
 void TabletModeMultitaskMenuController::MaybeCreateMultitaskMenu(
     aura::Window* window) {
-  if (!multitask_menu_) {
+  if (!multitask_menu_ && CanShowMenu(window)) {
     multitask_menu_ = std::make_unique<TabletModeMultitaskMenu>(this, window);
     multitask_cue_controller_->OnMenuOpened(window);
   }

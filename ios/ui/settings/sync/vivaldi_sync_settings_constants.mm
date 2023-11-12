@@ -19,8 +19,8 @@ const CGFloat kLogoutSectionHeaderHeight = 96.0;
 const CGFloat kDecryptSectionHeaderHeight = 8.0;
 const CGFloat kSaveSectionHeaderHeight = 8.0;
 
-NSString* const kShowPasswordIcon = @"infobar_reveal_password_icon";
-NSString* const kHidePasswordIcon = @"infobar_hide_password_icon";
+NSString* const kShowPasswordIcon = @"eye";
+NSString* const kHidePasswordIcon = @"eye.slash";
 NSString* const kVivaldiIcon = @"blue_vivaldi_icon";
 
 // Vivaldi.net account creation validation

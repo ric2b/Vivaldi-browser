@@ -9,10 +9,11 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
+#include "components/bookmarks/bookmark_thumbnail_theme_tab_helper.h"
 #include "components/prefs/pref_service.h"
 
-#include "content/public/browser/web_contents.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/web_contents.h"
 
 #include "extensions/buildflags/buildflags.h"
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -39,7 +40,11 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
         ->set_adblock_list(adblock_list);
 
     CreateSubresourceFilterWebContentsHelper(web_contents);
+
+    vivaldi_bookmark_kit::BookmarkThumbnailThemeTabHelper::CreateForWebContents(
+        web_contents);
   }
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);

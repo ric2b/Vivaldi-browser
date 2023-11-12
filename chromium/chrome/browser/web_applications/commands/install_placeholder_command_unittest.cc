@@ -29,6 +29,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_WIN)
+#include "base/base_paths_win.h"
+#include "base/test/scoped_path_override.h"
+#endif  // BUILDFLAG(IS_WIN)
+
 namespace web_app {
 namespace {
 
@@ -57,7 +62,11 @@ class InstallPlaceholderCommandTest : public WebAppTest {
   TestShortcutManager* shortcut_manager() { return shortcut_manager_; }
 
  private:
-  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_;
+#if BUILDFLAG(IS_WIN)
+  // This prevents creating shortcuts in the startup dir.
+  base::ScopedPathOverride override_start_dir_{base::DIR_USER_STARTUP};
+#endif  // BUILDFLAG(IS_WIN)
+  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_ = nullptr;
 };
 
 TEST_F(InstallPlaceholderCommandTest, InstallPlaceholder) {
@@ -98,6 +107,7 @@ TEST_F(InstallPlaceholderCommandTest, InstallPlaceholderWithOverrideIconUrl) {
       std::make_unique<testing::StrictMock<MockDataRetriever>>();
 
   bool skip_page_favicons = true;
+  bool fail_all_if_any_fail = false;
   SkBitmap bitmap;
   std::vector<gfx::Size> icon_sizes(1, gfx::Size(kIconSize, kIconSize));
   bitmap.allocN32Pixels(kIconSize, kIconSize);
@@ -105,10 +115,11 @@ TEST_F(InstallPlaceholderCommandTest, InstallPlaceholderWithOverrideIconUrl) {
   IconsMap icons = {{icon_url, {bitmap}}};
   DownloadedIconsHttpResults http_result = {
       {icon_url, net::HttpStatusCode::HTTP_OK}};
-  EXPECT_CALL(*data_retriever,
-              GetIcons(testing::_, testing::ElementsAre(icon_url),
-                       skip_page_favicons, base::test::IsNotNullCallback()))
-      .WillOnce(base::test::RunOnceCallback<3>(
+  EXPECT_CALL(
+      *data_retriever,
+      GetIcons(testing::_, testing::ElementsAre(icon_url), skip_page_favicons,
+               fail_all_if_any_fail, base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<4>(
           IconsDownloadedResult::kCompleted, std::move(icons), http_result));
 
   auto command = std::make_unique<InstallPlaceholderCommand>(

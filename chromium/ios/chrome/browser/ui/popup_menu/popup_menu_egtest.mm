@@ -6,7 +6,7 @@
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/feature_engagement/public/feature_constants.h"
-#import "ios/chrome/browser/find_in_page/features.h"
+#import "ios/chrome/browser/find_in_page/util.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -20,10 +20,6 @@
 #import "ios/web/public/test/http_server/http_server_util.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 }  // namespace
@@ -33,14 +29,6 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 @end
 
 @implementation PopupMenuTestCase
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config = [super appConfigurationForTestCase];
-  // This test suite assumes JavaScript Find in Page is used. This is required
-  // for `testNoSearchForPDF`.
-  config.features_disabled.push_back(kNativeFindInPage);
-  return config;
-}
 
 // Rotate the device back to portrait if needed, since some tests attempt to run
 // in landscape.
@@ -186,6 +174,10 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 // Navigates to a pdf page and verifies that the "Find in Page..." tool
 // is not enabled
 - (void)testNoSearchForPDF {
+  // Disabled for iOS 16.1.1+ since Native Find in Page supports PDFs.
+  if (base::ios::IsRunningOnOrLater(16, 1, 1)) {
+    return;
+  }
   const GURL URL = web::test::HttpServer::MakeUrl(kPDFURL);
 
   // Navigate to a mock pdf and verify that the find button is disabled.
@@ -213,8 +205,10 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
 }
 
-// Tests that the overflow menu IPH shows up when triggered.
-- (void)testOverflowMenuIPHForHistory {
+// Tests that both the 2 steps of the history on overflow menu IPH is displayed.
+// The 2nd step is only displayed if the user taps on the menu while the 1st
+// step IPH is displayed.
+- (void)testOverflowMenuIPHForHistoryShow2Steps {
   if (![ChromeEarlGrey isNewOverflowMenuEnabled]) {
     EARL_GREY_TEST_SKIPPED(
         @"The overflow menu IPH only exists when the overflow menu is enabled.")
@@ -252,6 +246,55 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
     [ChromeEarlGreyUI openToolsMenu];
     [ChromeEarlGrey waitForSufficientlyVisibleElementWithMatcher:
                         grey_accessibilityID(@"BubbleViewLabelIdentifier")];
+  }  // End of the sync disabler scope.
+}
+
+// Tests that the 2nd step of history on overflow menu IPH is not displayed, if
+// the 1st step IPH is ignored by the user and self-dismissed.
+- (void)testOverflowMenuIPHForHistoryNotShow2ndStep {
+  if (![ChromeEarlGrey isNewOverflowMenuEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"The overflow menu IPH only exists when the overflow menu is enabled.")
+  }
+
+  // Enable the IPH Demo Mode feature to ensure the IPH triggers
+  AppLaunchConfiguration config = [self appConfigurationForTestCase];
+  config.additional_args.push_back(base::StringPrintf(
+      "--enable-features=%s:chosen_feature/"
+      "IPH_iOSHistoryOnOverflowMenuFeature,IPHForSafariSwitcher",
+      feature_engagement::kIPHDemoMode.name));
+  // Force the conditions that allow the iph to show.
+  config.additional_args.push_back("-ForceExperienceForDeviceSwitcher");
+  config.additional_args.push_back("SyncedAndFirstDevice");
+
+  // The IPH appears immediately on startup, so don't open a new tab when the
+  // app starts up.
+  [[self class] testForStartup];
+
+  // Scope for the synchronization disabled.
+  {
+    ScopedSynchronizationDisabler syncDisabler;
+
+    [[AppLaunchManager sharedManager]
+        ensureAppLaunchedWithConfiguration:config];
+
+    // The app relaunch (to enable a feature flag) may take a while, therefore
+    // the timeout is extended to 15 seconds.
+    [ChromeEarlGrey
+        waitForUIElementToAppearWithMatcher:grey_accessibilityID(
+                                                @"BubbleViewLabelIdentifier")
+                                    timeout:base::Seconds(15)];
+    // The IPH should self-dismiss in 5 seconds.
+    [ChromeEarlGrey
+        waitForUIElementToDisappearWithMatcher:grey_accessibilityID(
+                                                   @"BubbleViewLabelIdentifier")
+                                       timeout:base::Seconds(7)];
+    // Open the tools menu and verify the 2nd step is not shown.
+    [ChromeEarlGreyUI openToolsMenu];
+    GREYAssert(![ChromeEarlGrey
+                   testUIElementAppearanceWithMatcher:
+                       grey_accessibilityID(@"BubbleViewLabelIdentifier")],
+               @"The 2nd step of the IPH is displayed");
   }  // End of the sync disabler scope.
 }
 

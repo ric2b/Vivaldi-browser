@@ -77,12 +77,8 @@ void BrowserPluginGuest::InitInternal(WebContentsImpl* owner_web_contents) {
   // navigations still continue to function inside the app.
   renderer_prefs->browser_handles_all_top_level_requests = false;
 
-  // TODO(chrishtr): this code is wrong. The navigate_on_drag_drop field will
-  // be reset again the next time preferences are updated.
-  blink::web_pref::WebPreferences prefs =
-      GetWebContents()->GetOrCreateWebPreferences();
-  prefs.navigate_on_drag_drop = vivaldi::IsVivaldiRunning();
-  GetWebContents()->SetWebPreferences(prefs);
+  // Also disable drag/drop navigations.
+  renderer_prefs->can_accept_load_drops = vivaldi::IsVivaldiRunning();
 }
 
 BrowserPluginGuest::~BrowserPluginGuest() = default;
@@ -101,8 +97,15 @@ WebContentsImpl* BrowserPluginGuest::GetWebContents() const {
 
 RenderFrameHostImpl* BrowserPluginGuest::GetProspectiveOuterDocument() {
   if (!delegate_) {
+    if (!vivaldi::IsVivaldiRunning()) {
+      // NOTE (andre@vivaldi.com) : This can happen if the webcontents has been
+      // shown in a webview that has been discarded and the owner window was
+      // closed when the tab was belonging to a workspace or being pinned. The
+      // the webview being unattached would be destroyed, but not the
+      // webcontents.
     // The guest delegate may only be null during some destruction scenarios.
     CHECK(web_contents()->IsBeingDestroyed());
+    }  // !vivaldi::IsVivaldiRunning()
     return nullptr;
   }
   return static_cast<RenderFrameHostImpl*>(

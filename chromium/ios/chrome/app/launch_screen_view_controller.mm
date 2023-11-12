@@ -7,10 +7,6 @@
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // All the following values are from "ios/chrome/app/resources/LaunchScreen.xib"
@@ -39,7 +35,11 @@ constexpr CGFloat kStatusWidth = 195;
   view.accessibilityIdentifier =
       first_run::kLaunchScreenAccessibilityIdentifier;
 
+#if defined(VIVALDI_BUILD)
+  view.backgroundColor = UIColor.systemBackgroundColor;
+#else
   view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+#endif // End Vivaldi
 
   UIImageView* logo = [self createLogoView];
   UIImageView* brand = [self createBrandView];

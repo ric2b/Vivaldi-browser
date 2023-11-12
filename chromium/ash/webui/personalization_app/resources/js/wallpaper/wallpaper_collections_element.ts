@@ -14,22 +14,23 @@ import '../../css/wallpaper.css.js';
 import '../../common/icons.html.js';
 import '../../css/common.css.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
+import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {GooglePhotosEnablementState, WallpaperCollection, WallpaperImage} from '../../personalization_app.mojom-webui.js';
 import {isGooglePhotosIntegrationEnabled, isPersonalizationJellyEnabled, isTimeOfDayWallpaperEnabled} from '../load_time_booleans.js';
-import {Paths, PersonalizationRouter} from '../personalization_router_element.js';
+import {Paths, PersonalizationRouterElement} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {getCountText, isImageDataUrl, isNonEmptyArray, isSelectionEvent} from '../utils.js';
 
 import {DefaultImageSymbol, kDefaultImageSymbol, kMaximumLocalImagePreviews} from './constants.js';
 import {getLoadingPlaceholderAnimationDelay, getLoadingPlaceholders, getPathOrSymbol} from './utils.js';
 import {getTemplate} from './wallpaper_collections_element.html.js';
-import {initializeBackdropData} from './wallpaper_controller.js';
+import {fetchGooglePhotosEnabled, fetchLocalData, getDefaultImageThumbnail, initializeBackdropData} from './wallpaper_controller.js';
 import {WallpaperGridItemSelectedEvent} from './wallpaper_grid_item_element.js';
 import {getWallpaperProvider} from './wallpaper_interface_provider.js';
 
@@ -215,7 +216,13 @@ function isTimeOfDay({id}: WallpaperCollection|Tile): boolean {
   return id === loadTimeData.getString('timeOfDayWallpaperCollectionId');
 }
 
-export class WallpaperCollections extends WithPersonalizationStore {
+export interface WallpaperCollectionsElement {
+  $: {
+    grid: IronListElement,
+  };
+}
+
+export class WallpaperCollectionsElement extends WithPersonalizationStore {
   static get is() {
     return 'wallpaper-collections';
   }
@@ -354,33 +361,41 @@ export class WallpaperCollections extends WithPersonalizationStore {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.watch<WallpaperCollections['hasError_']>(
+    this.watch<WallpaperCollectionsElement['hasError_']>(
         'hasError_',
         state => hasError(
             state.wallpaper.backdrop.collections,
             state.wallpaper.loading.collections, state.wallpaper.local.images,
             state.wallpaper.loading.local.images));
-    this.watch<WallpaperCollections['collections_']>(
+    this.watch<WallpaperCollectionsElement['collections_']>(
         'collections_', state => state.wallpaper.backdrop.collections);
-    this.watch<WallpaperCollections['images_']>(
+    this.watch<WallpaperCollectionsElement['images_']>(
         'images_', state => state.wallpaper.backdrop.images);
-    this.watch<WallpaperCollections['imagesLoading_']>(
+    this.watch<WallpaperCollectionsElement['imagesLoading_']>(
         'imagesLoading_', state => state.wallpaper.loading.images);
-    this.watch<WallpaperCollections['googlePhotosEnabled_']>(
+    this.watch<WallpaperCollectionsElement['googlePhotosEnabled_']>(
         'googlePhotosEnabled_', state => state.wallpaper.googlePhotos.enabled);
-    this.watch<WallpaperCollections['localImages_']>(
+    this.watch<WallpaperCollectionsElement['localImages_']>(
         'localImages_', state => state.wallpaper.local.images);
     // Treat as loading if either loading local images list or loading the
     // default image thumbnail. This prevents rapid churning of the UI on first
     // load.
-    this.watch<WallpaperCollections['localImagesLoading_']>(
+    this.watch<WallpaperCollectionsElement['localImagesLoading_']>(
         'localImagesLoading_',
         state => state.wallpaper.loading.local.images ||
             state.wallpaper.loading.local.data[kDefaultImageSymbol]);
-    this.watch<WallpaperCollections['localImageData_']>(
+    this.watch<WallpaperCollectionsElement['localImageData_']>(
         'localImageData_', state => state.wallpaper.local.data);
     this.updateFromStore();
     initializeBackdropData(getWallpaperProvider(), this.getStore());
+    getDefaultImageThumbnail(getWallpaperProvider(), this.getStore());
+    fetchLocalData(getWallpaperProvider(), this.getStore());
+    window.addEventListener('focus', () => {
+      fetchLocalData(getWallpaperProvider(), this.getStore());
+    });
+    if (isGooglePhotosIntegrationEnabled()) {
+      fetchGooglePhotosEnabled(getWallpaperProvider(), this.getStore());
+    }
   }
 
   /**
@@ -406,7 +421,7 @@ export class WallpaperCollections extends WithPersonalizationStore {
     if (!hidden) {
       document.title = this.i18n('wallpaperLabel');
     }
-    afterNextRender(this, () => this.notifyResize());
+    afterNextRender(this, () => this.$.grid.fire('iron-resize'));
   }
 
   /**
@@ -600,11 +615,12 @@ export class WallpaperCollections extends WithPersonalizationStore {
     }
     switch (tile.id) {
       case kGooglePhotosCollectionId:
-        PersonalizationRouter.instance().goToRoute(
+        PersonalizationRouterElement.instance().goToRoute(
             Paths.GOOGLE_PHOTOS_COLLECTION);
         return;
       case kLocalCollectionId:
-        PersonalizationRouter.instance().goToRoute(Paths.LOCAL_COLLECTION);
+        PersonalizationRouterElement.instance().goToRoute(
+            Paths.LOCAL_COLLECTION);
         return;
       default:
         assert(
@@ -612,7 +628,7 @@ export class WallpaperCollections extends WithPersonalizationStore {
         const collection =
             this.collections_.find(collection => collection.id === tile.id);
         assert(collection, 'collection with matching id required');
-        PersonalizationRouter.instance().selectCollection(collection);
+        PersonalizationRouterElement.instance().selectCollection(collection);
         return;
     }
   }
@@ -649,6 +665,15 @@ export class WallpaperCollections extends WithPersonalizationStore {
   private getAriaIndex_(index: number): number {
     return index + 1;
   }
+
+  private getOnlineTileSecondaryText_(item: Tile): string {
+    assert(this.isOnlineTile_(item), 'item must be online tile');
+    if (this.isTimeOfDayCollection_(item)) {
+      return loadTimeData.getString('timeOfDayWallpaperCollectionSublabel');
+    }
+    return item.count;
+  }
 }
 
-customElements.define(WallpaperCollections.is, WallpaperCollections);
+customElements.define(
+    WallpaperCollectionsElement.is, WallpaperCollectionsElement);

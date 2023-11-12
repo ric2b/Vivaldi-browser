@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
@@ -405,7 +405,7 @@ UIButton* ActionButton() {
 
       // Do nothing if the tapped option was already the default.
       VivaldiATBSettingItem* selectedSettingItem =
-      base::mac::ObjCCastStrict<VivaldiATBSettingItem>(selectedItem);
+          base::apple::ObjCCastStrict<VivaldiATBSettingItem>(selectedItem);
       if (selectedSettingItem.accessoryType ==
           UITableViewCellAccessoryCheckmark) {
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -420,7 +420,7 @@ UIButton* ActionButton() {
              [model
               itemsInSectionWithIdentifier:SectionIdentifierSettings]) {
           VivaldiATBSettingItem* settingItem =
-          base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+              base::apple::ObjCCastStrict<VivaldiATBSettingItem>(item);
           if (settingItem.accessoryType == UITableViewCellAccessoryCheckmark) {
             settingItem.accessoryType = UITableViewCellAccessoryNone;
             UITableViewCell* cell =
@@ -431,7 +431,7 @@ UIButton* ActionButton() {
       }
 
       VivaldiATBSettingItem* newSelectedCell =
-          base::mac::ObjCCastStrict<VivaldiATBSettingItem>
+          base::apple::ObjCCastStrict<VivaldiATBSettingItem>
               ([model itemAtIndexPath:indexPath]);
       newSelectedCell.accessoryType = UITableViewCellAccessoryCheckmark;
       UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];

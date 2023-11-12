@@ -57,7 +57,15 @@ public class MockRenderFrameHost implements RenderFrameHost {
     public void notifyUserActivation() {}
 
     @Override
+    public void notifyWebAuthnAssertionRequestSucceeded() {}
+
+    @Override
     public boolean isIncognito() {
+        return false;
+    }
+
+    @Override
+    public boolean isCloseWatcherActive() {
         return false;
     }
 

@@ -8,10 +8,6 @@
 
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace tests_hook {
 
 bool DisableAppGroupAccess() {
@@ -66,6 +62,14 @@ policy::ConfigurationPolicyProvider* GetOverriddenPlatformPolicyProvider() {
   return nullptr;
 }
 std::unique_ptr<SystemIdentityManager> CreateSystemIdentityManager() {
+  return nullptr;
+}
+std::unique_ptr<password_manager::BulkLeakCheckServiceInterface>
+GetOverriddenBulkLeakCheckService() {
+  return nullptr;
+}
+std::unique_ptr<password_manager::RecipientsFetcher>
+GetOverriddenRecipientsFetcher() {
   return nullptr;
 }
 void SetUpTestsIfPresent() {}

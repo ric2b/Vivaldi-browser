@@ -4,8 +4,6 @@
 
 package org.chromium.components.signin.identitymanager;
 
-import android.accounts.Account;
-
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -186,20 +184,6 @@ public class IdentityManager {
     }
 
     /**
-     * Call this method to retrieve an OAuth2 access token for the given account and scope. Please
-     * note that this method expects a scope with 'oauth2:' prefix.
-     * @param account the account to get the access token for.
-     * @param scope The scope to get an auth token for (with Android-style 'oauth2:' prefix).
-     * @param callback called on successful and unsuccessful fetching of auth token.
-     */
-    @MainThread
-    public void getAccessToken(Account account, String scope, GetAccessTokenCallback callback) {
-        assert mProfileOAuth2TokenServiceDelegate != null;
-        // TODO(crbug.com/934688) The following should call a JNI method instead.
-        mProfileOAuth2TokenServiceDelegate.getAccessToken(account, scope, callback);
-    }
-
-    /**
      * Called by native to invalidate an OAuth2 token. Please note that the token is invalidated
      * asynchronously.
      */
@@ -211,7 +195,6 @@ public class IdentityManager {
         mProfileOAuth2TokenServiceDelegate.invalidateAccessToken(accessToken);
     }
 
-    @VisibleForTesting
     public void setRefreshTokenUpdateObserverForTests(Callback<CoreAccountInfo> callback) {
         mRefreshTokenUpdateObserver = callback;
     }

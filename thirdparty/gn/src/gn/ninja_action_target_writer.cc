@@ -35,16 +35,33 @@ void NinjaActionTargetWriter::Run() {
   // operating on the result of that previous step, so we need to be sure to
   // serialize these.
   std::vector<const Target*> additional_hard_deps;
-  std::vector<OutputFile> data_outs;
+  std::vector<OutputFile> order_only_deps;
   const auto& target_deps = resolved().GetTargetDeps(target_);
 
   for (const Target* dep : target_deps.linked_deps()) {
     if (dep->IsDataOnly()) {
-      data_outs.push_back(dep->dependency_output_file());
+      order_only_deps.push_back(dep->dependency_output_file());
     } else {
       additional_hard_deps.push_back(dep);
     }
   }
+
+  // Add all data-deps to the order-only-deps for the action.  The data_deps
+  // field is used to implement different use-cases, including:
+  //
+  //  - Files needed at only runtime by the outputs of the action, and therefore
+  //    need be built if ninja is building the action's outputs.  But they do
+  //    not "dirty" the action's outputs if the data_deps alone are "dirty".
+  //    If ninja had the concept of "weak" dependencies, that would be used
+  //    instead, but that isn't available, so order-only dependencies are used.
+  //
+  //  - Files that _may_ need to be used to perform the action, and a depfile
+  //    will be used to promote these order-only deps to implicit dependencies,
+  //    and on an incremental build, if the now-implicit dependencies are
+  //    'dirty', this action will be considered 'dirty' as well.
+  //
+  for (const Target* data_dep : target_deps.data_deps())
+    order_only_deps.push_back(data_dep->dependency_output_file());
 
   // For ACTIONs, the input deps appear only once in the generated ninja
   // file, so WriteInputDepsStampAndGetDep() won't create a stamp file
@@ -60,7 +77,8 @@ void NinjaActionTargetWriter::Run() {
 
   if (target_->output_type() == Target::ACTION_FOREACH) {
     // Write separate build lines for each input source file.
-    WriteSourceRules(custom_rule_name, input_deps, &output_files);
+    WriteSourceRules(custom_rule_name, input_deps, order_only_deps,
+                     &output_files);
   } else {
     DCHECK(target_->output_type() == Target::ACTION);
 
@@ -78,6 +96,13 @@ void NinjaActionTargetWriter::Run() {
       out_ << " |";
       path_output_.WriteFiles(out_, input_deps);
     }
+    if (!order_only_deps.empty()) {
+      // Write any order-only deps out for actions just like they are for
+      // binaries.
+      out_ << " ||";
+      path_output_.WriteFiles(out_, order_only_deps);
+    }
+
     out_ << std::endl;
     if (target_->action_values().has_depfile()) {
       WriteDepfile(SourceFile());
@@ -94,14 +119,13 @@ void NinjaActionTargetWriter::Run() {
   }
   out_ << std::endl;
 
-  // Write the stamp, which also depends on all data deps. These are needed at
-  // runtime and should be compiled when the action is, but don't need to be
-  // done before we run the action.
+  // Write the stamp, which doesn't need to depend on the data deps because they
+  // have been added as order-only deps of the action output itself.
+  //
   // TODO(thakis): If the action has just a single output, make things depend
   // on that output directly without writing a stamp file.
-  for (const Target* data_dep : target_deps.data_deps())
-    data_outs.push_back(data_dep->dependency_output_file());
-  WriteStampForTarget(output_files, data_outs);
+  std::vector<OutputFile> stamp_file_order_only_deps;
+  WriteStampForTarget(output_files, stamp_file_order_only_deps);
 }
 
 std::string NinjaActionTargetWriter::WriteRuleDefinition() {
@@ -178,6 +202,7 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
 void NinjaActionTargetWriter::WriteSourceRules(
     const std::string& custom_rule_name,
     const std::vector<OutputFile>& input_deps,
+    const std::vector<OutputFile>& order_only_deps,
     std::vector<OutputFile>* output_files) {
   EscapeOptions args_escape_options;
   args_escape_options.mode = ESCAPE_NINJA_COMMAND;
@@ -199,6 +224,12 @@ void NinjaActionTargetWriter::WriteSourceRules(
       // this action may consume the outputs of previous steps.
       out_ << " |";
       path_output_.WriteFiles(out_, input_deps);
+    }
+    if (!order_only_deps.empty()) {
+      // Write any order-only deps out for actions just like they are written
+      // out for binaries.
+      out_ << " ||";
+      path_output_.WriteFiles(out_, order_only_deps);
     }
     out_ << std::endl;
 

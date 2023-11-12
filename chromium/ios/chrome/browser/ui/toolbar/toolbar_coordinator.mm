@@ -4,12 +4,14 @@
 
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/overlays/public/overlay_presentation_context.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
+#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -27,6 +29,8 @@
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_omnibox_consumer.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinatee.h"
@@ -40,12 +44,7 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-@interface ToolbarCoordinator () <PrimaryToolbarCoordinatorDelegate,
-                                  PrimaryToolbarViewControllerDelegate,
+@interface ToolbarCoordinator () <PrimaryToolbarViewControllerDelegate,
                                   ToolbarCommands,
 
                                   // Vivaldi
@@ -73,14 +72,20 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong) OmniboxFocusOrchestrator* orchestrator;
 /// Whether the omnibox is currently focused.
 @property(nonatomic, assign) BOOL locationBarFocused;
-/// Whether the omnibox focusing should happen with animation.
-@property(nonatomic, assign) BOOL enableAnimationsForOmniboxFocus;
 
 @end
 
 @implementation ToolbarCoordinator {
-  /// Type of toolbar containing the omnibox.
+  /// Type of toolbar containing the omnibox. Unlike
+  /// `_steadyStateOmniboxPosition`, this tracks the omnibox position at all
+  /// time.
   ToolbarType _omniboxPosition;
+  /// Type of the toolbar that contains the omnibox when it's not focused. The
+  /// animation of focusing/defocusing the omnibox changes depending on this
+  /// position.
+  ToolbarType _steadyStateOmniboxPosition;
+  /// Whether the omnibox focusing should happen with animation.
+  BOOL _enableAnimationsForOmniboxFocus;
 }
 
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -105,7 +110,7 @@ using vivaldi::IsVivaldiRunning;
   if (self.started) {
     return;
   }
-  self.enableAnimationsForOmniboxFocus = YES;
+  _enableAnimationsForOmniboxFocus = YES;
   // Set a default position, overriden by `setInitialOmniboxPosition` below.
   _omniboxPosition = ToolbarType::kPrimary;
 
@@ -117,10 +122,18 @@ using vivaldi::IsVivaldiRunning;
   PrefService* prefs =
       ChromeBrowserState::FromBrowserState(browser->GetBrowserState())
           ->GetPrefs();
+  segmentation_platform::DeviceSwitcherResultDispatcher* deviceSwitcherResult =
+      nullptr;
+  if (!browser->GetBrowserState()->IsOffTheRecord()) {
+    deviceSwitcherResult =
+        segmentation_platform::SegmentationPlatformServiceFactory::
+            GetDispatcherForBrowserState(browser->GetBrowserState());
+  }
   self.toolbarMediator = [[ToolbarMediator alloc]
       initWithWebStateList:browser->GetWebStateList()
                isIncognito:browser->GetBrowserState()->IsOffTheRecord()];
   self.toolbarMediator.delegate = self;
+  self.toolbarMediator.deviceSwitcherResultDispatcher = deviceSwitcherResult;
   self.toolbarMediator.prefService = prefs;
 
   self.locationBarCoordinator =
@@ -134,8 +147,9 @@ using vivaldi::IsVivaldiRunning;
   // End Vivaldi
 
   [self.locationBarCoordinator start];
+  self.toolbarMediator.omniboxConsumer =
+      self.locationBarCoordinator.toolbarOmniboxConsumer;
 
-  self.primaryToolbarCoordinator.delegate = self;
   self.primaryToolbarCoordinator.viewControllerDelegate = self;
   [self.primaryToolbarCoordinator start];
   [self.secondaryToolbarCoordinator start];
@@ -169,18 +183,32 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
   [super stop];
+  _prerenderService = nullptr;
+  self.orchestrator.editViewAnimatee = nil;
+  self.orchestrator.locationBarAnimatee = nil;
+  self.orchestrator = nil;
+
+  [self.primaryToolbarCoordinator stop];
+  self.primaryToolbarCoordinator.viewControllerDelegate = nil;
+  self.primaryToolbarCoordinator = nil;
+
+  [self.secondaryToolbarCoordinator stop];
+  self.secondaryToolbarCoordinator = nil;
+
+  [self.locationBarCoordinator stop];
+  self.locationBarCoordinator.popupPresenterDelegate = nil;
+  self.locationBarCoordinator = nil;
 
   [self.toolbarMediator disconnect];
+  self.toolbarMediator.omniboxConsumer = nil;
+  self.toolbarMediator.delegate = nil;
+  self.toolbarMediator.prefService = nullptr;
+  self.toolbarMediator.deviceSwitcherResultDispatcher = nullptr;
   self.toolbarMediator = nil;
 
   // Vivaldi
   self.locationBarCoordinator.steadyViewConsumer = nil;
   // End Vivaldi
-
-  [self.locationBarCoordinator stop];
-  self.locationBarCoordinator = nil;
-  [self.primaryToolbarCoordinator stop];
-  [self.secondaryToolbarCoordinator stop];
 
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
   _prerenderService = nullptr;
@@ -223,7 +251,9 @@ using vivaldi::IsVivaldiRunning;
       !webState->GetLastCommittedURL().SchemeIs(kChromeUIScheme);
 
   if (self.isLoadingPrerenderer && isToolbarLoading) {
-    [self.primaryToolbarCoordinator showPrerenderingAnimation];
+    for (id<ToolbarCoordinatee> coordinator in self.coordinators) {
+      [coordinator showPrerenderingAnimation];
+    }
   }
 
   id<FindInPageCommands> findInPageCommandsHandler = HandlerForProtocol(
@@ -266,17 +296,32 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark Omnibox and LocationBar
 
 - (void)transitionToLocationBarFocusedState:(BOOL)focused {
+  // Disable infobarBanner overlays when focusing the omnibox as they overlap
+  // with primary toolbar.
+  OverlayPresentationContext* infobarBannerContext =
+      OverlayPresentationContext::FromBrowser(self.browser,
+                                              OverlayModality::kInfobarBanner);
+  if (infobarBannerContext) {
+    infobarBannerContext->SetUIDisabled(focused);
+  }
+
   if (self.traitEnvironment.traitCollection.verticalSizeClass ==
       UIUserInterfaceSizeClassUnspecified) {
     return;
   }
   [self.toolbarMediator locationBarFocusChangedTo:focused];
 
+  // Disable toolbar animations when focusing the omnibox on secondary toolbar.
+  // TODO(crbug.com/1462889): Add animation in OmniboxFocusOrchestrator if
+  // needed.
+  BOOL animateTransition = _enableAnimationsForOmniboxFocus &&
+                           _steadyStateOmniboxPosition == ToolbarType::kPrimary;
+
   [self.orchestrator
       transitionToStateOmniboxFocused:focused
                       toolbarExpanded:focused && !IsRegularXRegularSizeClass(
                                                      self.traitEnvironment)
-                             animated:self.enableAnimationsForOmniboxFocus];
+                             animated:animateTransition];
   self.locationBarFocused = focused;
 }
 
@@ -288,25 +333,14 @@ using vivaldi::IsVivaldiRunning;
   return [self.locationBarCoordinator showingOmniboxPopup];
 }
 
-#pragma mark SnapshotProviding
-
-- (id<SideSwipeToolbarSnapshotProviding>)primaryToolbarSnapshotProvider {
-  return self.primaryToolbarCoordinator;
-}
-
-- (id<SideSwipeToolbarSnapshotProviding>)secondaryToolbarSnapshotProvider {
-  return self.secondaryToolbarCoordinator;
-}
-
 #pragma mark ToolbarHeightProviding
 
 - (CGFloat)collapsedPrimaryToolbarHeight {
   if (_omniboxPosition == ToolbarType::kSecondary) {
     CHECK(IsBottomOmniboxSteadyStateEnabled());
-    // TODO(crbug.com/1455030): Return 0 here once overlay message is fixed.
-    // Currently, it's in a infinite loop when we try to show a message with a
-    // non-expanded primary toolbar.
-    return self.expandedPrimaryToolbarHeight;
+    // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
+    // zero. This is a temporary fix for the pdf bug.
+    return 1.0;
   }
 
   return ToolbarCollapsedHeight(
@@ -316,9 +350,9 @@ using vivaldi::IsVivaldiRunning;
 - (CGFloat)expandedPrimaryToolbarHeight {
   if (_omniboxPosition == ToolbarType::kSecondary) {
     CHECK(IsBottomOmniboxSteadyStateEnabled());
-    // TODO(crbug.com/1455030): Return 0 here once overlay message is fixed.
-    // Currently, it's in a infinite loop when we try to show a message with a
-    // non-expanded primary toolbar.
+    // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
+    // zero. This is a temporary fix for the pdf bug.
+    return 1.0;
   }
 
   CGFloat height =
@@ -347,29 +381,18 @@ using vivaldi::IsVivaldiRunning;
       self.secondaryToolbarViewController.view.intrinsicContentSize.height;
   if (_omniboxPosition == ToolbarType::kSecondary) {
     CHECK(IsBottomOmniboxSteadyStateEnabled());
-    height += kSecondaryToolbarOmniboxHeight;
+    height += ToolbarExpandedHeight(
+        self.traitEnvironment.traitCollection.preferredContentSizeCategory);
   }
   return height;
-}
-
-#pragma mark ViewRevealing
-
-- (id<ViewRevealingAnimatee>)viewRevealingAnimatee {
-  CHECK(self.primaryToolbarCoordinator.animatee);
-  return self.primaryToolbarCoordinator.animatee;
-}
-
-- (void)setPanGestureHandler:
-    (ViewRevealingVerticalPanHandler*)panGestureHandler {
-  [self.primaryToolbarCoordinator setPanGestureHandler:panGestureHandler];
 }
 
 #pragma mark - FakeboxFocuser
 
 - (void)focusOmniboxNoAnimation {
-  self.enableAnimationsForOmniboxFocus = NO;
+  _enableAnimationsForOmniboxFocus = NO;
   [self fakeboxFocused];
-  self.enableAnimationsForOmniboxFocus = YES;
+  _enableAnimationsForOmniboxFocus = YES;
   // If the pasteboard is containing a URL, the omnibox popup suggestions are
   // displayed as soon as the omnibox is focused.
   // If the fake omnibox animation is triggered at the same time, it is possible
@@ -415,6 +438,10 @@ using vivaldi::IsVivaldiRunning;
   return self.locationBarCoordinator.omniboxScribbleForwardingTarget;
 }
 
+- (void)didNavigateToNTPOnActiveWebState {
+  [self.toolbarMediator didNavigateToNTPOnActiveWebState];
+}
+
 #pragma mark - PopupMenuUIUpdating
 
 - (void)updateUIForOverflowMenuIPHDisplayed {
@@ -429,27 +456,6 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-#pragma mark - PrimaryToolbarCoordinatorDelegate
-
-- (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-
-  if (IsVivaldiRunning()) {
-    [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
-  } else {
-  BOOL isNTP = IsVisibleURLNewTabPage(webState);
-
-  // Don't do anything for a live non-ntp tab.
-  if (webState == self.browser->GetWebStateList()->GetActiveWebState() &&
-      !isNTP) {
-    [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
-  } else {
-    self.primaryToolbarViewController.view.hidden = NO;
-    [self.locationBarCoordinator.locationBarViewController.view setHidden:YES];
-  }
-  } // End Vivaldi
-
-}
-
 - (void)resetToolbarAfterSideSwipeSnapshot {
   [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
 }
@@ -458,8 +464,9 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)viewControllerTraitCollectionDidChange:
     (UITraitCollection*)previousTraitCollection {
-  [self.toolbarMediator
-      toolbarTraitCollectionChangedTo:self.traitEnvironment.traitCollection];
+  if (!_started) {
+    return;
+  }
   [self updateToolbarsLayout];
 }
 
@@ -487,6 +494,53 @@ using vivaldi::IsVivaldiRunning;
     }
   }
   return NO;
+}
+
+#pragma mark - SideSwipeToolbarSnapshotProviding
+
+- (UIImage*)toolbarSideSwipeSnapshotForWebState:(web::WebState*)webState
+                                withToolbarType:(ToolbarType)toolbarType {
+  AdaptiveToolbarCoordinator* adaptiveToolbarCoordinator =
+      [self coordinatorWithToolbarType:toolbarType];
+
+  [adaptiveToolbarCoordinator updateToolbarForSideSwipeSnapshot:webState];
+  [self updateLocationBarForSideSwipeSnapshot:webState];
+
+  UIImage* toolbarSnapshot = CaptureViewWithOption(
+      adaptiveToolbarCoordinator.viewController.view,
+      [[UIScreen mainScreen] scale], kClientSideRendering);
+
+  [adaptiveToolbarCoordinator resetToolbarAfterSideSwipeSnapshot];
+  [self resetLocationBarAfterSideSwipeSnapshot];
+
+  return toolbarSnapshot;
+}
+
+#pragma mark SideSwipeToolbarSnapshotProviding Private
+
+/// Returns the coordinator coresponding to `toolbarType`.
+- (AdaptiveToolbarCoordinator*)coordinatorWithToolbarType:
+    (ToolbarType)toolbarType {
+  switch (toolbarType) {
+    case ToolbarType::kPrimary:
+      return self.primaryToolbarCoordinator;
+    case ToolbarType::kSecondary:
+      return self.secondaryToolbarCoordinator;
+  }
+}
+
+/// Prepares location bar for a side swipe snapshot with`webState`.
+- (void)updateLocationBarForSideSwipeSnapshot:(web::WebState*)webState {
+  // Hide LocationBarView when taking a snapshot on a web state that is not the
+  // active one, as the URL is not updated.
+  if (webState != self.browser->GetWebStateList()->GetActiveWebState()) {
+    [self.locationBarCoordinator.locationBarViewController.view setHidden:YES];
+  }
+}
+
+/// Resets location bar after a side swipe snapshot.
+- (void)resetLocationBarAfterSideSwipeSnapshot {
+  [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
 }
 
 #pragma mark - ToolbarCommands
@@ -530,6 +584,10 @@ using vivaldi::IsVivaldiRunning;
   [self.toolbarHeightDelegate toolbarsHeightChanged];
 }
 
+- (void)transitionSteadyStateOmniboxToToolbarType:(ToolbarType)toolbarType {
+  _steadyStateOmniboxPosition = toolbarType;
+}
+
 #pragma mark - Private
 
 /// Returns primary and secondary coordinator in a array. Helper to call method
@@ -543,8 +601,11 @@ using vivaldi::IsVivaldiRunning;
   return self.primaryToolbarViewController;
 }
 
-/// Updates toolbars layout whith current omnibox focus state.
+/// Updates toolbars layout whith current omnibox focus state and trait
+/// collection.
 - (void)updateToolbarsLayout {
+  [self.toolbarMediator
+      toolbarTraitCollectionChangedTo:self.traitEnvironment.traitCollection];
   BOOL omniboxFocused =
       self.isOmniboxFirstResponder || self.showingOmniboxPopup;
   [self.orchestrator

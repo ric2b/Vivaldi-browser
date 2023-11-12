@@ -39,6 +39,7 @@ const std::string Converter::kPseudoLookupTable[] = {
     "",  // This is just to fill the zeroth spot. It should not be used.
     "-internal-autofill-previewed",
     "-internal-autofill-selected",
+    "-internal-dialog-in-top-layer",
     "-internal-is-html",
     "-internal-list-box",
     "-internal-media-controls-overlay-cast-button",
@@ -118,6 +119,8 @@ const std::string Converter::kPseudoLookupTable[] = {
     "single-button",
     "start",
     "target",
+    "user-invalid",
+    "user-valid",
     "valid",
     "vertical",
     "visited",

@@ -51,6 +51,14 @@ chrome.fileManagerPrivate.DeviceType = {
 /**
  * @enum {string}
  */
+chrome.fileManagerPrivate.DeviceConnectionState = {
+  OFFLINE: 'OFFLINE',
+  ONLINE: 'ONLINE',
+};
+
+/**
+ * @enum {string}
+ */
 chrome.fileManagerPrivate.DriveConnectionStateType = {
   OFFLINE: 'OFFLINE',
   METERED: 'METERED',
@@ -464,9 +472,9 @@ chrome.fileManagerPrivate.BulkPinStage = {
   LISTING_FILES: 'listing_files',
   SYNCING: 'syncing',
   SUCCESS: 'success',
+  NOT_ENOUGH_SPACE: 'not_enough_space',
   CANNOT_GET_FREE_SPACE: 'cannot_get_free_space',
   CANNOT_LIST_FILES: 'cannot_list_files',
-  NOT_ENOUGH_SPACE: 'not_enough_space',
   CANNOT_ENABLE_DOCS_OFFLINE: 'cannot_enable_docs_offline',
 };
 
@@ -684,7 +692,7 @@ chrome.fileManagerPrivate.GetVolumeRootOptions;
 /**
  * @typedef {{
  *   driveEnabled: boolean,
- *   cellularDisabled: boolean,
+ *   driveSyncEnabledOnMeteredNetwork: boolean,
  *   searchSuggestEnabled: boolean,
  *   use24hourClock: boolean,
  *   timezone: string,
@@ -701,7 +709,7 @@ chrome.fileManagerPrivate.Preferences;
 
 /**
  * @typedef {{
- *   cellularDisabled: (boolean|undefined),
+ *   driveSyncEnabledOnMeteredNetwork: (boolean|undefined),
  *   arcEnabled: (boolean|undefined),
  *   arcRemovableMediaAccessEnabled: (boolean|undefined),
  *   folderShortcuts: (!Array<string>|undefined),
@@ -744,9 +752,7 @@ chrome.fileManagerPrivate.DriveMetadataSearchResult;
 /**
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.DriveConnectionStateType,
- *   reason: (!chrome.fileManagerPrivate.DriveOfflineReason|undefined),
- *   hasCellularNetworkAccess: boolean,
- *   canPinHostedFiles: boolean
+ *   reason: (!chrome.fileManagerPrivate.DriveOfflineReason|undefined)
  * }}
  */
 chrome.fileManagerPrivate.DriveConnectionState;
@@ -875,6 +881,15 @@ chrome.fileManagerPrivate.IOTaskParams;
 
 /**
  * @typedef {{
+ *   type: !chrome.fileManagerPrivate.PolicyErrorType,
+ *   policyFileCount: number,
+ *   fileName: string
+ * }}
+ */
+chrome.fileManagerPrivate.PolicyError;
+
+/**
+ * @typedef {{
  *   conflictName: (string|undefined),
  *   conflictIsDirectory: (boolean|undefined),
  *   conflictMultiple: (boolean|undefined),
@@ -885,7 +900,9 @@ chrome.fileManagerPrivate.ConflictPauseParams;
 
 /**
  * @typedef {{
- *   type: !chrome.fileManagerPrivate.PolicyErrorType
+ *   type: !chrome.fileManagerPrivate.PolicyErrorType,
+ *   policyFileCount: number,
+ *   fileName: string
  * }}
  */
 chrome.fileManagerPrivate.PolicyPauseParams;
@@ -925,7 +942,7 @@ chrome.fileManagerPrivate.ResumeParams;
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.IOTaskType,
  *   state: !chrome.fileManagerPrivate.IOTaskState,
- *   policyError: (!chrome.fileManagerPrivate.PolicyErrorType|undefined),
+ *   policyError: (!chrome.fileManagerPrivate.PolicyError|undefined),
  *   sourceName: string,
  *   numRemainingItems: number,
  *   itemCount: number,
@@ -996,7 +1013,9 @@ chrome.fileManagerPrivate.ParsedTrashInfoFile;
  *   bytesToPin: number,
  *   pinnedBytes: number,
  *   filesToPin: number,
- *   remainingSeconds: number
+ *   listedFiles: number,
+ *   remainingSeconds: number,
+ *   emptiedQueue: boolean
  * }}
  */
 chrome.fileManagerPrivate.BulkPinProgress;
@@ -1354,6 +1373,13 @@ chrome.fileManagerPrivate.searchFilesByHashes = function(volumeId, hashList, cal
 chrome.fileManagerPrivate.searchFiles = function(searchParams, callback) {};
 
 /**
+ * Retrieves the current device connection status. |callback|
+ * @param {function(!chrome.fileManagerPrivate.DeviceConnectionState): void}
+ *     callback
+ */
+chrome.fileManagerPrivate.getDeviceConnectionState = function(callback) {};
+
+/**
  * Retrieves the state of the current drive connection. |callback|
  * @param {function(!chrome.fileManagerPrivate.DriveConnectionState): void}
  *     callback
@@ -1541,43 +1567,6 @@ chrome.fileManagerPrivate.installLinuxPackage = function(entry, callback) {};
 chrome.fileManagerPrivate.importCrostiniImage = function(entry) {};
 
 /**
- * For a file in DriveFS, retrieves its thumbnail. If |cropToSquare| is true,
- * returns a thumbnail appropriate for file list or grid views; otherwise,
- * returns a thumbnail appropriate for quickview.
- * @param {FileEntry} entry
- * @param {boolean} cropToSquare
- * @param {function(string): void} callback |thumbnailDataUrl| A data URL for
- *     the thumbnail; |thumbnailDataUrl| is empty if no thumbnail was available.
- */
-chrome.fileManagerPrivate.getDriveThumbnail = function(entry, cropToSquare, callback) {};
-
-/**
- * For a local PDF file, retrieves its thumbnail with a given |width| and
- * |height|.
- * @param {FileEntry} entry
- * @param {number} width
- * @param {number} height
- * @param {function(string): void} callback |thumbnailDataUrl| A data URL for
- *     the thumbnail; |thumbnailDataUrl| is empty if no thumbnail was available.
- */
-chrome.fileManagerPrivate.getPdfThumbnail = function(entry, width, height, callback) {};
-
-/**
- * Retrieves a thumbnail of an ARC DocumentsProvider file, closely matching the
- * hinted size specified by |widthHint| and |heightHint|, but not necessarily
- * the exact size. |callback| is called with thumbnail data encoded as a data
- * URL. If the document does not support thumbnails, |callback| is called with
- * an empty string. Note: The thumbnail data may originate from third-party
- * application code, and is untrustworthy (Security).
- * @param {FileEntry} entry
- * @param {number} widthHint
- * @param {number} heightHint
- * @param {function(string): void} callback |thumbnailDataUrl| A data URL for
- *     the thumbnail; |thumbnailDataUrl| is empty if no thumbnail was available.
- */
-chrome.fileManagerPrivate.getArcDocumentsProviderThumbnail = function(entry, widthHint, heightHint, callback) {};
-
-/**
  * Returns a list of Android picker apps to be shown in file selector.
  * @param {!Array<string>} extensions
  * @param {function(!Array<!chrome.fileManagerPrivate.AndroidApp>): void}
@@ -1695,6 +1684,14 @@ chrome.fileManagerPrivate.cancelIOTask = function(taskId) {};
 chrome.fileManagerPrivate.resumeIOTask = function(taskId, params) {};
 
 /**
+ * Notifies the browser that any info still stored about an already completed
+ * I/O task identified by |taskId| can be cleared.
+ * @param {number} taskId
+ * @param {function(): void} callback Callback that does not take arguments.
+ */
+chrome.fileManagerPrivate.dismissIOTask = function(taskId, callback) {};
+
+/**
  * Shows a policy dialog for a task. Task ids are communicated to the Files App
  * in each I/O task's progress status.
  * @param {number} taskId
@@ -1782,6 +1779,11 @@ chrome.fileManagerPrivate.onDirectoryChanged;
  * @type {!ChromeEvent}
  */
 chrome.fileManagerPrivate.onPreferencesChanged;
+
+/**
+ * @type {!ChromeEvent}
+ */
+chrome.fileManagerPrivate.onDeviceConnectionStatusChanged;
 
 /**
  * @type {!ChromeEvent}

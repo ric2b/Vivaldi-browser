@@ -269,6 +269,21 @@ class UtilitiesGetUrlFragmentsFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
+// various JS bindings constrains.
+class UtilitiesUrlToThumbnailTextFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.urlToThumbnailText",
+                             UTILITIES_URLTOTHUMBNAILTEXT)
+  UtilitiesUrlToThumbnailTextFunction() = default;
+
+ private:
+  ~UtilitiesUrlToThumbnailTextFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class UtilitiesGetSelectedTextFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getSelectedText",
@@ -974,8 +989,7 @@ class UtilitiesSetProtocolHandlingFunction : public ExtensionFunction {
 
 class UtilitiesConnectProxyFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.connectProxy",
-                             UTILITIES_PROXY_CONNECT)
+  DECLARE_EXTENSION_FUNCTION("utilities.connectProxy", UTILITIES_PROXY_CONNECT)
   UtilitiesConnectProxyFunction() = default;
 
  private:
@@ -996,8 +1010,7 @@ class UtilitiesDisconnectProxyFunction : public ExtensionFunction {
 
 class UtilitiesSupportsProxyFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.supportsProxy",
-                             UTILITIES_PROXY_SUPPORT)
+  DECLARE_EXTENSION_FUNCTION("utilities.supportsProxy", UTILITIES_PROXY_SUPPORT)
   UtilitiesSupportsProxyFunction() = default;
 
  private:

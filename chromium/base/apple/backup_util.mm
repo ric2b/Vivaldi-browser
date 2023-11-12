@@ -6,15 +6,11 @@
 
 #import <Foundation/Foundation.h>
 
+#include "base/apple/foundation_util.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace base::apple {
 
@@ -22,7 +18,7 @@ bool GetBackupExclusion(const FilePath& file_path) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
 
-  NSURL* file_url = mac::FilePathToNSURL(file_path);
+  NSURL* file_url = apple::FilePathToNSURL(file_path);
   DCHECK([file_url checkPromisedItemIsReachableAndReturnError:nil]);
 
   NSError* error = nil;
@@ -44,7 +40,7 @@ bool SetBackupState(const FilePath& file_path, bool excluded) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
 
-  NSURL* file_url = mac::FilePathToNSURL(file_path);
+  NSURL* file_url = apple::FilePathToNSURL(file_path);
   DCHECK([file_url checkPromisedItemIsReachableAndReturnError:nil]);
 
   NSError* error = nil;

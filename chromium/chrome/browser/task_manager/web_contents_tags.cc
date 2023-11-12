@@ -141,7 +141,11 @@ void WebContentsTags::CreateForPrintingContents(
 void WebContentsTags::CreateForGuestContents(
     content::WebContents* web_contents) {
 #if !BUILDFLAG(IS_ANDROID)
-  DCHECK(guest_view::GuestViewBase::IsGuest(web_contents));
+  // NOTE(andre@vivaldi.com) : WebViews is shown in incognito windows with a
+  // regular profile in ingocnito enabled extensions. Popups.
+  if (!vivaldi::IsVivaldiRunning()) {
+    DCHECK(guest_view::GuestViewBase::IsGuest(web_contents));
+  }  // vivaldi
   if (!WebContentsTag::FromWebContents(web_contents)) {
     TagWebContents(web_contents, base::WrapUnique(new GuestTag(web_contents)),
                    WebContentsTag::kTagKey);

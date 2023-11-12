@@ -59,7 +59,7 @@ public class WebLayerSiteSettingsDelegate
                 || type == Type.BACKGROUND_SYNC || type == Type.CAMERA || type == Type.COOKIES
                 || type == Type.DEVICE_LOCATION || type == Type.JAVASCRIPT
                 || type == Type.MICROPHONE || type == Type.POPUPS || type == Type.PROTECTED_MEDIA
-                || type == Type.SOUND || type == Type.USE_STORAGE;
+                || type == Type.SOUND || type == Type.USE_STORAGE || type == Type.ZOOM;
     }
 
     @Override
@@ -79,6 +79,11 @@ public class WebLayerSiteSettingsDelegate
 
     @Override
     public boolean isPrivacySandboxSettings4Enabled() {
+        return false;
+    }
+
+    @Override
+    public boolean isUserBypassUIEnabled() {
         return false;
     }
 

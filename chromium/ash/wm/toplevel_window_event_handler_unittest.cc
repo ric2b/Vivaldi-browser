@@ -16,6 +16,7 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_window_builder.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -31,11 +32,13 @@
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
+#include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
@@ -1101,15 +1104,7 @@ TEST_F(ToplevelWindowEventHandlerTest, DragSnappedWindowToExternalDisplay) {
 
   // Drag the window to the secondary display.
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(), w1.get());
-  // To determine the state, WindowWorkspaceResizer determines the display by
-  // checking the CursorManager for the correct display. EventGenerator does not
-  // update the display in the CursorManager, so we manually do it here.
-  // TODO(crbug.com/990589): Unit tests should be able to simulate mouse input
-  // without having to call |CursorManager::SetDisplay|.
-  const gfx::Point drag_location = gfx::Point(472, -462);
-  Shell::Get()->cursor_manager()->SetDisplay(
-      display::Screen::GetScreen()->GetDisplayNearestPoint(drag_location));
-  generator.DragMouseTo(drag_location);
+  generator.DragMouseTo(472, -462);
 
   // Expect the window is no longer snapped and its size was restored to the
   // initial size.
@@ -1247,14 +1242,28 @@ class ToplevelWindowEventHandlerDragTest : public AshTestBase {
   }
 
  protected:
-  // Send gesture event with |type| to the toplevel window event handler.
+  // Send gesture event with `type` to the toplevel window event handler.
+  // This is for gestures that require the `delta` arguments for
+  // `GestureEventDetails` construction.
   void SendGestureEvent(const gfx::Point& position,
                         int scroll_x,
                         int scroll_y,
                         ui::EventType type) {
-    ui::GestureEvent event = ui::GestureEvent(
-        position.x(), position.y(), ui::EF_NONE, base::TimeTicks::Now(),
-        ui::GestureEventDetails(type, scroll_x, scroll_y));
+    SendGestureEventImpl(position,
+                         ui::GestureEventDetails(type, scroll_x, scroll_y));
+  }
+
+  // Send gesture event with `type` to the toplevel window event handler.
+  // This is for gestures that do not require the `delta` arguments for
+  // `GestureEventDetails` construction.
+  void SendGestureEvent(const gfx::Point& position, ui::EventType type) {
+    SendGestureEventImpl(position, ui::GestureEventDetails(type));
+  }
+
+  void SendGestureEventImpl(const gfx::Point& position,
+                            ui::GestureEventDetails gesture_details) {
+    ui::GestureEvent event(position.x(), position.y(), ui::EF_NONE,
+                           base::TimeTicks::Now(), gesture_details);
     ui::Event::DispatcherApi(&event).set_target(dragged_window_.get());
     ui::Event::DispatcherApi(&event).set_phase(ui::EP_PRETARGET);
     Shell::Get()->toplevel_window_event_handler()->OnGestureEvent(&event);
@@ -1298,6 +1307,168 @@ TEST_F(ToplevelWindowEventHandlerDragTest, WindowDestroyedDuringDragging) {
   EXPECT_FALSE(event_handler->is_drag_in_progress());
 }
 
+// Test that `gesture_target_` is set immediately with
+// `ET_GESTURE_BEGIN`. The client may call `AttemptToStartDrag()` after
+// `ET_GESTURE_BEGIN` but before `ET_GESTURE_SCROLL_BEGIN` or
+// `ET_GESTURE_PINCH_BEGIN`.
+TEST_F(ToplevelWindowEventHandlerDragTest,
+       GestureTargetIsSetAsSoonAsGestureStarts) {
+  SendGestureEvent(gfx::Point(0, 0), ui::ET_GESTURE_BEGIN);
+  ToplevelWindowEventHandler* event_handler =
+      Shell::Get()->toplevel_window_event_handler();
+
+  EXPECT_TRUE(event_handler->gesture_target());
+  dragged_window_.reset();
+}
+
+class ToplevelWindowEventHandlerPipPinchToResizeTest : public AshTestBase {
+ public:
+  ToplevelWindowEventHandlerPipPinchToResizeTest()
+      : scoped_feature_list_(features::kPipPinchToResize) {}
+
+  ToplevelWindowEventHandlerPipPinchToResizeTest(
+      const ToplevelWindowEventHandlerPipPinchToResizeTest&) = delete;
+  ToplevelWindowEventHandlerPipPinchToResizeTest& operator=(
+      const ToplevelWindowEventHandlerPipPinchToResizeTest&) = delete;
+
+  ~ToplevelWindowEventHandlerPipPinchToResizeTest() override = default;
+
+ protected:
+  // Send gesture event with `type` to the toplevel window event handler.
+  aura::Window* CreatePipWindow() {
+    gfx::Size kMaxWindowSize(600, 400);
+    gfx::Size kMinWindowSize(300, 200);
+    gfx::SizeF kWindowAspectRatio(3.f, 2.f);
+
+    gfx::Rect bounds(0, 0, 300, 200);
+    aura::test::TestWindowDelegate* delegate =
+        aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate();
+    aura::Window* window(TestWindowBuilder()
+                             .AllowAllWindowStates()
+                             .SetBounds(bounds)
+                             .SetDelegate(delegate)
+                             .SetShow(false)
+                             .Build()
+                             .release());
+
+    delegate->set_maximum_size(kMaxWindowSize);
+    delegate->set_minimum_size(kMinWindowSize);
+    delegate->set_window_component(HTCAPTION);
+    window->SetProperty(aura::client::kAspectRatio, kWindowAspectRatio);
+    window->SetProperty(aura::client::kZOrderingKey,
+                        ui::ZOrderLevel::kFloatingWindow);
+
+    WindowState* window_state = WindowState::Get(window);
+    const WMEvent enter_pip(WM_EVENT_PIP);
+    window_state->OnWMEvent(&enter_pip);
+    EXPECT_TRUE(window_state->IsPip());
+    window->Show();
+    return window;
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(ToplevelWindowEventHandlerPipPinchToResizeTest,
+       PinchToResizeOnPipChangesWindowBounds) {
+  std::unique_ptr<aura::Window> window(CreatePipWindow());
+  ASSERT_TRUE(WindowState::Get(window.get())->IsPip());
+  EXPECT_EQ(gfx::Rect(8, 8, 300, 200), window->bounds());
+
+  ui::test::EventGenerator* gen = GetEventGenerator();
+  const int kTouchPoints = 2;
+  int delay_adding_finger_ms[kTouchPoints] = {0, 0};
+  int delay_releasing_finger_ms[kTouchPoints] = {1500, 1500};
+
+  {
+    // Execute pinch (zoom in) event on PiP window.
+    gfx::Point start[kTouchPoints] = {gfx::Point(100, 100),
+                                      gfx::Point(250, 100)};
+    gfx::Vector2d delta[kTouchPoints] = {gfx::Vector2d(100, 100),
+                                         gfx::Vector2d(200, 200)};
+
+    gen->GestureMultiFingerScrollWithDelays(kTouchPoints, start, delta,
+                                            delay_adding_finger_ms,
+                                            delay_releasing_finger_ms, 15, 100);
+    base::RunLoop().RunUntilIdle();
+
+    // Verify that PiP window bounds (origin and size) have changed.
+    EXPECT_EQ(gfx::Rect(8, 94, 506, 337), window->bounds());
+  }
+
+  {
+    // Execute pinch (zoom out) event on PiP window.
+    gfx::Point start[kTouchPoints] = {gfx::Point(200, 200),
+                                      gfx::Point(450, 300)};
+    gfx::Vector2d delta[kTouchPoints] = {gfx::Vector2d(-100, -100),
+                                         gfx::Vector2d(-200, -200)};
+
+    gen->GestureMultiFingerScrollWithDelays(kTouchPoints, start, delta,
+                                            delay_adding_finger_ms,
+                                            delay_releasing_finger_ms, 15, 100);
+    base::RunLoop().RunUntilIdle();
+
+    // Verify that PiP window bounds (origin and size) have changed again.
+    EXPECT_EQ(gfx::Rect(8, 8, 300, 200), window->bounds());
+  }
+
+  const WMEvent exit_pip(WM_EVENT_NORMAL);
+  WindowState::Get(window.get())->OnWMEvent(&exit_pip);
+}
+
+TEST_F(ToplevelWindowEventHandlerPipPinchToResizeTest,
+       PinchToResizeOnPipRespectsMaxSizeAndMinSize) {
+  UpdateDisplay("1500x1000");
+
+  ui::test::EventGenerator* gen = GetEventGenerator();
+  const int kTouchPoints = 2;
+  int delay_adding_finger_ms[kTouchPoints] = {0, 0};
+  int delay_releasing_finger_ms[kTouchPoints] = {1500, 1500};
+  gfx::Point start[kTouchPoints] = {gfx::Point(100, 100), gfx::Point(250, 100)};
+
+  {
+    // Create a PiP window with maximum_size and minimum_size.
+    std::unique_ptr<aura::Window> window(CreatePipWindow());
+    ASSERT_TRUE(WindowState::Get(window.get())->IsPip());
+
+    // Execute pinch (zoom in) event on PiP window.
+    gfx::Vector2d delta[kTouchPoints] = {gfx::Vector2d(100, 100),
+                                         gfx::Vector2d(400, 400)};
+
+    gen->GestureMultiFingerScrollWithDelays(kTouchPoints, start, delta,
+                                            delay_adding_finger_ms,
+                                            delay_releasing_finger_ms, 15, 100);
+    base::RunLoop().RunUntilIdle();
+
+    // Verify that PiP window did not exceed the maximum size.
+    EXPECT_EQ(gfx::Rect(8, 166, 600, 400), window->bounds());
+
+    const WMEvent exit_pip(WM_EVENT_NORMAL);
+    WindowState::Get(window.get())->OnWMEvent(&exit_pip);
+  }
+
+  {
+    // Create a PiP window with maximum_size and minimum_size set.
+    std::unique_ptr<aura::Window> window(CreatePipWindow());
+    ASSERT_TRUE(WindowState::Get(window.get())->IsPip());
+
+    // Execute pinch (zoom out) event on PiP window.
+    gfx::Vector2d delta[kTouchPoints] = {gfx::Vector2d(0, 0),
+                                         gfx::Vector2d(-100, 0)};
+
+    gen->GestureMultiFingerScrollWithDelays(kTouchPoints, start, delta,
+                                            delay_adding_finger_ms,
+                                            delay_releasing_finger_ms, 15, 100);
+    base::RunLoop().RunUntilIdle();
+
+    // Verify that PiP window size did not become smaller than the minimum size.
+    EXPECT_EQ(gfx::Rect(8, 8, 300, 200), window->bounds());
+
+    const WMEvent exit_pip(WM_EVENT_NORMAL);
+    WindowState::Get(window.get())->OnWMEvent(&exit_pip);
+  }
+}
 // Showing the resize shadows when the mouse is over the window edges is
 // tested in resize_shadow_and_cursor_test.cc
 

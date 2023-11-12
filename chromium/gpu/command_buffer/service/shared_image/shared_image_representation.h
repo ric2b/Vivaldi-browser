@@ -6,7 +6,8 @@
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_SHARED_IMAGE_REPRESENTATION_H_
 
 #include <dawn/dawn_proc_table.h>
-#include <dawn/webgpu.h>
+#include <dawn/webgpu_cpp.h>
+
 #include <memory>
 
 #include "base/functional/callback_helpers.h"
@@ -49,7 +50,9 @@ extern "C" typedef struct AHardwareBuffer AHardwareBuffer;
 #endif
 
 typedef unsigned int GLenum;
-class GrBackendSurfaceMutableState;
+namespace skgpu {
+class MutableTextureState;
+}
 
 namespace cc {
 class PaintOpBuffer;
@@ -179,6 +182,15 @@ class SharedImageRepresentationFactoryRef : public SharedImageRepresentation {
     backing()->OnWriteSucceeded();
   }
   bool CopyToGpuMemoryBuffer() { return backing()->CopyToGpuMemoryBuffer(); }
+  void GetGpuMemoryBufferHandleInfo(gfx::GpuMemoryBufferHandle& handle,
+                                    viz::SharedImageFormat& format,
+                                    gfx::Size& size,
+                                    gfx::BufferUsage& buffer_usage) {
+    handle = backing()->GetGpuMemoryBufferHandle();
+    format = backing()->format();
+    size = backing()->size();
+    buffer_usage = backing()->buffer_usage();
+  }
   bool PresentSwapChain() { return backing()->PresentSwapChain(); }
   void RegisterImageFactory(SharedImageFactory* factory) {
     DCHECK(is_primary_);
@@ -228,6 +240,7 @@ class GPU_GLES2_EXPORT GLTextureImageRepresentationBase
  protected:
   friend class SkiaGLImageRepresentation;
   friend class DawnEGLImageRepresentation;
+  friend class DawnGLTextureRepresentation;
   friend class GLTextureGLCommonRepresentation;
 
   // Can be overridden to handle clear state tracking when GL access begins or
@@ -309,31 +322,24 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
     // NOTE: All references to the returned SkSurface(s) must be destroyed
     // before ScopedWriteAccess is destroyed.
     SkSurface* surface() const {
-      DCHECK(representation()->format().is_single_plane());
+      // Writes do not support external sampler.
+      CHECK(representation()->format().is_single_plane());
       return surface(0);
     }
     SkSurface* surface(int plane_index) const {
       return surfaces_[plane_index].get();
     }
 
-    GrPromiseImageTexture* promise_image_texture() const {
-      DCHECK(representation()->format().is_single_plane());
-      return promise_image_texture(0);
-    }
     GrPromiseImageTexture* promise_image_texture(int plane_index) const {
       return promise_image_textures_[plane_index].get();
     }
 
-    skgpu::graphite::BackendTexture graphite_texture() const {
-      DCHECK(representation()->format().is_single_plane());
-      return graphite_texture(0);
-    }
     skgpu::graphite::BackendTexture graphite_texture(int plane_index) const {
       return graphite_textures_[plane_index];
     }
 
     // NOTE: Implemented only for Ganesh.
-    // Applies the GrBackendSurfaceMutableState for Vulkan layout and external
+    // Applies the skgpu::MutableTextureState for Vulkan layout and external
     // queue transitions needed for Vulkan/GL interop.
     virtual void ApplyBackendSurfaceEndState() = 0;
 
@@ -362,7 +368,7 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
     virtual ~ScopedReadAccess();
 
     GrPromiseImageTexture* promise_image_texture() const {
-      DCHECK(representation()->format().is_single_plane());
+      CHECK_EQ(representation()->NumPlanesExpected(), 1u);
       return promise_image_texture(0);
     }
     GrPromiseImageTexture* promise_image_texture(int plane_index) const {
@@ -370,7 +376,7 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
     }
 
     skgpu::graphite::BackendTexture graphite_texture() const {
-      DCHECK(representation()->format().is_single_plane());
+      CHECK_EQ(representation()->NumPlanesExpected(), 1u);
       return graphite_texture(0);
     }
     skgpu::graphite::BackendTexture graphite_texture(int plane_index) const {
@@ -391,9 +397,9 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
         SharedContextState* context_state) = 0;
 
     // NOTE: Implemented only for Ganesh.
-    // Checks if need to apply GrBackendSurfaceMutableState.
+    // Checks if need to apply skgpu::MutableTextureState.
     virtual bool HasBackendSurfaceEndState() = 0;
-    // Applies the GrBackendSurfaceMutableState for Vulkan layout and external
+    // Applies the skgpu::MutableTextureState for Vulkan layout and external
     // queue transitions needed for Vulkan/GL interop.
     virtual void ApplyBackendSurfaceEndState() = 0;
 
@@ -465,15 +471,15 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
         base::PassKey<SkiaGaneshImageRepresentation> pass_key,
         SkiaImageRepresentation* representation,
         std::vector<sk_sp<SkSurface>> surfaces,
-        std::unique_ptr<GrBackendSurfaceMutableState> end_state);
+        std::unique_ptr<skgpu::MutableTextureState> end_state);
     ScopedGaneshWriteAccess(
         base::PassKey<SkiaGaneshImageRepresentation> pass_key,
         SkiaImageRepresentation* representation,
         std::vector<sk_sp<GrPromiseImageTexture>> promise_image_textures,
-        std::unique_ptr<GrBackendSurfaceMutableState> end_state);
+        std::unique_ptr<skgpu::MutableTextureState> end_state);
     ~ScopedGaneshWriteAccess() override;
 
-    // Applies the GrBackendSurfaceMutableState for Vulkan layout and external
+    // Applies the skgpu::MutableTextureState for Vulkan layout and external
     // queue transitions needed for Vulkan/GL interop.
     void ApplyBackendSurfaceEndState() override;
 
@@ -482,7 +488,7 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
       return static_cast<SkiaGaneshImageRepresentation*>(representation());
     }
 
-    std::unique_ptr<GrBackendSurfaceMutableState> end_state_;
+    std::unique_ptr<skgpu::MutableTextureState> end_state_;
   };
 
   class GPU_GLES2_EXPORT ScopedGaneshReadAccess : public ScopedReadAccess {
@@ -491,7 +497,7 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
         base::PassKey<SkiaGaneshImageRepresentation> pass_key,
         SkiaImageRepresentation* representation,
         std::vector<sk_sp<GrPromiseImageTexture>> promise_image_textures,
-        std::unique_ptr<GrBackendSurfaceMutableState> end_state);
+        std::unique_ptr<skgpu::MutableTextureState> end_state);
     ~ScopedGaneshReadAccess() override;
 
     // Creates an SkImage from GrBackendTexture for single planar formats or if
@@ -507,9 +513,9 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
         int plane_index,
         SharedContextState* context_state) override;
 
-    // Checks if need to apply GrBackendSurfaceMutableState.
+    // Checks if need to apply skgpu::MutableTextureState.
     bool HasBackendSurfaceEndState() override;
-    // Applies the GrBackendSurfaceMutableState for Vulkan layout and external
+    // Applies the skgpu::MutableTextureState for Vulkan layout and external
     // queue transitions needed for Vulkan/GL interop.
     void ApplyBackendSurfaceEndState() override;
 
@@ -518,7 +524,7 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
       return static_cast<SkiaGaneshImageRepresentation*>(representation());
     }
 
-    std::unique_ptr<GrBackendSurfaceMutableState> end_state_;
+    std::unique_ptr<skgpu::MutableTextureState> end_state_;
   };
 
   SkiaGaneshImageRepresentation(GrDirectContext* gr_context,
@@ -585,11 +591,11 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
       const gfx::Rect& update_rect,
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
-      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) = 0;
+      std::unique_ptr<skgpu::MutableTextureState>* end_state) = 0;
   virtual std::vector<sk_sp<GrPromiseImageTexture>> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
-      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) = 0;
+      std::unique_ptr<skgpu::MutableTextureState>* end_state) = 0;
 
   // Begin the read access. The implementations should insert semaphores into
   // begin_semaphores vector which client will wait on before reading the
@@ -605,7 +611,7 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
   virtual std::vector<sk_sp<GrPromiseImageTexture>> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
-      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) = 0;
+      std::unique_ptr<skgpu::MutableTextureState>* end_state) = 0;
 
  private:
   raw_ptr<GrDirectContext> gr_context_ = nullptr;
@@ -719,9 +725,9 @@ class GPU_GLES2_EXPORT SkiaGraphiteImageRepresentation
 class GPU_GLES2_EXPORT DawnImageRepresentation
     : public SharedImageRepresentation {
  public:
-  static constexpr uint32_t kWriteUsage = WGPUTextureUsage_CopyDst |
-                                          WGPUTextureUsage_RenderAttachment |
-                                          WGPUTextureUsage_StorageBinding;
+  static constexpr wgpu::TextureUsage kWriteUsage =
+      wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::RenderAttachment |
+      wgpu::TextureUsage::StorageBinding;
 
   DawnImageRepresentation(SharedImageManager* manager,
                           SharedImageBacking* backing,
@@ -733,31 +739,42 @@ class GPU_GLES2_EXPORT DawnImageRepresentation
    public:
     ScopedAccess(base::PassKey<DawnImageRepresentation> pass_key,
                  DawnImageRepresentation* representation,
-                 WGPUTexture texture,
+                 wgpu::Texture texture,
                  AccessMode access_mode);
     ~ScopedAccess();
 
     // Get the unowned texture handle. The caller should take a reference
     // if necessary by doing wgpu::Texture texture(access->texture());
-    WGPUTexture texture() const { return texture_; }
+    const wgpu::Texture& texture() const { return texture_; }
 
    private:
-    WGPUTexture texture_ = 0;
+    wgpu::Texture texture_;
   };
 
   // Calls BeginAccess and returns a ScopedAccess object which will EndAccess
   // when it goes out of scope. The Representation must outlive the returned
   // ScopedAccess.
   std::unique_ptr<ScopedAccess> BeginScopedAccess(
-      WGPUTextureUsage usage,
+      wgpu::TextureUsage usage,
       AllowUnclearedAccess allow_uncleared);
+
+  // For write usage, the update_rect is a hint to the backend about the portion
+  // of the image that will be drawn to. Callers shouldn't draw outside of this
+  // area, but aren't required to overwrite every pixel inside it.
+  // For non-write usage, the update_rect can be ignored.
+  std::unique_ptr<ScopedAccess> BeginScopedAccess(
+      wgpu::TextureUsage usage,
+      AllowUnclearedAccess allow_uncleared,
+      const gfx::Rect& update_rect);
 
  private:
   friend class WrappedDawnCompoundImageRepresentation;
 
   // This can return null in case of a Dawn validation error, for example if
   // usage is invalid.
-  virtual WGPUTexture BeginAccess(WGPUTextureUsage usage) = 0;
+  virtual wgpu::Texture BeginAccess(wgpu::TextureUsage usage) = 0;
+  virtual wgpu::Texture BeginAccess(wgpu::TextureUsage usage,
+                                    const gfx::Rect& update_rect);
   virtual void EndAccess() = 0;
 };
 

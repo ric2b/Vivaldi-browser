@@ -5,11 +5,7 @@
 #import "ios/chrome/browser/safe_mode/safe_mode_crashing_modules_config.h"
 
 #import "base/apple/bundle_locations.h"
-#import "base/mac/foundation_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#import "base/apple/foundation_util.h"
 
 namespace {
 
@@ -40,11 +36,11 @@ NSString* const kModuleFriendlyNameKey = @"ModuleFriendlyName";
 }
 
 - (NSString*)startupCrashModuleFriendlyName:(NSString*)modulePath {
-  NSDictionary* modules = base::mac::ObjCCastStrict<NSDictionary>(
+  NSDictionary* modules = base::apple::ObjCCastStrict<NSDictionary>(
       [_configuration objectForKey:kStartupCrashModulesKey]);
   NSDictionary* module =
-      base::mac::ObjCCastStrict<NSDictionary>(modules[modulePath]);
-  return base::mac::ObjCCast<NSString>(module[kModuleFriendlyNameKey]);
+      base::apple::ObjCCastStrict<NSDictionary>(modules[modulePath]);
+  return base::apple::ObjCCast<NSString>(module[kModuleFriendlyNameKey]);
 }
 
 @end

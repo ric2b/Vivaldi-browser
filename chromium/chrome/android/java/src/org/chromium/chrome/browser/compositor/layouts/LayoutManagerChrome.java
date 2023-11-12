@@ -15,7 +15,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
@@ -32,7 +31,6 @@ import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegateProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -57,8 +55,6 @@ import org.vivaldi.browser.common.VivaldiUtils;
 public class LayoutManagerChrome
         extends LayoutManagerImpl implements ChromeAccessibilityUtil.Observer {
     // Layouts
-    /** An {@link Layout} that should be used as the accessibility tab switcher. */
-    protected OverviewListLayout mOverviewListLayout;
     /** A {@link Layout} that should be used when the user is swiping sideways on the toolbar. */
     protected ToolbarSwipeLayout mToolbarSwipeLayout;
     /**
@@ -98,6 +94,8 @@ public class LayoutManagerChrome
      * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
      *         Start surface refactor is enabled. Used to create overviewLayout if it has value,
      *         otherwise will use the accessibility overview layout.
+     * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
+     *         controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      * @param tabSwitcherScrimAnchor {@link ViewGroup} used by tab switcher layout to show scrim
@@ -106,6 +104,7 @@ public class LayoutManagerChrome
      */
     public LayoutManagerChrome(LayoutManagerHost host, ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
+            BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator) {
@@ -136,11 +135,11 @@ public class LayoutManagerChrome
         if (ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context)) {
             if (startSurfaceSupplier.hasValue() || tabSwitcherSupplier.hasValue()) {
                 createOverviewLayout(startSurfaceSupplier.get(), tabSwitcherSupplier.get(),
-                        scrimCoordinator, tabSwitcherScrimAnchor);
+                        browserControlsStateProvider, scrimCoordinator, tabSwitcherScrimAnchor);
             }
         } else if (startSurfaceSupplier.hasValue()) {
-            createOverviewLayout(startSurfaceSupplier.get(), /*tabSwitcher=*/null, scrimCoordinator,
-                    tabSwitcherScrimAnchor);
+            createOverviewLayout(startSurfaceSupplier.get(), /*tabSwitcher=*/null,
+                    browserControlsStateProvider, scrimCoordinator, tabSwitcherScrimAnchor);
         }
     }
 
@@ -150,15 +149,17 @@ public class LayoutManagerChrome
      *         is disabled.
      * @param tabSwitcher An interface to talk to the Grid Tab Switcher when Start surface refactor
      *         is enabled.
+     * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
+     *         controls.
      * @param scrimCoordinator scrim coordinator for GTS
      * @param tabSwitcherScrimAnchor scrim anchor view for GTS
      */
     protected void createOverviewLayout(@Nullable StartSurface startSurface,
-            @Nullable TabSwitcher tabSwitcher, ScrimCoordinator scrimCoordinator,
-            ViewGroup tabSwitcherScrimAnchor) {
+            @Nullable TabSwitcher tabSwitcher,
+            BrowserControlsStateProvider browserControlsStateProvider,
+            ScrimCoordinator scrimCoordinator, ViewGroup tabSwitcherScrimAnchor) {
         assert mOverviewLayout == null && mTabSwitcherLayout == null
-                && mStartSurfaceHomeLayout == null
-                && TabUiFeatureUtilities.isGridTabSwitcherEnabled(mHost.getContext());
+                && mStartSurfaceHomeLayout == null;
         boolean isRefactorEnabled =
                 ReturnToChromeUtil.isStartSurfaceRefactorEnabled(mHost.getContext());
 
@@ -171,8 +172,9 @@ public class LayoutManagerChrome
                     TabManagementDelegateProvider.getDelegate();
             assert tabManagementDelegate != null;
 
-            mTabSwitcherLayout = tabManagementDelegate.createTabSwitcherLayout(context, this,
-                    renderHost, tabSwitcher, tabSwitcherScrimAnchor, scrimCoordinator);
+            mTabSwitcherLayout = tabManagementDelegate.createTabSwitcherLayout(context, this, this,
+                    renderHost, browserControlsStateProvider, tabSwitcher, tabSwitcherScrimAnchor,
+                    scrimCoordinator);
 
             if (startSurface != null) {
                 mStartSurfaceHomeLayout = StartSurfaceDelegate.createStartSurfaceHomeLayout(
@@ -181,7 +183,8 @@ public class LayoutManagerChrome
         } else {
             assert startSurface != null;
             mOverviewLayout = StartSurfaceDelegate.createTabSwitcherAndStartSurfaceLayout(context,
-                    this, renderHost, startSurface, tabSwitcherScrimAnchor, scrimCoordinator);
+                    this, renderHost, browserControlsStateProvider, startSurface,
+                    tabSwitcherScrimAnchor, scrimCoordinator);
         }
 
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mHost.getContext())) {
@@ -270,8 +273,6 @@ public class LayoutManagerChrome
                 mHost.getBrowserControlsManager();
 
         // Build Layouts
-        mOverviewListLayout =
-                new OverviewListLayout(context, this, renderHost, browserControlsStateProvider);
         mToolbarSwipeLayout = new ToolbarSwipeLayout(context, this, renderHost,
                 browserControlsStateProvider, this, topUiColorProvider);
 
@@ -280,7 +281,6 @@ public class LayoutManagerChrome
         // Initialize Layouts
         TabContentManager content = mTabContentManagerSupplier.get();
         mToolbarSwipeLayout.setTabModelSelector(selector, content);
-        mOverviewListLayout.setTabModelSelector(selector, content);
         if (mOverviewLayout != null) {
             mOverviewLayout.setTabModelSelector(selector, content);
             mOverviewLayout.onFinishNativeInitialization();
@@ -335,9 +335,6 @@ public class LayoutManagerChrome
             mStartSurfaceHomeLayout.destroy();
             mStartSurfaceHomeLayout = null;
         }
-        if (mOverviewListLayout != null) {
-            mOverviewListLayout.destroy();
-        }
         if (mToolbarSwipeLayout != null) {
             mToolbarSwipeLayout.destroy();
         }
@@ -349,9 +346,7 @@ public class LayoutManagerChrome
         if (layoutType == LayoutType.TOOLBAR_SWIPE) {
             layout = mToolbarSwipeLayout;
         } else if (layoutType == LayoutType.TAB_SWITCHER) {
-            if (shouldUseAccessibilityTabSwitcher()) {
-                layout = mOverviewListLayout;
-            } else if (mTabSwitcherLayout != null) {
+            if (mTabSwitcherLayout != null) {
                 layout = mTabSwitcherLayout;
             } else {
                 layout = mOverviewLayout;
@@ -368,22 +363,6 @@ public class LayoutManagerChrome
             layout = super.getLayoutForType(layoutType);
         }
         return layout;
-    }
-
-    /** @return Whether to use the accessibility tab switcher instead of the default one. */
-    private boolean shouldUseAccessibilityTabSwitcher() {
-        boolean useAccessibility = DeviceClassManager.enableAccessibilityLayout(mHost.getContext());
-
-        boolean accessibilityIsVisible =
-                useAccessibility && getActiveLayout() == mOverviewListLayout;
-        boolean normalIsVisible = (getActiveLayout() == mOverviewLayout && mOverviewLayout != null)
-                || (getActiveLayout() == mTabSwitcherLayout && mTabSwitcherLayout != null);
-
-        // We only want to use the AccessibilityOverviewLayout if the following are all valid:
-        // 1. We're already showing the AccessibilityOverviewLayout OR we're using accessibility.
-        // 2. We're not already showing the normal OverviewLayout (or we are on a tablet, in which
-        //    case the normal layout is always visible).
-        return (accessibilityIsVisible || useAccessibility) && !normalIsVisible;
     }
 
     @Override
@@ -415,7 +394,8 @@ public class LayoutManagerChrome
         boolean showOverview = nextId == Tab.INVALID_TAB_ID;
         boolean animate = !tabRemoved && animationsEnabled();
         if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
-                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview) {
+                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview
+                && getNextLayoutType() != LayoutType.TAB_SWITCHER) {
             // Vivaldi
             if (!BuildConfig.IS_VIVALDI)
             showLayout(LayoutType.TAB_SWITCHER, animate);
@@ -431,14 +411,6 @@ public class LayoutManagerChrome
     }
 
     /**
-     * @return The {@link OverviewListLayout} managed by this class.
-     */
-    @VisibleForTesting
-    public Layout getOverviewListLayout() {
-        return mOverviewListLayout;
-    }
-
-    /**
      * @return The overview layout {@link Layout} managed by this class.
      */
     @VisibleForTesting
@@ -450,7 +422,6 @@ public class LayoutManagerChrome
      * @return The grid tab switcher layout {@link Layout} managed by this class. This is non-null
      * when the Start surface refactor is enabled.
      */
-    @VisibleForTesting
     public Layout getTabSwitcherLayoutForTesting() {
         return mTabSwitcherLayout;
     }
@@ -604,8 +575,7 @@ public class LayoutManagerChrome
             // Vivaldi - Enable ScrollDirection UP when address bar at the bottom
             if (direction == ScrollDirection.DOWN
                     || (!VivaldiUtils.isTopToolbarOn() && direction == ScrollDirection.UP)) {
-                boolean isAccessibility = ChromeAccessibilityUtil.get().isAccessibilityEnabled();
-                return isTabSwitcherReady() && !isAccessibility;
+                return isTabSwitcherReady();
             }
 
             return direction == ScrollDirection.LEFT || direction == ScrollDirection.RIGHT;

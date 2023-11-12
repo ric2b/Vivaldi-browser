@@ -14,6 +14,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/values_util.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/uuid.h"
@@ -28,9 +29,6 @@
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
 #include "components/sync/protocol/workspace_desk_specifics.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/re2/src/re2/stringpiece.h"
-#include "url/gurl.h"
 
 namespace desks_storage {
 
@@ -54,16 +52,17 @@ constexpr auto kValidDeskTypes = base::MakeFixedFlatSet<ash::DeskTemplateType>(
     {ash::DeskTemplateType::kTemplate, ash::DeskTemplateType::kSaveAndRecall});
 
 // Reads a file at `fully_qualified_path` into a
-// std::unique_ptr<ash::DeskTemplate> This function returns a `nullptr` if the
-// file does not exist or deserialization fails.
-std::unique_ptr<ash::DeskTemplate> ReadFileToTemplate(
+// `ash::DeskTemplate` or as `SavedDeskParseError` code. This function returns a
+// `nullptr` if the file does not exist or deserialization fails.
+desk_template_conversion::ParseSavedDeskResult ReadFileToTemplate(
     const base::FilePath& fully_qualified_path) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
 
   std::string value_string;
   if (!base::ReadFileToString(fully_qualified_path, &value_string)) {
-    return nullptr;
+    return base::unexpected(
+        desk_template_conversion::SavedDeskParseError::kFileNotExist);
   }
 
   std::string error_message;
@@ -75,7 +74,8 @@ std::unique_ptr<ash::DeskTemplate> ReadFileToTemplate(
   if (!desk_template_value) {
     DVLOG(1) << "Fail to deserialize json value from string with error code: "
              << error_code << " and error message: " << error_message;
-    return nullptr;
+    return base::unexpected(
+        desk_template_conversion::SavedDeskParseError::kInvalidJson);
   }
 
   return desk_template_conversion::ParseDeskTemplateFromBaseValue(
@@ -134,59 +134,6 @@ std::string StorageLocationToDirName(
     case LocalDeskDataManager::StorageLocation::kAppLaunchAutomationDir:
       return kAppLaunchAutomationDirectoryName;
   }
-}
-
-bool AreDeskTemplatesEqual(const ash::DeskTemplate* template_one,
-                           const ash::DeskTemplate* template_two) {
-  // confirm metadata is equal.
-  if (template_one->uuid() != template_two->uuid() ||
-      template_one->source() != template_two->source() ||
-      template_one->created_time() != template_two->created_time() ||
-      template_one->GetLastUpdatedTime() !=
-          template_two->GetLastUpdatedTime() ||
-      template_one->should_launch_on_startup() !=
-          template_two->should_launch_on_startup()) {
-    return false;
-  }
-
-  if (template_one->uuid() != template_two->uuid() ||
-      template_one->source() != template_two->source() ||
-      template_one->created_time() != template_two->created_time() ||
-      template_one->GetLastUpdatedTime() !=
-          template_two->GetLastUpdatedTime()) {
-    return false;
-  }
-
-  const auto* restore_data_one = template_one->desk_restore_data();
-  const auto* restore_data_two = template_two->desk_restore_data();
-
-  // iterate over each app, confirm its in the other's list.
-  for (const auto& launch_list_one :
-       restore_data_one->app_id_to_launch_list()) {
-    const auto& launch_list_two_iter =
-        restore_data_two->app_id_to_launch_list().find(launch_list_one.first);
-    if (launch_list_two_iter ==
-        restore_data_two->app_id_to_launch_list().end()) {
-      return false;
-    }
-    const auto& launch_list_two_app = launch_list_two_iter->second;
-
-    // iterate over each window, confirm its in the other's list.
-    for (const auto& restore_window_one : launch_list_one.second) {
-      const auto& restore_window_two_iter =
-          launch_list_two_app.find(restore_window_one.first);
-      if (restore_window_two_iter == launch_list_two_app.end()) {
-        return false;
-      }
-
-      // Compare app restore data structs.
-      if (*restore_window_one.second != *restore_window_two_iter->second) {
-        return false;
-      }
-    }
-  }
-
-  return true;
 }
 
 }  // namespace
@@ -338,18 +285,26 @@ void LocalDeskDataManager::AddOrUpdateEntry(
   // Deserialize the `template_base_value` to a desk template to make sure that
   // we can properly get the correct information now instead of during a future
   // user operation.
-  std::unique_ptr<ash::DeskTemplate> deserialize_entry =
+  auto deserialize_entry =
       desk_template_conversion::ParseDeskTemplateFromBaseValue(
           template_base_value, new_entry->source());
+
+  if (!deserialize_entry.has_value()) {
+    std::move(callback).Run(AddOrUpdateEntryStatus::kFailure,
+                            std::move(new_entry));
+    return;
+  }
+
   auto& saved_desks = saved_desks_list_[desk_type];
   auto existing_it = saved_desks.find(uuid);
   std::unique_ptr<ash::DeskTemplate> old_entry = nullptr;
   bool is_update = existing_it != saved_desks.end();
+
   if (is_update) {
     old_entry = std::move(existing_it->second);
-    existing_it->second = std::move(deserialize_entry);
+    existing_it->second = std::move(deserialize_entry.value());
   } else {
-    saved_desks[uuid] = std::move(deserialize_entry);
+    saved_desks[uuid] = std::move(deserialize_entry.value());
   }
 
   task_runner_->PostTaskAndReplyWithResult(
@@ -452,12 +407,12 @@ size_t LocalDeskDataManager::GetMaxDeskTemplateEntryCount() const {
   return kMaxDeskTemplateCount + policy_entries_.size();
 }
 
-std::vector<base::Uuid> LocalDeskDataManager::GetAllEntryUuids() const {
-  std::vector<base::Uuid> keys;
+std::set<base::Uuid> LocalDeskDataManager::GetAllEntryUuids() const {
+  std::set<base::Uuid> keys;
   for (const auto& type_and_saved_desks : saved_desks_list_) {
     for (const auto& [uuid, template_entry] : type_and_saved_desks.second) {
       DCHECK_EQ(uuid, template_entry->uuid());
-      keys.emplace_back(uuid);
+      keys.emplace(uuid);
     }
   }
   return keys;
@@ -497,11 +452,12 @@ void LocalDeskDataManager::UpdateEntry(
     // Do not update a template if the storage layer has a new policy.
   } else if (old_entry->second->policy_definition() !=
              entry->policy_definition()) {
-    last_update_status_ = UpdateEntryStatus::kBadPolicy;
+    last_update_status_ = UpdateEntryStatus::kOutdatedPolicy;
     return;
     // Make sure that there are actually new contents, otherwise don't bother
     // the io thread.
-  } else if (AreDeskTemplatesEqual(entry.get(), old_entry->second.get())) {
+  } else if (desk_template_util::AreDeskTemplatesEqual(
+                 entry.get(), old_entry->second.get())) {
     last_update_status_ = UpdateEntryStatus::kDuplicate;
     return;
   }
@@ -550,26 +506,28 @@ LocalDeskDataManager::LoadCacheOnBackgroundSequence(
 
     base::FilePath fully_qualified_path =
         base::FilePath(local_saved_desk_path.Append(dir_reader.name()));
-    std::unique_ptr<ash::DeskTemplate> entry =
-        ReadFileToTemplate(fully_qualified_path);
+    auto entry = ReadFileToTemplate(fully_qualified_path);
 
-    // TODO(b/248645596): Record metrics about files that failed to parse.
-    if (entry == nullptr)
+    if (!entry.has_value()) {
+      base::UmaHistogramEnumeration(
+          kSaveAndRecallLocalDeskSavedDeskParseErrorHistogramName,
+          entry.error());
       continue;
+    }
 
     // Rename file for saved desk if uuid in file and file name are different.
-    std::string entry_uuid_string = entry->uuid().AsLowercaseString();
+    std::string entry_uuid_string = entry.value()->uuid().AsLowercaseString();
     entry_uuid_string.append(kFileExtension);
 
     if (dir_reader.name() != entry_uuid_string) {
       const base::FilePath renamed_fully_qualified_path =
-          GetFullyQualifiedPath(local_saved_desk_path, entry->uuid());
+          GetFullyQualifiedPath(local_saved_desk_path, entry.value()->uuid());
       if (!base::Move(fully_qualified_path, renamed_fully_qualified_path)) {
         DVLOG(1) << "Fail to rename saved desk template to proper UUID";
       }
     }
 
-    entries.push_back(std::move(entry));
+    entries.push_back(std::move(entry.value()));
   }
   return {CacheStatus::kOk, std::move(entries)};
 }

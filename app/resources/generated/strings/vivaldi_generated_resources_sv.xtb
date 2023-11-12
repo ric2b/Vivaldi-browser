@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Återställ inställningar</translation>
 <translation id="4478664379124702289">Spara l&amp;änk som...</translation>
 <translation id="4520385623207007473">Cookies som används</translation>
+<translation id="456449593072900590">Radera när du stänger webbläsaren</translation>
 <translation id="4580596421317071374">Lösenorden sparas i <ph name="GOOGLE_PASSWORD_MANAGER" /> på den här enheten.</translation>
 <translation id="4593021220803146968">&amp;Öppna <ph name="URL" /></translation>
 <translation id="4595560905247879544">Appar och tillägg kan bara ändras av den ansvariga (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Färg</translation>
 <translation id="5485102783864353244">Lägg till app</translation>
 <translation id="5486561344817861625">Simulera omstart av webbläsaren</translation>
-<translation id="5487521232677179737">Rensa data</translation>
 <translation id="5509693895992845810">Spara &amp;som...</translation>
 <translation id="5521078259930077036">Är det här den startsida du förväntade dig?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Okänd</translation>
 <translation id="5851868085455377790">Utfärdare</translation>
 <translation id="5860491529813859533">Aktivera</translation>
-<translation id="5867841422488265304">Sök eller skriv en webbadress</translation>
 <translation id="5910363049092958439">S&amp;para bild som...</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> bitar):
    <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Åtkomst nekad.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrollera stavning medan jag skriver</translation>
-<translation id="73786666777299047">Öppna Chrome Webbutik</translation>
 <translation id="7385854874724088939">Det uppstod ett problem vid utskriften.  Kontrollera skrivaren och försök igen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Visa sidkälla</translation>
@@ -442,6 +440,7 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8382913212082956454">Kopiera &amp;e-postadress</translation>
 <translation id="8434480141477525001">Felsökningsport för NaCl</translation>
 <translation id="8449008133205184768">Klistra in och matcha stilen</translation>
+<translation id="8477178913400731244">Radera data</translation>
 <translation id="8477384620836102176">&amp;Allmän</translation>
 <translation id="8496717697661868878">Kör det här insticksprogrammet</translation>
 <translation id="8512476990829870887">Avsluta process</translation>

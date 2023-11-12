@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_CRED_MAN_CONTROLLER_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_CRED_MAN_CONTROLLER_H_
 
+#include <string>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 
@@ -15,6 +17,8 @@ class WebAuthnCredManDelegate;
 namespace password_manager {
 
 class PasswordCredentialFiller;
+class KeyboardReplacingSurfaceVisibilityController;
+class ContentPasswordManagerDriver;
 
 // This class is responsible for the logic to show Credential Manager UI. The
 // interaction with Credential Manager UI is delegated to WebAuthnCredMan class.
@@ -22,7 +26,9 @@ class PasswordCredentialFiller;
 // used in Android U+ only.
 class CredManController : public base::SupportsWeakPtr<CredManController> {
  public:
-  CredManController();
+  explicit CredManController(
+      base::WeakPtr<KeyboardReplacingSurfaceVisibilityController>
+          visibility_controller);
 
   CredManController(const CredManController&) = delete;
   CredManController& operator=(const CredManController&) = delete;
@@ -34,9 +40,16 @@ class CredManController : public base::SupportsWeakPtr<CredManController> {
   // false otherwise.
   bool Show(raw_ptr<webauthn::WebAuthnCredManDelegate> cred_man_delegate,
             std::unique_ptr<PasswordCredentialFiller> filler,
+            base::WeakPtr<password_manager::ContentPasswordManagerDriver>
+                frame_driver,
             bool is_webauthn_form);
 
  private:
+  void Dismiss(bool success);
+  void Fill(const std::u16string& username, const std::u16string& password);
+
+  base::WeakPtr<KeyboardReplacingSurfaceVisibilityController>
+      visibility_controller_;
   std::unique_ptr<PasswordCredentialFiller> filler_;
 };
 

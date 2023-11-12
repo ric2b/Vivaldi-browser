@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUndoController;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
@@ -154,6 +155,7 @@ public final class ReadingListUtils {
     /** For cases where GURLs are faked for testing (e.g. test pages). */
     public static void setReadingListSupportedForTesting(Boolean supported) {
         sReadingListSupportedForTesting = supported;
+        ResettersForTesting.register(() -> sReadingListSupportedForTesting = null);
     }
 
     /**
@@ -169,5 +171,6 @@ public final class ReadingListUtils {
     /** For cases where we don't want to mock the entire bookmarks save flow infra. */
     public static void setSkipShowSaveFlowForTesting(Boolean skipShowSaveFlowForTesting) {
         sSkipShowSaveFlowForTesting = skipShowSaveFlowForTesting;
+        ResettersForTesting.register(() -> sSkipShowSaveFlowForTesting = null);
     }
 }

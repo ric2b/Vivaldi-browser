@@ -19,6 +19,13 @@ class ChromeBrowserState;
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
+// Vivaldi
+// Initializer to open the search engine settings page from private or standard
+// button tap from settings.
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+                           isPrivate:(BOOL)isPrivate;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_SETTINGS_SEARCH_ENGINE_TABLE_VIEW_CONTROLLER_H_

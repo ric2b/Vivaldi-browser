@@ -35,6 +35,9 @@ namespace extensions {
 
 using calendar::AccountRow;
 using calendar::CalendarRow;
+using calendar::EventTemplateResultCB;
+using calendar::EventTemplateRow;
+using calendar::EventTemplateRows;
 using calendar::EventTypeRow;
 using calendar::GetIdAsInt64;
 using calendar::GetStdStringAsInt64;
@@ -52,6 +55,7 @@ using vivaldi::calendar::Calendar;
 using vivaldi::calendar::CreateEventsResults;
 using vivaldi::calendar::CreateInviteRow;
 using vivaldi::calendar::CreateNotificationRow;
+using vivaldi::calendar::EventTemplate;
 using vivaldi::calendar::EventType;
 using vivaldi::calendar::Invite;
 using vivaldi::calendar::Notification;
@@ -67,6 +71,7 @@ namespace OnNotificationChanged = vivaldi::calendar::OnNotificationChanged;
 namespace OnCalendarDataChanged = vivaldi::calendar::OnCalendarDataChanged;
 
 typedef std::vector<vivaldi::calendar::CalendarEvent> EventList;
+typedef std::vector<EventTemplate> EventTemplateList;
 typedef std::vector<vivaldi::calendar::Account> AccountList;
 typedef std::vector<vivaldi::calendar::Notification> NotificaionList;
 typedef std::vector<vivaldi::calendar::Calendar> CalendarList;
@@ -260,6 +265,14 @@ void CalendarEventRouter::ExtensiveCalendarChangesBeginning(
 
 void CalendarEventRouter::ExtensiveCalendarChangesEnded(
     CalendarService* model) {}
+
+EventTemplate CreateEventTemplate(EventTemplateRow event_template) {
+  extensions::vivaldi::calendar::EventTemplate template_event;
+  template_event.id = base::NumberToString(event_template.id);
+  template_event.ical = base::UTF16ToUTF8(event_template.ical);
+  template_event.name = base::UTF16ToUTF8(event_template.name);
+  return template_event;
+}
 
 CalendarEvent CreateVivaldiEvent(calendar::EventRow event) {
   CalendarEvent cal_event;
@@ -1873,6 +1886,37 @@ void CalendarGetAllAccountsFunction::GetAllAccountsComplete(
   Respond(ArgumentList(
       vivaldi::calendar::GetAllAccounts::Results::Create(accountList)));
 }
+ExtensionFunction::ResponseAction CalendarCreateEventTemplateFunction::Run() {
+  absl::optional<vivaldi::calendar::CreateEventTemplate::Params> params(
+      vivaldi::calendar::CreateEventTemplate::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  EventTemplateRow event_template;
+  event_template.name = base::UTF8ToUTF16(params->name);
+  event_template.ical = base::UTF8ToUTF16(params->ical);
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+  model->CreateEventTemplate(
+      event_template,
+      base::BindOnce(
+          &CalendarCreateEventTemplateFunction::CreateEventTemplateComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarCreateEventTemplateFunction::CreateEventTemplateComplete(
+    EventTemplateResultCB result) {
+  if (!result.success) {
+    Respond(Error("Error creating event template. " + result.message));
+  } else {
+    vivaldi::calendar::EventTemplate event_template =
+        CreateEventTemplate(result.event_template);
+    Respond(
+        ArgumentList(vivaldi::calendar::CreateEventTemplate::Results::Create(
+            event_template)));
+  }
+}
 
 ExtensionFunction::ResponseAction CalendarGetAllEventTemplatesFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -1888,17 +1932,98 @@ ExtensionFunction::ResponseAction CalendarGetAllEventTemplatesFunction::Run() {
 }
 
 void CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete(
-    std::vector<calendar::EventRow> results) {
-  EventList eventList;
+    EventTemplateRows results) {
+  EventTemplateList template_list;
 
   if (!results.empty()) {
     for (const auto& result : results) {
-      eventList.push_back(CreateVivaldiEvent(result));
+      template_list.push_back(CreateEventTemplate(result));
     }
   }
 
   Respond(ArgumentList(
-      vivaldi::calendar::GetAllEventTemplates::Results::Create(eventList)));
+      vivaldi::calendar::GetAllEventTemplates::Results::Create(template_list)));
+}
+
+ExtensionFunction::ResponseAction CalendarUpdateEventTemplateFunction::Run() {
+  absl::optional<vivaldi::calendar::UpdateEventTemplate::Params> params(
+      vivaldi::calendar::UpdateEventTemplate::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  calendar::EventTemplateRow update_event_row;
+
+  std::u16string id;
+  id = base::UTF8ToUTF16(params->id);
+  calendar::EventTemplateID event_template_id;
+
+  if (!GetIdAsInt64(id, &event_template_id)) {
+    return RespondNow(Error("Error. Invalid event id"));
+  }
+
+  if (params->changes.name.has_value()) {
+    update_event_row.name = base::UTF8ToUTF16(params->changes.name.value());
+    update_event_row.updateFields |= calendar::TEMPLATE_NAME;
+  }
+
+  if (params->changes.ical.has_value()) {
+    update_event_row.ical = base::UTF8ToUTF16(params->changes.ical.value());
+    update_event_row.updateFields |= calendar::TEMPLATE_ICAL;
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+  model->UpdateEventTemplate(
+      event_template_id, update_event_row,
+      base::BindOnce(
+          &CalendarUpdateEventTemplateFunction::UpdateEventTemplateComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarUpdateEventTemplateFunction::UpdateEventTemplateComplete(
+    EventTemplateResultCB result) {
+  if (!result.success) {
+    Respond(Error("Error updating event template"));
+  } else {
+    EventTemplate event = CreateEventTemplate(result.event_template);
+    Respond(ArgumentList(
+        vivaldi::calendar::UpdateEventTemplate::Results::Create(event)));
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarDeleteEventTemplateFunction::Run() {
+  absl::optional<vivaldi::calendar::DeleteEventTemplate::Params> params(
+      vivaldi::calendar::DeleteEventTemplate::Params::Create(args()));
+
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  std::u16string id;
+  id = base::UTF8ToUTF16(params->id);
+  calendar::EventTemplateID event_template_id;
+
+  if (!GetIdAsInt64(id, &event_template_id)) {
+    return RespondNow(Error("Error. Invalid event template id"));
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->DeleteEventTemplate(
+      event_template_id,
+      base::BindOnce(
+          &CalendarDeleteEventTemplateFunction::DeleteEventTemplateComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarDeleteEventTemplateFunction::DeleteEventTemplateComplete(
+    bool result) {
+  if (!result) {
+    Respond(Error("Error deleting event template"));
+  } else {
+    Respond(ArgumentList(
+        vivaldi::calendar::DeleteEventTemplate::Results::Create(result)));
+  }
 }
 
 }  //  namespace extensions

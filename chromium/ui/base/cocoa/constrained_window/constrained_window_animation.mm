@@ -7,16 +7,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#import "base/apple/foundation_util.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#import "base/mac/foundation_util.h"
 #include "base/native_library.h"
 #include "base/notreached.h"
 #include "ui/gfx/animation/tween.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 // The window animations in this file use private APIs as described here:
 // https://github.com/MarkVillacampa/undocumented-goodness/blob/master/CoreGraphics/CGSPrivate.h

@@ -291,7 +291,7 @@ android_library("content_full_java") {
     "java/src/org/chromium/content/browser/input/SelectPopupDropdown.java",
     "java/src/org/chromium/content/browser/input/SelectPopupItem.java",
     "java/src/org/chromium/content/browser/input/SpellCheckPopupWindow.java",
-    "java/src/org/chromium/content/browser/input/StylusGestureHandler.java",
+    "java/src/org/chromium/content/browser/input/StylusGestureConverter.java",
     "java/src/org/chromium/content/browser/input/SuggestionInfo.java",
     "java/src/org/chromium/content/browser/input/SuggestionsPopupWindow.java",
     "java/src/org/chromium/content/browser/input/TextInputState.java",
@@ -339,6 +339,7 @@ android_library("content_full_java") {
     "java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java",
     "java/src/org/chromium/content/browser/webid/MDocProviderAndroid.java",
+    "java/src/org/chromium/content_public/browser/ActionModeCallback.java",
     "java/src/org/chromium/content_public/browser/ActionModeCallbackHelper.java",
     "java/src/org/chromium/content_public/browser/AdditionalNavigationParams.java",
     "java/src/org/chromium/content_public/browser/AdditionalSelectionMenuItemProvider.java",
@@ -387,6 +388,7 @@ android_library("content_full_java") {
     "java/src/org/chromium/content_public/browser/SelectionMenuGroup.java",
     "java/src/org/chromium/content_public/browser/SelectionMenuItem.java",
     "java/src/org/chromium/content_public/browser/SelectionPopupController.java",
+    "java/src/org/chromium/content_public/browser/SiteZoomInfo.java",
     "java/src/org/chromium/content_public/browser/SmartClipProvider.java",
     "java/src/org/chromium/content_public/browser/SpeechRecognition.java",
     "java/src/org/chromium/content_public/browser/StylusWritingHandler.java",
@@ -398,9 +400,30 @@ android_library("content_full_java") {
     "java/src/org/chromium/content_public/browser/WebContentsInternals.java",
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/browser/WebContentsStatics.java",
+    "java/src/org/chromium/content_public/browser/selection/SelectionDropdownMenuDelegate.java",
   ]
 
+  public_deps = [ ":identity_credentials_java" ]
+
   proguard_configs = [ "proguard.flags" ]
+}
+
+# TODO(crbug.com/1475970) simplify these build targets once GMSCore publishes identity-credentials.
+android_library("identity_credentials_java") {
+  sources = [
+    "java/src/org/chromium/content/browser/webid/IdentityCredentialsDelegate.java",
+    "java/src/org/chromium/content/browser/webid/IdentityCredentialsDelegateImpl.java",
+  ]
+  deps = [ "//base:base_java" ]
+  jar_excluded_patterns = [ "*/IdentityCredentialsDelegateImpl.class" ]
+}
+
+android_library("identity_credentials_public_impl_java") {
+  sources = [ "java/src/org/chromium/content/browser/webid/IdentityCredentialsDelegateImpl.java" ]
+  deps = [
+    ":identity_credentials_java",
+    "//base:base_java",
+  ]
 }
 
 java_strings_grd("content_strings_grd") {
@@ -632,6 +655,9 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/input/InsertionMarkerTest.java",
     "javatests/src/org/chromium/content/browser/input/OngoingGestureTest.java",
     "javatests/src/org/chromium/content/browser/input/SelectPopupTest.java",
+    "javatests/src/org/chromium/content/browser/input/StylusGestureConverterTest.java",
+    "javatests/src/org/chromium/content/browser/input/StylusGestureEndToEndTest.java",
+    "javatests/src/org/chromium/content/browser/input/StylusTestHelper.java",
     "javatests/src/org/chromium/content/browser/input/TextSuggestionMenuTest.java",
     "javatests/src/org/chromium/content/browser/picker/DateTimePickerDialogTest.java",
     "javatests/src/org/chromium/content/browser/remoteobjects/RemoteObjectHostImplTest.java",
@@ -641,10 +667,6 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/webcontents/WebContentsTest.java",
     "javatests/src/org/chromium/content_public/browser/ClientDataJsonTest.java",
   ]
-
-  if (android_sdk_release == "u") {
-    sources += [ "javatests/src/org/chromium/content/browser/input/StylusGestureHandlerTest.java" ]
-  }
 
   data = [
     "//content/test/data/accessibility/accname/",
@@ -692,6 +714,7 @@ robolectric_binary("content_junit_tests") {
     "//base:base_java_process_launcher_test_support",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//base:jni_java",
     "//cc/mojom:mojom_java",
     "//content/public/common:common_java",
     "//content/public/test/android:content_java_test_support",

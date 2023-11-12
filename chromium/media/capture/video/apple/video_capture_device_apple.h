@@ -20,10 +20,6 @@
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video_capture_types.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace base {
 class SingleThreadTaskRunner;
 }
@@ -77,7 +73,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceApple
                     const gfx::ColorSpace color_space,
                     int aspect_numerator,
                     int aspect_denominator,
-                    base::TimeDelta timestamp) override;
+                    base::TimeDelta timestamp,
+                    int rotation) override;
   void ReceiveExternalGpuMemoryBufferFrame(CapturedExternalVideoBuffer frame,
                                            base::TimeDelta timestamp) override;
   void OnPhotoTaken(const uint8_t* image_data,

@@ -20,9 +20,9 @@ namespace vivaldi {
 std::vector<int>& GetBookmarkMenuIds();
 bool IsBookmarkMenuId(int candidate);
 
-unsigned int GetMenuIndex();
+int GetMenuIndex();
 
-void SetContainerState(const std::string& edge, unsigned int menu_index);
+void SetContainerState(const std::string& edge, int menu_index);
 
 void ClearBookmarkMenu();
 

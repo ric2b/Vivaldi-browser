@@ -20,7 +20,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.share.LensUtils;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
@@ -204,14 +203,6 @@ class ChromeContextMenuItem {
      */
     private static @StringRes int getStringId(Context context, @Item int item) {
         assert STRING_IDS.length == Item.NUM_ENTRIES;
-
-        // Note(david@vivaldi.com): We offer always all  options for our users.
-        if (!ChromeApplicationImpl.isVivaldi())
-        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(context)
-                && TabUiFeatureUtilities.ENABLE_TAB_GROUP_AUTO_CREATION.getValue()
-                && item == Item.OPEN_IN_NEW_TAB) {
-            return R.string.contextmenu_open_in_new_tab_group;
-        }
 
         return STRING_IDS[item];
     }

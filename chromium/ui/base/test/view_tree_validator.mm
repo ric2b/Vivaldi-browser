@@ -9,10 +9,6 @@
 #include "base/mac/mac_util.h"
 #include "base/strings/sys_string_conversions.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 NSArray* CollectSubviews(NSView* root) {
@@ -40,7 +36,7 @@ bool IgnoreChildBoundsChecks(NSView* view) {
   // On macOS 10.14+, NSButton has a subview of a private helper class whose
   // bounds extend a bit outside the NSButton itself. We don't care about this
   // helper class's bounds being outside the button.
-  return base::mac::IsAtLeastOS10_14() && [view isKindOfClass:[NSButton class]];
+  return [view isKindOfClass:[NSButton class]];
 }
 
 }  // namespace

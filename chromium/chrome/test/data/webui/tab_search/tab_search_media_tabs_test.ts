@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-test/mojo_webui_test_support.js';
-
 import {MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {ProfileData, Tab, TabAlertState, TabSearchApiProxyImpl, TabSearchAppElement} from 'chrome://tab-search.top-chrome/tab_search.js';
@@ -87,15 +85,14 @@ suite('TabSearchMediaTabsTest', () => {
 
     // During search there should be no Audio & Video section and the selected
     // index should be 0.
-    const searchField = tabSearchApp.$.searchField;
-    searchField.setValue('Google');
+    tabSearchApp.setValue('Google');
     await flushTasks();
     verifyTabIds(queryRows(), [2, 1]);
     assertEquals(0, tabSearchApp.getSelectedIndex());
 
     // When the search query is reset the initially selected index should also
     // be reset.
-    searchField.setValue('');
+    tabSearchApp.setValue('');
     await flushTasks();
     assertEquals(1, tabSearchApp.getSelectedIndex());
   });
@@ -209,8 +206,7 @@ suite('TabSearchMediaTabsTest', () => {
   test('Search for media tab', async () => {
     await setupTest(
         createProfileData({windows: SAMPLE_WINDOW_DATA_WITH_MEDIA_TAB}));
-    const searchField = tabSearchApp.$.searchField;
-    searchField.setValue('google');
+    tabSearchApp.setValue('google');
     await flushTasks();
     // No media tabs section when there is a search query.
     assertEquals(1, queryListTitle().length);

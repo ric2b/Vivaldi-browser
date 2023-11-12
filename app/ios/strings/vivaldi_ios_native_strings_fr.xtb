@@ -23,6 +23,7 @@
 <translation id="1379470994139227452">Définir Vivaldi comme navigateur par défaut</translation>
 <translation id="1381484244248892686">Vous pouvez utiliser les mots de passe enregistrés sur n’importe quel appareil. Ils sont enregistrés dans le gestionnaire de mots de passe de Vivaldi pour <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Rechercher</translation>
+<translation id="1397515084080510783">Aucun onglet synchronisé</translation>
 <translation id="1430638949087011281">Pas de blocage</translation>
 <translation id="1446108955355168157">Pour chiffrer et protéger vos données de synchronisation (mots de passe, signets, notes, etc.), veuillez créer un mot de passe de cryptage. Ce mot de passe ne nous sera jamais envoyé.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> éléments</translation>
@@ -82,6 +83,7 @@ bloquées</translation>
 <translation id="2842985007712546952">Dossier parent</translation>
 <translation id="2843343418360315034">Hongrois (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Initialisation de la synchronisation…</translation>
+<translation id="2874111661876416905">Rechercher avec Vivaldi</translation>
 <translation id="2874121295511641364">Synchroniser les URL tapées et les onglets ouverts</translation>
 <translation id="2898963176829412617">Nouveau dossier…</translation>
 <translation id="2961573414320947355">Voulez-vous ouvrir tous les liens dans Vivaldi ? Assurez-vous de nous définir comme navigateur par défaut.</translation>
@@ -130,7 +132,7 @@ bloquées</translation>
 <translation id="3997823869212225788">Entrez le code à 6 chiffres</translation>
 <translation id="4002066346123236978">Titre</translation>
 <translation id="4032606071208172574">(par défaut)</translation>
-<translation id="4048057312173843244">Les onglets synchronisés depuis d’autres appareils apparaissent ici. Connectez-vous à la synchronisation pour utiliser ce service.</translation>
+<translation id="4048057312173843244">Les onglets synchronisés depuis d’autres appareils apparaitront ici. Connectez-vous à la synchronisation pour utiliser ce service.</translation>
 <translation id="4073968054795398875">Le serveur de synchronisation rencontre actuellement des problèmes. L’initialisation de la synchronisation sera bientôt relancée…</translation>
 <translation id="4096707694175478403">Panneau</translation>
 <translation id="414098425907666915">Recherche privée</translation>
@@ -146,12 +148,14 @@ bloquées</translation>
 bloqués</translation>
 <translation id="4299298331965375737">Faire de Vivaldi votre navigateur par défaut ?</translation>
 <translation id="4304224509867189079">Connexion</translation>
+<translation id="4316955624679873896">Signet enregistré dans</translation>
 <translation id="432696242656678770">Russe (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Espagnol (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Vietnamien (<ph name="ORIGIN" />)</translation>
 <translation id="4394049700291259645">Désactiver</translation>
 <translation id="4413780690230851155">Effacer l’historique de navigation</translation>
 <translation id="4452878871193896747">Indonésien (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Vous n’avez actuellement aucun onglet synchronisé sur d’autres appareils.</translation>
 <translation id="4493850495402472953">et</translation>
 <translation id="4497115807425788318">Emplacement</translation>
 <translation id="4507213865286211606">Aperçu de la taille</translation>
@@ -184,6 +188,7 @@ bloqué</translation>
 <translation id="497942794017668482">Blocage des traqueurs et des publicités</translation>
 <translation id="5037761343305489956">Copié dans la note</translation>
 <translation id="504986598654589766">Naviguer en mode privé signifie que les recherches, les sites visités, les cookies et autres fichiers temporaires ne seront pas conservés par Vivaldi. Par contre, ce mode ne chiffre pas votre connexion et ne la modifie d’aucune manière.</translation>
+<translation id="5094376253685335202">Activer la synchronisation</translation>
 <translation id="5116316489033177455">Synchroniser les signets et Speed Dials</translation>
 <translation id="5122095890854520072">Letton (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Échec de la connexion</translation>
@@ -214,6 +219,7 @@ bloqué</translation>
 <translation id="5857090052475505287">Nouveau dossier</translation>
 <translation id="5859825823508296659">Modifier le domaine</translation>
 <translation id="5867841422488265304">Saisir une adresse Web ou une expression à rechercher</translation>
+<translation id="5869217094746242845">En savoir plus sur la confidentialité et la sécurité</translation>
 <translation id="5871497086027727873">1 élément déplacé</translation>
 <translation id="5898502570200301364">Vous pouvez utiliser les mots de passe que vous avez enregistrés dans le gestionnaire de mots de passe de Vivaldi dans d'autres applications sur votre iPhone.</translation>
 <translation id="5900160494089383343">Ce nom d’utilisateur n’est pas disponible.</translation>
@@ -266,6 +272,7 @@ bloqué</translation>
 <translation id="7311118006561484338">Par titre</translation>
 <translation id="7325310788570036874">Naviguez sur le Web subtilement, rapidement et sans souci avec Vivaldi.</translation>
 <translation id="734110743815267231">Hébreu (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Ouvrir en navigation privée ?</translation>
 <translation id="7362952245780030555">Choisir entre une vraie barre d’onglets ou le gestionnaire d’onglets simplifié.</translation>
 <translation id="7379938540614588640">Néerlandais (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Ajouter une nouvelle source</translation>
@@ -305,6 +312,7 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8275038454117074363">Importer</translation>
 <translation id="8329813750766387010">Mis à jour : <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Supprimer les bannières de consentement aux cookies (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Pour voir les onglets ouverts sur d’autres appareils, vous devez activer la synchronisation.</translation>
 <translation id="8366175803122817174">Ouvrir toutes les adresses des notes</translation>
 <translation id="8384409685584033392">Info sur la page</translation>
 <translation id="8414685983518053656">Notes</translation>
@@ -322,6 +330,7 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8677007239430848917">Ajoutez votre première note en pressant le signe « + » ci-dessous</translation>
 <translation id="8684294196284714094">Souhaitez-vous définir Vivaldi en tant que navigateur par défaut ?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> éléments supprimés</translation>
+<translation id="8763006697839582351">Ouvrir dans Vivaldi en navigation privée</translation>
 <translation id="8804164990146287819">Politique de respect de la vie privée</translation>
 <translation id="8819841443522803117">Il est temps de changer de navigateur par défaut ? Choisissez Vivaldi.</translation>
 <translation id="8820817407110198400">Signets</translation>
@@ -333,7 +342,6 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="9043882097999887291">Pubs
 bloquées</translation>
 <translation id="9065203028668620118">Modifier</translation>
-<translation id="9078193189520575214">Application des modifications…</translation>
 <translation id="9079251484401922158">Finlandais (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 élément</translation>
 <translation id="9091665118798175641">Synchroniser les informations de remplissage automatique du formulaire</translation>

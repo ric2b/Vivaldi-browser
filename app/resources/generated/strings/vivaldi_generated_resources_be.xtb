@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Аднавіць налады</translation>
 <translation id="4478664379124702289">Захаваць &amp;спасылку як...</translation>
 <translation id="4520385623207007473">Файлы cookie, якія выкарыстоўваюцца</translation>
+<translation id="456449593072900590">Выдаляць пры выхадзе</translation>
 <translation id="4580596421317071374">Паролі захоўваюцца ў "<ph name="GOOGLE_PASSWORD_MANAGER" />" на гэтай прыладзе.</translation>
 <translation id="4593021220803146968">&amp;Перайсці да <ph name="URL" /></translation>
 <translation id="4595560905247879544">Змяняць праграмы і пашырэнні можа толькі кіраўнік (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -235,6 +236,7 @@
 <translation id="4839303808932127586">Захаваць відэа як...</translation>
 <translation id="4840096453115567876">Выйсці з рэжыму інкогніта?</translation>
 <translation id="488785315393301722">Паказаць падрабязнасці</translation>
+<translation id="4895799941222633551">Стварыць &amp;цэтлік...</translation>
 <translation id="4912643508233590958">Пераход у актыўны рэжым</translation>
 <translation id="49265687513387605">Немагчыма трансляваць экран. Пераканайцеся, што вы далі дазвол на трансляцыю.</translation>
 <translation id="4927753642311223124">Тут нічога няма, пераходзьце далей.</translation>
@@ -272,12 +274,12 @@
 <translation id="5370819323174483825">&amp;Перазагрузіць</translation>
 <translation id="5390743329570580756">Адправіць</translation>
 <translation id="5398572795982417028">Памер старонкі перавышае дапушчальны, максімальны памер - <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Стварыць &amp;цэтлік...</translation>
 <translation id="5425042808445046667">Працягнуць спампоўванне</translation>
 <translation id="5427459444770871191">Павярнуць &amp;па стрэлцы гадзінніка</translation>
 <translation id="5431318178759467895">Колер</translation>
 <translation id="5485102783864353244">Дадаць праграму</translation>
 <translation id="5486561344817861625">Сімуляваць перазапуск браўзера</translation>
-<translation id="5487521232677179737">Выдаліць даныя</translation>
 <translation id="5509693895992845810">Захаваць &amp;як...</translation>
 <translation id="5521078259930077036">Вы хочаце прызначыць гэтую хатнюю старонку?</translation>
 <translation id="5542132724887566711">Профіль</translation>
@@ -303,7 +305,6 @@
 <translation id="583281660410589416">Невядома</translation>
 <translation id="5851868085455377790">Выдавец</translation>
 <translation id="5860491529813859533">Уключыць</translation>
-<translation id="5867841422488265304">Увядзіце адрас або запыт на пошук</translation>
 <translation id="5910363049092958439">Захаваць выяву як...</translation>
 <translation id="5914724413750400082">Модуль (бітаў – <ph name="MODULUS_NUM_BITS" />):
   <ph name="MODULUS_HEX_DUMP" />
@@ -373,12 +374,12 @@
 <translation id="7070484045139057854">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="708060913198414444">С&amp;капіяваць адрас аўдыё</translation>
 <translation id="7121728544325372695">Разумныя пераносы</translation>
+<translation id="7144856456372460176">&amp;Усталяваць <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Загружана з:</translation>
 <translation id="7186088072322679094">Трымаць на панэлі</translation>
 <translation id="7287143125007575591">Доступ забаронены.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />х<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Правяраць правапіс падчас набору тэксту</translation>
-<translation id="73786666777299047">Адкрыць сеціўную краму Chrome</translation>
 <translation id="7385854874724088939">Падчас друку адбылася памылка.   Калі ласка, праверце прынтар і паўтарыце спробу.</translation>
 <translation id="7412226954991670867">Памяць GPU</translation>
 <translation id="7421925624202799674">&amp;Праглядзець код старонкі</translation>
@@ -438,6 +439,7 @@
 <translation id="8382913212082956454">Скапіяваць &amp;адрас электроннай пошты</translation>
 <translation id="8434480141477525001">Порт адладкі NaCl</translation>
 <translation id="8449008133205184768">Уставіць з захаваннем стылю</translation>
+<translation id="8477178913400731244">Выдаліць даныя</translation>
 <translation id="8477384620836102176">&amp;Агульныя звесткі</translation>
 <translation id="8496717697661868878">Запусціць убудову</translation>
 <translation id="8512476990829870887">Завяршыць працэс</translation>

@@ -51,7 +51,6 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "sync/note_sync_service_factory.h"
-#include "sync/vivaldi_sync_client.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
@@ -164,7 +163,8 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
   DCHECK(!profile->IsOffTheRecord());
 
   init_params.is_regular_profile_for_uma = profile->IsRegularProfile();
-  init_params.sync_client = std::make_unique<VivaldiSyncClient>(profile);
+  init_params.sync_client =
+      std::make_unique<browser_sync::ChromeSyncClient>(profile);
   init_params.url_loader_factory = profile->GetDefaultStoragePartition()
                                        ->GetURLLoaderFactoryForBrowserProcess();
   init_params.network_connection_tracker =

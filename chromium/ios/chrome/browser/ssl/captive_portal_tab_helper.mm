@@ -11,10 +11,6 @@
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/web_state.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 CaptivePortalTabHelper::CaptivePortalTabHelper(web::WebState* web_state) {}
 
 void CaptivePortalTabHelper::SetTabInsertionBrowserAgent(
@@ -27,10 +23,7 @@ void CaptivePortalTabHelper::DisplayCaptivePortalLoginPage(GURL landing_url) {
   insertionAgent_->InsertWebState(
       web_navigation_util::CreateWebLoadParams(
           landing_url, ui::PAGE_TRANSITION_TYPED, nullptr),
-      nil, false, TabInsertion::kPositionAutomatically,
-      /*in_background=*/false, /*inherit_opener=*/false,
-      /*should_show_start_surface=*/false,
-      /*should_skip_new_tab_animation=*/false);
+      TabInsertion::Params());
 }
 
 CaptivePortalTabHelper::~CaptivePortalTabHelper() = default;

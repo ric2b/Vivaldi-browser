@@ -1556,7 +1556,7 @@ TEST_P(SSLClientSocketVersionTest, ConnectBadValidityIgnoreCertErrors) {
 }
 
 // Client certificates are disabled on iOS.
-#if !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 // Attempt to connect to a page which requests a client certificate. It should
 // return an error code on connect.
 TEST_P(SSLClientSocketVersionTest, ConnectClientAuthCertRequested) {
@@ -1599,7 +1599,7 @@ TEST_P(SSLClientSocketVersionTest, ConnectClientAuthSendNullCert) {
   sock_->Disconnect();
   EXPECT_FALSE(sock_->IsConnected());
 }
-#endif  // !IS_IOS
+#endif  // BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 
 // TODO(wtc): Add unit tests for IsConnectedAndIdle:
 //   - Server closes an SSL connection (with a close_notify alert message).
@@ -2668,7 +2668,7 @@ TEST_P(SSLClientSocketVersionTest, VerifyReturnChainProperlyOrdered) {
 }
 
 // Client certificates are disabled on iOS.
-#if !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 INSTANTIATE_TEST_SUITE_P(TLSVersion,
                          SSLClientSocketCertRequestInfoTest,
                          ValuesIn(GetTLSVersions()));
@@ -2740,7 +2740,7 @@ TEST_P(SSLClientSocketCertRequestInfoTest, CertKeyTypes) {
   EXPECT_THAT(request_info->signature_algorithms,
               testing::Contains(SSL_SIGN_RSA_PSS_RSAE_SHA256));
 }
-#endif  // !IS_IOS
+#endif  // BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 
 // Tests that the Certificate Transparency (RFC 6962) TLS extension is
 // supported.
@@ -3609,7 +3609,7 @@ TEST_F(SSLClientSocketTest, AlpnClientDisabled) {
 }
 
 // Client certificates are disabled on iOS.
-#if !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 // Connect to a server requesting client authentication, do not send
 // any client certificates. It should refuse the connection.
 TEST_P(SSLClientSocketVersionTest, NoCert) {
@@ -3802,6 +3802,283 @@ TEST_F(SSLClientSocketTest, ClearSessionCacheOnClientCertDatabaseChange) {
   context_->RemoveObserver(&observer);
 }
 
+TEST_F(SSLClientSocketTest, DontClearEmptyClientCertCache) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::REQUIRE_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  context_->AddObserver(&observer);
+
+  // No cached client certs and no open session.
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().empty());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 0U);
+
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<net::X509Certificate> certificate1 =
+      ImportCertFromFile(certs_dir, "client_1.pem");
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), certificate1);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().empty());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 0U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_FALSE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
+TEST_F(SSLClientSocketTest, DontClearMatchingClientCertificates) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::REQUIRE_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  EXPECT_CALL(observer, OnSSLConfigForServersChanged(
+                            base::flat_set<HostPortPair>({host_port_pair()})));
+  context_->AddObserver(&observer);
+
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<net::X509Certificate> certificate1 =
+      ImportCertFromFile(certs_dir, "client_1.pem");
+  scoped_refptr<net::SSLPrivateKey> private_key1 =
+      key_util::LoadPrivateKeyOpenSSL(certs_dir.AppendASCII("client_1.key"));
+
+  context_->SetClientCertificate(host_port_pair(), certificate1, private_key1);
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+
+  // Connect to `host_port_pair()` using the client cert.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_TRUE(sock_->IsConnected());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), certificate1);
+  base::RunLoop().RunUntilIdle();
+
+  // Cached certificate and session should not have been cleared since the
+  // certificates were identical.
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().contains(
+      host_port_pair()));
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_FALSE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
+TEST_F(SSLClientSocketTest, ClearMismatchingClientCertificates) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::REQUIRE_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  EXPECT_CALL(observer, OnSSLConfigForServersChanged(
+                            base::flat_set<HostPortPair>({host_port_pair()})))
+      .Times(2);
+  context_->AddObserver(&observer);
+
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<net::X509Certificate> certificate1 =
+      ImportCertFromFile(certs_dir, "client_1.pem");
+  scoped_refptr<net::SSLPrivateKey> private_key1 =
+      key_util::LoadPrivateKeyOpenSSL(certs_dir.AppendASCII("client_1.key"));
+
+  context_->SetClientCertificate(host_port_pair(), certificate1, private_key1);
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+
+  // Connect to `host_port_pair()` using the client cert.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_TRUE(sock_->IsConnected());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  scoped_refptr<net::X509Certificate> certificate2 =
+      ImportCertFromFile(certs_dir, "client_2.pem");
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), certificate2);
+  base::RunLoop().RunUntilIdle();
+
+  // Cached certificate and session should have been cleared since the
+  // certificates were different.
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().empty());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 0U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_TRUE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
+TEST_F(SSLClientSocketTest,
+       ClearMismatchingClientCertificatesWithNullParameter) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::REQUIRE_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  EXPECT_CALL(observer, OnSSLConfigForServersChanged(
+                            base::flat_set<HostPortPair>({host_port_pair()})))
+      .Times(2);
+  context_->AddObserver(&observer);
+
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<net::X509Certificate> certificate1 =
+      ImportCertFromFile(certs_dir, "client_1.pem");
+  scoped_refptr<net::SSLPrivateKey> private_key1 =
+      key_util::LoadPrivateKeyOpenSSL(certs_dir.AppendASCII("client_1.key"));
+
+  context_->SetClientCertificate(host_port_pair(), certificate1, private_key1);
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+
+  // Connect to `host_port_pair()` using the client cert.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_TRUE(sock_->IsConnected());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), nullptr);
+  base::RunLoop().RunUntilIdle();
+
+  // Cached certificate and session should have been cleared since the
+  // certificates were different.
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().empty());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 0U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_TRUE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
+TEST_F(SSLClientSocketTest,
+       ClearMismatchingClientCertificatesWithNullCachedCert) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::OPTIONAL_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  EXPECT_CALL(observer, OnSSLConfigForServersChanged(
+                            base::flat_set<HostPortPair>({host_port_pair()})))
+      .Times(2);
+  context_->AddObserver(&observer);
+
+  context_->SetClientCertificate(host_port_pair(), nullptr, nullptr);
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+
+  // Connect to `host_port_pair()` using the client cert.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_TRUE(sock_->IsConnected());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  base::FilePath certs_dir = GetTestCertsDirectory();
+  scoped_refptr<net::X509Certificate> certificate2 =
+      ImportCertFromFile(certs_dir, "client_2.pem");
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), certificate2);
+  base::RunLoop().RunUntilIdle();
+
+  // Cached certificate and session should have been cleared since the
+  // certificates were different.
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().empty());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 0U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_TRUE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
+TEST_F(SSLClientSocketTest, DontClearClientCertificatesWithNullCerts) {
+  SSLServerConfig server_config;
+  // TLS 1.3 reports client certificate errors after the handshake, so test at
+  // TLS 1.2 for simplicity.
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  server_config.client_cert_type = SSLServerConfig::OPTIONAL_CLIENT_CERT;
+  ASSERT_TRUE(
+      StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, server_config));
+
+  testing::StrictMock<MockSSLClientContextObserver> observer;
+  EXPECT_CALL(observer, OnSSLConfigForServersChanged(
+                            base::flat_set<HostPortPair>({host_port_pair()})));
+  context_->AddObserver(&observer);
+
+  context_->SetClientCertificate(host_port_pair(), nullptr, nullptr);
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+
+  // Connect to `host_port_pair()` using the client cert.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_TRUE(sock_->IsConnected());
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  context_->ClearClientCertificateIfNeeded(host_port_pair(), nullptr);
+  base::RunLoop().RunUntilIdle();
+
+  // Cached certificate and session should not have been cleared since the
+  // certificates were identical.
+  EXPECT_EQ(context_->GetClientCertificateCachedServersForTesting().size(), 1U);
+  EXPECT_TRUE(context_->GetClientCertificateCachedServersForTesting().contains(
+      host_port_pair()));
+  EXPECT_EQ(context_->ssl_client_session_cache()->size(), 1U);
+
+  context_->RemoveObserver(&observer);
+
+  auto entries = log_observer_.GetEntriesWithType(
+      NetLogEventType::CLEAR_CACHED_CLIENT_CERT);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(GetStringValueFromParams(entries[0], "host"),
+            host_port_pair().ToString());
+  EXPECT_FALSE(GetBooleanValueFromParams(entries[0], "is_cleared"));
+}
+
 TEST_F(SSLClientSocketTest, DontClearSessionCacheOnServerCertDatabaseChange) {
   SSLServerConfig server_config;
   // TLS 1.3 reports client certificate errors after the handshake, so test at
@@ -3854,7 +4131,7 @@ TEST_F(SSLClientSocketTest, DontClearSessionCacheOnServerCertDatabaseChange) {
 
   context_->RemoveObserver(&observer);
 }
-#endif  // !IS_IOS
+#endif  // BUILDFLAG(ENABLE_CLIENT_CERTIFICATES)
 
 HashValueVector MakeHashValueVector(uint8_t value) {
   HashValueVector out;

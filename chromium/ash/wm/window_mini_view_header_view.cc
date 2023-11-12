@@ -4,14 +4,19 @@
 
 #include "ash/wm/window_mini_view_header_view.h"
 
+#include "ash/shell.h"
 #include "ash/style/ash_color_id.h"
+#include "ash/wm/snap_group/snap_group.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/window_mini_view.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
@@ -80,17 +85,13 @@ WindowMiniViewHeaderView::WindowMiniViewHeaderView(
   icon_label_view_->SetFlexForView(title_label_, 1);
 
   if (is_jellyroll_enabled) {
-    SetBackground(views::CreateThemedRoundedRectBackground(
-        chromeos::features::IsJellyrollEnabled()
-            ? cros_tokens::kCrosSysHeader
-            : static_cast<ui::ColorId>(kColorAshShieldAndBase80),
-        /*top_radius=*/kHeaderTopCornerRadius,
-        /*bottom_radius=*/0, /*for_border_thickness=*/0));
+    RefreshHeaderViewRoundedCorners();
 
     views::Separator* separator =
         AddChildView(std::make_unique<views::Separator>());
     separator->SetColorId(kColorAshWindowHeaderStrokeColor);
   }
+
   SetFlexForView(icon_label_view_, 1);
 }
 
@@ -117,6 +118,40 @@ void WindowMiniViewHeaderView::UpdateIconView(aura::Window* window) {
 
 void WindowMiniViewHeaderView::UpdateTitleLabel(aura::Window* window) {
   title_label_->SetText(GetWindowTitle(window));
+}
+
+void WindowMiniViewHeaderView::RefreshHeaderViewRoundedCorners() {
+  if (chromeos::features::IsJellyrollEnabled()) {
+    SetBackground(views::CreateThemedRoundedRectBackground(
+        chromeos::features::IsJellyrollEnabled()
+            ? cros_tokens::kCrosSysHeader
+            : static_cast<ui::ColorId>(kColorAshShieldAndBase80),
+        GetHeaderRoundedCorners(window_mini_view_->source_window()),
+        /*for_border_thickness=*/0));
+  }
+}
+
+void WindowMiniViewHeaderView::SetHeaderViewRoundedCornerRadius(
+    gfx::RoundedCornersF& header_view_rounded_corners) {
+  header_view_rounded_corners_ = header_view_rounded_corners;
+}
+
+void WindowMiniViewHeaderView::ResetRoundedCorners() {
+  header_view_rounded_corners_.reset();
+}
+
+gfx::RoundedCornersF WindowMiniViewHeaderView::GetHeaderRoundedCorners(
+    aura::Window* window) const {
+  const float scale = window->layer()->GetTargetTransform().To2dScale().x();
+  if (header_view_rounded_corners_.has_value()) {
+    const auto raw_value = header_view_rounded_corners_.value();
+    return gfx::RoundedCornersF(
+        raw_value.upper_left() / scale, raw_value.upper_right() / scale,
+        raw_value.lower_right() / scale, raw_value.lower_left() / scale);
+  }
+
+  return gfx::RoundedCornersF(kHeaderTopCornerRadius / scale,
+                              kHeaderTopCornerRadius / scale, 0, 0);
 }
 
 BEGIN_METADATA(WindowMiniViewHeaderView, views::View)

@@ -57,7 +57,6 @@ generated_types("generated_api_types") {
 group("schema") {
   public_deps = [
     ":generated_api_json_strings",
-    ":generated_api_registration",
     ":generated_api_types",
   ]
 }

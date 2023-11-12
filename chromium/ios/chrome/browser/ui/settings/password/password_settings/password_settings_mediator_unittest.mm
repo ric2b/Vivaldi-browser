@@ -4,12 +4,14 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_settings/password_settings_mediator.h"
 
+#import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/password_manager/core/browser/affiliation/mock_affiliation_service.h"
+#import "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/test_password_store.h"
 #import "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/sync/base/features.h"
 #import "components/sync/base/model_type.h"
@@ -27,10 +29,6 @@
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using password_manager::SavedPasswordsPresenter;
 using password_manager::TestPasswordStore;
@@ -68,7 +66,6 @@ class PasswordSettingsMediatorTest : public PlatformTest {
                                                   TestPasswordStore>));
     browser_state_ = builder.Build();
 
-    password_manager::MockAffiliationService affiliation_service_;
     store_ =
         base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
             IOSChromePasswordStoreFactory::GetForBrowserState(
@@ -78,14 +75,16 @@ class PasswordSettingsMediatorTest : public PlatformTest {
         &affiliation_service_, store_, /*accont_store=*/nullptr);
 
     mediator_ = [[PasswordSettingsMediator alloc]
-        initWithReauthenticationModule:reauth_module_
-               savedPasswordsPresenter:presenter_.get()
-                         exportHandler:export_handler_
-                           prefService:browser_state_->GetPrefs()
-                       identityManager:IdentityManagerFactory::
-                                           GetForBrowserState(
-                                               browser_state_.get())
-                           syncService:&sync_service_];
+           initWithReauthenticationModule:reauth_module_
+                  savedPasswordsPresenter:presenter_.get()
+        bulkMovePasswordsToAccountHandler:
+            bulk_move_passwords_to_account_handler_
+                            exportHandler:export_handler_
+                              prefService:browser_state_->GetPrefs()
+                          identityManager:IdentityManagerFactory::
+                                              GetForBrowserState(
+                                                  browser_state_.get())
+                              syncService:&sync_service_];
     mediator_.consumer = consumer_;
   }
 
@@ -93,11 +92,14 @@ class PasswordSettingsMediatorTest : public PlatformTest {
 
   web::WebTaskEnvironment task_env_;
   SyncServiceForPasswordTests sync_service_;
+  password_manager::FakeAffiliationService affiliation_service_;
   scoped_refptr<TestPasswordStore> store_;
   std::unique_ptr<SavedPasswordsPresenter> presenter_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   id consumer_ = OCMProtocolMock(@protocol(PasswordSettingsConsumer));
   id export_handler_ = OCMProtocolMock(@protocol(PasswordExportHandler));
+  id bulk_move_passwords_to_account_handler_ =
+      OCMProtocolMock(@protocol(BulkMoveLocalPasswordsToAccountHandler));
   id reauth_module_ = OCMProtocolMock(@protocol(ReauthenticationProtocol));
   PasswordSettingsMediator* mediator_;
 };
@@ -149,4 +151,25 @@ TEST_F(PasswordSettingsMediatorTest,
   [syncObserver onPrimaryAccountChanged:event];
   [[consumer_ verify] setOnDeviceEncryptionState:
                           PasswordSettingsOnDeviceEncryptionStateNotShown];
+}
+
+// Tests that sync state changes trigger updates to showing the move local
+// passwords to account module.
+TEST_F(PasswordSettingsMediatorTest,
+       SyncChangeTriggersBulkMovePasswordsToAccountChange) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {password_manager::features::
+           kIOSPasswordSettingsBulkUploadLocalPasswords},
+      /*disabled_features=*/{});
+
+  ASSERT_TRUE(
+      [mediator_ conformsToProtocol:@protocol(SyncObserverModelBridge)]);
+
+  PasswordSettingsMediator<SyncObserverModelBridge>* syncObserver =
+      static_cast<PasswordSettingsMediator<SyncObserverModelBridge>*>(
+          mediator_);
+
+  [syncObserver onSyncStateChanged];
+  [[consumer_ verify] setLocalPasswordsCount:0 withUserEligibility:NO];
 }

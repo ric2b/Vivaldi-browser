@@ -16,9 +16,9 @@
 #include <CoreVideo/CVPixelBuffer.h>
 #include <CoreVideo/CoreVideo.h>
 
+#include "base/apple/osstatus_logging.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/mac/mac_logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_byteorder.h"
 #include "media/base/async_destroy_video_decoder.h"
@@ -104,17 +104,17 @@ bool IsProfileSupported(VideoCodecProfile profile, gfx::Size coded_size) {
 }
 
 // Build an |image_config| dictionary for VideoToolbox initialization.
-base::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
+base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
     CMVideoDimensions coded_dimensions) {
-  base::ScopedCFTypeRef<CFMutableDictionaryRef> image_config;
+  base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> image_config;
 
   // Note that 4:2:0 textures cannot be used directly as RGBA in OpenGL, but are
   // lower power than 4:2:2 when composited directly by CoreAnimation.
   int32_t pixel_format = kCVPixelFormatType_420YpCbCr8Planar;
 #define CFINT(i) CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &i)
-  base::ScopedCFTypeRef<CFNumberRef> cf_pixel_format(CFINT(pixel_format));
-  base::ScopedCFTypeRef<CFNumberRef> cf_width(CFINT(coded_dimensions.width));
-  base::ScopedCFTypeRef<CFNumberRef> cf_height(CFINT(coded_dimensions.height));
+  base::apple::ScopedCFTypeRef<CFNumberRef> cf_pixel_format(CFINT(pixel_format));
+  base::apple::ScopedCFTypeRef<CFNumberRef> cf_width(CFINT(coded_dimensions.width));
+  base::apple::ScopedCFTypeRef<CFNumberRef> cf_height(CFINT(coded_dimensions.height));
 #undef CFINT
   if (!cf_pixel_format.get() || !cf_width.get() || !cf_height.get())
     return image_config;
@@ -565,7 +565,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
 
   // Create a memory-backed CMBlockBuffer for the translated data.
   // TODO(sandersd): Pool of memory blocks.
-  base::ScopedCFTypeRef<CMBlockBufferRef> data;
+  base::apple::ScopedCFTypeRef<CMBlockBufferRef> data;
   OSStatus status = CMBlockBufferCreateWithMemoryBlock(
       kCFAllocatorDefault,
       nullptr,              // &memory_block
@@ -611,7 +611,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   }
 
   // Package the data in a CMSampleBuffer.
-  base::ScopedCFTypeRef<CMSampleBufferRef> sample;
+  base::apple::ScopedCFTypeRef<CMSampleBufferRef> sample;
   status = CMSampleBufferCreate(kCFAllocatorDefault,
                                 data,        // data_buffer
                                 true,        // data_ready
@@ -890,7 +890,7 @@ bool VivVideoDecoder::ConfigureDecoder() {
   }
 
   // Prepare VideoToolbox configuration dictionaries.
-  base::ScopedCFTypeRef<CFMutableDictionaryRef> decoder_config(
+  base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> decoder_config(
       CFDictionaryCreateMutable(kCFAllocatorDefault,
                                 1,  // capacity
                                 &kCFTypeDictionaryKeyCallBacks,
@@ -909,7 +909,7 @@ bool VivVideoDecoder::ConfigureDecoder() {
       static_cast<int32_t>(visible_rect.size.width),
       static_cast<int32_t>(visible_rect.size.height)};
 
-  base::ScopedCFTypeRef<CFMutableDictionaryRef> image_config(
+  base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> image_config(
       BuildImageConfig(visible_dimensions));
 
   if (!image_config.get()) {

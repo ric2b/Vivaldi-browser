@@ -72,6 +72,8 @@ uint32_t TranslatePriority(gfx::OverlayPriorityHint priority_hint) {
   return priority;
 }
 
+const wl_fixed_t kMinusOne = wl_fixed_from_int(-1);
+
 }  // namespace
 
 WaylandSurface::ExplicitReleaseInfo::ExplicitReleaseInfo(
@@ -134,22 +136,21 @@ bool WaylandSurface::Initialize() {
   if (!surface_)
     return false;
 
-  static struct wl_surface_listener surface_listener = {
-      &WaylandSurface::Enter,
-      &WaylandSurface::Leave,
+  static constexpr wl_surface_listener kSurfaceListener = {
+      .enter = &OnEnter,
+      .leave = &OnLeave,
   };
-  wl_surface_add_listener(surface_.get(), &surface_listener, this);
+  wl_surface_add_listener(surface_.get(), &kSurfaceListener, this);
 
-  if (auto* fractional_scale_manager =
-          connection_->fractional_scale_manager_v1()) {
-    static struct wp_fractional_scale_v1_listener fractional_scale_listener {
-      &WaylandSurface::PreferredScale,
-    };
-    fractional_scale_ =
-        wl::Object(wp_fractional_scale_manager_v1_get_fractional_scale(
-            fractional_scale_manager, surface_.get()));
+  if (connection_->fractional_scale_manager_v1()) {
+    static constexpr wp_fractional_scale_v1_listener kFractionalScaleListener =
+        {
+            .preferred_scale = &OnPreferredScale,
+        };
+    fractional_scale_.reset(wp_fractional_scale_manager_v1_get_fractional_scale(
+        connection_->fractional_scale_manager_v1(), surface_.get()));
     wp_fractional_scale_v1_add_listener(fractional_scale_.get(),
-                                        &fractional_scale_listener, this);
+                                        &kFractionalScaleListener, this);
   }
 
   if (connection_->viewporter()) {
@@ -261,7 +262,8 @@ void WaylandSurface::set_acquire_fence(gfx::GpuFenceHandle acquire_fence) {
   // WaylandBufferManagerGPU knows if the synchronization is not available and
   // must disallow clients to use explicit synchronization.
   DCHECK(!apply_state_immediately_);
-  DCHECK(connection_->linux_explicit_synchronization_v1());
+  DCHECK(connection_->linux_explicit_synchronization_v1() ||
+         connection_->UseImplicitSyncInterop());
   if (!acquire_fence.is_null()) {
     base::TimeTicks ticks;
     auto status = gfx::GpuFence::GetStatusChangeTime(
@@ -282,7 +284,7 @@ bool WaylandSurface::AttachBuffer(WaylandBufferHandle* buffer_handle) {
   }
 
   pending_state_.buffer_size_px = buffer_handle->size();
-  pending_state_.buffer = buffer_handle->wl_buffer();
+  pending_state_.buffer = buffer_handle->buffer();
   pending_state_.buffer_id = buffer_handle->id();
 
   if (state_.buffer_id == pending_state_.buffer_id &&
@@ -326,7 +328,7 @@ void WaylandSurface::set_surface_buffer_scale(float scale) {
 }
 
 void WaylandSurface::set_opaque_region(
-    const std::vector<gfx::Rect>* region_px) {
+    absl::optional<std::vector<gfx::Rect>> region_px) {
   pending_state_.opaque_region_px.clear();
   if (!root_window_)
     return;
@@ -335,7 +337,7 @@ void WaylandSurface::set_opaque_region(
     pending_state_.opaque_region_px = *region_px;
 
   if (apply_state_immediately_) {
-    state_.opaque_region_px.swap(pending_state_.opaque_region_px);
+    state_.opaque_region_px = pending_state_.opaque_region_px;
     wl_surface_set_opaque_region(
         surface_.get(),
         pending_state_.opaque_region_px.empty()
@@ -346,7 +348,7 @@ void WaylandSurface::set_opaque_region(
   }
 }
 
-void WaylandSurface::set_input_region(const gfx::Rect* region_px) {
+void WaylandSurface::set_input_region(absl::optional<gfx::Rect> region_px) {
   pending_state_.input_region_px.reset();
   if (!root_window_)
     return;
@@ -355,7 +357,7 @@ void WaylandSurface::set_input_region(const gfx::Rect* region_px) {
     return;
   }
   if (region_px)
-    pending_state_.input_region_px = *region_px;
+    pending_state_.input_region_px = region_px;
 
   if (apply_state_immediately_) {
     state_.input_region_px = pending_state_.input_region_px;
@@ -476,13 +478,13 @@ void WaylandSurface::ApplyPendingState() {
           LOG_IF(FATAL, !linux_buffer_release)
               << "Unable to get an explicit release object.";
 
-          static struct zwp_linux_buffer_release_v1_listener release_listener =
-              {
-                  &WaylandSurface::FencedRelease,
-                  &WaylandSurface::ImmediateRelease,
+          static constexpr zwp_linux_buffer_release_v1_listener
+              kBufferReleaseListener = {
+                  .fenced_release = &OnFencedRelease,
+                  .immediate_release = &OnImmediateRelease,
               };
-          zwp_linux_buffer_release_v1_add_listener(linux_buffer_release,
-                                                   &release_listener, this);
+          zwp_linux_buffer_release_v1_add_listener(
+              linux_buffer_release, &kBufferReleaseListener, this);
 
           linux_buffer_releases_.emplace(
               linux_buffer_release,
@@ -490,6 +492,12 @@ void WaylandSurface::ApplyPendingState() {
                   wl::Object<zwp_linux_buffer_release_v1>(linux_buffer_release),
                   pending_state_.buffer,
                   std::move(next_explicit_release_request_)));
+        }
+      } else if (connection_->UseImplicitSyncInterop()) {
+        if (!pending_state_.acquire_fence.is_null()) {
+          connection_->buffer_manager_host()->InsertAcquireFence(
+              pending_state_.buffer_id,
+              pending_state_.acquire_fence.owned_fd.get());
         }
       }
     }
@@ -577,11 +585,38 @@ void WaylandSurface::ApplyPendingState() {
 
   if (pending_state_.rounded_clip_bounds != state_.rounded_clip_bounds) {
     DCHECK(get_augmented_surface());
-    if (augmented_surface_get_version(get_augmented_surface()) >=
-        AUGMENTED_SURFACE_SET_ROUNDED_CLIP_BOUNDS_SINCE_VERSION) {
-      gfx::RRectF rounded_clip_bounds = pending_state_.rounded_clip_bounds;
-      rounded_clip_bounds.Scale(1.f / GetWaylandScale(pending_state_));
+    gfx::RRectF rounded_clip_bounds = pending_state_.rounded_clip_bounds;
+    rounded_clip_bounds.Scale(1.f / GetWaylandScale(pending_state_));
 
+    // For backwards compatibility, support both the latest and the deprecated
+    // incarnation of this request. In the future, this API will get a clean up
+    // pass.
+    if (augmented_surface_get_version(get_augmented_surface()) >=
+        AUGMENTED_SURFACE_SET_ROUNDED_CORNERS_CLIP_BOUNDS_SINCE_VERSION) {
+      augmented_surface_set_rounded_corners_clip_bounds(
+          get_augmented_surface(),
+          wl_fixed_from_double(rounded_clip_bounds.rect().x()),
+          wl_fixed_from_double(rounded_clip_bounds.rect().y()),
+          wl_fixed_from_double(rounded_clip_bounds.rect().width()),
+          wl_fixed_from_double(rounded_clip_bounds.rect().height()),
+          wl_fixed_from_double(
+              rounded_clip_bounds
+                  .GetCornerRadii(gfx::RRectF::Corner::kUpperLeft)
+                  .x()),
+          wl_fixed_from_double(
+              rounded_clip_bounds
+                  .GetCornerRadii(gfx::RRectF::Corner::kUpperRight)
+                  .x()),
+          wl_fixed_from_double(
+              rounded_clip_bounds
+                  .GetCornerRadii(gfx::RRectF::Corner::kLowerRight)
+                  .x()),
+          wl_fixed_from_double(
+              rounded_clip_bounds
+                  .GetCornerRadii(gfx::RRectF::Corner::kLowerLeft)
+                  .x()));
+    } else if (augmented_surface_get_version(get_augmented_surface()) >=
+               AUGMENTED_SURFACE_SET_ROUNDED_CLIP_BOUNDS_SINCE_VERSION) {
       augmented_surface_set_rounded_clip_bounds(
           get_augmented_surface(), rounded_clip_bounds.rect().x(),
           rounded_clip_bounds.rect().y(), rounded_clip_bounds.rect().width(),
@@ -602,6 +637,25 @@ void WaylandSurface::ApplyPendingState() {
               rounded_clip_bounds
                   .GetCornerRadii(gfx::RRectF::Corner::kLowerLeft)
                   .x()));
+    }
+  }
+
+  if (pending_state_.clip_rect != state_.clip_rect) {
+    DCHECK(get_augmented_surface());
+    if (connection_->surface_augmenter()
+            ->SupportsClipRectOnAugmentedSurface()) {
+      absl::optional<gfx::RectF> clip_rect = pending_state_.clip_rect;
+      if (clip_rect) {
+        clip_rect->Scale(1.f / GetWaylandScale(pending_state_));
+        augmented_surface_set_clip_rect(
+            get_augmented_surface(), wl_fixed_from_double(clip_rect->x()),
+            wl_fixed_from_double(clip_rect->y()),
+            wl_fixed_from_double(clip_rect->width()),
+            wl_fixed_from_double(clip_rect->height()));
+      } else {
+        augmented_surface_set_clip_rect(get_augmented_surface(), kMinusOne,
+                                        kMinusOne, kMinusOne, kMinusOne);
+      }
     }
   }
 
@@ -825,7 +879,7 @@ void WaylandSurface::EnableTrustedDamageIfPossible() {
 }
 
 void WaylandSurface::ExplicitRelease(
-    struct zwp_linux_buffer_release_v1* linux_buffer_release,
+    zwp_linux_buffer_release_v1* linux_buffer_release,
     base::ScopedFD fence) {
   auto iter = linux_buffer_releases_.find(linux_buffer_release);
   DCHECK(iter != linux_buffer_releases_.end());
@@ -857,19 +911,19 @@ WaylandSurface::State& WaylandSurface::State::operator=(
   rounded_clip_bounds = other.rounded_clip_bounds;
   priority_hint = other.priority_hint;
   background_color = other.background_color;
+  clip_rect = other.clip_rect;
   contains_video = other.contains_video;
   return *this;
 }
 
 // static
-void WaylandSurface::Enter(void* data,
-                           struct wl_surface* wl_surface,
-                           struct wl_output* output) {
-  auto* const surface = static_cast<WaylandSurface*>(data);
-  DCHECK(surface);
+void WaylandSurface::OnEnter(void* data,
+                             wl_surface* surface,
+                             wl_output* output) {
+  auto* self = static_cast<WaylandSurface*>(data);
+  DCHECK(self);
 
-  // The compositor can send a null output.
-  // crbug.com/1332540
+  // The compositor can send a null output. See https://crbug.com/1332540.
   if (!output) {
     LOG(ERROR) << "NULL output received, cannot enter it!";
     return;
@@ -878,29 +932,29 @@ void WaylandSurface::Enter(void* data,
   auto* wayland_output =
       static_cast<WaylandOutput*>(wl_output_get_user_data(output));
 
-  DCHECK_NE(surface->connection_->wayland_output_manager()->GetOutput(
+  DCHECK_NE(self->connection_->wayland_output_manager()->GetOutput(
                 wayland_output->output_id()),
             nullptr);
 
-  if (auto it = base::ranges::find(surface->entered_outputs_,
+  if (auto it = base::ranges::find(self->entered_outputs_,
                                    wayland_output->output_id());
-      it == surface->entered_outputs_.end()) {
-    surface->entered_outputs_.emplace_back(wayland_output->output_id());
+      it == self->entered_outputs_.end()) {
+    self->entered_outputs_.emplace_back(wayland_output->output_id());
   }
 
-  if (surface->root_window_)
-    surface->root_window_->OnEnteredOutput();
+  if (self->root_window_) {
+    self->root_window_->OnEnteredOutput();
+  }
 }
 
 // static
-void WaylandSurface::Leave(void* data,
-                           struct wl_surface* wl_surface,
-                           struct wl_output* output) {
-  auto* const surface = static_cast<WaylandSurface*>(data);
-  DCHECK(surface);
+void WaylandSurface::OnLeave(void* data,
+                             wl_surface* surface,
+                             wl_output* output) {
+  auto* self = static_cast<WaylandSurface*>(data);
+  DCHECK(self);
 
-  // The compositor can send a null output.
-  // crbug.com/1332540
+  // The compositor can send a null output. See https://crbug.com/1332540.
   if (!output) {
     LOG(ERROR) << "NULL output received, cannot leave it!";
     return;
@@ -908,14 +962,13 @@ void WaylandSurface::Leave(void* data,
 
   auto* wayland_output =
       static_cast<WaylandOutput*>(wl_output_get_user_data(output));
-  surface->RemoveEnteredOutput(wayland_output->output_id());
+  self->RemoveEnteredOutput(wayland_output->output_id());
 }
 
 // static
-void WaylandSurface::PreferredScale(
-    void* data,
-    struct wp_fractional_scale_v1* wp_fractional_scale_v1,
-    uint32_t scale) {}
+void WaylandSurface::OnPreferredScale(void* data,
+                                      wp_fractional_scale_v1* fractional_scale,
+                                      uint32_t scale) {}
 
 void WaylandSurface::RemoveEnteredOutput(uint32_t output_id) {
   auto it = base::ranges::find(entered_outputs_, output_id);
@@ -954,21 +1007,21 @@ void WaylandSurface::set_color_space(gfx::ColorSpace color_space) {
 }
 
 // static
-void WaylandSurface::FencedRelease(
+void WaylandSurface::OnFencedRelease(
     void* data,
-    struct zwp_linux_buffer_release_v1* linux_buffer_release,
+    zwp_linux_buffer_release_v1* buffer_release,
     int32_t fence) {
+  auto* self = static_cast<WaylandSurface*>(data);
   auto fd = base::ScopedFD(fence);
-  static_cast<WaylandSurface*>(data)->ExplicitRelease(linux_buffer_release,
-                                                      std::move(fd));
+  self->ExplicitRelease(buffer_release, std::move(fd));
 }
 
 // static
-void WaylandSurface::ImmediateRelease(
+void WaylandSurface::OnImmediateRelease(
     void* data,
-    struct zwp_linux_buffer_release_v1* linux_buffer_release) {
-  static_cast<WaylandSurface*>(data)->ExplicitRelease(linux_buffer_release,
-                                                      base::ScopedFD());
+    zwp_linux_buffer_release_v1* buffer_release) {
+  auto* self = static_cast<WaylandSurface*>(data);
+  self->ExplicitRelease(buffer_release, base::ScopedFD());
 }
 
 }  // namespace ui

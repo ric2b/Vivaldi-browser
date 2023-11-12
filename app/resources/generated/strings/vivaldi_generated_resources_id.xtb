@@ -211,7 +211,7 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
 <translation id="431076611119798497">&amp;Detail</translation>
 <translation id="4345587454538109430">Konfigurasikan...</translation>
-<translation id="4348766275249686434">Kumpulkan semua galat</translation>
+<translation id="4348766275249686434">Kumpulkan galat</translation>
 <translation id="4363771538994847871">Tujuan Siaran tidak ditemukan. Perlu bantuan?</translation>
 <translation id="4384652540891215547">Aktifkan ekstensi</translation>
 <translation id="4394049700291259645">Nonaktifkan</translation>
@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Pulihkan Semua Pengaturan</translation>
 <translation id="4478664379124702289">Simpan Tauta&amp;n Sebagai...</translation>
 <translation id="4520385623207007473">Kuki yang sedang digunakan</translation>
+<translation id="456449593072900590">Hapus saat keluar</translation>
 <translation id="4580596421317071374">Sandi disimpan ke <ph name="GOOGLE_PASSWORD_MANAGER" /> di perangkat ini.</translation>
 <translation id="4593021220803146968">&amp;Buka <ph name="URL" /></translation>
 <translation id="4595560905247879544">Semua aplikasi dan ekstensi hanya dapat diubah oleh pengelola (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Warna</translation>
 <translation id="5485102783864353244">Tambah aplikasi</translation>
 <translation id="5486561344817861625">Simulasikan Mulai Ulang Peramban</translation>
-<translation id="5487521232677179737">Bersihkan data</translation>
 <translation id="5509693895992845810">Simp&amp;an Sebagai...</translation>
 <translation id="5521078259930077036">Apakah ini beranda yang anda harapkan?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Tidak diketahui</translation>
 <translation id="5851868085455377790">Penerbit</translation>
 <translation id="5860491529813859533">Aktifkan</translation>
-<translation id="5867841422488265304">Telusuri atau ketik alamat web</translation>
 <translation id="5910363049092958439">Sim&amp;pan Gambar Sebagai...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Periksa Ejaan Saat Mengetik</translation>
-<translation id="73786666777299047">Buka Chrome Web Store</translation>
 <translation id="7385854874724088939">Ada yang salah saat mencetak. Periksa printer anda dan coba kembali.</translation>
 <translation id="7412226954991670867">Memori GPU</translation>
 <translation id="7421925624202799674">&amp;Lihat Sumber Halaman</translation>
@@ -442,6 +440,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8382913212082956454">Salin alamat &amp;email</translation>
 <translation id="8434480141477525001">Port Debug NaCl</translation>
 <translation id="8449008133205184768">Tempel dan Cocokkan Gaya</translation>
+<translation id="8477178913400731244">Hapus data</translation>
 <translation id="8477384620836102176">&amp;Umum</translation>
 <translation id="8496717697661868878">Jalankan Plugin Ini</translation>
 <translation id="8512476990829870887">Akhiri Proses</translation>

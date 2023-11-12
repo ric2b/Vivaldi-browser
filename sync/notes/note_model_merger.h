@@ -11,8 +11,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/uuid.h"
 #include "base/memory/raw_ptr.h"
+#include "base/uuid.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
@@ -110,8 +110,8 @@ class NoteModelMerger {
   // matched by UUID. They are guaranteed to have the same type and URL (if
   // applicable).
   struct GuidMatch {
-    raw_ptr<const vivaldi::NoteNode> local_node;
-    raw_ptr<const RemoteTreeNode> remote_node;
+    raw_ptr<const vivaldi::NoteNode> local_node = nullptr;
+    raw_ptr<const RemoteTreeNode> remote_node = nullptr;
   };
 
   // Constructs the remote note tree to be merged. Each entry in the

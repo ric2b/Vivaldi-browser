@@ -82,6 +82,9 @@ extern const char kChromeAppGroupQRScannerCommand[];
 // The command to open Lens.
 extern const char kChromeAppGroupLensCommand[];
 
+// The command to open the Password Manager's search page.
+extern const char kChromeAppGroupSearchPasswordsCommand[];
+
 // The key in kChromeAppGroupCommandPreference containing a NSDate at which
 // `kChromeAppGroupCommandAppPreference` issued the command.
 extern const char kChromeAppGroupCommandTimePreference[];
@@ -142,6 +145,10 @@ extern NSString* const kOpenCommandSourceCredentialsExtension;
 
 // The value of the key for the sharedDefaults used by the Content Widget.
 extern NSString* const kSuggestedItems;
+
+// The value of the key for the sharedDefaults last modification date used by
+// the Shortcuts Widget.
+extern NSString* const kSuggestedItemsLastModificationDate;
 
 // The current epoch time, on the first run of chrome on this machine. It is set
 // once and must be attached to metrics reports forever thereafter.

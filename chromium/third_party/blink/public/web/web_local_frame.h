@@ -771,11 +771,6 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // printing. It returns whether any resources will need to load.
   virtual bool WillPrintSoon() = 0;
 
-  // Returns the page shrinking factor calculated by webkit (usually
-  // between 1/1.33 and 1/2). Returns 0 if the page number is invalid or
-  // not in printing mode.
-  virtual float GetPrintPageShrink(uint32_t page) = 0;
-
   // Prints one page.
   virtual void PrintPage(uint32_t page_to_print, cc::PaintCanvas*) = 0;
 
@@ -870,22 +865,19 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // Testing ------------------------------------------------------------------
 
   // Get the total spool size (the bounding box of all the pages placed after
-  // oneanother vertically), when printing for testing. Even if we still only
-  // support a uniform page size, some pages may be rotated using
-  // page-orientation.
+  // oneanother vertically), when printing for testing.
   virtual gfx::Size SpoolSizeInPixelsForTesting(
-      const gfx::Size& page_size_in_pixels,
+      const WebPrintParams&,
       const WebVector<uint32_t>& pages) = 0;
-  virtual gfx::Size SpoolSizeInPixelsForTesting(
-      const gfx::Size& page_size_in_pixels,
-      uint32_t page_count) = 0;
+  virtual gfx::Size SpoolSizeInPixelsForTesting(const WebPrintParams&,
+                                                uint32_t page_count) = 0;
 
   // Prints the given pages of the frame into the canvas, with page boundaries
   // drawn as one pixel wide blue lines. By default, all pages are printed. This
   // method exists to support web tests.
   virtual void PrintPagesForTesting(
       cc::PaintCanvas*,
-      const gfx::Size& page_size_in_pixels,
+      const WebPrintParams&,
       const gfx::Size& spool_size_in_pixels,
       const WebVector<uint32_t>* pages = nullptr) = 0;
 
@@ -911,7 +903,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   virtual void SetTargetToCurrentHistoryItem(const WebString& target) = 0;
   virtual void UpdateCurrentHistoryItem() = 0;
   virtual PageState CurrentHistoryItemToPageState() = 0;
-  virtual const WebHistoryItem& GetCurrentHistoryItem() const = 0;
+  virtual WebHistoryItem GetCurrentHistoryItem() const = 0;
   // Reset TextFinder state for the web test runner in between two tests.
   virtual void ClearActiveFindMatchForTesting() = 0;
 
@@ -940,6 +932,16 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // Sets a ResourceCache hosted by another frame.
   virtual void SetResourceCacheRemote(
       CrossVariantMojoRemote<mojom::ResourceCacheInterfaceBase> remote) = 0;
+
+  // Used to block and resume parsing of the current document in the frame.
+  virtual void BlockParserForTesting() {}
+  virtual void ResumeParserForTesting() {}
+
+  // Processes all pending input in the widget associated with this frame.
+  // This is an asynchronous operation since it processes the compositor queue
+  // as well. The passed closure is invoked when queues of both threads have
+  // been processed.
+  virtual void FlushInputForTesting(base::OnceClosure) {}
 
  protected:
   explicit WebLocalFrame(mojom::TreeScopeType scope,

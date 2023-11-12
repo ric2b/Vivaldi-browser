@@ -20,7 +20,7 @@
 #include "extensions/browser/api/declarative_webrequest/webrequest_constants.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_rules_registry.h"
 #include "extensions/browser/api/extensions_api_client.h"
-#include "extensions/browser/api/web_request/web_request_api.h"
+#include "extensions/browser/api/web_request/extension_web_request_event_router.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
@@ -93,7 +93,7 @@ void RulesRegistryService::RegisterRulesRegistry(
     scoped_refptr<RulesRegistry> rule_registry) {
   const std::string event_name(rule_registry->event_name());
   RulesRegistryKey key(event_name, rule_registry->id());
-  DCHECK(rule_registries_.find(key) == rule_registries_.end());
+  DCHECK(!base::Contains(rule_registries_, key));
   rule_registries_[key] = rule_registry;
 }
 

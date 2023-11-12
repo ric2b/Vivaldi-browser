@@ -216,9 +216,10 @@
 <translation id="4384652540891215547">Aktivizoj shtesën</translation>
 <translation id="4394049700291259645">Çaktivizoj</translation>
 <translation id="4409697491990005945">Anësoret</translation>
-<translation id="4423376891418188461">Rikthej parametrat</translation>
+<translation id="4423376891418188461">Kthej parametrat</translation>
 <translation id="4478664379124702289">Regjistroj lidh&amp;jen në...</translation>
 <translation id="4520385623207007473">Cookies në përdorim</translation>
+<translation id="456449593072900590">Fshij gjatë daljes</translation>
 <translation id="4580596421317071374">Fjalëkalimet janë regjistruar te <ph name="GOOGLE_PASSWORD_MANAGER" /> në këtë aparat.</translation>
 <translation id="4593021220803146968">&amp;Shkoj te <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacionet dhe shtesat mund t'i modifikojë vetëm administratori (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -227,7 +228,7 @@
 <translation id="4643612240819915418">&amp;Hap materialin filmik në skedë të re</translation>
 <translation id="4677772697204437347">Memoria e procesorit grafik</translation>
 <translation id="4681930562518940301">Hap &amp;imazhin origjinal në skedë të re</translation>
-<translation id="4711638718396952945">Rikthej parametrat</translation>
+<translation id="4711638718396952945">Kthej parametrat</translation>
 <translation id="4726710629007580002">Pati disa vërejtje gjatë instalimit të shtesës:</translation>
 <translation id="4763408175235639573">Cookies e mëposhtme janë shtuar pas hapjes së faqes</translation>
 <translation id="479536056609751218">Faqe interneti, vetëm HTML</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Me ngjyra</translation>
 <translation id="5485102783864353244">Shtoj aplikacionin</translation>
 <translation id="5486561344817861625">Simuloj rinisjen e shfletuesit të internetit</translation>
-<translation id="5487521232677179737">Pastroj të dhënat</translation>
 <translation id="5509693895992845810">Regjistroj &amp;në...</translation>
 <translation id="5521078259930077036">A është kjo faqja zyrtare që prisnit?</translation>
 <translation id="5542132724887566711">Profili</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Nuk dihet</translation>
 <translation id="5851868085455377790">Lëshuesi</translation>
 <translation id="5860491529813859533">Aktivizoj</translation>
-<translation id="5867841422488265304">Kërkoni ose shkruani adresën</translation>
 <translation id="5910363049092958439">Regji&amp;stroj imazhin në...</translation>
 <translation id="5914724413750400082">Moduli (<ph name="MODULUS_NUM_BITS" /> bitë):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">U refuzua aksesi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrolloj drejtshkrimin gjatë shkrimit</translation>
-<translation id="73786666777299047">Hap Dyqanin e dedikuar të Chrome</translation>
 <translation id="7385854874724088939">Diçka nuk funksionoi gjatë printimit. Lutemi të kontrolloni printerin dhe provojeni prapë.</translation>
 <translation id="7412226954991670867">Memoria e procesorit grafik</translation>
 <translation id="7421925624202799674">&amp;Shikoj burimin e faqes</translation>
@@ -442,6 +440,7 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8382913212082956454">Kopjoj adresën e &amp;imejlit</translation>
 <translation id="8434480141477525001">Porti i NaCl Debug</translation>
 <translation id="8449008133205184768">Ngjit dhe respektoj stilin</translation>
+<translation id="8477178913400731244">Fshij të dhënat</translation>
 <translation id="8477384620836102176">&amp;Të përgjithshme</translation>
 <translation id="8496717697661868878">Ekzekutoj fishën</translation>
 <translation id="8512476990829870887">Përfundoj procesin</translation>

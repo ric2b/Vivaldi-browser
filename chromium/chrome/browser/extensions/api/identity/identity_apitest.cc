@@ -78,9 +78,11 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api_test_utils.h"
+#include "extensions/browser/pref_names.h"
 #include "extensions/common/api/oauth2.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/manifest_handlers/oauth2_manifest_handler.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
 #include "net/cookies/cookie_util.h"
@@ -113,10 +115,6 @@
 #endif
 
 using extensions::ExtensionsAPIClient;
-using guest_view::GuestViewBase;
-using guest_view::GuestViewManager;
-using guest_view::TestGuestViewManager;
-using guest_view::TestGuestViewManagerFactory;
 using testing::_;
 using testing::Return;
 
@@ -340,6 +338,14 @@ void SimulateUrlRedirect(const std::string& url_prefix,
                          content::WebContents* auth_web_contents) {
   ASSERT_EQ(nullptr, content::EvalJs(auth_web_contents,
                                      "apply_consent(\"" + url_prefix + "\");"));
+}
+
+// Similar to SimulateUrlRedirect, but uses provided url instead of the pattern
+void SimulateCustomUrlRedirect(const std::string& redirect_url,
+                               content::WebContents* auth_web_contents) {
+  ASSERT_EQ(nullptr,
+            content::EvalJs(auth_web_contents, "window.location.replace(\"" +
+                                                   redirect_url + "\");"));
 }
 
 }  // namespace
@@ -1061,7 +1067,7 @@ class GetAuthTokenFunctionTest
 
   base::test::ScopedFeatureList feature_list_;
   base::HistogramTester histogram_tester_;
-  std::string extension_id_;
+  ExtensionId extension_id_;
   std::set<std::string> oauth_scopes_;
   std::unique_ptr<ExtensionFunction::ScopedUserGestureForTests> user_gesture_;
 };
@@ -1642,24 +1648,6 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   histogram_tester()->ExpectUniqueSample(
       kGetAuthTokenResultHistogramName,
       IdentityGetAuthTokenError::State::kRemoteConsentPageLoadFailure, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
-                       InteractiveApprovalSetAccountsInCookieFailed) {
-  SignIn("primary@example.com");
-  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
-  func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
-  func->push_mint_token_result(TestOAuth2MintTokenFlow::REMOTE_CONSENT_SUCCESS);
-  func->set_scope_ui_failure(
-      GaiaRemoteConsentFlow::SET_ACCOUNTS_IN_COOKIE_FAILED);
-  std::string error = utils::RunFunctionAndReturnError(
-      func.get(), "[{\"interactive\": true}]", browser()->profile());
-  EXPECT_EQ(std::string(errors::kSetAccountsInCookieFailure), error);
-  EXPECT_FALSE(func->login_ui_shown());
-  EXPECT_TRUE(func->scope_ui_shown());
-  histogram_tester()->ExpectUniqueSample(
-      kGetAuthTokenResultHistogramName,
-      IdentityGetAuthTokenError::State::kSetAccountsInCookieFailure, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
@@ -3555,7 +3543,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, NonInteractiveSuccess) {
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
       CreateLaunchWebAuthFlowFunction();
 
-  function->InitFinalRedirectURLPrefixForTest("abcdefghij");
+  function->InitFinalRedirectURLDomainsForTest("abcdefghij");
   absl::optional<base::Value> value = utils::RunFunctionAndReturnSingleResult(
       function.get(),
       "[{\"interactive\": false,"
@@ -3580,7 +3568,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
       CreateLaunchWebAuthFlowFunction();
 
-  function->InitFinalRedirectURLPrefixForTest("abcdefghij");
+  function->InitFinalRedirectURLDomainsForTest("abcdefghij");
   std::string args = base::StringPrintf(
       R"([{
         "interactive": false,
@@ -3602,7 +3590,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
       CreateLaunchWebAuthFlowFunction();
 
-  function->InitFinalRedirectURLPrefixForTest("abcdefghij");
+  function->InitFinalRedirectURLDomainsForTest("abcdefghij");
   absl::optional<base::Value> value = utils::RunFunctionAndReturnSingleResult(
       function.get(),
       "[{\"interactive\": true,"
@@ -3625,7 +3613,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
       CreateLaunchWebAuthFlowFunction();
 
-  function->InitFinalRedirectURLPrefixForTest("abcdefghij");
+  function->InitFinalRedirectURLDomainsForTest("abcdefghij");
   std::string args =
       "[{\"interactive\": true, \"url\": \"" + auth_url.spec() + "\"}]";
   absl::optional<base::Value> value = utils::RunFunctionAndReturnSingleResult(
@@ -3639,63 +3627,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
       IdentityLaunchWebAuthFlowFunction::Error::kNone, 1);
 }
 
-class LaunchWebAuthFlowFunctionTestWithWebAuthFlowInBrowserTabParam
-    : public LaunchWebAuthFlowFunctionTest,
-      public testing::WithParamInterface<bool> {
- public:
-  LaunchWebAuthFlowFunctionTestWithWebAuthFlowInBrowserTabParam() {
-    scoped_feature_list_.InitWithFeatureState(
-        features::kWebAuthFlowInBrowserTab, use_tab_feature_enabled());
-  }
-
-  void SetUp() override {
-    GuestViewManager::set_factory_for_testing(&factory_);
-    LaunchWebAuthFlowFunctionTest::SetUp();
-  }
-
-  void TearDown() override {
-    LaunchWebAuthFlowFunctionTest::TearDown();
-    GuestViewManager::set_factory_for_testing(nullptr);
-  }
-
- protected:
-  bool use_tab_feature_enabled() { return GetParam(); }
-
-  void CloseGuestView() {
-    TestGuestViewManager* guest_view_manager = GetGuestViewManager();
-    auto* guest_view = guest_view_manager->WaitForSingleGuestViewCreated();
-    ASSERT_TRUE(guest_view);
-
-    guest_view_manager->WaitUntilAttached(guest_view);
-
-    auto* embedder_web_contents = guest_view->embedder_web_contents();
-    ASSERT_TRUE(embedder_web_contents);
-    embedder_web_contents->Close();
-  }
-
- private:
-  TestGuestViewManagerFactory factory_;
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  TestGuestViewManager* GetGuestViewManager() {
-    TestGuestViewManager* manager = static_cast<TestGuestViewManager*>(
-        TestGuestViewManager::FromBrowserContext(browser()->profile()));
-    // Test code may access the TestGuestViewManager before it would be created
-    // during creation of the first guest.
-    if (!manager) {
-      manager = static_cast<TestGuestViewManager*>(
-          GuestViewManager::CreateWithDelegate(
-              browser()->profile(),
-              ExtensionsAPIClient::Get()->CreateGuestViewManagerDelegate(
-                  browser()->profile())));
-    }
-    return manager;
-  }
-};
-
-IN_PROC_BROWSER_TEST_P(
-    LaunchWebAuthFlowFunctionTestWithWebAuthFlowInBrowserTabParam,
-    UserCloseWindow) {
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, UserCloseWindow) {
   std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
   GURL auth_url(https_server->GetURL("/interaction_required.html"));
 
@@ -3703,30 +3635,21 @@ IN_PROC_BROWSER_TEST_P(
       CreateLaunchWebAuthFlowFunction();
 
   content::TestNavigationObserver url_obvserver(auth_url);
-  if (use_tab_feature_enabled()) {
-    url_obvserver.StartWatchingNewWebContents();
-  }
+  url_obvserver.StartWatchingNewWebContents();
 
   std::string args =
       "[{\"interactive\": true, \"url\": \"" + auth_url.spec() + "\"}]";
   RunFunctionAsync(function.get(), args);
 
-  // Close the opened auth web contents.
-  // Depending on the feature `WebAuthFlowInBrowserTab`, close the opened
-  // GuestView (simulating the AppWindow), or close the new tab through the
-  // created WebContents.
-  if (use_tab_feature_enabled()) {
-    url_obvserver.Wait();
+  url_obvserver.Wait();
 
-    Browser* popup_browser = chrome::FindBrowserWithWebContents(
-        function->GetWebAuthFlowForTesting()->web_contents());
-    TabStripModel* tabs = popup_browser->tab_strip_model();
-    EXPECT_NE(browser(), popup_browser);
-    ASSERT_EQ(tabs->GetActiveWebContents()->GetURL(), auth_url);
-    tabs->CloseWebContentsAt(tabs->active_index(), 0);
-  } else {
-    CloseGuestView();
-  }
+  Browser* popup_browser = chrome::FindBrowserWithWebContents(
+      function->GetWebAuthFlowForTesting()->web_contents());
+  TabStripModel* tabs = popup_browser->tab_strip_model();
+  EXPECT_NE(browser(), popup_browser);
+  ASSERT_EQ(tabs->GetActiveWebContents()->GetURL(), auth_url);
+  // Close the opened auth web contents.
+  tabs->CloseWebContentsAt(tabs->active_index(), 0);
 
   EXPECT_EQ(std::string(errors::kUserRejected), WaitForError(function.get()));
   histogram_tester()->ExpectUniqueSample(
@@ -3734,25 +3657,27 @@ IN_PROC_BROWSER_TEST_P(
       IdentityLaunchWebAuthFlowFunction::Error::kUserRejected, 1);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    ,
-    LaunchWebAuthFlowFunctionTestWithWebAuthFlowInBrowserTabParam,
-    testing::Bool(),
-    [](const testing::TestParamInfo<
-        LaunchWebAuthFlowFunctionTestWithWebAuthFlowInBrowserTabParam::
-            ParamType>& info) {
-      return base::StrCat(
-          {info.param ? "With" : "Without", "WebAuthFlowInBrowserTab"});
-    });
+// Regression test for http://b/290733700.
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
+                       SchemeOtherThanHttpOrHttpsNotAllowed) {
+  // Only http and https schemes are allowed.
+  GURL invalid_auth_url("chrome-untrusted://some_chrome_url");
+  scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
+      CreateLaunchWebAuthFlowFunction();
 
-class LaunchWebAuthFlowFunctionTestWithNewTab
+  std::string args =
+      "[{\"interactive\": true, \"url\": \"" + invalid_auth_url.spec() + "\"}]";
+  RunFunctionAsync(function.get(), args);
+
+  EXPECT_EQ(std::string(errors::kInvalidURLScheme),
+            WaitForError(function.get()));
+  histogram_tester()->ExpectUniqueSample(
+      kLaunchWebAuthFlowResultHistogramName,
+      IdentityLaunchWebAuthFlowFunction::Error::kInvalidURLScheme, 1);
+}
+
+class LaunchWebAuthFlowFunctionTestWithBrowserTab
     : public LaunchWebAuthFlowFunctionTest {
- public:
-  LaunchWebAuthFlowFunctionTestWithNewTab() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kWebAuthFlowInBrowserTab);
-  }
-
  protected:
   void RunFunctionAndWaitForNavigation(
       IdentityLaunchWebAuthFlowFunction* function,
@@ -3763,19 +3688,16 @@ class LaunchWebAuthFlowFunctionTestWithNewTab
     RunFunctionAsync(function, args);
     url_observer.Wait();
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithBrowserTab,
                        PageNavigateFromInitURLToFinalURL) {
   std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
       CreateLaunchWebAuthFlowFunction();
 
   const std::string extension_id("abcdefghij");
-  function->InitFinalRedirectURLPrefixForTest(extension_id);
+  function->InitFinalRedirectURLDomainsForTest(extension_id);
 
   const GURL auth_url(https_server->GetURL("/consent_page.html"));
   const GURL final_url("https://" + extension_id + ".chromiumapp.org/");
@@ -3790,7 +3712,38 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
   base::Value output;
   WaitForOneResult(function.get(), &output);
   EXPECT_FALSE(function->GetWebAuthFlowForTesting());
-  EXPECT_TRUE(output.GetString().find(final_url.spec()) != std::string::npos);
+  EXPECT_EQ(GURL(output.GetString()).Resolve("/"), final_url);
+  histogram_tester()->ExpectUniqueSample(
+      kLaunchWebAuthFlowResultHistogramName,
+      IdentityLaunchWebAuthFlowFunction::Error::kNone, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithBrowserTab,
+                       PageNavigateFromInitURLToCustomFinalURL) {
+  std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
+  scoped_refptr<IdentityLaunchWebAuthFlowFunction> function =
+      CreateLaunchWebAuthFlowFunction();
+
+  const GURL auth_url(https_server->GetURL("/consent_page.html"));
+  const GURL final_url("example://example.com/");
+
+  const std::string args =
+      "[{\"interactive\": true, \"url\": \"" + auth_url.spec() + "\"}]";
+
+  browser()->profile()->GetPrefs()->SetDict(
+      extensions::pref_names::kOAuthRedirectUrls,
+      base::Value::Dict().Set(function->extension()->id(),
+                              base::Value::List().Append(final_url.spec())));
+  RunFunctionAndWaitForNavigation(function.get(), auth_url, args);
+
+  SimulateCustomUrlRedirect(
+      final_url.spec() + "#some_information",
+      function->GetWebAuthFlowForTesting()->web_contents());
+
+  base::Value output;
+  WaitForOneResult(function.get(), &output);
+  EXPECT_FALSE(function->GetWebAuthFlowForTesting());
+  EXPECT_EQ(GURL(output.GetString()).Resolve("/"), final_url);
   histogram_tester()->ExpectUniqueSample(
       kLaunchWebAuthFlowResultHistogramName,
       IdentityLaunchWebAuthFlowFunction::Error::kNone, 1);
@@ -3798,7 +3751,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
 
 // TODO(crbug/1421278): This test should be adapted after the implementation of
 // the bug. Multiple TODOs in the test to fix.
-IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithBrowserTab,
                        SimilarExtensionAndArgsShouldGenerateSameFlow) {
   std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function1 =
@@ -3807,8 +3760,8 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
       CreateLaunchWebAuthFlowFunction();
 
   const std::string extension_id("final_url");
-  function1->InitFinalRedirectURLPrefixForTest(extension_id);
-  function2->InitFinalRedirectURLPrefixForTest(extension_id);
+  function1->InitFinalRedirectURLDomainsForTest(extension_id);
+  function2->InitFinalRedirectURLDomainsForTest(extension_id);
 
   const GURL auth_url(https_server->GetURL("/consent_page.html"));
   const GURL final_url("https://" + extension_id + ".chromiumapp.org/");
@@ -3847,7 +3800,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
       IdentityLaunchWebAuthFlowFunction::Error::kNone, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
+IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithBrowserTab,
                        DifferentExtensionsShouldGenerateDifferentFlows) {
   std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function1 =
@@ -3856,9 +3809,9 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
       CreateLaunchWebAuthFlowFunction();
 
   const std::string extension_id1("extension1");
-  function1->InitFinalRedirectURLPrefixForTest(extension_id1);
+  function1->InitFinalRedirectURLDomainsForTest(extension_id1);
   const std::string extension_id2("extension2");
-  function2->InitFinalRedirectURLPrefixForTest(extension_id2);
+  function2->InitFinalRedirectURLDomainsForTest(extension_id2);
 
   const GURL auth_url(https_server->GetURL("/consent_page.html"));
   // Different final_urls.
@@ -3906,7 +3859,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTestWithNewTab,
 // TODO(crbug/1421278): This test should be adapted after the implementation of
 // the bug.
 IN_PROC_BROWSER_TEST_F(
-    LaunchWebAuthFlowFunctionTestWithNewTab,
+    LaunchWebAuthFlowFunctionTestWithBrowserTab,
     ExtensionWithDifferentArgsShouldGenerateDifferentFlowsInAQueue) {
   std::unique_ptr<net::EmbeddedTestServer> https_server = LaunchHttpsServer();
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function1 =
@@ -3915,7 +3868,7 @@ IN_PROC_BROWSER_TEST_F(
       CreateLaunchWebAuthFlowFunction();
 
   const std::string extension_id("extension");
-  function1->InitFinalRedirectURLPrefixForTest(extension_id);
+  function1->InitFinalRedirectURLDomainsForTest(extension_id);
 
   const GURL auth_url1(https_server->GetURL("/consent_page.html"));
   const GURL auth_url2(https_server->GetURL("/interaction_required.html"));
@@ -3933,8 +3886,8 @@ IN_PROC_BROWSER_TEST_F(
       function1->GetWebAuthFlowForTesting()->web_contents();
   content::WebContents* consent_web_contents2 =
       function2->GetWebAuthFlowForTesting()->web_contents();
-  // TODO(crbug/1421278): `function2->GetWebAuthFlowForTesting()` should be null
-  // after the changes since it would be in a queue.
+  // TODO(crbug/1421278): `function2->GetWebAuthFlowForTesting()` should be
+  // null after the changes since it would be in a queue.
   EXPECT_NE(consent_web_contents1, consent_web_contents2);
 
   const std::string& current_consent_url2 =
@@ -4006,58 +3959,6 @@ IN_PROC_BROWSER_TEST_F(ClearAllCachedAuthTokensFunctionTest,
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND,
             id_api()->token_cache()->GetToken(token_key).status());
 }
-
-class ClearAllCachedAuthTokensFunctionTestWithPartitionParam
-    : public ClearAllCachedAuthTokensFunctionTest,
-      public testing::WithParamInterface<WebAuthFlow::Partition> {
- public:
-  network::mojom::CookieManager* GetCookieManager() {
-    Profile* profile = browser()->profile();
-    return profile
-        ->GetStoragePartition(
-            WebAuthFlow::GetWebViewPartitionConfig(GetParam(), profile))
-        ->GetCookieManagerForBrowserProcess();
-  }
-
-  // Returns the list of cookies in the cookie manager.
-  net::CookieList GetCookies() {
-    net::CookieList result;
-    base::RunLoop get_all_cookies_loop;
-    GetCookieManager()->GetAllCookies(base::BindLambdaForTesting(
-        [&get_all_cookies_loop, &result](const net::CookieList& cookie_list) {
-          result = cookie_list;
-          get_all_cookies_loop.Quit();
-        }));
-    get_all_cookies_loop.Run();
-    return result;
-  }
-};
-
-IN_PROC_BROWSER_TEST_P(ClearAllCachedAuthTokensFunctionTestWithPartitionParam,
-                       CleanWebAuthFlowCookies) {
-  auto test_cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
-      "test_name", "test_value", "test.com", "/", base::Time(), base::Time(),
-      base::Time(), base::Time(), true, false,
-      net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT, false);
-  base::test::TestFuture<bool> future;
-  GetCookieManager()->SetCanonicalCookie(
-      *test_cookie,
-      net::cookie_util::SimulatedCookieSource(*test_cookie, url::kHttpsScheme),
-      net::CookieOptions(),
-      base::BindOnce(net::cookie_util::IsCookieAccessResultInclude)
-          .Then(future.GetCallback()));
-  EXPECT_TRUE(future.Get());
-
-  EXPECT_FALSE(GetCookies().empty());
-  ASSERT_TRUE(RunClearAllCachedAuthTokensFunction());
-  EXPECT_TRUE(GetCookies().empty());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ClearAllCachedAuthTokensFunctionTestWithPartitionParam,
-    ::testing::Values(WebAuthFlow::Partition::LAUNCH_WEB_AUTH_FLOW,
-                      WebAuthFlow::Partition::GET_AUTH_TOKEN));
 
 class OnSignInChangedEventTest : public IdentityTestWithSignin {
  protected:

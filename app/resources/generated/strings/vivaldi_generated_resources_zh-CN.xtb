@@ -37,15 +37,15 @@
 <translation id="1589055389569595240">显示拼写和语法</translation>
 <translation id="159359590073980872">图片缓存</translation>
 <translation id="1601560923496285236">应用</translation>
-<translation id="1603914832182249871">（隐私）</translation>
+<translation id="1603914832182249871">（隐身模式）</translation>
 <translation id="1627276047960621195">文件描述符</translation>
 <translation id="166278006618318542">证书持有者的公共密钥算法</translation>
-<translation id="1682548588986054654">新建隐私窗口</translation>
+<translation id="1682548588986054654">新建隐身窗口</translation>
 <translation id="1708338024780164500">（闲置）</translation>
 <translation id="1723824996674794290">新建窗口(&amp;N)</translation>
 <translation id="1729533290416704613">它还能够控制您通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="174123615272205933">自定义</translation>
-<translation id="1744108098763830590">背景页(&amp;B)</translation>
+<translation id="1744108098763830590">背景页</translation>
 <translation id="176587472219019965">新建窗口(&amp;N)</translation>
 <translation id="1769104665586091481">在新窗口中打开链接(&amp;W)</translation>
 <translation id="1779468444204342338">最小值</translation>
@@ -69,7 +69,7 @@
 <translation id="2150139952286079145">搜索目标打印机</translation>
 <translation id="215753907730220065">退出全屏模式</translation>
 <translation id="2158475082070321257">复制指向选中文本的链接</translation>
-<translation id="2177950615300672361">隐私标签页：<ph name="TAB_NAME" /></translation>
+<translation id="2177950615300672361">隐身标签页：<ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Native Client 模块：<ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">粘贴为纯文本</translation>
 <translation id="2249605167705922988">例如：1-5、8、11-13</translation>
@@ -113,7 +113,7 @@
 <translation id="2861941300086904918">Native Client 安全管理器</translation>
 <translation id="2881076733170862447">当您点击此扩展程序时</translation>
 <translation id="2889064240420137087">链接打开方式...</translation>
-<translation id="2902127500170292085"><ph name="EXTENSION_NAME" />无法与此打印机通信。请确保此打印机已插好并重试。</translation>
+<translation id="2902127500170292085"><ph name="EXTENSION_NAME" />无法与此打印机通信。请确保此打印机已连接并重试。</translation>
 <translation id="2916745397441987255">搜索扩展程序</translation>
 <translation id="2931157624143513983">适配可打印区域</translation>
 <translation id="2932085390869194046">建议密码…</translation>
@@ -135,7 +135,7 @@
 <translation id="3144647712221361880">以其他身份打开链接</translation>
 <translation id="3202131003361292969">路径</translation>
 <translation id="3222066309010235055">预渲染：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私有密钥文件。</translation>
+<translation id="3241680850019875542">选择要打包的扩展程序的根目录。要更新某个扩展程序，还需选择要再次使用的私钥文件。</translation>
 <translation id="3275778913554317645">在窗口中打开</translation>
 <translation id="3280237271814976245">另存为(&amp;A)...</translation>
 <translation id="3285322247471302225">新建标签(&amp;T)</translation>
@@ -161,7 +161,7 @@
 <translation id="354068948465830244">可读取和更改网站数据</translation>
 <translation id="3560034655160545939">拼写检查(&amp;S)</translation>
 <translation id="3587482841069643663">全部</translation>
-<translation id="3627588569887975815">在隐私窗口中打开链接(&amp;G)</translation>
+<translation id="3627588569887975815">在隐身窗口中打开链接(&amp;G)</translation>
 <translation id="3678156199662914018">扩展程序：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 屏幕共享请求</translation>
 <translation id="3708684582558000260">不允许已关闭的网站完成数据收发操作</translation>
@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">还原设置</translation>
 <translation id="4478664379124702289">链接另存为(&amp;K)...</translation>
 <translation id="4520385623207007473">正在使用的 Cookie</translation>
+<translation id="456449593072900590">退出时删除</translation>
 <translation id="4580596421317071374">系统会将密码保存到此设备上的 <ph name="GOOGLE_PASSWORD_MANAGER" />中。</translation>
 <translation id="4593021220803146968">转到<ph name="URL" />(&amp;G)</translation>
 <translation id="4595560905247879544">只有管理员（<ph name="CUSTODIAN_NAME" />）可以修改应用和扩展程序。</translation>
@@ -233,7 +234,7 @@
 <translation id="479536056609751218">网页，仅 HTML</translation>
 <translation id="4827904420700932487">创建此图片的二维码</translation>
 <translation id="4839303808932127586">视频另存为(&amp;V)...</translation>
-<translation id="4840096453115567876">仍要退出隐私模式？</translation>
+<translation id="4840096453115567876">仍要退出隐身模式？</translation>
 <translation id="488785315393301722">显示细节</translation>
 <translation id="4895799941222633551">创建快捷方式(&amp;S)…</translation>
 <translation id="4912643508233590958">闲置状态唤醒</translation>
@@ -261,14 +262,14 @@
 <translation id="5260334392110301220">智能引号</translation>
 <translation id="5269977353971873915">打印失败</translation>
 <translation id="5284445933715251131">继续下载</translation>
-<translation id="52912272896845572">私有密钥文件无效。</translation>
+<translation id="52912272896845572">私钥文件无效。</translation>
 <translation id="5301954838959518834">知道了</translation>
 <translation id="5302932258331363306">显示替换</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5334142896108694079">脚本缓存</translation>
 <translation id="5355926466126177564">“<ph name="EXTENSION_NAME" />”扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="5360150013186312835">显示在工具栏上</translation>
-<translation id="5362741141255528695">选择私有密钥文件。</translation>
+<translation id="5362741141255528695">选择私钥文件。</translation>
 <translation id="536638840841140142">无</translation>
 <translation id="5370819323174483825">重新加载(&amp;R)</translation>
 <translation id="5390743329570580756">发送条件</translation>
@@ -279,12 +280,11 @@
 <translation id="5431318178759467895">颜色</translation>
 <translation id="5485102783864353244">添加应用</translation>
 <translation id="5486561344817861625">模拟浏览器重启</translation>
-<translation id="5487521232677179737">清除数据</translation>
 <translation id="5509693895992845810">另存为(&amp;A)...</translation>
 <translation id="5521078259930077036">这是您想要的主页吗？</translation>
 <translation id="5542132724887566711">个人资料</translation>
 <translation id="5556459405103347317">刷新</translation>
-<translation id="5575473780076478375">隐私模式下启用的扩展...<ph name="EXTENSION_NAME" /></translation>
+<translation id="5575473780076478375">隐身模式下启用的扩展...<ph name="EXTENSION_NAME" /></translation>
 <translation id="5582839680698949063">主菜单</translation>
 <translation id="5614553682702429503">要保存密码吗？</translation>
 <translation id="5623842676595125836">日志</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">未知</translation>
 <translation id="5851868085455377790">颁发者</translation>
 <translation id="5860491529813859533">启用</translation>
-<translation id="5867841422488265304">搜索或输入网址</translation>
 <translation id="5910363049092958439">图片另存为(&amp;V)...</translation>
 <translation id="5914724413750400082">模数（<ph name="MODULUS_NUM_BITS" />位）：
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">访问遭拒。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">键入时检查拼写</translation>
-<translation id="73786666777299047">打开 Chrome 应用商店</translation>
 <translation id="7385854874724088939">尝试打印时出现错误。请检查您的打印机，然后重试。</translation>
 <translation id="7412226954991670867">GPU 内存</translation>
 <translation id="7421925624202799674">显示网页源代码(&amp;V)</translation>
@@ -392,7 +390,7 @@
 <translation id="7576690715254076113">合并</translation>
 <translation id="7629827748548208700">标签页：<ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">取消</translation>
-<translation id="7659154729610375585">仍要退出隐私模式？</translation>
+<translation id="7659154729610375585">仍要退出隐身模式？</translation>
 <translation id="7661259717474717992">允许网站保存和读取 Cookie 数据</translation>
 <translation id="7663719505383602579">接收器：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">需由管理员安装</translation>
@@ -418,8 +416,8 @@
 <translation id="7903925330883316394">实用程序：<ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">复制视频地址(&amp;O)</translation>
 <translation id="7966241909927244760">复制图片地址(&amp;O)</translation>
-<translation id="7973394300052703468">新建隐私窗口(&amp;P)</translation>
-<translation id="7978412674231730200">私有密钥</translation>
+<translation id="7973394300052703468">新建隐身窗口(&amp;P)</translation>
+<translation id="7978412674231730200">私钥</translation>
 <translation id="7982789257301363584">网络</translation>
 <translation id="7997826902155442747">进程优先级</translation>
 <translation id="7999229196265990314">已创建以下文件：
@@ -442,6 +440,7 @@
 <translation id="8382913212082956454">复制电子邮件地址(&amp;E)</translation>
 <translation id="8434480141477525001">NaCl调试端口</translation>
 <translation id="8449008133205184768">粘贴并匹配样式</translation>
+<translation id="8477178913400731244">删除数据</translation>
 <translation id="8477384620836102176">基本信息(&amp;G)</translation>
 <translation id="8496717697661868878">运行此插件</translation>
 <translation id="8512476990829870887">结束进程</translation>
@@ -450,9 +449,9 @@
 <translation id="8569682776816196752">未发现目标打印机</translation>
 <translation id="8584280235376696778">在新标签中打开视频(&amp;O)</translation>
 <translation id="8605428685123651449">SQLite 内存</translation>
-<translation id="8615618338313291042">隐私模式下启用的应用...<ph name="APP_NAME" /></translation>
+<translation id="8615618338313291042">隐身模式下启用的应用...<ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS 缓存</translation>
-<translation id="8661290697478713397">在隐私窗口中打开链接(&amp;G)</translation>
+<translation id="8661290697478713397">在隐身窗口中打开链接(&amp;G)</translation>
 <translation id="8664389313780386848">查看网页源码(&amp;V)</translation>
 <translation id="8705331520020532516">序列号</translation>
 <translation id="8708000541097332489">退出时清除</translation>
@@ -467,8 +466,8 @@
 <translation id="8859174528519900719">辅助框架：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">在新窗口中打开链接(&amp;W)</translation>
 <translation id="8915370057835397490">正在加载建议</translation>
-<translation id="8916476537757519021">隐私辅助框架：<ph name="SUBFRAME_SITE" /></translation>
-<translation id="8929696694736010839">仅限当前隐私会话</translation>
+<translation id="8916476537757519021">隐身辅助框架：<ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">仅限当前隐身会话</translation>
 <translation id="895944840846194039">JavaScript 内存</translation>
 <translation id="8962083179518285172">隐藏细节</translation>
 <translation id="8973557916016709913">移除缩放级别</translation>

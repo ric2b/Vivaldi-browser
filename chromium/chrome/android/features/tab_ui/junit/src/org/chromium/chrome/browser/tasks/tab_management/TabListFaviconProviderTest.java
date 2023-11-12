@@ -14,7 +14,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.ColorInt;
+
+import androidx.annotation.ColorInt;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -87,10 +88,11 @@ public class TabListFaviconProviderTest {
         mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
 
         MockitoAnnotations.initMocks(this);
-        mUrl1 = JUnitTestGURLs.getGURL(JUnitTestGURLs.URL_1);
-        mUrl2 = JUnitTestGURLs.getGURL(JUnitTestGURLs.URL_2);
+        mUrl1 = JUnitTestGURLs.URL_1;
+        mUrl2 = JUnitTestGURLs.URL_2;
 
-        mTabListFaviconProvider = new TabListFaviconProvider(mActivity, false);
+        mTabListFaviconProvider =
+                new TabListFaviconProvider(mActivity, false, R.dimen.default_favicon_corner_radius);
         mTabListFaviconProvider.initForTesting(mProfile, mMockFaviconHelper);
     }
 

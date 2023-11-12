@@ -34,8 +34,8 @@ import java.util.concurrent.Callable;
  */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.
-Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-features=LogJsConsoleMessages"})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        "enable-features=LogJsConsoleMessages", "force-webxr-runtime=gvr"})
 public class WebXrGvrDeviceTest {
     @ClassParameter
     private static List<ParameterSet> sClassParams =
@@ -66,7 +66,7 @@ public class WebXrGvrDeviceTest {
     public void testWebXrCapabilities() {
         mWebXrVrTestFramework.loadFileAndAwaitInitialization(
                 "test_webxr_capabilities", PAGE_LOAD_TIMEOUT_S);
-        mWebXrVrTestFramework.executeStepAndWait("stepCheckCapabilities('Daydream')");
+        mWebXrVrTestFramework.executeStepAndWait("stepCheckCapabilities()");
         mWebXrVrTestFramework.endTest();
     }
 }

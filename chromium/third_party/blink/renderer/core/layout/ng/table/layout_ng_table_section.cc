@@ -16,12 +16,12 @@ LayoutNGTableSection::LayoutNGTableSection(Element* element)
 
 LayoutNGTableSection* LayoutNGTableSection::CreateAnonymousWithParent(
     const LayoutObject& parent) {
-  scoped_refptr<const ComputedStyle> new_style =
+  const ComputedStyle* new_style =
       parent.GetDocument().GetStyleResolver().CreateAnonymousStyleWithDisplay(
           parent.StyleRef(), EDisplay::kTableRowGroup);
   auto* new_section = MakeGarbageCollected<LayoutNGTableSection>(nullptr);
   new_section->SetDocumentForAnonymous(&parent.GetDocument());
-  new_section->SetStyle(std::move(new_style));
+  new_section->SetStyle(new_style);
   return new_section;
 }
 
@@ -126,12 +126,6 @@ LayoutBox* LayoutNGTableSection::CreateAnonymousBoxWithSameTypeAs(
     const LayoutObject* parent) const {
   NOT_DESTROYED();
   return CreateAnonymousWithParent(*parent);
-}
-
-void LayoutNGTableSection::SetNeedsCellRecalc() {
-  // TODO(1229581): See if we can get rid of this.
-  NOT_DESTROYED();
-  SetNeedsLayout(layout_invalidation_reason::kDomChanged);
 }
 
 // TODO(crbug.com/1079133): Used by AXLayoutObject::IsDataTable, verify

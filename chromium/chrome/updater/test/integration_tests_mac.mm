@@ -6,13 +6,14 @@
 #include <string>
 #include <vector>
 
+#include "base/apple/bridging.h"
+#include "base/apple/foundation_util.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/mac/foundation_util.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -35,16 +36,12 @@
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #import "chrome/updater/util/mac_util.h"
-#include "chrome/updater/util/unittest_util.h"
+#include "chrome/updater/util/unit_test_util.h"
 #include "chrome/updater/util/util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace updater::test {
 namespace {
@@ -87,7 +84,7 @@ void EnterTestMode(const GURL& update_url,
                   .SetDeviceManagementURL(device_management_url.spec())
                   .SetUseCUP(false)
                   .SetInitialDelay(base::Milliseconds(100))
-                  .SetServerKeepAliveTime(base::Seconds(1))
+                  .SetServerKeepAliveTime(base::Seconds(2))
                   .SetCrxVerifierFormat(crx_file::VerifierFormat::CRX3)
                   .SetOverinstallTimeout(base::Seconds(5))
                   .SetIdleCheckPeriod(idle_timeout)
@@ -147,12 +144,11 @@ void ExpectClean(UpdaterScope scope) {
     int count = CountDirectoryFiles(*path);
     EXPECT_LE(count, 1) << base::JoinString(
         [](const base::FilePath& dir) {
-          base::FileEnumerator it(dir, false, base::FileEnumerator::FILES);
           std::vector<base::FilePath::StringType> files;
-          for (base::FilePath name = it.Next(); !name.empty();
-               name = it.Next()) {
-            files.push_back(name.value());
-          }
+          base::FileEnumerator(dir, false, base::FileEnumerator::FILES)
+              .ForEach([&files](const base::FilePath& name) {
+                files.push_back(name.value());
+              });
 
           return files;
         }(*path),
@@ -231,7 +227,7 @@ void ExpectNotActive(UpdaterScope scope, const std::string& app_id) {
 
 bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
   return WaitFor(
-      base::BindRepeating([] {
+      [] {
         std::string ps_stdout;
         EXPECT_TRUE(
             base::GetAppOutput({"ps", "ax", "-o", "command"}, &ps_stdout));
@@ -240,9 +236,8 @@ bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
           return true;
         }
         return false;
-      }),
-      base::BindLambdaForTesting(
-          [] { VLOG(0) << "Still waiting for updater to exit..."; }));
+      },
+      [] { VLOG(0) << "Still waiting for updater to exit..."; });
 }
 
 void SetupRealUpdaterLowerVersion(UpdaterScope scope) {
@@ -342,8 +337,10 @@ void ExpectLegacyUpdaterMigrated(UpdaterScope scope) {
   EXPECT_FALSE(persisted_data->GetDateLastRollcall(kCorruptedApp));
 }
 
-void InstallApp(UpdaterScope scope, const std::string& app_id) {
-  RegisterApp(scope, app_id);
+void InstallApp(UpdaterScope scope,
+                const std::string& app_id,
+                const base::Version& version) {
+  RegisterApp(scope, app_id, version);
 }
 
 void UninstallApp(UpdaterScope scope, const std::string& app_id) {
@@ -354,6 +351,38 @@ void UninstallApp(UpdaterScope scope, const std::string& app_id) {
 base::CommandLine MakeElevated(base::CommandLine command_line) {
   command_line.PrependWrapper("/usr/bin/sudo");
   return command_line;
+}
+
+void SetPlatformPolicies(const base::Value::Dict& values) {
+  const CFStringRef domain = CFSTR("com.google.Keystone");
+
+  // Synchronize just to be safe. Ignore spurious errors if the domain
+  // does not yet exist.
+  CFPreferencesSynchronize(domain, kCFPreferencesAnyUser,
+                           kCFPreferencesCurrentHost);
+
+  NSMutableDictionary* all_policies = [NSMutableDictionary dictionary];
+  for (const auto [app_id, policies] : values) {
+    ASSERT_TRUE(policies.is_dict());
+    NSMutableDictionary* app_policies = [NSMutableDictionary dictionary];
+    for (const auto [name, value] : policies.GetDict()) {
+      NSString* key = base::SysUTF8ToNSString(name);
+      if (value.is_string()) {
+        app_policies[key] = base::SysUTF8ToNSString(value.GetString());
+      } else if (value.is_int()) {
+        app_policies[key] = [NSNumber numberWithInt:value.GetInt()];
+      } else if (value.is_bool()) {
+        app_policies[key] = [NSNumber numberWithInt:value.GetBool()];
+      }
+    }
+    all_policies[base::SysUTF8ToNSString(app_id)] = app_policies;
+  }
+
+  CFPreferencesSetValue(CFSTR("updatePolicies"),
+                        base::apple::NSToCFPtrCast(all_policies), domain,
+                        kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
+  ASSERT_TRUE(CFPreferencesSynchronize(domain, kCFPreferencesAnyUser,
+                                       kCFPreferencesCurrentHost));
 }
 
 }  // namespace updater::test

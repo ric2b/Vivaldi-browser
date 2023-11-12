@@ -35,8 +35,10 @@
 <translation id="1280820357415527819">កំពុង​ស្វែងរក​បណ្ដាញ​ទូរសព្ទ​ចល័ត</translation>
 <translation id="1293556467332435079">ឯកសារ</translation>
 <translation id="1297922636971898492">Google Drive មិនមានទេឥឡូវនេះ។ ការទាញឡើងនឹងចាប់ផ្តើមឡើងវិញដោយស្វ័យប្រវត្តិនៅពេល Google Drive ត្រលប់មកវិញ។</translation>
+<translation id="1306130176943817227">មិន​អាច​លុបបាន​ទេ។ ធាតុកំពុងជាប់ប្រើ។</translation>
 <translation id="1307931752636661898">មិនអាច​មើល​ឯកសារ Linux បានទេ</translation>
 <translation id="1313405956111467313">ការតំឡើងប្រូកស៊ីដោយស្វ័យប្រវត្តិ</translation>
+<translation id="134645005685694099">ឧបករណ៍​របស់អ្នក​មិនមាន​ទំហំផ្ទុក​គ្រប់គ្រាន់ ដើម្បីបន្តបើកការធ្វើសមកាលកម្មឯកសារទេ។ ឯកសារថ្មីៗ​នឹងលែង​ធ្វើសម​កាលកម្ម​ដោយស្វ័យប្រវត្តិ​ទៀតហើយ។</translation>
 <translation id="1353686479385938207"><ph name="PROVIDER_NAME" />៖ <ph name="NETWORK_NAME" /></translation>
 <translation id="1358735829858566124">ឯកសារ ឬថតឯកសារមិនអាចប្រើបានទេ។</translation>
 <translation id="1363028406613469049">សំឡេង</translation>
@@ -93,6 +95,7 @@
 <translation id="174937106936716857">ការរាប់ឯកសារសរុប</translation>
 <translation id="1755345808328621801">ឯកសារនេះ​ត្រូវបានរចនាឡើង​សម្រាប់កុំព្យូទ័រ​ដែលប្រើកម្មវិធី Windows។ វាមិនត្រូវគ្នា​ជាមួយ​ឧបករណ៍​របស់អ្នក​ដែលដំណើរការ ChromeOS ទេ។ សូមស្វែងរក​កម្មវិធីជំនួសដែលសមស្រប​នៅលើ Chrome Web Store។</translation>
 <translation id="1757915090001272240">ឡាតាំងធំ</translation>
+<translation id="1761091787730831947">ចែក​រំលែក​ជា​មួយ <ph name="VM_NAME" /></translation>
 <translation id="1773212559869067373">វិញ្ញាបនប័ត្រសម្គាល់អត្តសញ្ញាណបានបដិសេធជាមូលដ្ឋាន</translation>
 <translation id="1775381402323441512">ព័ត៌មានអំពី​​វីដេអូ</translation>
 <translation id="180035236176489073">អ្នកត្រូវតែមានអ៊ីនធឺណិតដើម្បីចូលប្រើឯកសារទាំងនេះ។</translation>
@@ -113,7 +116,6 @@
 <translation id="1920798810075583923">ឪឡឹក</translation>
 <translation id="1924372192547904021">បានសម្អាត <ph name="DRIVE_NAME" /></translation>
 <translation id="1931134289871235022">ស្លូវ៉ាគី</translation>
-<translation id="1933345018156373194">មិនអាចផ្លាស់ទីបានទេ បញ្ហាមិនបានរំពឹងទុក៖ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">ភាសាហ្វាំងឡង់</translation>
 <translation id="1942765061641586207">កម្រិតភាពច្បាស់នៃរូបភាព</translation>
 <translation id="1972984168337863910">ពង្រីកផ្ទាំង​មតិកែលម្អ​ឯកសារ</translation>
@@ -130,7 +132,7 @@
 <translation id="2084108471225856927">ការកំណត់ឧបករណ៍</translation>
 <translation id="2084809735218147718">កំពុងបង្ហាញ​កាយវិការ​អរគុណ</translation>
 <translation id="2088690981887365033">បណ្ដាញ VPN</translation>
-<translation id="2089751716171649322">ងាយស្រួល​ចូលប្រើ​ឯកសារ Google ថាស​របស់អ្នក នៅពេលដែលអ្នក​គ្មានអ៊ីនធឺណិត</translation>
+<translation id="209653272837065803">មិនមាន​ទំហំផ្ទុក​គ្រប់គ្រាន់ ដើម្បី​បន្តធ្វើ​សមកាលកម្ម​ឯកសារទេ</translation>
 <translation id="2111134541987263231">បើក <ph name="BEGIN_BOLD" />អនុញ្ញាតនៅក្នុងមុខងារឯកជន<ph name="END_BOLD" /></translation>
 <translation id="2114191879048183086">ធាតុ <ph name="NUMBER_OF_ITEMS" /> នឹង​ត្រូ​វបាន​លុប ហើយ​អ្នកនឹង​មិន​អាច​ស្ដារ​ធាតុ​ទាំងនេះ​បាន​ទេ។</translation>
 <translation id="2122305276694332719">ការតភ្ជាប់ទៅបណ្ដាញដែលបានលាក់ដោយស្វ័យប្រវត្តិ​​អាចឱ្យអ្នកដទៃ​អាចមើលឃើញការកំណត់បណ្ដាញមួយចំនួន​ និងឧបករណ៍​របស់អ្នក ដូច្នេះយើង​សូមណែនាំមិន​ឱ្យធ្វើការតភ្ជាប់​ទេ។</translation>
@@ -147,9 +149,11 @@
 <translation id="2198315389084035571">ភាសាចិនសាមញ្ញ</translation>
 <translation id="22085916256174561">ភាសាកូរ៉េ</translation>
 <translation id="2208919847696382164">ដំឡើង​តាមរយៈ Linux</translation>
+<translation id="2215692307449050019">ថ្មសល់តិច។ ការធ្វើ​សមកាលកម្ម​ឯកសារ​នឹងបន្ត នៅពេល​អ្នកភ្ជាប់ទៅ​ថាមពល។</translation>
 <translation id="2225536596944493418">តើអ្នកប្រាកដថា​ចង់លុបធាតុ <ph name="NUMBER_OF_ITEMS" /> ដែរទេ?</translation>
 <translation id="2230062665678605299">មិនអាចបង្កើតថតឯកសារ "<ph name="FOLDER_NAME" />". <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2239068707900391003">មនុស្ស​កាន់កែវកាហ្វេ</translation>
+<translation id="2247561763838186830">អ្នកត្រូវបាននាំ​ចេញពីគណនី</translation>
 <translation id="2251368349685848079">ស្ដារពី​ធុងសំរាម</translation>
 <translation id="2278133026967558505">ការ​ចូលប្រើ​ឯកសារដោយ​គេហទំព័រ និង URL ទាំងអស់</translation>
 <translation id="2282155092769082568">ការកំណត់រចនាសម្ព័ន្ធ URL ដោយស្វ័យប្រវត្តិ៖</translation>
@@ -163,10 +167,11 @@
 <translation id="2312704192806647271">{COUNT,plural, =1{មិន​អាច​កំណត់​ទីតាំង​កម្មវិធី​ដែលមាន​លេខម្គាល់ <ph name="BEGIN_LIST" /><ph name="END_LIST" /> បាន​ទេ។ សូមទាក់ទងទៅ​អ្នកគ្រប់គ្រង​របស់អ្នក។}other{មិន​អាច​កំណត់​ទីតាំង​កម្មវិធី​ដែលមាន​លេខម្គាល់ <ph name="BEGIN_LIST" /><ph name="END_LIST" /> បាន​ទេ។ សូមទាក់ទងទៅ​អ្នកគ្រប់គ្រង​របស់អ្នក។}}</translation>
 <translation id="2325650632570794183">ប្រភេទឯកសារនេះមិនត្រូវបានគាំទ្រទេ។ សូមទៅកាន់ Chrome Web Store ដើម្បិស្វែងរកកម្មវិធីដែលអាចបើកប្រភេទឯកសារនេះបាន។</translation>
 <translation id="2326539130272988168">ភាសា​ប៊ុលហ្ការី</translation>
-<translation id="2337715497728194187">ចែករំលែក​ជា​មួយ Bruschetta</translation>
+<translation id="233822363739146957">មិនមាន​ទំហំផ្ទុក​គ្រប់គ្រាន់ ដើម្បី​ធ្វើសម​កាលកម្ម​ឯកសារ​ទាំងអស់​របស់អ្នកទេ</translation>
 <translation id="23721837607121582">ទាញយក​កម្រងព័ត៌មាន​ឧបករណ៍​ចល័ត បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="2377319039870049694">ប្ដូរ​ទៅ​ទិដ្ឋភាពជាបញ្ជី</translation>
 <translation id="2377590462528165447">ថត <ph name="NUMBER_OF_ITEMS" /> ដែលបាន​ចែករំលែកជាមួយ Linux</translation>
+<translation id="2379576081295865700">កំពុង​ពិនិត្យមើល​ទំហំផ្ទុក… បានរកឃើញ​ធាតុ 1</translation>
 <translation id="2383454254762599978">ផ្លាស់ទី​ទៅក្នុង​ធុងសំរាម</translation>
 <translation id="2387458720915042159">ប្រភេទ​នៃការ​តភ្ជាប់​ប្រូកស៊ី</translation>
 <translation id="2389832672041313158">ភាសា​ភូមា/មីយ៉ាន់ម៉ា</translation>
@@ -181,6 +186,7 @@
 <translation id="2464089476039395325">ប្រូកស៊ី HTTP</translation>
 <translation id="2467267713099745100">បណ្ដាញ <ph name="NETWORK_TYPE" />, ត្រូវបាន​បិទ</translation>
 <translation id="2468402215065996499">ថាម៉ាហ្គោឈី</translation>
+<translation id="2468470447085858632">ចូលប្រើឯកសារ Google ថាស​របស់អ្នកពេលគ្មានអ៊ីនធឺណិតតាមរយៈការធ្វើសមកាលកម្មឯកសារ</translation>
 <translation id="2470939964922472929">បានបញ្ចូលកូដ PIN មិនត្រឹមត្រូវច្រើនដងពេក។ ដើម្បីរៀបចំកូដ PIN ថ្មី សូមបញ្ចូលកូដឈប់​ទប់ស្កាត់ផ្ទាល់ខ្លួន (PUK) 8 ខ្ទង់ ដែលផ្ដល់ដោយក្រុមហ៊ុន​សេវាទូរសព្ទរបស់អ្នក។</translation>
 <translation id="2500392669976258912">សូរសព្ទជាភាសា​គូចារ៉ាទី</translation>
 <translation id="2515586267016047495">Alt</translation>
@@ -192,7 +198,6 @@
 <translation id="2544853746127077729">វិញ្ញាបនប័ត្រសម្គាល់អត្តសញ្ញាណត្រូវបានបដិសេធដោយបណ្តាញ</translation>
 <translation id="255937426064304553">US អន្តរជាតិ</translation>
 <translation id="2563185590376525700">កង្កែប</translation>
-<translation id="2574327434504608656">បាន​ចែករំលែក​ថត 1 ជា​មួយ Bruschetta</translation>
 <translation id="2578394532502990878">សូរសព្ទជាភាសា​តាមិល</translation>
 <translation id="2579959351793446050">ភាសា​អូឌៀ</translation>
 <translation id="2587195714949534472">កំពុង​រៀបចំ​ធ្វើ​សមកាលកម្ម <ph name="FILE_NAME" />...</translation>
@@ -208,6 +213,7 @@
 <translation id="2718540689505416944">ដំឡើង​កម្មវិធី​តាមរយៈ Linux</translation>
 <translation id="2719020180254996569">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, ព័ត៌មាន​លម្អិត</translation>
 <translation id="2724954091494693138">ភាសាតួកគី​ដែលប្រើ​ក្ដារចុច F</translation>
+<translation id="2732288874651063549">គ្រប់គ្រង​ការចែករំលែក​ជាមួយ <ph name="VM_NAME" /></translation>
 <translation id="2732839045120506979">ភាសាវៀតណាម VNI</translation>
 <translation id="2735623501230989521">ផ្ដល់ការអនុញ្ញាតឱ្យ Parallels Desktop ចូលប្រើឯកសារ​នៅក្នុងថត <ph name="FOLDER_NAME" /></translation>
 <translation id="2764206540577097904">អ្នកបានប្រើទំហំផ្ទុក Google Workspace បុគ្គលរបស់អ្នកអស់ហើយ។</translation>
@@ -216,6 +222,7 @@
 <translation id="2782104745158847185">មានបញ្ហាក្នុង​ការដំឡើង​កម្មវិធី Linux</translation>
 <translation id="2802583107108007218">ស្វែងយល់បន្ថែម​អំពី​ការរឹតបន្តឹងទាំងនេះ</translation>
 <translation id="2803375539583399270">បញ្ចូលកូដ PIN</translation>
+<translation id="2819519502129272135">បានបិទ​ការធ្វើសម​កាលកម្ម​ឯកសារ</translation>
 <translation id="2820957248982571256">កំពុងស្កេន...</translation>
 <translation id="2830077785865012357">ភាសាចិនជូយីន</translation>
 <translation id="2843806747483486897">ប្តូរលំនាំដើម...</translation>
@@ -271,6 +278,7 @@
 <translation id="3264582393905923483">បរិបទ</translation>
 <translation id="3272909651715601089">មិនអាចបើក "<ph name="PATH" />" បានទេ</translation>
 <translation id="3280431534455935878">កំពុងរៀបចំ</translation>
+<translation id="3280719573299097127">អ្នកស្ថិតនៅលើបណ្ដាញដែលផ្អែកតាមទិន្នន័យដែលប្រើ។ សមកាលកម្មឯកសារត្រូវបានផ្អាក។</translation>
 <translation id="3280987981688031357">ថាសសំឡេងវីនីល</translation>
 <translation id="3290356915286466215">គ្មាន​សុវត្ថិភាព</translation>
 <translation id="3291218047831493686">ភ្ជាប់ជាមួយបណ្ដាញនេះ ដើម្បីប្ដូរការកំណត់​ការចាក់សោ​ស៊ីម</translation>
@@ -291,7 +299,6 @@
 <translation id="3408072735282270043">បើកដំណើរការ, <ph name="NETWORK_NAME" /></translation>
 <translation id="3408236822532681288">ភាសា​អាល្លឺម៉ង់ (អាល្លឺម៉ង់) ដែលប្រើ​ក្ដារចុច Neo 2</translation>
 <translation id="3414856743105198592">ការសម្អាតឯកសារកំសាន្តដែលអាចយកចេញបាននឹងលុបទិន្នន័យទាំងអស់។ តើអ្នកចង់បន្តទេ?</translation>
-<translation id="3435143625481187092">ផ្ដល់​ការ​អនុញ្ញាត​ឱ្យ Bruschetta ចូល​ប្រើ​ឯកសារ​នៅ​ក្នុង​ថត <ph name="FOLDER_NAME" /></translation>
 <translation id="3437801641691368414">ម៉ោងបង្កើត</translation>
 <translation id="343907260260897561">កាមេរ៉ាថតបានរូបសន្លឹកភ្លាមៗ</translation>
 <translation id="3455931012307786678">ភាសា​អេស្តូនី</translation>
@@ -299,10 +306,10 @@
 <translation id="3479552764303398839">មិនមែនឥឡូវនេះទេ</translation>
 <translation id="3486821258960016770">ភាសា​ម៉ុងហ្គោលី</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> កំហុសឆ្គង។</translation>
-<translation id="3501954296166022751">អាចចូលប្រើ​ឯកសារ Google ថាស​របស់អ្នកបាន ពេលគ្មានអ៊ីនធឺណិត</translation>
 <translation id="3509680540198371098">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, កម្លាំងរលកសញ្ញា <ph name="SIGNAL_STRENGTH" />%, ព័ត៌មានលម្អិត</translation>
 <translation id="3511705761158917664">កំពុង​រៀបចំ​ធ្វើ​សមកាលកម្មធាតុ <ph name="NUMBER_OF_ITEMS" />...</translation>
 <translation id="3522708245912499433">ភាសាប៉ទុយកាល់</translation>
+<translation id="3523225005467146490">បានចែករំលែក​ថត 1 ជាមួយ <ph name="VM_NAME" /></translation>
 <translation id="3524311639100184459">ប្រុងប្រយ័ត្ន៖ ឯកសារទាំងនេះ​គឺជាឯកសារ​បណ្ដោះអាសន្ន និងអាចត្រូវបានលុប​ដោយស្វ័យប្រវត្តិ ដើម្បីបង្កើន​ទំហំផ្ទុកថាស។  <ph name="BEGIN_LINK" />ស្វែងយល់បន្ថែម<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ថតឯកសារ</translation>
 <translation id="3548125359243647069">បានបញ្ចូលកូដ PIN មិនត្រឹមត្រូវច្រើនដងពេក។</translation>
@@ -356,6 +363,7 @@
 <translation id="3906232975181435906">កំពុងដំឡើង​កម្រងព័ត៌មាន​ឧបករណ៍ចល័ត បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="3924145049010392604">Meta</translation>
 <translation id="3943857333388298514">បិទភ្ជាប់</translation>
+<translation id="3950820424414687140">ចូល</translation>
 <translation id="3952872973865944257">សូរសព្ទ​ជាភាសា​តេលូហ្គូ</translation>
 <translation id="3958548648197196644">គីវី</translation>
 <translation id="397105322502079400">កំពុងគណនា...</translation>
@@ -369,6 +377,7 @@
 <translation id="4040753847560036377">PUK មិនត្រឹមត្រូវទេ</translation>
 <translation id="4057991113334098539">កំពុង​បើក​ដំណើរការ...</translation>
 <translation id="4092890906744441904">ភាសា​អៀរឡង់</translation>
+<translation id="4124731372776320263">កំពុង​ធ្វើសម​កាលកម្ម​ឯកសារ​ថាស 1</translation>
 <translation id="4124935795427217608">សេះមាន​ស្នែង</translation>
 <translation id="4131235941541910880">ផ្លាស់ទី​ធាតុ​ដែល​អ្នក​មិនត្រូវការ​ទៅក្នុង​ធុង​សំរាម</translation>
 <translation id="4134804435730168042">បណ្ដាញទី <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, បើក​ដំណើរការ​បន្ទាប់ពី​រៀបចំ​ឧបករណ៍</translation>
@@ -378,7 +387,6 @@
 <translation id="4159731583141908892">បានផ្លាស់ទី <ph name="FILE_NAME" />។</translation>
 <translation id="4176286497474237543">សម្អាត​ធុងសំរាម​ឥឡូវ</translation>
 <translation id="4179621117429069925">ធាតុ​​នេះ​ស្ថិត​នៅ​ក្នុង​ធុង​សំរាម​របស់​អ្នក</translation>
-<translation id="4181839429935094755">បាន​ចែករំលែក​ថត <ph name="NUMBER_OF_ITEMS" /> ជា​មួយ Bruschetta</translation>
 <translation id="4186579485882418952">បើកឯកសារគ្មានអ៊ីនធឺណិត</translation>
 <translation id="4193154014135846272">ឯកសារ Google</translation>
 <translation id="4197674956721858839">ការជ្រើសរើសការបង្រួម</translation>
@@ -418,6 +426,7 @@
 <translation id="4432921877815220091">បណ្ដាញទី <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, បើក​ដំណើរការ​បន្ទាប់​ពី​រៀបចំ​ឧបករណ៍, គ្រប់គ្រង​ដោយ​អ្នក​គ្រប់គ្រង​របស់​អ្នក</translation>
 <translation id="4439427728133035643">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, កម្លាំងរលកសញ្ញា <ph name="SIGNAL_STRENGTH" />%, ភ្ជាប់</translation>
 <translation id="4442424173763614572">DNS lookup បានបរាជ័យ</translation>
+<translation id="4445896958353114391">កំពុងធ្វើសមកាលកម្មឯកសារ</translation>
 <translation id="4462159676511157176">ម៉ាស៊ីនមេឈ្មោះផ្ទាល់ខ្លូន</translation>
 <translation id="4465725236958772856">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, គ្រប់គ្រងដោយ​អ្នកគ្រប់គ្រង​របស់អ្នក, ភ្ជាប់</translation>
 <translation id="4470564870223067757">ហានគុល 2 ឈុត</translation>
@@ -439,11 +448,11 @@
 <translation id="4599600860674643278">តម្រងត្រូវបានកំណត់ឡើងវិញ។</translation>
 <translation id="4603392156942865207">កំពុងចម្លង <ph name="FILE_NAME" /> ទៅ <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">សិល្បករ</translation>
+<translation id="4635373743001040938">ទំហំផ្ទុក​នៅសល់​តិចខ្លាំងណាស់។ ការធ្វើសម​កាលកម្ម​ឯកសារ​ត្រូវបានបិទ។</translation>
 <translation id="4642769377300286600">កំពុងដំឡើង​កម្រងព័ត៌មាន​ឧបករណ៍ចល័ត បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
 <translation id="4646813851450205600">ភាសាឆែក​ដែលប្រើ​ក្ដារចុច Qwerty</translation>
 <translation id="4656777537938206294">កំណត់ឱ្យ​អាចប្រើ​ឯកសារបាន​ពេលគ្មាន​អ៊ីនធឺណិត</translation>
 <translation id="4658782175094886150">មនុស្ស​នៅក្រោម​ព្រិលធ្លាក់</translation>
-<translation id="466782788172479199">ផ្ដល់​កា​រអនុញ្ញាត​ឱ្យ Bruschetta ចូល​ប្រើ​ឯកសារ​នៅ​ក្នុង Google ថាសរបស់​អ្នក។ ការផ្លាស់ប្ដូរនឹង​ធ្វើសមកាលកម្ម​ទៅឧបករណ៍​ផ្សេងទៀត​របស់អ្នក។</translation>
 <translation id="4669606053856530811">សមាជិករបស់ '<ph name="SOURCE_NAME" />' នឹងបាត់បង់សិទ្ធិ​ចូលប្រើ ប្រសិនបើធាតុទាំងនេះ​មិនត្រូវបានចែករំលែកដល់ពួកគេទេ។</translation>
 <translation id="467809019005607715">Google បទបង្ហាញ</translation>
 <translation id="4690246192099372265">ភាសាស៊ុយអែដ</translation>
@@ -492,8 +501,8 @@
 <translation id="4961158930123534723">បានចែករំលែក​ថត 1 ជាមួយ Parallels Desktop</translation>
 <translation id="496656650103537022">បាន​ស្ដារ​ <ph name="FILE_NAME" /></translation>
 <translation id="4969785127455456148">អាល់ប៊ុម</translation>
+<translation id="4972330214479971536">មិនអាច​បញ្ចប់​ការរៀបចំ​ការធ្វើសមកាលកម្ម​ឯកសារ​បានទេ</translation>
 <translation id="4973523518332075481">ប្រើឈ្មោះដែលមានអក្សរ <ph name="MAX_LENGTH" /> តួ ឬតិចជាងនេះ</translation>
-<translation id="4973970068702235170">មិនអាច​បង្រួមបានទេ បញ្ហាមិនបានរំពឹងទុក៖ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4984616446166309645">ភាសា​ជប៉ុន</translation>
 <translation id="4987699874727873250">អង់គ្លេស (ឥណ្ឌា)</translation>
 <translation id="4988205478593450158">តើអ្នកប្រាកដថា​ចង់លុប "<ph name="FILE_NAME" />" ដែរទេ?</translation>
@@ -515,6 +524,7 @@
 <translation id="5102922915594634436">គ្រប់គ្រង​ថត​ដែលបានធ្វើសមកាលកម្ម</translation>
 <translation id="5109254780565519649">មានបញ្ហា​បាន​កើត​ឡើង។ ធាតុមួយចំនួន​អាចនឹងមិនត្រូវបានស្ដារទេ។</translation>
 <translation id="5110329002213341433">ភាសា​អង់គ្លេស (កាណាដា)</translation>
+<translation id="5119780910075847424">បានផ្អាកការធ្វើសមកាលកម្ម</translation>
 <translation id="5123433949759960244">​បាល់បោះ</translation>
 <translation id="5129662217315786329">ភាសាប៉ូឡូញ</translation>
 <translation id="5144820558584035333">ហានគុល 3 ឈុត (390)</translation>
@@ -533,6 +543,7 @@
 <translation id="5218183485292899140">ភាសាបារាំងបែបស្វីស</translation>
 <translation id="5234764350956374838">ច្រានចោល</translation>
 <translation id="5253070652067921974">បង្កើត​ដោយ</translation>
+<translation id="5254207638927440400">មិន​អាច​ផ្លាស់​ទី​ឯកសារបាន​ទេ។ ឯកសារកំពុងជាប់ប្រើ។</translation>
 <translation id="5257456363153333584">កន្ទុំរុយ</translation>
 <translation id="5262311848634918433"><ph name="MARKUP_1" />ចូលប្រើឯកសារពីគ្រប់ទីកន្លែង បើទោះបីជានៅក្រៅបណ្តាញក៏ដោយ <ph name="MARKUP_2" />
     ឯកសារនៅក្នុង Google ថាសបានអាប់ដេតរួចហើយ និងអាចប្រើបាននៅលើឧបករណ៍ទាំងឡាយ។<ph name="MARKUP_3" />
@@ -552,7 +563,6 @@
 <translation id="5323213332664049067">ភាសាអាមេរិកឡាទីន</translation>
 <translation id="5330145655348521461">ឯកសារទាំងនេះត្រូវបានបើកនៅលើដេស៍ថបដ៏ទៃ។ ផ្លាស់ទីទៅ <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) ដើម្បីមើលវា។</translation>
 <translation id="5330512191124428349">ទទួលយកព័ត៌មាន</translation>
-<translation id="5344246330454251646">គ្រប់គ្រង​ការ​ចែករំលែក​ជាមួយ Bruschetta</translation>
 <translation id="535792325654997756">មនុស្ស​កាន់ឆ្មា</translation>
 <translation id="5358764674931277">អត្រា​ហ្រេ្វម</translation>
 <translation id="5363339716524495120">ភាសាបញ្ចូលគឺភាសាចិន</translation>
@@ -564,6 +574,7 @@
 <translation id="5422221874247253874">ចំណុចចូលប្រើ</translation>
 <translation id="5428105026674456456">ភាសាអេស្ប៉ាញ</translation>
 <translation id="5438282218546237410">គ្មានលទ្ធផល​អំពី <ph name="SEARCH_TERM" /> ទេ។</translation>
+<translation id="5447680084201416734">ទំហំផ្ទុក​មិនគ្រប់គ្រាន់។</translation>
 <translation id="5449551289610225147">ពាក្យ​សម្ងាត់​មិន​ត្រឹមត្រូវ</translation>
 <translation id="5459064203055649751">ឯកសារដែលបានដាក់​ឈ្មោះថា "<ph name="FILENAME" />" មានរួចហើយ។ តើអ្នកចង់ជំនួសឯកសារនេះដោយឯកសារដែលអ្នកកំពុងផ្លាស់ទីដែរឬទេ?</translation>
 <translation id="5463231940765244860">បញ្ចូល</translation>
@@ -574,7 +585,6 @@
 <translation id="5494920125229734069">ជ្រើសរើសទាំងអស់</translation>
 <translation id="5500122897333236901">ភាសាអាយឡែន</translation>
 <translation id="5508696409934741614">ចំណុច</translation>
-<translation id="5519161320735100193">ការកំណត់ Google ថាស</translation>
 <translation id="5522908512596376669">បញ្ជីឯកសារ​បានប្ដូរទៅទិដ្ឋភាព​បញ្ជី។</translation>
 <translation id="5524517123096967210">ឯកសារមិនអាចត្រូវបានអានទេ។</translation>
 <translation id="5533102081734025921">រូបភាព <ph name="IMAGE_TYPE" /></translation>
@@ -602,6 +612,7 @@
 <translation id="5720028165859493293">បានផ្លាស់ទី <ph name="FILE_NAME" /> ទៅក្នុងធុងសំរាម</translation>
 <translation id="5724172041621205163">ភាសាថៃ​ដែលប្រើ​ក្ដារចុច Pattachote</translation>
 <translation id="57383366388012121">ខែមុន</translation>
+<translation id="575175778971367197">មិនអាចធ្វើ​សម​កាល​កម្មឯកសារនេះនៅពេលនេះបានទេ</translation>
 <translation id="5756666464756035725">ក្តារចុចហុងគ្រី</translation>
 <translation id="5760252553414789727">បានជ្រើសរើស​ធាតុ <ph name="SELECTED_FILES_COUNT" /></translation>
 <translation id="5763377084591234761">ភាសា​អាល្លឺម៉ង់ (ស្វ៊ីស)</translation>
@@ -621,13 +632,13 @@
 <translation id="5838451609423551646">បានលុបធាតុទាំងអស់​ចេញពីការជ្រើសរើស។</translation>
 <translation id="5838825566232597749">US Workman អន្តរជាតិ</translation>
 <translation id="5845721951356578987">គិលានុបដ្ឋាយិកា</translation>
+<translation id="5858478190805449225">មុខងារសន្សំថ្មត្រូវបានបើក។ សូមព្យាយាមម្តងទៀត នៅពេលដែលមុខងារសន្សំថ្មត្រូវបានបិទ។</translation>
 <translation id="5860491529813859533">បើក</translation>
 <translation id="5861477046012235702">អ្នកលេង​ហ្គេម</translation>
 <translation id="5864471791310927901">DHCP lookup បានបរាជ័យ</translation>
 <translation id="5896749729057314184">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, បានបិទដំណើរការ, កម្លាំងរលកសញ្ញា <ph name="SIGNAL_STRENGTH" />%, ព័ត៌មានលម្អិត</translation>
 <translation id="5911887972742538906">មានបញ្ហា​កើតឡើង អំឡុង​ពេលដំឡើង​កម្មវិធី Linux របស់អ្នក។</translation>
 <translation id="5912396950572065471">ទម្រង់</translation>
-<translation id="5913638992615760742">មិនអាចចម្លង​ប្រតិបត្តិការ​បានទេ បញ្ហាមិនបានរំពឹងទុក៖ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="5918480239180455431">មាន​មុខងារ​ស្វែងរក​ថ្មីៗ</translation>
 <translation id="5926082595146149752">ភាសាហូឡង់ (ហូឡង់) ដែលប្រើ​ក្ដារចុចកុំព្យូទ័រ​អាមេរិកអន្តរជាតិ</translation>
 <translation id="5932901536148835538">Chromebit</translation>
@@ -635,7 +646,6 @@
 <translation id="5955954492236143329">ធាតុ <ph name="NUMBER_OF_ITEMS" /></translation>
 <translation id="5957366693331451795">Chromebox</translation>
 <translation id="5982621672636444458">រៀបជម្រើសតាមប្រភេទ</translation>
-<translation id="6007237601604674381">ការផ្លាស់ទីបានបរាជ័យ។ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="6011074160056912900">បណ្ដាញ​អ៊ីសឺរណិត</translation>
 <translation id="60357267506638014">ក្តារចុចភាសាឆេក</translation>
 <translation id="603895874132768835">អ្នកនឹង​មិនអាច​ប្រើបណ្ដាញនេះបានទេ រហូតទាល់តែអ្នករៀបចំកូដ PIN ថ្មី</translation>
@@ -657,6 +667,8 @@
 <translation id="6164412158936057769">មេអំបៅ</translation>
 <translation id="6165508094623778733">ស្វែងយល់​បន្ថែម</translation>
 <translation id="6170470584681422115">សាំងវិច</translation>
+<translation id="6177854567773392726">កំពុង​ពិនិត្យមើល​ទំហំផ្ទុក… បាន​រកឃើញ​ធាតុ <ph name="ITEMS_FOUND" /></translation>
+<translation id="6181912134988520389">ផ្ដល់​ការអនុញ្ញាតឱ្យ <ph name="VM_NAME" /> ចូលប្រើ​ឯកសារ​នៅក្នុង Google ថាស​របស់អ្នក។ ការផ្លាស់ប្ដូរនឹង​ធ្វើសមកាលកម្ម​ទៅឧបករណ៍​ផ្សេងទៀត​របស់អ្នក។</translation>
 <translation id="6187719147498869044">ភាសា​ហុងគ្រី</translation>
 <translation id="6198252989419008588">ប្តូរលេខសម្គាល់</translation>
 <translation id="6199801702437275229">កំពុងរង់ចាំព័ត៌មានចន្លោះផ្ទុក...</translation>
@@ -691,6 +703,7 @@
 <translation id="6423031066725912715">ភាសាវៀតណាម​ដែលប្រើ​ក្ដារចុច TCVN</translation>
 <translation id="6430271654280079150">អ្នកអាចព្យាយាមបាន 1 ដងទៀត។</translation>
 <translation id="643243556292470964">ឯកសារដែលបានលុប​ត្រូវបាន​ផ្លាស់ទី​ទៅក្នុងធុងសំរាម​ឥឡូវនេះ</translation>
+<translation id="6438480100790416671">កំពុង​ពិនិត្យមើល​ទំហំផ្ទុក…</translation>
 <translation id="6485131920355264772">បានបរាជ័យក្នុងការទាញត្រលប់ព័ត៌មានចន្លោះផ្ទុក</translation>
 <translation id="6495925982925244349">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, កម្លាំងរលកសញ្ញា <ph name="SIGNAL_STRENGTH" />%, គ្រប់គ្រងដោយ​អ្នកគ្រប់គ្រង​របស់អ្នក, ព័ត៌មាន​លម្អិត</translation>
 <translation id="649877868557234318">កំពុងស្រង់ <ph name="FILE_NAME" /> ទៅ <ph name="FOLDER_NAME" /></translation>
@@ -703,6 +716,7 @@
 <translation id="6558280019477628686">មាន​បញ្ហា​កើតឡើង។ ធាតុមួយ​ចំនួន​ប្រហែល​ជាមិនទាន់​ត្រូវបាន​លុបទេ។</translation>
 <translation id="656398493051028875">កំពុងលុប "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">តំណ Google Drive</translation>
+<translation id="6588648400954570689">ការកំណត់ការធ្វើសម​កាល​កម្មឯកសារ</translation>
 <translation id="6594855146910089723">ថតនេះត្រូវបាន​ចែករំលែកជាមួយ Linux និង Parallels Desktop</translation>
 <translation id="6607272825297743757">ព័ត៌មានឯកសារ</translation>
 <translation id="6609332149380188670">បានចែករំលែក​ថត <ph name="NUMBER_OF_ITEMS" /> ជាមួយ Parallels Desktop</translation>
@@ -717,7 +731,6 @@
 <translation id="6710213216561001401">មុន</translation>
 <translation id="6732801395666424405">វិញ្ញាបនប័ត្រមិនត្រូវបានដំណើរការទេ</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
-<translation id="6740270213273127264">ចែករំលែក​ថត​ជា​មួយ Bruschetta</translation>
 <translation id="6750737795876287924">បញ្ជីបច្ចុប្បន្ន</translation>
 <translation id="6751256176799620176">បានជ្រើសថតឯកសារ 1</translation>
 <translation id="6755827872271341378">ឧបករណ៍ ChromeOS Flex</translation>
@@ -759,6 +772,7 @@
 <translation id="6989942356279143254">ភាសា​ស៊ុយអែត</translation>
 <translation id="6990081529015358884">អ្នកអស់ចន្លោះផ្ទុកហើយ</translation>
 <translation id="6993826899923627728">ធាតុទាំងនេះស្ថិតនៅក្នុងធុងសំរាមរបស់អ្នក</translation>
+<translation id="6996593023542748157">ចែករំលែក​ថត​ជាមួយ <ph name="VM_NAME" /></translation>
 <translation id="7008426324576352165">ស្ថាប័នរបស់អ្នកតម្រូវ​ឱ្យ​មាន​ទំហំផ្ទុកបន្ថែម ដើម្បីបញ្ចប់ការបង្ហោះ។</translation>
 <translation id="7009985720488544166">ការផ្លាស់ទី​ឯកសារ <ph name="COUNT" /> ត្រូវបាន​ទប់ស្កាត់​ដោយ​គោលការណ៍​របស់​អ្នក​គ្រប់គ្រង</translation>
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
@@ -794,6 +808,7 @@
 <translation id="7256405249507348194">កំហុសឆ្គងដែលមិនបានសម្គាល់៖ <ph name="DESC" /></translation>
 <translation id="7268659760406822741">មានសេវាកម្ម</translation>
 <translation id="7291818353625820805">ចង់ឱ្យ​គ្រាប់ចុច​ចុច​ឡើងវិញ​ឬ? សូមបិទ​សញ្ញា​សម្គាល់​សំឡេង​នៅក្នុងការកំណត់​ក្ដារចុច</translation>
+<translation id="729236380049459563">ការធ្វើសមកាលកម្មឯកសារត្រូវបានបើក</translation>
 <translation id="7292816689782057017">គោលការណ៍​របស់អ្នកគ្រប់គ្រង​រឹតបន្តឹង​ការរក្សាទុក​ទៅ​ទីតាំង​មួយចំនួន។</translation>
 <translation id="7294063083760278948">ការសរសេរតាម​សូរសព្ទជាភាសា​តេលូហ្គូ</translation>
 <translation id="7295662345261934369">ចែក​រំលែក​ជាមួយ​អ្នកដទៃ</translation>
@@ -801,6 +816,7 @@
 <translation id="7309413087278791451">ភាសា​អាល្លឺម៉ង់ (បែលហ្ស៊ិក)</translation>
 <translation id="7339898014177206373">ផ្ទាំងថ្មី</translation>
 <translation id="7343393116438664539">ភាសាវៀតណាម​ថេឡិច</translation>
+<translation id="7347346221088620549">ឯកសារ​ដែលបាន​អ៊ីនគ្រីប</translation>
 <translation id="7357762654218998920">ប្រភេទឯកសារនេះ​មិនអាចប្រើបានទេ។ <ph name="BEGIN_LINK_HELP" />ស្វែងយល់បន្ថែម<ph name="END_LINK_HELP" />អំពី​ការបើកឯកសារ​នៅលើ ChromeOS។</translation>
 <translation id="7359359531237882347">កំពុង​ចម្លងធាតុ <ph name="NUMBER_OF_ITEMS" /> ...</translation>
 <translation id="7375951387215729722">បញ្ជី​ឯកសារ​ដែលតម្រៀប​តាមលំដាប់​ចុះនៃ <ph name="COLUMN_NAME" /> ។</translation>
@@ -827,6 +843,7 @@
 <translation id="7547811415869834682">ភាសាហូឡង់</translation>
 <translation id="7551643184018910560">ដៅទៅធ្នើ</translation>
 <translation id="7553492409867692754">ផ្ដល់ការអនុញ្ញាតឱ្យ​កម្មវិធី Linux ចូលប្រើឯកសារ​នៅក្នុងថត <ph name="FOLDER_NAME" /></translation>
+<translation id="7555339735447658365">បច្ចុប្បន្ននេះ អ្នកគ្មានអ៊ីនធឺណិតទេ។ ការធ្វើសមកាលកម្ម​ឯកសារនឹងបន្ត នៅពេល​ដែលអ្នក​បានភ្ជាប់ទៅ​អ៊ីនធឺណិត</translation>
 <translation id="7589661784326793847">រង់ចាំមួយភ្លែត</translation>
 <translation id="7592775719802218421">កំពុង​​កំណត់ឱ្យ <ph name="FILE_NAME" /> អាចប្រើបានពេល​​គ្មាន​​​អ៊ីនធឺណិត</translation>
 <translation id="7600126690270271294">ភាសា​ស៊ែប៊ី</translation>
@@ -845,6 +862,7 @@
 <translation id="76959938259365003">មិន​អាច​សម្អាត​ធុង​សំរាម​បាន​ទេ។</translation>
 <translation id="770015031906360009">ភាសាក្រិក</translation>
 <translation id="7705251383879779343">បានចម្លង <ph name="FILE_NAME" />។</translation>
+<translation id="7707941139430559579">មិន​អាច​ផ្លាស់​ទី​ឯកសារបាន​ទេ។ <ph name="ERROR_MESSAGE" /></translation>
 <translation id="7708271999969613024">ដើម្បីប្រើបណ្តាញនេះ អ្នកត្រូវបញ្ចូលកូដឈប់​ទប់ស្កាត់ផ្ទាល់ខ្លួន (PUK) ចំនួន 8 ខ្ទង់ ដែលផ្តល់ដោយក្រុមហ៊ុនសេវាទូរសព្ទ។</translation>
 <translation id="7711920809702896782">ព័ត៌មាន​អំពី​រូបភាព</translation>
 <translation id="7724603315864178912">កាត់</translation>
@@ -881,7 +899,6 @@
 <translation id="7911118814695487383">Linux</translation>
 <translation id="7920501309908018401">ឯកសារ​របស់អ្នក​នៅក្នុង "ថាសខ្ញុំ" នឹងធ្វើសម​កាលកម្មទៅ Chromebook របស់អ្នក​ដោយស្វ័យប្រវត្តិ ដូច្នេះ​អ្នកអាចចូលប្រើ​ឯកសារ​ទាំងនោះបាន​ដោយគ្មាន​ការតភ្ជាប់អ៊ីនធឺណិត។</translation>
 <translation id="7925247922861151263">ការពិនិត្យ AAA បានបរាជ័យ</translation>
-<translation id="7925686952655276919">កុំប្រើទិន្នន័យទូរស័ព្ទសម្រាប់ធ្វើសមកម្ម</translation>
 <translation id="7928710562641958568">បញ្ចេញឧបករណ៍</translation>
 <translation id="7933875256234974853">កំពុង​រៀបចំ​ធ្វើសមកាលកម្ម​ឯកសារថាស...</translation>
 <translation id="7943385054491506837">US Colemak</translation>
@@ -890,10 +907,10 @@
 <translation id="7972920761225148017">ភាសា​បារាំង (ស្វ៊ីស)</translation>
 <translation id="7973962044839454485">ការសម្គាល់អត្តសញ្ញាណ PPP បានបរាជ័យដោយសារឈ្មោះ និងពាក្យសម្ងាត់មិនត្រឹមត្រូវ</translation>
 <translation id="7980421588063892270">ភាសា​អង់គ្លេស (សហរដ្ឋអាមេរិក) ដែលប្រើ​ក្ដារចុច Colemak</translation>
-<translation id="7985008041109611710">កំពុង​ធ្វើសមកាលកម្ម​ឯកសារ <ph name="NUMBER_OF_FILES_SYNCING" /></translation>
 <translation id="8000066093800657092">គ្មានបណ្តាញទេ</translation>
 <translation id="8008366997883261463">សត្វឆ្កែ</translation>
 <translation id="8028993641010258682">ទំហំ</translation>
+<translation id="8034974485549318493">សម្រាប់​ការរៀបចំ​ដំបូង អ្នកត្រូវភ្ជាប់​ទៅអ៊ីនធឺណិត ដូច្នេះ​ឯកសារ​អាចធ្វើ​សម​កាលកម្ម​បាន។</translation>
 <translation id="803771048473350947">ឯកសារ</translation>
 <translation id="8038111231936746805">(លំនាំដើម)</translation>
 <translation id="8042602468072383151">សំឡេង <ph name="AUDIO_TYPE" /></translation>
@@ -904,6 +921,8 @@
 <translation id="8087576439476816834">ទាញយក, <ph name="PROFILE_NAME" /></translation>
 <translation id="8106045200081704138">បានចែករំលែកជាមួយខ្ញុំ</translation>
 <translation id="8116072619078571545">ទឹកកក</translation>
+<translation id="8120392982188717723">អនុញ្ញាត​ឱ្យ​ធ្វើ​សមកាលកម្ម​នៅលើ​បណ្ដាញដែល​ផ្អែកតាមទិន្នន័យដែលប្រើ</translation>
+<translation id="8124093710070495550">បញ្ហាសម​កាល​កម្ម</translation>
 <translation id="8128733386027980860">ភាសា​អង់គ្លេស (ចក្រភព​អង់គ្លេស) ដែលប្រើ​ក្ដារចុច Dvorak</translation>
 <translation id="8137331602592933310">"<ph name="FILENAME" />" បានចែករំលែកជាមួយអ្នក។ អ្នកមិនអាចលុបវាទេ ពីព្រោះអ្នកមិនមានជាម្ចាស់របស់វា។</translation>
 <translation id="8138705869659070104">បើកដំណើរការបន្ទាប់ពីរៀបចំឧបករណ៍</translation>
@@ -913,9 +932,11 @@
 <translation id="8154842056504218462">បានជ្រើសរើសធាតុទាំងអស់។</translation>
 <translation id="8157684860301034423">មិន​អាច​ទាញយកព័ត៌មាន​កម្មវិធី​បានទេ។</translation>
 <translation id="8175731104491895765">ភាសា​បារាំង (បែលហ្ស៊ិក)</translation>
+<translation id="8175799081768705361">កំពុង​ធ្វើសម​កាលកម្ម​ឯកសារ​ថាស <ph name="NUMBER_OF_FILES_SYNCING" /></translation>
 <translation id="8179976553408161302">បញ្ចូល</translation>
 <translation id="8193175696669055101">គំរូឧបករណ៍</translation>
 <translation id="8223479393428528563">ដើម្បីរក្សាទុកឯកសារទាំងនេះសម្រាប់ការប្រើនៅក្រៅបណ្តាញ ភ្ជាប់ទៅអ៊ីនធឺណិត ហើយចុចកណ្តុរខាងស្តាំលើឯកសារ ហើយជ្រើសរើសជម្រើស <ph name="OFFLINE_CHECKBOX_NAME" />។</translation>
+<translation id="8241139360630443550">មើល​ទំហំ​ផ្ទុក</translation>
 <translation id="8249296373107784235">បោះបង់</translation>
 <translation id="8250690786522693009">ឡាតាំង</translation>
 <translation id="8250920743982581267">ឯកសារ</translation>
@@ -938,6 +959,7 @@
 <translation id="8335837413233998004">ភាសា​បេឡារុស</translation>
 <translation id="8336153091935557858">ម្សិលមិញ <ph name="YESTERDAY_DAYTIME" /></translation>
 <translation id="8342318071240498787">មានឯកសារ ឬថតឯកសារដែលមានឈ្មោះដូចនេះមានរួចទៅហើយ។</translation>
+<translation id="83651606385705612">ផ្ដល់​ការអនុញ្ញាតឱ្យ <ph name="VM_NAME" /> ចូលប្រើ​ឯកសារ​នៅក្នុង​ថត <ph name="FOLDER_NAME" /></translation>
 <translation id="8372369524088641025">សោ WEP មិនល្អ</translation>
 <translation id="8372852072747894550">ភាសា​ក្រិក</translation>
 <translation id="8386903983509584791">ការស្កេនបានបញ្ចប់</translation>
@@ -946,6 +968,8 @@
 <translation id="8404498045299006085">រក្សាទុកទាំងអស់</translation>
 <translation id="8408068190360279472">បណ្ដាញ <ph name="NETWORK_TYPE" />, កំពុង​ភ្ជាប់</translation>
 <translation id="8425213833346101688">ប្តូរ</translation>
+<translation id="8428213095426709021">ការកំណត់</translation>
+<translation id="8429998526804961548">បានចែករំលែក​ថត <ph name="NUMBER_OF_ITEMS" /> ជាមួយ <ph name="VM_NAME" /></translation>
 <translation id="8431909052837336408">ប្ដូរកូដ PIN ស៊ីមកាត</translation>
 <translation id="8437209419043462667">អាមេរិក</translation>
 <translation id="8452135315243592079">បាត់ស៊ីមកាត</translation>
@@ -982,6 +1006,7 @@
 <translation id="8609695766746872526">ភាសា​អ៊ីស្លង់</translation>
 <translation id="863903787380594467">កូដ PIN មិនត្រឹមត្រូវទេ។ អ្នកអាចព្យាយាមបាន <ph name="RETRIES" /> ដងទៀត។</translation>
 <translation id="8639391553632924850"><ph name="INPUT_LABEL" /> - រន្ធ</translation>
+<translation id="8656407365183407932">ចាំបាច់ត្រូវលុប​ឯកសារ​គ្មានអ៊ីនធឺណិត​របស់អ្នក</translation>
 <translation id="8656768832129462377">កុំពិនិត្យ</translation>
 <translation id="8688591111840995413">ពាក្យសម្ងាត់មិនល្អ</translation>
 <translation id="8698464937041809063">គំនូរ Google</translation>
@@ -1012,10 +1037,12 @@
 <translation id="8919081441417203123">ភាសាដាណឺម៉ាក</translation>
 <translation id="8949925099261528566">បាន​ភ្ជាប់ ប៉ុន្តែ​គ្មាន​អ៊ីនធឺណិត​</translation>
 <translation id="8965697826696209160">គ្មានចន្លោះផ្ទុកគ្រប់គ្រាន់ទេ។</translation>
+<translation id="8970887620466824814">មានអ្វីមួយ​ខុសប្រក្រតី។</translation>
 <translation id="8971742885766657349">កំពុង​ធ្វើសមកាលកម្ម - <ph name="PERCENT" />%</translation>
 <translation id="8997962250644902079">ភាសាចិន (អក្សរពេញ) ភីងអ៊ីង</translation>
 <translation id="8998871447376656508">មិនមានទំហំផ្ទុកទំនេរគ្រប់គ្រាន់នៅក្នុង Google ថាសរបស់អ្នក ដើម្បីបញ្ចប់ការបង្ហោះទេ។</translation>
 <translation id="9003940392834790328">បណ្ដាញ <ph name="NETWORK_INDEX" /> នៃ <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, កម្លាំងរលកសញ្ញា <ph name="SIGNAL_STRENGTH" />%, គ្រប់គ្រងដោយ​អ្នកគ្រប់គ្រង​របស់អ្នក, ព័ត៌មាន​លម្អិត</translation>
+<translation id="9007990314804111233">ចូល​គណនី Microsoft របស់អ្នក</translation>
 <translation id="9017798300203431059">ស្រះជាភាសារុស្សី</translation>
 <translation id="9034924485347205037">ឯកសារ Linux</translation>
 <translation id="9035012421917565900">ធាតុ​ទាំងនេះ​មិនអាច​ផ្លាស់ទី​ទៅក្នុង '<ph name="DESTINATION_NAME" />' បានទេ ដូច្នេះ​អ្នកនឹង​មិនអាច​ត្រឡប់​សកម្មភាព​នេះវិញ​បានទេ។</translation>
@@ -1023,6 +1050,7 @@
 <translation id="9038620279323455325">ឯកសារដែល​ដាក់ឈ្មោះ "<ph name="FILE_NAME" />" មានរួចហើយ។ សូមជ្រើសរើស​ឈ្មោះផ្សេង។</translation>
 <translation id="9046895021617826162">ការភ្ជាប់បានបរាជ័យ</translation>
 <translation id="9065512565307033593">ប្រសិនបើអ្នក​មិនអាចផ្ទៀងផ្ទាត់​បានទេ សិទ្ធិចូលប្រើ​បណ្ដាញ​របស់អ្នក​នឹងត្រូវបានបិទ។</translation>
+<translation id="9083722265619106011">{0,plural, =1{សារប្រុងប្រយ័ត្ន 1។}other{សារប្រុងប្រយ័ត្ន <ph name="COUNT" />។}}</translation>
 <translation id="908378762078012445">ភាសារុស្ស៊ី​ដែលប្រើ​ក្ដារចុចតាម​សូរសព្ទ AATSEEL</translation>
 <translation id="9086302186042011942">កំពុងធ្វើសមកម្ម</translation>
 <translation id="9099674669267916096">ចំនួន​ទំព័រ</translation>
@@ -1046,7 +1074,6 @@
 <translation id="9213073329713032541">បានចាប់ផ្ដើម​ការដំឡើង​ដោយជោគជ័យហើយ។</translation>
 <translation id="9219103736887031265">រូបភាព</translation>
 <translation id="9219908252191632183">ទេសភាព​ភព​ព្រះចន្ទ</translation>
-<translation id="937795003075802289">កំពុង​ធ្វើសមកាលកម្ម​ឯកសារ 1</translation>
 <translation id="938470336146445890">សូមតំឡើងវិញ្ញាបនប័ត្រអ្នកប្រើ។</translation>
 <translation id="939736085109172342">ថតឯកសារថ្មី</translation>
 <translation id="943972244133411984">កែសម្រួល​ដោយ</translation>

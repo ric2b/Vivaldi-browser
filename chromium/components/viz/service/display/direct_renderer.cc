@@ -43,37 +43,6 @@
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "components/viz/common/quads/texture_draw_quad.h"
-#endif  // BUILDFLAG(IS_WIN)
-
-namespace {
-
-// Returns the bounding box that contains the specified rounded corner.
-gfx::RectF ComputeRoundedCornerBoundingBox(const gfx::RRectF& rrect,
-                                           const gfx::RRectF::Corner corner) {
-  auto radii = rrect.GetCornerRadii(corner);
-  gfx::RectF bounding_box(radii.x(), radii.y());
-  switch (corner) {
-    case gfx::RRectF::Corner::kUpperLeft:
-      bounding_box.Offset(rrect.rect().x(), rrect.rect().y());
-      break;
-    case gfx::RRectF::Corner::kUpperRight:
-      bounding_box.Offset(rrect.rect().right() - radii.x(), rrect.rect().y());
-      break;
-    case gfx::RRectF::Corner::kLowerRight:
-      bounding_box.Offset(rrect.rect().right() - radii.x(),
-                          rrect.rect().bottom() - radii.y());
-      break;
-    case gfx::RRectF::Corner::kLowerLeft:
-      bounding_box.Offset(rrect.rect().x(), rrect.rect().bottom() - radii.y());
-      break;
-  }
-  return bounding_box;
-}
-
-}  // namespace
-
 namespace viz {
 
 DirectRenderer::DrawingFrame::DrawingFrame() = default;
@@ -346,25 +315,6 @@ void DirectRenderer::DrawFrame(
     overlay_processor_->AdjustOutputSurfaceOverlay(
         &(current_frame()->output_surface_plane));
   }
-
-#if BUILDFLAG(IS_WIN)
-  // On Windows stream video texture quads are currently only supported in
-  // overlays. There are scenarios where promotion may fail today, (e.g.
-  // if the quad is in a non-root render pass or video capture is enabled)
-  // so we do an extra pass to ensure these quads aren't processed by setting
-  // their visible rect to empty.
-  for (const auto& pass : *render_passes_in_draw_order) {
-    QuadList* ql = &pass->quad_list;
-    for (auto it = ql->begin(); it != ql->end(); ++it) {
-      if (it->material == DrawQuad::Material::kTextureContent) {
-        const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
-        if (tex_quad->is_stream_video) {
-          it->visible_rect = gfx::Rect();
-        }
-      }
-    }
-  }
-#endif  // BUILDFLAG(IS_WIN)
 
   // Only reshape when we know we are going to draw. Otherwise, the reshape
   // can leave the window at the wrong size if we never draw and the proper
@@ -773,12 +723,18 @@ void DirectRenderer::DrawRenderPass(const AggregatedRenderPass* render_pass) {
                            render_pass_requires_scissor);
 
     if (OverlayCandidate::RequiresOverlay(&quad)) {
-      // We cannot composite this quad properly, replace it with solid black.
-      SolidColorDrawQuad solid_black;
-      solid_black.SetAll(quad.shared_quad_state, quad.rect, quad.rect,
-                         /*needs_blending=*/false, SkColors::kBlack,
-                         /*force_anti_aliasing_off=*/true);
-      DoDrawQuad(&solid_black, nullptr);
+      // We cannot composite this quad properly, replace it with a fallback
+      // solid color quad.
+      SolidColorDrawQuad overlay_fallback;
+      overlay_fallback.SetAll(quad.shared_quad_state, quad.rect, quad.rect,
+                              /*needs_blending=*/false,
+#if DCHECK_IS_ON()
+                              SkColors::kMagenta,
+#else
+                              SkColors::kBlack,
+#endif
+                              /*anti_aliasing_off=*/true);
+      DoDrawQuad(&overlay_fallback, nullptr);
       continue;
     }
 
@@ -826,7 +782,8 @@ DirectRenderer::CalculateRenderPassRequirements(
     requirements.size = surface_size_for_swap_buffers();
     requirements.generate_mipmap = false;
     requirements.color_space = reshape_color_space();
-    requirements.format = GetSharedImageFormat(reshape_buffer_format());
+    requirements.format =
+        GetSinglePlaneSharedImageFormat(reshape_buffer_format());
 
     // All root render pass backings allocated by the renderer needs to
     // eventually go into some composition tree. Other things that own/allocate
@@ -1121,8 +1078,7 @@ bool DirectRenderer::ShouldApplyRoundedCorner(const DrawQuad* quad) const {
       gfx::RRectF::Corner::kUpperLeft, gfx::RRectF::Corner::kUpperRight,
       gfx::RRectF::Corner::kLowerRight, gfx::RRectF::Corner::kLowerLeft};
   for (auto c : corners) {
-    if (ComputeRoundedCornerBoundingBox(rounded_corner_bounds, c)
-            .Intersects(target_quad)) {
+    if (rounded_corner_bounds.CornerBoundingRect(c).Intersects(target_quad)) {
       return true;
     }
   }

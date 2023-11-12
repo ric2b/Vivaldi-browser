@@ -34,6 +34,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/webapps/browser/installable/ml_install_operation_tracker.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/text_elider.h"
@@ -62,7 +63,7 @@ bool g_dont_close_on_deactivate = false;
 
 // Returns an ImageView containing the app icon.
 std::unique_ptr<views::ImageView> CreateIconView(
-    const WebAppInstallInfo& web_app_info) {
+    const web_app::WebAppInstallInfo& web_app_info) {
   constexpr int kIconSize = 48;
   gfx::ImageSkia image(std::make_unique<WebAppInfoImageSource>(
                            kIconSize, web_app_info.icon_bitmaps.any),
@@ -102,7 +103,7 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
     views::View* anchor_view,
     content::WebContents* web_contents,
     PageActionIconView* highlight_icon_button,
-    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     chrome::AppInstallationAcceptanceCallback callback,
     chrome::PwaInProductHelpState iph_state,
@@ -161,7 +162,7 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
                            url::Origin::Create(web_app_info_->start_url), false)
                            .release());
 
-  if (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip) &&
+  if (base::FeatureList::IsEnabled(blink::features::kDesktopPWAsTabStrip) &&
       base::FeatureList::IsEnabled(features::kDesktopPWAsTabStripSettings)) {
     // This UI is only for prototyping and is not intended for shipping.
     DCHECK_EQ(features::kDesktopPWAsTabStripSettings.default_state,
@@ -315,7 +316,7 @@ namespace chrome {
 
 void ShowPWAInstallBubble(
     content::WebContents* web_contents,
-    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     AppInstallationAcceptanceCallback callback,
     PwaInProductHelpState iph_state) {

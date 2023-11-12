@@ -111,6 +111,8 @@ const InstallConstants kInstallModes[] = {
         L"Vivaldi",  // A distinct base_app_id.
         L"VivaldiHTM",                              // ProgID prefix.
         L"Vivaldi HTML Document",                   // ProgID description.
+        L"VivaldiPPDF",                             // PDF ProgID prefix.
+        L"Vivaldi PDF Document",                    // PDF ProgID description.
         L"{9C142C0C-124C-4467-B117-EBCC62801D7B}",  // Active Setup GUID.
         L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}",  // CommandExecuteImpl CLSID.
 

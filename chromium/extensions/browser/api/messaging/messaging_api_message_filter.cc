@@ -54,6 +54,12 @@ class ShutdownNotifierFactory
     DependsOn(EventRouterFactory::GetInstance());
   }
   ~ShutdownNotifierFactory() override = default;
+
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override {
+    return ExtensionsBrowserClient::Get()->GetContextOwnInstance(
+        context, /*force_guest_profile=*/true);
+  }
 };
 
 // Returns true if `source_endpoint` can be legitimately claimed/used by

@@ -6,8 +6,7 @@ package org.chromium.chrome.browser.ntp;
 
 import android.content.Context;
 
-import androidx.annotation.VisibleForTesting;
-
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.invalidation.SessionsInvalidationManager;
@@ -496,7 +495,7 @@ public class RecentTabsManager implements SyncService.SyncStateChangedListener, 
 
     // AccountsChangeObserver implementation.
     @Override
-    public void onAccountsChanged() {
+    public void onCoreAccountInfosChanged() {
         update();
     }
 
@@ -537,9 +536,9 @@ public class RecentTabsManager implements SyncService.SyncStateChangedListener, 
         return mTabModel;
     }
 
-    @VisibleForTesting
     public static void setRecentlyClosedTabManagerForTests(RecentlyClosedTabManager manager) {
         sRecentlyClosedTabManagerForTests = manager;
+        ResettersForTesting.register(() -> sRecentlyClosedTabManagerForTests = null);
     }
 
     /** Vivaldi */

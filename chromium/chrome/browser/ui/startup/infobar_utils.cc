@@ -5,16 +5,17 @@
 #include "chrome/browser/ui/startup/infobar_utils.h"
 
 #include "base/command_line.h"
+#include "build/branding_buildflags.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_for_testing/buildflags.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/session_crashed_bubble.h"
 #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
+#include "chrome/browser/ui/startup/bidding_and_auction_consented_debugging_infobar_delegate.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/browser/ui/startup/google_api_keys_infobar_delegate.h"
 #include "chrome/browser/ui/startup/obsolete_system_infobar_delegate.h"
@@ -96,6 +97,11 @@ void AddInfoBarsIfNecessary(Browser* browser,
 
     if (IsAutomationEnabled())
       AutomationInfoBarDelegate::Create();
+
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kProtectedAudiencesConsentedDebugToken)) {
+      BiddingAndAuctionConsentedDebuggingDelegate::Create(web_contents);
+    }
   }
 
   // Do not show any other info bars in Kiosk mode, because it's unlikely that

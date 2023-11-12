@@ -15,7 +15,6 @@ import android.view.ViewGroup;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.viewpager2.widget.ViewPager2;
@@ -23,6 +22,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -36,6 +36,9 @@ import org.chromium.ui.widget.ButtonCompat;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Fragment containing the Privacy Guide (a walk-through of the most important privacy settings).
@@ -47,17 +50,25 @@ public class PrivacyGuideFragment
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({FragmentType.WELCOME, FragmentType.MSBB, FragmentType.HISTORY_SYNC,
-            FragmentType.SAFE_BROWSING, FragmentType.COOKIES, FragmentType.DONE})
+            FragmentType.SAFE_BROWSING, FragmentType.COOKIES, FragmentType.SEARCH_SUGGESTIONS,
+            FragmentType.DONE})
     @interface FragmentType {
         int WELCOME = 0;
         int MSBB = 1;
         int HISTORY_SYNC = 2;
         int SAFE_BROWSING = 3;
         int COOKIES = 4;
-        int DONE = 5;
+        int SEARCH_SUGGESTIONS = 5;
+        int DONE = 6;
         int MAX_VALUE = DONE;
     }
-
+    public static final List<Integer> ALL_FRAGMENT_TYPE_ORDER = Collections.unmodifiableList(
+            Arrays.asList(FragmentType.WELCOME, FragmentType.MSBB, FragmentType.HISTORY_SYNC,
+                    FragmentType.SAFE_BROWSING, FragmentType.COOKIES, FragmentType.DONE));
+    public static final List<Integer> ALL_FRAGMENT_TYPE_ORDER_PG3 =
+            Collections.unmodifiableList(Arrays.asList(FragmentType.WELCOME, FragmentType.MSBB,
+                    FragmentType.HISTORY_SYNC, FragmentType.COOKIES, FragmentType.SAFE_BROWSING,
+                    FragmentType.SEARCH_SUGGESTIONS, FragmentType.DONE));
     private OneshotSupplier<BottomSheetController> mBottomSheetControllerSupplier;
     private ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier;
     private CustomTabIntentHelper mCustomTabHelper;
@@ -95,9 +106,14 @@ public class PrivacyGuideFragment
         mView = inflater.inflate(R.layout.privacy_guide_steps, container, false);
 
         mViewPager = (ViewPager2) mView.findViewById(R.id.review_viewpager);
-        mPagerAdapter = new PrivacyGuidePagerAdapter(this, new StepDisplayHandlerImpl());
+        mPagerAdapter = new PrivacyGuidePagerAdapter(this, new StepDisplayHandlerImpl(),
+                ChromeFeatureList.sPrivacyGuideAndroid3.isEnabled() ? ALL_FRAGMENT_TYPE_ORDER_PG3
+                                                                    : ALL_FRAGMENT_TYPE_ORDER);
         mNavbarVisibilityDelegate = new NavbarVisibilityDelegate(mPagerAdapter.getItemCount());
         mViewPager.setAdapter(mPagerAdapter);
+        if (ChromeFeatureList.sPrivacyGuidePostMVP.isEnabled()) {
+            mViewPager.setPageTransformer(new PrivacyGuidePageTransformer());
+        }
         mViewPager.setUserInputEnabled(false);
 
         mTabLayout = mView.findViewById(R.id.tab_layout);
@@ -277,9 +293,10 @@ public class PrivacyGuideFragment
         mSettingsLauncher = settingsLauncher;
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     void setPrivacyGuideMetricsDelegateForTesting(
             @Nullable PrivacyGuideMetricsDelegate privacyGuideMetricsDelegate) {
+        var oldValue = mPrivacyGuideMetricsDelegate;
         mPrivacyGuideMetricsDelegate = privacyGuideMetricsDelegate;
+        ResettersForTesting.register(() -> mPrivacyGuideMetricsDelegate = oldValue);
     }
 }

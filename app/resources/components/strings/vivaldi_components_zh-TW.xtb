@@ -23,14 +23,14 @@
           並確認您的設定為「不使用代理」或「直接連線」</translation>
 <translation id="5248344925342018662">您正在瀏覽的是安全的 Vivaldi 網頁</translation>
 <translation id="7023871570427738255">前往
-        Vivaldi 主選單 &gt;
+        Vivaldi 選單 &gt;
         <ph name="SETTINGS_TITLE" />
         &gt;
         <ph name="ADVANCED_TITLE" />
         取消勾選「<ph name="NO_PREFETCH_DESCRIPTION" />」。
         如果仍然無法解決問題，建議您重新勾選這個選項
         以增進效能。</translation>
-<translation id="7496505986576158197">Vivaldi 是基於 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 開放原始碼專案和其他<ph name="BEGIN_LINK_OSS" />開放原始碼軟體<ph name="END_LINK_OSS" />而實現的。</translation>
+<translation id="7496505986576158197">Vivaldi 是基於 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 開放原始碼專案和其它<ph name="BEGIN_LINK_OSS" />開放原始碼軟體<ph name="END_LINK_OSS" />而實現的。</translation>
 <translation id="8187289872471304532">前往
 Vivaldi 設定 &gt; 網路 &gt; 代理設定
 取消勾選全部代理。</translation>

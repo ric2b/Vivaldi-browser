@@ -22,6 +22,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
@@ -38,8 +41,8 @@ namespace supervised_user {
 
 namespace {
 
-constexpr char kExampleUrl0[] = "http://www.example0.com";
-constexpr char kExampleUrl1[] = "http://www.example1.com/123";
+const char kExampleUrl0[] = "http://www.example0.com";
+const char kExampleUrl1[] = "http://www.example1.com/123";
 
 }  // namespace
 
@@ -55,9 +58,9 @@ class SupervisedUserServiceTestBase : public ::testing::Test {
             base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
                 &test_url_loader_factory_),
             identity_test_env_.identity_manager()) {
-    // Specify if the user is supervised.
-    syncable_pref_service_.registry()->RegisterStringPref(
-        prefs::kSupervisedUserId, std::string());
+    settings_service_.Init(syncable_pref_service_.user_prefs_store());
+    SupervisedUserService::RegisterProfilePrefs(
+        syncable_pref_service_.registry());
     if (is_supervised) {
       syncable_pref_service_.SetString(prefs::kSupervisedUserId,
                                        kChildAccountSUID);
@@ -65,17 +68,13 @@ class SupervisedUserServiceTestBase : public ::testing::Test {
       syncable_pref_service_.ClearPref(prefs::kSupervisedUserId);
     }
 
-    settings_service_.Init(syncable_pref_service_.user_prefs_store());
-    SupervisedUserService::RegisterProfilePrefs(
-        syncable_pref_service_.registry());
-
     service_ = std::make_unique<SupervisedUserService>(
-        &kids_chrome_management_client_, syncable_pref_service_,
-        settings_service_, sync_service_,
+        identity_test_env_.identity_manager(), &kids_chrome_management_client_,
+        syncable_pref_service_, settings_service_, sync_service_,
         /*check_webstore_url_callback=*/
         base::BindRepeating([](const GURL& url) { return false; }),
         std::make_unique<FilterDelegateImpl>(),
-        /*can_show_first_time_interstitial_banner=*/false);
+        /*can_show_first_time_interstitial_banner=*/true);
 
     service_->Init();
   }
@@ -250,6 +249,54 @@ TEST_F(SupervisedUserServiceTest,
   EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://example.com")));
   EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("http://youtube.com")));
   EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://youtube.com")));
+}
+
+TEST_F(SupervisedUserServiceTest, InterstitialBannerState) {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_IOS)
+  {
+    // If disabled kFilterWebsitesForSupervisedUsersOnDesktopAndIOS
+    // the state remains unchanged.
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kUnknown) ==
+                FirstTimeInterstitialBannerState::kUnknown);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kNeedToShow) ==
+                FirstTimeInterstitialBannerState::kNeedToShow);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kSetupComplete) ==
+                FirstTimeInterstitialBannerState::kSetupComplete);
+  }
+  {
+    // If enabled kFilterWebsitesForSupervisedUsersOnDesktopAndIOS
+    // the state may be updated.
+    base::test::ScopedFeatureList features{
+        kFilterWebsitesForSupervisedUsersOnDesktopAndIOS};
+
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kUnknown) ==
+                FirstTimeInterstitialBannerState::kNeedToShow);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kNeedToShow) ==
+                FirstTimeInterstitialBannerState::kNeedToShow);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kSetupComplete) ==
+                FirstTimeInterstitialBannerState::kSetupComplete);
+  }
+#else
+  {
+    // On other platforms, the state is marked complete.
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kUnknown) ==
+                FirstTimeInterstitialBannerState::kSetupComplete);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kNeedToShow) ==
+                FirstTimeInterstitialBannerState::kSetupComplete);
+    EXPECT_TRUE(service_->GetUpdatedBannerState(
+                    FirstTimeInterstitialBannerState::kSetupComplete) ==
+                FirstTimeInterstitialBannerState::kSetupComplete);
+  }
+#endif
 }
 
 class SupervisedUserServiceTestUnsupervised

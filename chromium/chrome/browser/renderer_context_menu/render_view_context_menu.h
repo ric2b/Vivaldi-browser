@@ -26,6 +26,7 @@
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "components/search_engines/template_url.h"
 #include "components/services/screen_ai/buildflags/buildflags.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/context_menu_params.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -43,6 +44,11 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/menu_manager.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
 #endif
 
 class AccessibilityLabelsMenuObserver;
@@ -227,6 +233,10 @@ class RenderViewContextMenu
   // Writes the specified text/url to the system clipboard.
   void WriteURLToClipboard(const GURL& url);
 
+  // Issues a preconnection request to the given url.
+  void IssuePreconnectionToUrl(const std::string& anonymization_key_url,
+                               const std::string& preconnect_url);
+
   // RenderViewContextMenuBase:
   void InitMenu() override;
   void RecordShownItem(int id, bool is_submenu) override;
@@ -280,6 +290,7 @@ class RenderViewContextMenu
   bool AppendAccessibilityLabelsItems();
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   void AppendPdfOcrItems();
+  void AppendLayoutExtractionItem();
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   void AppendSearchProvider();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -348,8 +359,6 @@ class RenderViewContextMenu
                         bool is_google_default_search_provider);
   void ExecSearchWebForImage(bool is_image_translate);
   void ExecLoadImage();
-  void ExecPlayPause();
-  void ExecMute();
   void ExecLoop();
   void ExecControls();
   void ExecCopyVideoFrame();
@@ -366,6 +375,9 @@ class RenderViewContextMenu
   void ExecProtocolHandlerSettings(int event_flags);
   void ExecPictureInPicture();
   void ExecOpenInReadAnything();
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  void ExecRunLayoutExtraction();
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
   void MediaPlayerActionAt(const gfx::Point& location,
                            const blink::mojom::MediaPlayerAction& action);
@@ -384,6 +396,16 @@ class RenderViewContextMenu
   // checks multiple criteria, e.g. whether translation is disabled by a policy
   // or whether the current page can be translated.
   bool CanTranslate(bool menu_logging);
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  // Does not execute "Save link as" if the URL is blocked by the URL filter.
+  void CheckSupervisedUserURLFilterAndSaveLinkAs();
+  void OnSupervisedUserURLFilterChecked(
+      supervised_user::SupervisedUserURLFilter::FilteringBehavior
+          filtering_behavior,
+      supervised_user::FilteringBehaviorReason reason,
+      bool uncertain);
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Shows the standalone clipboard history menu. `event_flags` describes the

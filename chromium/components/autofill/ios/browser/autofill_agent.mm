@@ -10,10 +10,10 @@
 #import <string>
 #import <utility>
 
+#import "base/apple/foundation_util.h"
 #import "base/format_macros.h"
 #import "base/json/json_reader.h"
 #import "base/json/json_writer.h"
-#import "base/mac/foundation_util.h"
 #import "base/memory/weak_ptr.h"
 #import "base/metrics/field_trial.h"
 #import "base/metrics/histogram_macros.h"
@@ -66,10 +66,6 @@
 #import "ui/gfx/geometry/rect.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using autofill::AutofillJavaScriptFeature;
 using autofill::FieldDataManager;
 using autofill::FieldRendererId;
@@ -107,7 +103,7 @@ void GetFormField(autofill::FormFieldData* field,
     return;
 
   // Hack to get suggestions from select input elements.
-  if (field->form_control_type == "select-one") {
+  if (field->IsSelectElement()) {
     // Any value set will cause the BrowserAutofillManager to filter suggestions
     // (only show suggestions that begin the same as the current value) with the
     // effect that one only suggestion would be returned; the value itself.
@@ -239,9 +235,9 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
                        webFrame:(web::WebFrame*)webFrame {
   if (!webState || !_webStateObserverBridge)
     return nullptr;
-  return autofill::AutofillDriverIOS::FromWebStateAndWebFrame(webState,
-                                                              webFrame)
-      ->autofill_manager();
+  return &autofill::AutofillDriverIOS::FromWebStateAndWebFrame(webState,
+                                                               webFrame)
+              ->GetAutofillManager();
 }
 
 // Notifies the autofill manager when forms are detected on a page.
@@ -351,7 +347,7 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
   // TODO(crbug.com/1448447): Distinguish between different trigger sources.
   autofillManager->OnAskForValuesToFill(
       form, field, gfx::RectF(),
-      autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked);
+      autofill::AutofillSuggestionTriggerSource::kiOS);
 }
 
 - (void)checkIfSuggestionsAvailableForForm:
@@ -481,7 +477,10 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
             SysNSStringToUTF8(suggestion.backendIdentifier));
       }
 
-      _popupDelegate->DidAcceptSuggestion(autofill_suggestion, 0);
+      // On iOS, only a single trigger source exists. See crbug.com/1448447.
+      _popupDelegate->DidAcceptSuggestion(
+          autofill_suggestion, 0,
+          autofill::AutofillSuggestionTriggerSource::kiOS);
     }
     return;
   }
@@ -588,7 +587,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
 
 - (void)handleParsedForms:(const std::vector<autofill::FormStructure*>&)forms
                   inFrame:(web::WebFrame*)frame {
-  // No op.
 }
 
 - (void)fillFormDataPredictions:
@@ -666,6 +664,19 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
         // which case we do not set an icon at all.
         if (!popup_suggestion.custom_icon.IsEmpty()) {
           icon = popup_suggestion.custom_icon.ToUIImage();
+
+          // On iOS, the keyboard accessory wants smaller icons than the default
+          // 40x24 size, so we resize them to 32x20, if the provided icon is
+          // larger than that.
+          constexpr CGFloat kSuggestionIconWidth = 32;
+          if (icon && (icon.size.width > kSuggestionIconWidth)) {
+            // For a simple image resize, we can keep the same underlying image
+            // and only adjust the ratio.
+            CGFloat ratio = icon.size.width / kSuggestionIconWidth;
+            icon = [UIImage imageWithCGImage:[icon CGImage]
+                                       scale:icon.scale * ratio
+                                 orientation:icon.imageOrientation];
+          }
         } else if (!popup_suggestion.icon.empty()) {
           const int resourceID =
               autofill::CreditCard::IconResourceId(popup_suggestion.icon);

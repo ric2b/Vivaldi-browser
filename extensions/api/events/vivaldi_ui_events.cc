@@ -17,8 +17,8 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -525,10 +525,13 @@ bool VivaldiUIEvents::DoHandleKeyboardEvent(
   // We only need the four lowest bits for cmd, alt, ctrl, shift
   int modifiers = event.GetModifiers() & 15;
 
+  bool is_auto_repeat =
+    event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat;
+
   SendEventToUI(window, tabs_private::OnKeyboardChanged::kEventName,
                 tabs_private::OnKeyboardChanged::Create(
                     window->id(), down, modifiers, event.windows_key_code,
-                    after_gesture));
+                    after_gesture, is_auto_repeat));
 
   return after_gesture;
 }

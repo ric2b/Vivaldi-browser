@@ -200,6 +200,17 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NEW_INCOGNITO_TAB_PAGE" desc="Label for text saying the user is on the new Incognito tab page">
         New Private Tab Page
       </message>
+      <!-- DEFAULT BROWSER -->
+      <message name="IDS_IOS_DEFAULT_BROWSER_SETTINGS_HEADER_TEXT" desc="Header of the Default Browser Settings page explaining the default browser feature's utility.">
+        You can open links in Vivaldi automatically by making it your Default Browser App.
+      </message>
+      <message name="IDS_IOS_SETTINGS_OPEN_CHROME_SETTINGS_BUTTON_TEXT" desc="Label of the button that opens the Vivaldi panel in Settings.app">
+          Open Vivaldi Settings
+      </message>
+      <message name="IDS_IOS_SETTINGS_OPEN_SETTINGS_STEP" desc="Text of the row indicating the first step of setting the default browser.">
+        1. Open Vivaldi Settings
+      </message>
+      <!-- END DEFAULT BROWSER -->
     </messages>
   </release>
 </grit>

@@ -29,10 +29,6 @@
 #import "third_party/ocmock/gtest_support.h"
 #import "third_party/ocmock/ocmock_extensions.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 class SideSwipeMediatorTest : public PlatformTest {
@@ -75,6 +71,8 @@ class SideSwipeMediatorTest : public PlatformTest {
 
     [side_swipe_mediator_ addHorizontalGesturesToView:view_];
   }
+
+  ~SideSwipeMediatorTest() override { [side_swipe_mediator_ disconnect]; }
 
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
@@ -168,7 +166,7 @@ TEST_F(SideSwipeMediatorTest, ObserversTriggerStateUpdate) {
   // The NTP and chrome://crash should use native swipe.
   item->SetURL(GURL(kChromeUINewTabURL));
   // Insert the WebState and make sure it's active. This should trigger
-  // didChangeActiveWebState and update edge navigation state.
+  // the activation WebState change and update edge navigation state.
   browser_->GetWebStateList()->InsertWebState(1, std::move(fake_web_state),
                                               WebStateList::INSERT_ACTIVATE,
                                               WebStateOpener());

@@ -60,7 +60,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/account_id/account_id.h"
-#include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/startup_metric_utils/common/startup_metric_utils.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -524,7 +524,8 @@ void LoginDisplayHostMojo::OnStartAppLaunch() {
 }
 
 void LoginDisplayHostMojo::OnBrowserCreated() {
-  base::TimeTicks startup_time = startup_metric_utils::MainEntryPointTicks();
+  base::TimeTicks startup_time =
+      startup_metric_utils::GetCommon().MainEntryPointTicks();
   if (startup_time.is_null()) {
     return;
   }
@@ -545,6 +546,9 @@ void LoginDisplayHostMojo::ShowGaiaDialog(const AccountId& prefilled_account) {
   ShowGaiaDialogCommon(prefilled_account);
 
   ShowDialog();
+  // Refresh wallpaper once OobeDialogState is propagated after showing the
+  // dialog.
+  UpdateWallpaper(prefilled_account);
 }
 
 void LoginDisplayHostMojo::ShowOsInstallScreen() {
@@ -578,12 +582,13 @@ void LoginDisplayHostMojo::HideOobeDialog(bool saml_page_closed) {
   }
 
   user_selection_screen_->OnBeforeShow();
-  LoadWallpaper(focused_pod_account_id_);
   if (features::IsInputDeviceSettingsSplitEnabled()) {
     InputDeviceSettingsController::Get()->OnLoginScreenFocusedPodChanged(
         focused_pod_account_id_);
   }
   HideDialog();
+  // Update wallpaper once a new OobeDialogState is propagated.
+  UpdateWallpaper(focused_pod_account_id_);
 
   // If the OOBE dialog was hidden due to closing of the SAML page (camera
   // timeout or ESC button) and there are no user pods and the user isn't using
@@ -711,11 +716,8 @@ void LoginDisplayHostMojo::HandleAuthenticateUserWithPasswordOrPin(
                                              .id());
 
   if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY) {
-    if (user_context.GetUserType() !=
-        user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY) {
-      LOG(FATAL) << "Incorrect Active Directory user type "
-                 << user_context.GetUserType();
-    }
+    LOG(FATAL) << "Incorrect Active Directory user type "
+               << user_context.GetUserType();
     user_context.SetIsUsingOAuth(false);
   }
 

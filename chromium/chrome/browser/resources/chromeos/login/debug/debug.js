@@ -6,9 +6,7 @@
  * @fileoverview Root element of the OOBE UI Debugger.
  */
 
-import {addSingletonGetter} from '//resources/ash/common/cr_deprecated.js';
 import {MessageType, ProblemType} from '//resources/ash/common/quick_unlock/setup_pin_keyboard.js';
-import { QuickStartUIState } from '../screens/oobe/quick_start.js';
 import {$} from '//resources/ash/common/util.js';
 
 import {AssistantNativeIconType} from '../../assistant_optin/utils.js';
@@ -286,9 +284,9 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
           id: 'success',
           trigger: (screen) => {
             screen.updateCountdownString(
-                'Your device will shut down in 60 seconds. Remove the USB \
-                 before turning your device back on. Then you can start using \
-                 ChromeOS Flex.');
+                'Your device will shut down in 60 seconds. Remove the USB' +
+                ' before turning your device back on. Then you can start' +
+                ' using ChromeOS Flex.');
             screen.showStep('success');
           },
         },
@@ -362,6 +360,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'consumer-update',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'auto-enrollment-check',
       kind: ScreenKind.NORMAL,
     },
@@ -402,6 +404,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'add-child',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'offline-ad-login',
       kind: ScreenKind.NORMAL,
       // Remove this step from preview here, because it can only occur during
@@ -438,28 +444,17 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'enterprise-enrollment',
       kind: ScreenKind.NORMAL,
-      defaultState: 'step-signin',
-      handledSteps: 'error,ad-join',
+      handledSteps: 'error',
       suffix: 'E',
+      data: {
+        gaiaPath: 'embedded/setup/v2/chromeos',
+        gaiaUrl: 'https://accounts.google.com/',
+      },
       states: [
         {
           id: 'error',
           trigger: (screen) => {
             screen.showError('Some error message', true);
-          },
-        },
-        {
-          id: 'ad-join-encrypted',
-          trigger: (screen) => {
-            screen.setAdJoinParams('machineName', 'userName', 0, true);
-            screen.showStep('ad-join');
-          },
-        },
-        {
-          id: 'ad-join',
-          trigger: (screen) => {
-            screen.setAdJoinParams('machineName', 'userName', 0, false);
-            screen.showStep('ad-join');
           },
         },
       ],
@@ -668,10 +663,23 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'gaia-signin',
       kind: ScreenKind.NORMAL,
-      handledSteps: 'allowlist-error',
+      handledSteps: 'online-gaia,allowlist-error',
       states: [
         {
-          id: 'allowlist-customer',
+          id: 'online-gaia',
+          trigger: (screen) => {
+            screen.loadAuthExtension({
+              chromeType: 'chromedevice',
+              enterpriseManagedDevice: false,
+              forceReload: true,
+              gaiaPath: 'embedded/setup/v2/chromeos',
+              gaiaUrl: 'https://accounts.google.com/',
+              hl: loadTimeData.getString('app_locale'),
+            });
+          },
+        },
+        {
+          id: 'allowlist-error',
           trigger: (screen) => {
             screen.showAllowlistCheckFailedError({
               enterpriseManaged: false,
@@ -847,6 +855,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
           },
         },
       ],
+    },
+    {
+      id: 'local-password-setup',
+      kind: ScreenKind.NORMAL,
     },
     {
       id: 'saml-confirm-password',
@@ -1358,6 +1370,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       ],
     },
     {
+      id: 'password-selection',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'arc-vm-data-migration',
       kind: ScreenKind.NORMAL,
     },
@@ -1730,7 +1746,8 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'quick-start',
       kind: ScreenKind.NORMAL,
-      handledSteps: 'verification,connecting_to_wifi,connected_to_wifi,gaia_credentials,fido_assertion_received',
+      handledSteps:
+          'verification,connecting_to_wifi,connected_to_wifi,gaia_credentials,fido_assertion_received',
       states: [
         {
           id: 'PinVerification',
@@ -1855,6 +1872,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.knownScreens = undefined;
       /** Iterator for making a series of screenshots */
       this.commandIterator_ = undefined;
+    }
+
+    get currentScreenId() {
+      return this.currentScreenId_;
     }
 
     showDebugUI() {
@@ -2146,8 +2167,8 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.currentScreenId_ = screenId;
       this.lastScreenState_ = stateId;
       /** @suppress {visibility} */
-      const displayManager = Oobe.instance_;
-      Oobe.instance_.showScreen({id: screen.id, data: data});
+      const displayManager = Oobe.getInstance();
+      displayManager.showScreen({id: screen.id, data: data});
       if (state.trigger) {
         state.trigger(displayManager.currentScreen);
       }
@@ -2161,7 +2182,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.knownScreens = [];
       this.screenButtons = {};
       /** @suppress {visibility} */
-      for (var id of Oobe.instance_.screens_) {
+      for (var id of Oobe.getInstance().screens_) {
         if (id in this.screenMap) {
           const screenDef = this.screenMap[id];
           const screenElement = $(id);
@@ -2232,7 +2253,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
         this.createScreensList();
       }
       /** @suppress {visibility} */
-      const displayManager = Oobe.instance_;
+      const displayManager = Oobe.getInstance();
       if (this.stateCachedFor_) {
         this.screenButtons[this.stateCachedFor_].element.classList.remove(
             'debug-button-selected');
@@ -2325,6 +2346,12 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       element.appendChild(this.debuggerButton_);
       element.appendChild(this.debuggerOverlay_);
     }
+
+    /** @return {!DebuggerUI} */
+    static getInstance() {
+      return instance || (instance = new DebuggerUI());
+    }
   }
 
-  addSingletonGetter(DebuggerUI);
+  /** @type {?DebuggerUI} */
+  let instance = null;

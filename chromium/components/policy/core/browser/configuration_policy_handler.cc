@@ -377,6 +377,42 @@ void SimplePolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
     prefs->SetValue(pref_path_, value->Clone());
 }
 
+// SimplePolicyHandler implementation ------------------------------------------
+
+PolicyWithDependencyHandler::PolicyWithDependencyHandler(
+    const char* required_policy_name,
+    std::unique_ptr<NamedPolicyHandler> handler)
+    : NamedPolicyHandler(handler->policy_name()),
+      required_policy_name_(required_policy_name),
+      handler_(std::move(handler)) {}
+
+PolicyWithDependencyHandler::~PolicyWithDependencyHandler() = default;
+
+bool PolicyWithDependencyHandler::CheckPolicySettings(const PolicyMap& policies,
+                                                      PolicyErrorMap* errors) {
+  // It is safe to use `GetValueUnsafe()` as multiple policy types are handled.
+  const base::Value* required_value =
+      policies.GetValueUnsafe(required_policy_name_);
+  if (!required_value) {
+    errors->AddError(policy_name(), IDS_POLICY_DEPENDENCY_ERROR_ANY_VALUE,
+                     required_policy_name_);
+    return false;
+  }
+  return handler_->CheckPolicySettings(policies, errors);
+}
+
+void PolicyWithDependencyHandler::ApplyPolicySettingsWithParameters(
+    const policy::PolicyMap& policies,
+    const policy::PolicyHandlerParameters& parameters,
+    PrefValueMap* prefs) {
+  handler_->ApplyPolicySettingsWithParameters(policies, parameters, prefs);
+}
+
+void PolicyWithDependencyHandler::ApplyPolicySettings(
+    const policy::PolicyMap& /* policies */,
+    PrefValueMap* /* prefs */) {
+  NOTREACHED();
+}
 // SchemaValidatingPolicyHandler implementation --------------------------------
 
 SchemaValidatingPolicyHandler::SchemaValidatingPolicyHandler(
@@ -755,6 +791,15 @@ void SimpleDeprecatingPolicyHandler::ApplyPolicySettings(
 
 // CloudOnlyPolicyHandler implementation ---------------------------------------
 
+namespace {
+
+bool IsCloudOnlyPolicy(const policy::PolicyMap::Entry& policy) {
+  return policy.source == policy::POLICY_SOURCE_CLOUD ||
+         policy.source == policy::POLICY_SOURCE_CLOUD_FROM_ASH;
+}
+
+}  // namespace
+
 CloudOnlyPolicyHandler::CloudOnlyPolicyHandler(const char* policy_name,
                                                Schema schema,
                                                SchemaOnErrorStrategy strategy)
@@ -762,21 +807,39 @@ CloudOnlyPolicyHandler::CloudOnlyPolicyHandler(const char* policy_name,
 
 CloudOnlyPolicyHandler::~CloudOnlyPolicyHandler() = default;
 
-bool CloudOnlyPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
-                                                 PolicyErrorMap* errors) {
-  const policy::PolicyMap::Entry* policy = policies.Get(policy_name());
-
+// static
+bool CloudOnlyPolicyHandler::CheckCloudOnlyPolicySettings(
+    const char* policy_name,
+    const PolicyMap& policies,
+    PolicyErrorMap* errors) {
+  const PolicyMap::Entry* policy = policies.Get(policy_name);
   if (!policy) {
     return true;
   }
 
-  if (policy->source != policy::POLICY_SOURCE_CLOUD &&
-      policy->source != policy::POLICY_SOURCE_CLOUD_FROM_ASH) {
-    errors->AddError(policy_name(), IDS_POLICY_CLOUD_SOURCE_ONLY_ERROR);
+  // If the policy source is POLICY_SOURCE_MERGED, it is still cloud-only if all
+  // policy values merged into it are cloud-only.
+  if (policy->source == policy::POLICY_SOURCE_MERGED) {
+    for (const auto& conflict : policy->conflicts) {
+      if (!IsCloudOnlyPolicy(conflict.entry())) {
+        errors->AddError(policy_name, IDS_POLICY_CLOUD_SOURCE_ONLY_ERROR);
+        return false;
+      }
+    }
+  } else if (!IsCloudOnlyPolicy(*policy)) {
+    errors->AddError(policy_name, IDS_POLICY_CLOUD_SOURCE_ONLY_ERROR);
     return false;
   }
 
-  return SchemaValidatingPolicyHandler::CheckPolicySettings(policies, errors);
+  return true;
+}
+
+bool CloudOnlyPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
+                                                 PolicyErrorMap* errors) {
+  return CheckCloudOnlyPolicySettings(policy_name(), policies, errors)
+             ? SchemaValidatingPolicyHandler::CheckPolicySettings(policies,
+                                                                  errors)
+             : false;
 }
 
 }  // namespace policy

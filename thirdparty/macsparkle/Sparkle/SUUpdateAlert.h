@@ -18,18 +18,12 @@
 @protocol SUUpdateAlertDelegate;
 
 @class SUAppcastItem, SPUDownloadData, SUHost;
-@interface SUUpdateAlert : NSWindowController
+SPU_OBJC_DIRECT_MEMBERS @interface SUUpdateAlert : NSWindowController
 
-@property (nonatomic, weak, readonly) id <SUVersionDisplay> versionDisplayer;
-
-- (instancetype)initWithAppcastItem:(SUAppcastItem *)item state:(SPUUserUpdateState *)state host:(SUHost *)aHost versionDisplayer:(id <SUVersionDisplay>)aVersionDisplayer completionBlock:(void (^)(SPUUserUpdateChoice, NSRect, BOOL))completionBlock didBecomeKeyBlock:(void (^)(void))didBecomeKeyBlock;
+- (instancetype)initWithAppcastItem:(SUAppcastItem *)item state:(SPUUserUpdateState *)state host:(SUHost *)aHost versionDisplayer:(id<SUVersionDisplay>)versionDisplayer completionBlock:(void (^)(SPUUserUpdateChoice, NSRect, BOOL))completionBlock didBecomeKeyBlock:(void (^)(void))didBecomeKeyBlock;
 
 - (void)showUpdateReleaseNotesWithDownloadData:(SPUDownloadData *)downloadData;
 - (void)showReleaseNotesFailedToDownload;
-
-- (IBAction)installUpdate:sender;
-- (IBAction)skipThisVersion:sender;
-- (IBAction)remindMeLater:sender;
 
 - (void)setInstallButtonFocus:(BOOL)focus;
 

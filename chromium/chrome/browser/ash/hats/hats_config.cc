@@ -215,13 +215,14 @@ const HatsConfig kHatsPeripheralsSurvey = {
     prefs::kHatsPeripheralsCycleEndTs,  // cycle_end_timestamp_pref_name
 };
 
-// Privacy Hub Baseline experience survey -- shown 40 seconds after the user
-// leaves the Security and Privacy page.
-const HatsConfig kPrivacyHubBaselineSurvey = {
-    ::features::kHappinessTrackingPrivacyHubBaseline,  // feature
-    base::Days(1),                                     // new_device_threshold
-    prefs::kHatsPrivacyHubBaselineIsSelected,          // is_selected_pref_name
-    prefs::kHatsPrivacyHubBaselineCycleEndTs,  // cycle_end_timestamp_pref_name
+// Privacy Hub post launch experience survey -- shown 40 seconds after the user
+// leaves the Privacy controls page after staying there for 5 seconds.
+const HatsConfig kPrivacyHubPostLaunchSurvey = {
+    ::features::kHappinessTrackingPrivacyHubPostLaunch,  // feature
+    base::Days(1),                                       // new_device_threshold
+    prefs::kHatsPrivacyHubPostLaunchIsSelected,  // is_selected_pref_name
+    prefs::
+        kHatsPrivacyHubPostLaunchCycleEndTs,  // cycle_end_timestamp_pref_name
 };
 
 // OS Settings Survey -- shown [5-30] seconds after a user removes focus from
@@ -241,6 +242,9 @@ const HatsConfig kHatsBorealisGamesSurvey = {
     base::Days(1),                                // new_device_threshold
     prefs::kHatsBorealisGamesSurveyIsSelected,    // is_selected_pref_name
     prefs::kHatsBorealisGamesSurveyCycleEndTs,  // cycle_end_timestamp_pref_name
+    prefs::kHatsBorealisGamesLastInteractionTimestamp,
+    // survey_last_interaction_timestamp_pref_name
+    base::Days(7),  // threshold_time
 };
 
 }  // namespace ash

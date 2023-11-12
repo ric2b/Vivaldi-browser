@@ -2,6 +2,7 @@
 
 #import "ios/ad_blocker/adblock_content_rule_list_provider.h"
 
+#import <set>
 #import <vector>
 
 #import <Foundation/Foundation.h>
@@ -18,10 +19,6 @@
 #import "ios/web/public/browser_state.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider_observer.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace adblock_filter {
 
@@ -41,7 +38,7 @@ class AdBlockerContentRuleListProviderImpl
       web::BrowserState* browser_state,
       RuleGroup group,
       base::OnceClosure on_loaded,
-      base::RepeatingClosure rules_applied);
+      base::RepeatingClosure on_done_applying_rules);
   ~AdBlockerContentRuleListProviderImpl() override;
   AdBlockerContentRuleListProviderImpl(
       const AdBlockerContentRuleListProviderImpl&) = delete;
@@ -51,6 +48,9 @@ class AdBlockerContentRuleListProviderImpl
   // Implementing AdBlockerContentRuleListProvider
   void InstallContentRuleLists(const base::Value::List& lists) override;
   void ApplyLoadedRules() override { ApplyContentRuleLists(); }
+  bool IsApplyingRules() override {
+    return !list_application_in_progress_stamps_.empty();
+  }
 
  private:
   // Implementing WKWebViewConfigurationProviderObserver
@@ -60,6 +60,7 @@ class AdBlockerContentRuleListProviderImpl
 
   void RemoveInstalledLists();
   void DoInstallContentRuleLists(
+      int64_t rule_list_timestamp,
       std::vector<WKContentRuleList*> content_rule_lists);
   void ApplyContentRuleLists();
 
@@ -67,7 +68,8 @@ class AdBlockerContentRuleListProviderImpl
   RuleGroup group_;
   __weak WKUserContentController* user_content_controller_;
   std::vector<WKContentRuleList*> installed_content_rule_lists_;
-  base::RepeatingClosure on_rules_applied_;
+  std::set<int64_t> list_application_in_progress_stamps_;
+  base::RepeatingClosure on_done_applying_rules_;
 
   base::WeakPtrFactory<AdBlockerContentRuleListProviderImpl> weak_ptr_factory_{
       this};
@@ -77,10 +79,10 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
     web::BrowserState* browser_state,
     RuleGroup group,
     base::OnceClosure on_loaded,
-    base::RepeatingClosure on_rules_applied)
+    base::RepeatingClosure on_done_applying_rules)
     : browser_state_(browser_state),
       group_(group),
-      on_rules_applied_(std::move(on_rules_applied)) {
+      on_done_applying_rules_(std::move(on_done_applying_rules)) {
   web::WKWebViewConfigurationProvider& config_provider =
       web::WKWebViewConfigurationProvider::FromBrowserState(browser_state_);
   DidCreateNewConfiguration(&config_provider,
@@ -129,24 +131,32 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
     const base::Value::List& lists) {
   if (lists.empty()) {
     RemoveInstalledLists();
-    on_rules_applied_.Run();
+    list_application_in_progress_stamps_.clear();
+    on_done_applying_rules_.Run();
     return;
   }
+
+  int64_t timestamp =
+      base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds();
+  list_application_in_progress_stamps_.insert(timestamp);
+  std::string string_timestamp = base::NumberToString(timestamp);
 
   __block auto compile_and_apply = base::BarrierCallback<WKContentRuleList*>(
       lists.size(),
       base::BindOnce(
           &AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists,
-          weak_ptr_factory_.GetWeakPtr()));
+          weak_ptr_factory_.GetWeakPtr(), timestamp));
 
+  int list_index = 0;
   for (const auto& list : lists) {
     DCHECK(list.is_string());
     std::string list_name(kListNamePrefix);
     list_name.append(
         std::string(kListNameGroupPrefix[static_cast<size_t>(group_)]));
 
-    list_name.append(base::NumberToString(
-        base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds()));
+    list_name.append(string_timestamp);
+    list_name.append("_");
+    list_name.append(base::NumberToString(list_index++));
 
     [WKContentRuleListStore.defaultStore
         compileContentRuleListForIdentifier:
@@ -172,15 +182,33 @@ void AdBlockerContentRuleListProviderImpl::DidCreateNewConfiguration(
 }
 
 void AdBlockerContentRuleListProviderImpl::DoInstallContentRuleLists(
+    int64_t rule_list_timestamp,
     std::vector<WKContentRuleList*> content_rule_lists) {
   base::EraseIf(content_rule_lists,
                 [](const WKContentRuleList* content_rule_list) {
                   return content_rule_list == nullptr;
                 });
+  if (list_application_in_progress_stamps_.count(rule_list_timestamp) == 0) {
+    // This list was removed from the list of lists to apply, probably because
+    // of a request to remove all lists. Just get rid of the compilation result
+    for (auto* content_rule_list : content_rule_lists) {
+      [WKContentRuleListStore.defaultStore
+          removeContentRuleListForIdentifier:content_rule_list.identifier
+                           completionHandler:^(NSError* error) {
+                             if (error) {
+                               DLOG(WARNING) << "Failed removing rule list";
+                             }
+                           }];
+    }
+    return;
+  }
+
   RemoveInstalledLists();
   installed_content_rule_lists_.swap(content_rule_lists);
   ApplyContentRuleLists();
-  on_rules_applied_.Run();
+  list_application_in_progress_stamps_.erase(rule_list_timestamp);
+  if (list_application_in_progress_stamps_.empty())
+    on_done_applying_rules_.Run();
 }
 
 void AdBlockerContentRuleListProviderImpl::RemoveInstalledLists() {
@@ -211,9 +239,9 @@ AdBlockerContentRuleListProvider::Create(
     web::BrowserState* browser_state,
     RuleGroup group,
     base::OnceClosure on_loaded,
-    base::RepeatingClosure on_rules_applied) {
+    base::RepeatingClosure on_done_applying_rules) {
   return std::make_unique<AdBlockerContentRuleListProviderImpl>(
-      browser_state, group, std::move(on_loaded), on_rules_applied);
+      browser_state, group, std::move(on_loaded), on_done_applying_rules);
 }
 
 }  // namespace adblock_filter

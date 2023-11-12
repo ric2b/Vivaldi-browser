@@ -2,6 +2,25 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="1063263220330818888">Ricerca privata</translation>
+<translation id="1137850887415122856">Per bloccare le tue schede private, imposta Touch ID, Face ID o un Passcode.</translation>
+<translation id="1310184829257917508">Chiedi di aprire link da altre app in modalità privata</translation>
 <translation id="1512201558627495343">Nuova scheda privata</translation>
+<translation id="1786453623676543866">Inizia una ricerca in una nuova scheda di Vivaldi.</translation>
+<translation id="207677936531967364">Pagina nuova scheda privata</translation>
+<translation id="3372807273343182542">Apri indirizzi in Vivaldi in modalità privata</translation>
+<translation id="3473652525653758699">Nuova finestra privata</translation>
+<translation id="3501504415290398157">Usa <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> per sbloccare le tue schede private.</translation>
+<translation id="3692650606013198282">Apri in modalità privata</translation>
+<translation id="3709782636417497984">Apri in nuova scheda privata</translation>
+<translation id="3981599532037327317">Apri ${url} in privato</translation>
+<translation id="4755216899422789286">Apri indirizzi in Vivaldi</translation>
+<translation id="6233792867654386826">Apre gli indirizzi inseriti in Vivaldi.</translation>
 <translation id="6827597288286078054">Ricerca privata</translation>
+<translation id="7175743738896712454">Apre gli indirizzi inseriti in Vivaldi in modalità privata.</translation>
+<translation id="7307970171564921489">Sblocca schede private con <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Apri in modalità privata?</translation>
+<translation id="7549299604720382000">Nuova scheda privata</translation>
+<translation id="8326104954595890674">Nuova scheda privata</translation>
+<translation id="8763006697839582351">Apri in Vivaldi in modalità privata</translation>
+<translation id="9060728682512999830">Cerca in Vivaldi</translation>
 </translationbundle>

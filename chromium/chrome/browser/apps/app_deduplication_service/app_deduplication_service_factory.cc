@@ -8,7 +8,6 @@
 #include "chrome/browser/apps/app_deduplication_service/app_deduplication_service.h"
 #include "chrome/browser/apps/app_deduplication_service/app_deduplication_service_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
@@ -73,13 +72,14 @@ AppDeduplicationServiceFactory::AppDeduplicationServiceFactory()
 
 AppDeduplicationServiceFactory::~AppDeduplicationServiceFactory() = default;
 
-KeyedService* AppDeduplicationServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+AppDeduplicationServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* const profile = Profile::FromBrowserContext(context);
   if (!IsAppDeduplicationServiceAvailableForProfile(profile)) {
     return nullptr;
   }
-  return new AppDeduplicationService(profile);
+  return std::make_unique<AppDeduplicationService>(profile);
 }
 
 content::BrowserContext* AppDeduplicationServiceFactory::GetBrowserContextToUse(

@@ -1,7 +1,6 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
 source_set("vivaldi_modal_page") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "modal_page_commands.h",
     "modal_page_coordinator.h",

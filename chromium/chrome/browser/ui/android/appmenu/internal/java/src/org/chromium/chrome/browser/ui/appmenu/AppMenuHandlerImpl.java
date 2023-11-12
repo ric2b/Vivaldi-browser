@@ -352,13 +352,11 @@ class AppMenuHandlerImpl
         return true;
     }
 
-    @VisibleForTesting
     void overrideOnOptionItemSelectedListenerForTests(
             Callback<Integer> onOptionsItemSelectedListener) {
         mTestOptionsItemSelectedListener = onOptionsItemSelectedListener;
     }
 
-    @VisibleForTesting
     AppMenuPropertiesDelegate getDelegateForTests() {
         return mDelegate;
     }

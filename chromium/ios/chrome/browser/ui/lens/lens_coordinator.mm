@@ -48,10 +48,6 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using lens::CameraOpenEntryPoint;
 
 @interface LensCoordinator () <ChromeLensControllerDelegate,
@@ -340,13 +336,12 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
 #pragma mark - WebStateListObserving methods
 
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
-  if (self.lensWebPageLoadTriggeredFromInputSelection) {
-    self.loadingWebState = newWebState;
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                       status:(const WebStateListStatus&)status {
+  if (status.active_web_state_change() &&
+      self.lensWebPageLoadTriggeredFromInputSelection) {
+    self.loadingWebState = status.new_active_web_state;
   }
 }
 

@@ -9,7 +9,9 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
+#include "build/buildflag.h"
 #include "media/base/decoder_buffer.h"
+#include "media/gpu/buildflags.h"
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -484,9 +486,16 @@ bool VP9Validator::Validate(const DecoderBuffer& decoder_buffer,
       return false;
     }
     if (!header.refresh_frame_context) {
+#if BUILDFLAG(USE_VAAPI)
+      // TODO(b/297226972): Remove the workaround once the iHD driver is fixed.
+      LOG(WARNING)
+          << "Frame context should be refreshed if neither spatial nor "
+             "nor temporal scalablity is enabled";
+#else
       LOG(ERROR) << "Frame context should be refreshed if neither spatial nor "
                     "nor temporal scalablity is enabled";
       return false;
+#endif  // BUILDFLAG(USE_VAAPI)
     }
     new_buffer_state.picture_id = next_picture_id_++;
   }
@@ -696,13 +705,13 @@ bool AV1Validator::Validate(const DecoderBuffer& decoder_buffer,
   }
 
   const auto& frame_header = av1_parser.frame_header();
-  if (frame_header.width != visible_rect_.width() ||
-      frame_header.height != visible_rect_.height()) {
-    LOG(ERROR) << "Mismatched frame dimensions.";
-    LOG(ERROR) << "Got width=" << frame_header.width
-               << " height=" << frame_header.height;
-    LOG(ERROR) << "Expected width=" << visible_rect_.width()
-               << " height=" << visible_rect_.height();
+  if (gfx::Size(frame_header.render_width, frame_header.render_height) !=
+      visible_rect_.size()) {
+    LOG(ERROR) << "Mismatched visible rectangle dimensions.";
+    LOG(ERROR) << "Got render_width=" << frame_header.render_width
+               << " render_height=" << frame_header.render_height;
+    LOG(ERROR) << "Expected visible_width=" << visible_rect_.width()
+               << " visible_height=" << visible_rect_.height();
     return false;
   }
 

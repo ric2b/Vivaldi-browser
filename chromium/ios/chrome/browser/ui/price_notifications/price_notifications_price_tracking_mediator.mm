@@ -27,10 +27,6 @@
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // The histogram used to record a product's new tracking state when a user
 // initates a state change.
@@ -298,7 +294,7 @@ using PriceNotificationItems =
       item.entryURL,
       base::BindOnce(^(
           const GURL& productURL,
-          const absl::optional<commerce::ProductInfo>& productInfo) {
+          const absl::optional<const commerce::ProductInfo>& productInfo) {
         PriceNotificationsPriceTrackingMediator* strongSelf = weakSelf;
         if (!strongSelf) {
           return;
@@ -372,7 +368,7 @@ using PriceNotificationItems =
       currentSiteURL,
       base::BindOnce(
           ^(const GURL& productURL,
-            const absl::optional<commerce::ProductInfo>& productInfo) {
+            const absl::optional<const commerce::ProductInfo>& productInfo) {
             PriceNotificationsPriceTrackingMediator* strongSelf = weakSelf;
             if (!strongSelf) {
               return;

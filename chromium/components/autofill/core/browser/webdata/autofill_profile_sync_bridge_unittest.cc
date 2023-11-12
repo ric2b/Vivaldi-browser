@@ -169,11 +169,8 @@ AutofillProfile ConstructCompleteProfile() {
   profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE, u"CEDEX");
   profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY, u"Santa Clara");
   profile.SetRawInfo(ADDRESS_HOME_STREET_NAME, u"Street Name");
-  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_STREET_NAME,
-                     u"Dependent Street Name");
   profile.SetRawInfo(ADDRESS_HOME_HOUSE_NUMBER, u"House Number");
   profile.SetRawInfo(ADDRESS_HOME_SUBPREMISE, u"Subpremise");
-  profile.SetRawInfo(ADDRESS_HOME_PREMISE_NAME, u"Premise");
   profile.set_language_code("en");
   profile.FinalizeAfterImport();
   return profile;
@@ -242,11 +239,8 @@ AutofillProfileSpecifics ConstructCompleteSpecifics() {
   specifics.set_address_home_language_code("en");
 
   specifics.set_address_home_thoroughfare_name("Street Name");
-  specifics.set_address_home_dependent_thoroughfare_name(
-      "Dependent Street Name");
   specifics.set_address_home_thoroughfare_number("House Number");
   specifics.set_address_home_subpremise_name("Subpremise");
-  specifics.set_address_home_premise_name("Premise");
 
   specifics.set_validity_state_bitfield(kValidityStateBitfield);
   return specifics;
@@ -387,7 +381,7 @@ TEST_F(AutofillProfileSyncBridgeTest, AutofillProfileChanged_Added) {
   AutofillProfile local(kGuidA);
   local.SetRawInfo(NAME_FIRST, u"Jane");
   local.FinalizeAfterImport();
-  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, &local);
+  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, local);
 
   EXPECT_CALL(
       mock_processor(),
@@ -406,7 +400,7 @@ TEST_F(AutofillProfileSyncBridgeTest,
 
   AutofillProfile local(kGuidA);
   local.set_language_code("en");
-  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, &local);
+  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, local);
 
   EXPECT_CALL(
       mock_processor(),
@@ -424,7 +418,7 @@ TEST_F(AutofillProfileSyncBridgeTest,
   StartSyncing({});
 
   AutofillProfile local(kGuidA);
-  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, &local);
+  AutofillProfileChange change(AutofillProfileChange::ADD, kGuidA, local);
 
   EXPECT_CALL(
       mock_processor(),
@@ -442,7 +436,7 @@ TEST_F(AutofillProfileSyncBridgeTest, AutofillProfileChanged_Updated) {
 
   AutofillProfile local(kGuidA);
   local.SetRawInfo(NAME_FIRST, u"Jane");
-  AutofillProfileChange change(AutofillProfileChange::UPDATE, kGuidA, &local);
+  AutofillProfileChange change(AutofillProfileChange::UPDATE, kGuidA, local);
 
   EXPECT_CALL(
       mock_processor(),
@@ -472,7 +466,7 @@ TEST_F(AutofillProfileSyncBridgeTest,
   local.set_language_code("en");
   local.set_use_count(10U);
   local.set_use_date(base::Time::FromTimeT(30));
-  AutofillProfileChange change(AutofillProfileChange::UPDATE, kGuidA, &local);
+  AutofillProfileChange change(AutofillProfileChange::UPDATE, kGuidA, local);
 
   EXPECT_CALL(
       mock_processor(),
@@ -491,7 +485,7 @@ TEST_F(AutofillProfileSyncBridgeTest,
 
   AutofillProfile server_profile(AutofillProfile::SERVER_PROFILE, "server-id");
   AutofillProfileChange change(AutofillProfileChange::UPDATE,
-                               server_profile.guid(), &server_profile);
+                               server_profile.guid(), server_profile);
 
   EXPECT_CALL(mock_processor(), Put).Times(0);
   // Should not crash.
@@ -503,7 +497,7 @@ TEST_F(AutofillProfileSyncBridgeTest, AutofillProfileChanged_Deleted) {
 
   AutofillProfile local(kGuidB);
   local.SetRawInfo(NAME_FIRST, u"Jane");
-  AutofillProfileChange change(AutofillProfileChange::REMOVE, kGuidB, &local);
+  AutofillProfileChange change(AutofillProfileChange::REMOVE, kGuidB, local);
   EXPECT_CALL(mock_processor(), Delete(kGuidB, _));
   // The bridge does not need to commit when reacting to a notification about a
   // local change.
@@ -519,7 +513,7 @@ TEST_F(AutofillProfileSyncBridgeTest,
 
   AutofillProfile server_profile(AutofillProfile::SERVER_PROFILE, "server-id");
   AutofillProfileChange change(AutofillProfileChange::REMOVE,
-                               server_profile.guid(), &server_profile);
+                               server_profile.guid(), server_profile);
 
   EXPECT_CALL(mock_processor(), Put).Times(0);
   // Should not crash.

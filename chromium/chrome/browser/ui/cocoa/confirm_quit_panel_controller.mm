@@ -22,10 +22,6 @@
 
 #include "app/vivaldi_commands.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Constants ///////////////////////////////////////////////////////////////////
 
 // Leeway between the |targetDate| and the current time that will confirm a
@@ -151,11 +147,15 @@ const NSTimeInterval kTimeDeltaFuzzFactor = 1.0;
 - (void)sendAccessibilityAnnouncement;
 @end
 
-ConfirmQuitPanelController* g_confirmQuitPanelController = nil;
+ConfirmQuitPanelController* __strong g_confirmQuitPanelController = nil;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-@implementation ConfirmQuitPanelController
+@implementation ConfirmQuitPanelController {
+ @private
+  // The content view of the window that this controller manages.
+  ConfirmQuitFrameView* __weak _contentView;
+}
 
 + (ConfirmQuitPanelController*)sharedController {
   if (!g_confirmQuitPanelController) {

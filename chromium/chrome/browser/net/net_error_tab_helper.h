@@ -102,6 +102,8 @@ class NetErrorTabHelper
 #if BUILDFLAG(IS_CHROMEOS)
   void ShowPortalSignin() override;
 #endif
+  // Vivaldi.
+  void OpenVivaldia() override;
 
  protected:
   // |contents| is the WebContents of the tab this NetErrorTabHelper is

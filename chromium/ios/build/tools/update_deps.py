@@ -64,12 +64,16 @@ GRIT_TARGET_MESSAGE_DETAILS = "Automatically replacing:\n  %s\nby:\n  %s\n"
 CANONICAL_PUBLIC_TARGETS = {
     "//ios/chrome/app/strings:ios_strings_grit":
     "//ios/chrome/app/strings:strings",
-    "//ios/chrome/app/strings:ios_google_chrome_strings_grit":
-    "//ios/chrome/app/strings:strings",
     "//ios/chrome/app/strings:ios_chromium_strings_grit":
     "//ios/chrome/app/strings:strings",
     "//components/strings:components_strings_grit":
     "//components/strings:strings",
+    "//components/sessions:shared":
+    "//components/sessions:sessions",
+    "//base/numerics:base_numerics":
+    "//base:base",
+    "//third_party/abseil-cpp/absl/types:optional":
+    "//base:base",
 }
 
 

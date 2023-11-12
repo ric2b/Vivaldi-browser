@@ -4,7 +4,7 @@
 
 #include "chrome/browser/browser_process_platform_part_mac.h"
 
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #import "chrome/browser/app_controller_mac.h"
@@ -15,18 +15,9 @@
 #include "chrome/browser/chrome_browser_application_mac.h"
 #include "services/device/public/cpp/geolocation/system_geolocation_source_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 BrowserProcessPlatformPart::BrowserProcessPlatformPart() = default;
 
 BrowserProcessPlatformPart::~BrowserProcessPlatformPart() = default;
-
-void BrowserProcessPlatformPart::BeginStartTearDown() {
-  if (app_shim_manager_)
-    app_shim_manager_->OnBeginTearDown();
-}
 
 void BrowserProcessPlatformPart::StartTearDown() {
   app_shim_listener_ = nullptr;

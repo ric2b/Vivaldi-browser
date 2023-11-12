@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 
 #import "ui/base/clipboard/clipboard_mac.h"
-#include "base/test/test_future.h"
 
 #import <AppKit/AppKit.h>
+#import <PDFKit/PDFKit.h>
 
 #include <vector>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/feature_list.h"
 #include "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/scoped_feature_list.h"
@@ -24,20 +24,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/skia_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-@interface RedView : NSView
-@end
-@implementation RedView
-- (void)drawRect:(NSRect)dirtyRect {
-  [NSColor.redColor setFill];
-  NSRectFill(dirtyRect);
-  [super drawRect:dirtyRect];
-}
-@end
 
 namespace ui {
 
@@ -74,13 +60,13 @@ class ClipboardMacTest : public PlatformTest,
     // loses its "retina-ness".
     uint8_t* buffer =
         static_cast<uint8_t*>(calloc(pixel_width * pixel_height, 4));
-    base::ScopedCFTypeRef<CGDataProviderRef> provider(
+    base::apple::ScopedCFTypeRef<CGDataProviderRef> provider(
         CGDataProviderCreateWithData(buffer, buffer,
                                      (pixel_width * pixel_height * 4),
                                      &CreateImageBufferReleaser));
-    base::ScopedCFTypeRef<CGColorSpaceRef> color_space(
+    base::apple::ScopedCFTypeRef<CGColorSpaceRef> color_space(
         CGColorSpaceCreateWithName(kCGColorSpaceSRGB));
-    base::ScopedCFTypeRef<CGImageRef> image_ref(
+    base::apple::ScopedCFTypeRef<CGImageRef> image_ref(
         CGImageCreate(pixel_width, pixel_height, 8, 32, 4 * pixel_width,
                       color_space.get(), kCGBitmapByteOrderDefault,
                       provider.get(), nullptr, NO, kCGRenderingIntentDefault));
@@ -160,16 +146,15 @@ TEST_P(ClipboardMacTest, EmptyImage) {
 TEST_P(ClipboardMacTest, PDFImage) {
   int32_t width = 99;
   int32_t height = 101;
-  NSRect frame = NSMakeRect(0, 0, width, height);
-
-  // This seems like a round-about way of getting a NSPDFImageRep to shove into
-  // an NSPasteboard. However, I haven't found any other way of generating a
-  // "PDF" image that makes NSPasteboard happy.
-  NSView* v = [[RedView alloc] initWithFrame:frame];
-  NSData* data = [v dataWithPDFInsideRect:frame];
+  PDFPage* page = [[PDFPage alloc] init];
+  [page setBounds:NSMakeRect(0, 0, width, height)
+           forBox:kPDFDisplayBoxMediaBox];
+  PDFDocument* pdf_document = [[PDFDocument alloc] init];
+  [pdf_document insertPage:page atIndex:0];
+  NSData* pdf_data = [pdf_document dataRepresentation];
 
   scoped_refptr<UniquePasteboard> pasteboard = new UniquePasteboard;
-  [pasteboard->get() setData:data forType:NSPasteboardTypePDF];
+  [pasteboard->get() setData:pdf_data forType:NSPasteboardTypePDF];
 
   Clipboard* clipboard = Clipboard::GetForCurrentThread();
   ClipboardMac* clipboard_mac = static_cast<ClipboardMac*>(clipboard);

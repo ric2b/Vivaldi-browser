@@ -53,6 +53,7 @@ enum class PrerenderCrossOriginRedirectionMismatch {
 // some explanations can be attached to the status.
 class PrerenderCancellationReason {
  public:
+  // Tagged by `final_status_`. See `BuildFor*` and `ToDevtoolReasonString`.
   using DetailedReasonVariant =
       absl::variant<absl::monostate, int32_t, uint64_t, std::string>;
 
@@ -77,6 +78,9 @@ class PrerenderCancellationReason {
 
   // This is mainly used for displaying a detailed reason on devtools panel.
   std::string ToDevtoolReasonString() const;
+  // Returns disallowed Mojo interface name iff final status is
+  // `kMojoBinderPolicy`.
+  absl::optional<std::string> DisallowedMojoInterface() const;
 
  private:
   PrerenderCancellationReason(PrerenderFinalStatus final_status,
@@ -159,15 +163,6 @@ void RecordPrerenderActivationTransition(
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
 
-// Records the net error code when a prerendering page fails the navigation upon
-// PrerenderHost::DidFinishNavigation. Note that this is different from the one
-// that checked at `PrerenderNavigationThrottle::WillProcessResponse` which
-// checks the http_response_code of the `commit_params`.
-void RecordPrerenderNavigationErrorCode(
-    net::Error error_code,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix);
-
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // These are also mapped onto the second content internal range of
@@ -184,8 +179,9 @@ enum class PrerenderBackNavigationEligibility {
   kNoHttpCacheEntry = 7,
   kTargetingOtherWindow = 8,
   kTargetIsNonHttp = 9,
+  kRelatedActiveContents = 10,
 
-  kMaxValue = kTargetIsNonHttp,
+  kMaxValue = kRelatedActiveContents,
 };
 
 // Maps `eligibility` onto a content internal range of PreloadingEligibility.
@@ -206,6 +202,11 @@ void RecordBlockedByClientResourceType(
     network::mojom::RequestDestination request_destination,
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
+
+void RecordReceivedPrerendersPerPrimaryPageChangedCount(
+    int number,
+    PrerenderTriggerType trigger_type,
+    const std::string& eagerness_category);
 
 }  // namespace content
 

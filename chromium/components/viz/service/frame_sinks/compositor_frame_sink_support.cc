@@ -13,8 +13,10 @@
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
 #include "components/viz/common/features.h"
@@ -39,8 +41,10 @@
 namespace viz {
 namespace {
 
-void RecordShouldSendBeginFrame(const std::string& reason) {
-  TRACE_EVENT1("viz", "ShouldNotSendBeginFrame", "reason", reason);
+bool RecordShouldSendBeginFrame(const std::string& reason, bool should_send) {
+  TRACE_EVENT2("viz", "SendBeginFrameDecision", "reason", reason, "should_send",
+               should_send);
+  return should_send;
 }
 
 void AdjustPresentationFeedback(gfx::PresentationFeedback* feedback,
@@ -96,6 +100,15 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
   if (last_created_surface_id_.is_valid())
     surface_manager_->MarkSurfaceForDestruction(last_created_surface_id_);
   frame_sink_manager_->UnregisterCompositorFrameSinkSupport(frame_sink_id_);
+  // When we unregister `this` from `frame_sink_manager_` from above,
+  // `FrameSinkManagerImpl::DiscardPendingCopyOfOutputRequests` clears out all
+  // the outstanding requests.
+  // However there are other destruction code paths that don't exercise
+  // `DiscardPendingCopyOfOutputRequests` (e.g, in unittests we might not have a
+  // `RootCompositorFrameSinkImpl`, such that no `ExternalBeginFrameSourceMojo`
+  // is added as an observer of `frame_sink_manager_`). Therefore we explicitly
+  // clear the requests here regardless.
+  ClearAllPendingCopyOutputRequests();
 
   // The display compositor has ownership of shared memory for each
   // SharedBitmapId that has been reported from the client. Since the client is
@@ -345,16 +358,16 @@ void CompositorFrameSinkSupport::ReturnResources(
     return;
 
   // When features::OnBeginFrameAcks is disabled we attempt to return resources
-  // in DidReceiveCompositorFrameAck. However if there is no
-  // `ack_pending_from_surface_count_` then we don't expect that signal soon. In
-  // which case we return the resources to the `client_` now.
+  // in DidReceiveCompositorFrameAck. However if there are no pending frames
+  // then we don't expect that signal soon. In which case we return the
+  // resources to the `client_` now.
   //
   // When features::OnBeginFrameAcks is enabled we attempt to return resources
   // during the next OnBeginFrame. However if we currently do not
   // `needs_begin_frame_` or if we have been disconnected from a
   // `begin_frame_source_` then we don't expect that signal soon. In which case
   // we return the resources to the `client_` now.
-  if (!ack_pending_from_surface_count_ && client_ &&
+  if (pending_frames_.empty() && client_ &&
       (!ShouldMergeBeginFrameWithAcks() ||
        (!needs_begin_frame_ || !begin_frame_source_))) {
     client_->ReclaimResources(std::move(resources));
@@ -376,10 +389,23 @@ CompositorFrameSinkSupport::TakeCopyOutputRequests(
   std::vector<PendingCopyOutputRequest> results;
   for (auto it = copy_output_requests_.begin();
        it != copy_output_requests_.end();) {
+    // Pick up the requests that require an exact `LocalSurfaceId` match.
+    if (it->capture_exact_surface_id) {
+      // `ui::DelegatedFrameHostAndroid` won't send a `CopyOutputRequest`
+      // without a valid `LocalSurfaceId`. This is guaranteed as we can't
+      // serialize/deserialize an empty `LocalSurfaceId`.
+      CHECK(it->local_surface_id.is_valid());
+      if (it->local_surface_id == latest_local_id) {
+        results.push_back(std::move(*it));
+        it = copy_output_requests_.erase(it);
+      } else {
+        ++it;
+      }
+    }
     // Requests with a non-valid local id should be satisfied as soon as
     // possible.
-    if (!it->local_surface_id.is_valid() ||
-        it->local_surface_id <= latest_local_id) {
+    else if (!it->local_surface_id.is_valid() ||  // NOLINT
+             it->local_surface_id <= latest_local_id) {
       results.push_back(std::move(*it));
       it = copy_output_requests_.erase(it);
     } else {
@@ -481,10 +507,15 @@ bool CompositorFrameSinkSupport::IsRoot() const {
 }
 
 void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
-  TRACE_EVENT_WITH_FLOW2(
-      "viz,benchmark", "Graphics.Pipeline", TRACE_ID_GLOBAL(ack.trace_id),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "DidNotProduceFrame", "FrameSinkId", frame_sink_id_.ToString());
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(ack.trace_id), [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_DID_NOT_PRODUCE_FRAME);
+        frame_sink_id_.WriteIntoTrace(ctx.Wrap(data->set_frame_sink_id()));
+      });
   DCHECK(ack.frame_id.IsSequenceValid());
 
   begin_frame_tracker_.ReceivedAck(ack);
@@ -493,8 +524,11 @@ void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
   BeginFrameAck modified_ack(ack);
   modified_ack.has_damage = false;
 
+  // If the client doesn't produce a frame, we assume it's no longer interactive
+  // for scheduling.
   if (last_activated_surface_id_.is_valid())
-    surface_manager_->SurfaceModified(last_activated_surface_id_, modified_ack);
+    surface_manager_->SurfaceModified(last_activated_surface_id_, modified_ack,
+                                      SurfaceObserver::HandleInteraction::kNo);
 
   if (begin_frame_source_) {
     begin_frame_source_->DidFinishFrame(this);
@@ -532,17 +566,50 @@ void CompositorFrameSinkSupport::DidDeleteSharedBitmap(
   owned_bitmaps_.erase(id);
 }
 
+void CompositorFrameSinkSupport::SubmitCompositorFrameLocally(
+    const SurfaceId& surface_id,
+    CompositorFrame frame,
+    const RendererSettings& settings) {
+  CHECK_EQ(surface_id, last_created_surface_id_);
+
+  pending_frames_.push_back(FrameData{.local_frame = true});
+  Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
+
+  auto frame_rejected_callback =
+      base::ScopedClosureRunner(base::BindOnce([] { NOTREACHED(); }));
+  auto frame_index = ++last_frame_index_;
+  Surface::QueueFrameResult result = surface->QueueFrame(
+      std::move(frame), frame_index, std::move(frame_rejected_callback));
+  // Currently, frames are only queued on Android, and we don't need to use
+  // `SubmitCompositorFrameLocally` for evicting resources on Android.
+  CHECK_EQ(result, Surface::QueueFrameResult::ACCEPTED_ACTIVE);
+
+  // Make sure this surface will be stretched to match the display size. If
+  // `auto_resize_output_surface` is false, then swap will not occur meaning
+  // that the content of this compositor frame will not be presented. If it is
+  // not, then we won't properly push out existing resources. A mismatch between
+  // root surface size and display size can happen. For example, there is a race
+  // condition if `Display` is resized after it is set not visible but before
+  // any compositor frame with that new size is submitted.
+  CHECK(settings.auto_resize_output_surface);
+}
+
 SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
     const LocalSurfaceId& local_surface_id,
     CompositorFrame frame,
     absl::optional<HitTestRegionList> hit_test_region_list,
     uint64_t submit_time,
     mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback callback) {
-  TRACE_EVENT_WITH_FLOW2(
-      "viz,benchmark", "Graphics.Pipeline",
-      TRACE_ID_GLOBAL(frame.metadata.begin_frame_ack.trace_id),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "ReceiveCompositorFrame", "FrameSinkId", frame_sink_id_.ToString());
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global((frame.metadata.begin_frame_ack.trace_id)),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_RECEIVE_COMPOSITOR_FRAME);
+        frame_sink_id_.WriteIntoTrace(ctx.Wrap(data->set_frame_sink_id()));
+      });
 
   DCHECK(local_surface_id.is_valid());
   DCHECK(!frame.render_pass_list.empty());
@@ -552,7 +619,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
   CHECK(callback_received_receive_ack_);
 
   begin_frame_tracker_.ReceivedAck(frame.metadata.begin_frame_ack);
-  ++ack_pending_from_surface_count_;
+  pending_frames_.push_back(FrameData{.local_frame = false});
 
   if (frame.metadata.begin_frame_ack.frame_id.source_id ==
       BeginFrameArgs::kManualSourceId) {
@@ -748,15 +815,25 @@ void CompositorFrameSinkSupport::HandleCallback() {
 }
 
 void CompositorFrameSinkSupport::DidReceiveCompositorFrameAck() {
-  DCHECK_GT(ack_pending_from_surface_count_, 0);
+  DCHECK(!pending_frames_.empty());
   bool was_pending_manual_begin_frame_source_ =
       pending_manual_begin_frame_source_;
-  ack_pending_from_surface_count_--;
-  if (!ack_pending_from_surface_count_) {
+  bool was_local_frame = pending_frames_.front().local_frame;
+  pending_frames_.pop_front();
+
+  if (pending_frames_.empty()) {
     pending_manual_begin_frame_source_ = false;
   }
   if (!client_)
     return;
+
+  // If this frame came from viz directly and not from the client, don't send
+  // the client an ack, since it didn't do anything. Just return the resources.
+  if (was_local_frame) {
+    client_->ReclaimResources(std::move(surface_returned_resources_));
+    surface_returned_resources_.clear();
+    return;
+  }
 
   // If we have a callback, we only return the resource on onBeginFrame.
   if (compositor_frame_callback_) {
@@ -780,6 +857,7 @@ void CompositorFrameSinkSupport::DidReceiveCompositorFrameAck() {
       (!base::FeatureList::IsEnabled(features::kOnBeginFrameAllowLateAcks) ||
        !ack_pending_during_on_begin_frame_)) {
     ack_queued_for_client_count_++;
+    UpdateNeedsBeginFramesInternal();
     return;
   }
 
@@ -792,7 +870,7 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
     base::TimeTicks draw_start_timestamp,
     const gfx::SwapTimings& swap_timings,
     const gfx::PresentationFeedback& feedback) {
-  DCHECK(frame_token);
+  CHECK_NE(frame_token, kInvalidOrLocalFrameToken);
   DCHECK((feedback.flags & gfx::PresentationFeedback::kFailure) ||
          (!draw_start_timestamp.is_null() && !swap_timings.is_null()));
 
@@ -888,7 +966,7 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   }
 
   bool send_begin_frame_to_client =
-      client_ && ShouldSendBeginFrame(adjusted_args.frame_time);
+      client_ && ShouldSendBeginFrame(adjusted_args.frame_time, args.interval);
   if (send_begin_frame_to_client) {
     if (last_activated_surface_id_.is_valid())
       surface_manager_->SurfaceDamageExpected(last_activated_surface_id_,
@@ -900,10 +978,15 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
       adjusted_args.animate_only = false;
 
     adjusted_args.trace_id = ComputeTraceId();
-    TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
-                           TRACE_ID_GLOBAL(adjusted_args.trace_id),
-                           TRACE_EVENT_FLAG_FLOW_OUT, "step",
-                           "IssueBeginFrame");
+    TRACE_EVENT(
+        "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+        perfetto::Flow::Global((adjusted_args.trace_id)),
+        [&](perfetto::EventContext ctx) {
+          auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+          auto* data = event->set_chrome_graphics_pipeline();
+          data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                             StepName::STEP_ISSUE_BEGIN_FRAME);
+        });
     adjusted_args.frames_throttled_since_last = frames_throttled_since_last_;
     frames_throttled_since_last_ = 0;
 
@@ -911,7 +994,7 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
     if (ShouldMergeBeginFrameWithAcks()) {
       bool frame_ack = ack_queued_for_client_count_ > 0;
       ack_pending_during_on_begin_frame_ =
-          !frame_ack && ack_pending_from_surface_count_;
+          !frame_ack && !pending_frames_.empty();
       client_->OnBeginFrame(adjusted_args, frame_timing_details_, frame_ack,
                             std::move(surface_returned_resources_));
       if (frame_ack) {
@@ -927,6 +1010,8 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
     frame_sink_manager_->DidBeginFrame(frame_sink_id_, adjusted_args);
     frame_timing_details_.clear();
     UpdateNeedsBeginFramesInternal();
+  } else if (begin_frame_source_) {
+    begin_frame_source_->DidFinishFrame(this);
   }
 }
 
@@ -946,13 +1031,15 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
 
   // We require a begin frame if there's a callback pending, or if the client
   // requested it, or if the client needs to get some frame timing details, or
-  // if there are resources to return.
+  // if the client is waiting for a frame ack, or if there are resources to
+  // return.
   needs_begin_frame_ =
       (client_needs_begin_frame_ || !frame_timing_details_.empty() ||
        !pending_surfaces_.empty() ||
        (compositor_frame_callback_ && !callback_received_begin_frame_) ||
        (ShouldMergeBeginFrameWithAcks() &&
-        !surface_returned_resources_.empty()));
+        (!surface_returned_resources_.empty() ||
+         ack_queued_for_client_count_)));
 
   if (bundle_id_.has_value()) {
     // When bundled with other sinks, observation of BeginFrame notifications is
@@ -1074,7 +1161,9 @@ void CompositorFrameSinkSupport::RequestCopyOfOutput(
   if (last_activated_surface_id_.is_valid()) {
     BeginFrameAck ack;
     ack.has_damage = true;
-    surface_manager_->SurfaceModified(last_activated_surface_id_, ack);
+    surface_manager_->SurfaceModified(
+        last_activated_surface_id_, ack,
+        SurfaceObserver::HandleInteraction::kNoChange);
   }
 }
 
@@ -1126,12 +1215,13 @@ int64_t CompositorFrameSinkSupport::ComputeTraceId() {
 }
 
 bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
-    base::TimeTicks frame_time) {
+    base::TimeTicks frame_time,
+    base::TimeDelta vsync_interval) {
   // We should throttle OnBeginFrame() if it has been less than
   // |begin_frame_interval_| since the last one was sent because clients have
   // requested to update at such rate.
   const bool should_throttle_as_requested =
-      ShouldThrottleBeginFrameAsRequested(frame_time);
+      ShouldThrottleBeginFrameAsRequested(frame_time, vsync_interval);
   // We might throttle this OnBeginFrame() if it's been less than a second
   // since the last one was sent, either because clients are unresponsive or
   // have submitted too many undrawn frames.
@@ -1141,44 +1231,43 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   // If there are pending timing details from the previous frame(s),
   // then the client needs to receive the begin-frame.
   if (!frame_timing_details_.empty() && !should_throttle_as_requested) {
-    RecordShouldSendBeginFrame("SendFrameTiming");
-    return true;
+    return RecordShouldSendBeginFrame("SendFrameTiming", true);
+  }
+
+  // If the client is waiting for an ack from a previously submitted frame, then
+  // the client needs to receive the begin-frame.
+  if (ack_queued_for_client_count_ && !should_throttle_as_requested) {
+    return RecordShouldSendBeginFrame("SendFrameAck", true);
   }
 
   if (!client_needs_begin_frame_) {
-    RecordShouldSendBeginFrame("StopNotRequested");
-    return false;
+    return RecordShouldSendBeginFrame("StopNotRequested", false);
   }
 
   // Stop sending BeginFrames to clients that are totally unresponsive.
   if (begin_frame_tracker_.ShouldStopBeginFrame()) {
-    RecordShouldSendBeginFrame("StopUnresponsiveClient");
-    return false;
+    return RecordShouldSendBeginFrame("StopUnresponsiveClient", false);
   }
 
   // Throttle clients that are unresponsive.
   if (can_throttle_if_unresponsive_or_excessive &&
       begin_frame_tracker_.ShouldThrottleBeginFrame()) {
-    RecordShouldSendBeginFrame("ThrottleUnresponsiveClient");
-    return false;
+    return RecordShouldSendBeginFrame("ThrottleUnresponsiveClient", false);
   }
 
   if (!last_activated_surface_id_.is_valid()) {
-    RecordShouldSendBeginFrame("SendNoActiveSurface");
-    return true;
+    return RecordShouldSendBeginFrame("SendNoActiveSurface", true);
   }
 
   // We should never throttle BeginFrames if there is another client waiting
   // for this client to submit a frame.
   if (surface_manager_->HasBlockedEmbedder(frame_sink_id_)) {
-    RecordShouldSendBeginFrame("SendBlockedEmbedded");
-    return true;
+    return RecordShouldSendBeginFrame("SendBlockedEmbedded", true);
   }
 
   if (should_throttle_as_requested) {
     ++frames_throttled_since_last_;
-    RecordShouldSendBeginFrame("ThrottleRequested");
-    return false;
+    return RecordShouldSendBeginFrame("ThrottleRequested", false);
   }
 
   Surface* surface =
@@ -1206,13 +1295,11 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   if (can_throttle_if_unresponsive_or_excessive &&
       num_undrawn_frames > kUndrawnFrameLimit &&
       surface->GetActiveFrameMetadata().may_throttle_if_undrawn_frames) {
-    RecordShouldSendBeginFrame("ThrottleUndrawnFrames");
-    return false;
+    return RecordShouldSendBeginFrame("ThrottleUndrawnFrames", false);
   }
 
   // No other conditions apply so send the begin frame.
-  RecordShouldSendBeginFrame("SendDefault");
-  return true;
+  return RecordShouldSendBeginFrame("SendDefault", true);
 }
 
 void CompositorFrameSinkSupport::CheckPendingSurfaces() {
@@ -1234,31 +1321,42 @@ bool CompositorFrameSinkSupport::ShouldAdjustBeginFrameArgs() const {
 }
 
 bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(
-    base::TimeTicks frame_time) {
-  // It is not good enough to only check whether
-  // |time_since_last_frame| < |begin_frame_interval_|. There are 2 factors
-  // complicating this (examples assume a 30Hz throttled frame rate):
-  // 1) The precision of timing between frames is in microseconds, which
-  //    can result in error accumulation over several throttled frames. For
-  //    instance, on a 60Hz display, the first frame is produced at 0.016666
-  //    seconds, and the second at (0.016666 + 0.016666 = 0.033332) seconds.
-  //    base::Hertz(30) is 0.033333 seconds, so the second frame is considered
-  //    to have been produced too fast, and is therefore throttled.
-  // 2) Small system error in the frame timestamps (often on the order of a few
-  //    microseconds). For example, the first frame may be produced at 0.016662
-  //    seconds (instead of 0.016666), so the second frame's timestamp is
-  //    0.016662 + 0.016666 = 0.033328 and incorrectly gets throttled.
-  //
-  // To correct for this: Ceil the time since last frame to the nearest 100us.
-  // Building off the example above:
-  // Frame 1 time -> 0.016662 -> 0.0167 -> Throttle
-  // Frame 2 time -> 0.016662 + 0.016666 = 0.033328 -> 0.0334 -> Don't Throttle
-  static constexpr base::TimeDelta kFrameTimeQuantization =
-      base::Microseconds(100);
+    base::TimeTicks frame_time,
+    base::TimeDelta vsync_interval) {
+  if (!begin_frame_interval_.is_positive() || !vsync_interval.is_positive()) {
+    return false;
+  }
+
+  // Check the remainder in nanoseconds to ensure we don't accidentally
+  // truncate either begin_frame_interval_ or vsync_interval.
+  uint64_t remainder =
+      begin_frame_interval_.InNanoseconds() % vsync_interval.InNanoseconds();
+  if (remainder > 1000000) {
+    // We test against a remainder more than 100000ns (or 1 ms) because when we
+    // have 16.X ms + 16.X ms we can easily end up with 33.X which means added
+    // an extra unit in a perfect cadence so avoid that from being misflagged.
+
+    // This is a perfect cadence so we can throttle.
+    // Example: a 120 hz vsync / 60 fps is a perfect cadence of [2,2,2,2]
+    // We avoid non perfect cadences which means framerate is not a multiple
+    // of vsync rate. Because, throttling those cadences will cause
+    // framerate to be lowered more than the expected throttling, instead
+    // let clients receive their own begin frames at regular vsync periods
+    // and allow them impose their own custom cadence throttling
+    // For instance a 24 FPS content on a 60 HZ screen would yield a 2.5
+    // value. Which usually means [2,3,2,3] cadence, we do not throttle
+    // since throttling here would cause a [3,3,3,3] cadence effectively
+    // lowering the framerate of the content to 20 FPS.
+    return false;
+  }
   base::TimeDelta time_since_last_frame = frame_time - last_frame_time_;
-  return begin_frame_interval_.is_positive() &&
-         time_since_last_frame.CeilToMultiple(kFrameTimeQuantization) <
-             begin_frame_interval_;
+  if (time_since_last_frame.RoundToMultiple(vsync_interval) <
+      begin_frame_interval_.RoundToMultiple(vsync_interval)) {
+    // We will be past the deadline significantly next throttle check, so avoid
+    // throttling here.
+    return true;
+  }
+  return false;
 }
 
 void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
@@ -1353,6 +1451,51 @@ bool CompositorFrameSinkSupport::IsEvicted(
              last_evicted_local_surface_id_.embed_token() &&
          local_surface_id.parent_sequence_number() <=
              last_evicted_local_surface_id_.parent_sequence_number();
+}
+
+void CompositorFrameSinkSupport::ClearAllPendingCopyOutputRequests() {
+  CHECK(surface_manager_);
+  for (auto& request : copy_output_requests_) {
+    // If the frame sink is getting destroyed while there are still
+    // outstanding `CopyOutputRequest`s to capture an associated surface,
+    // transfer these requests to the corresponding `Surface`s.
+    //
+    // Resources reclamation: once frame sink is destroyed, the `Surface`s
+    // won't be able to notify the client code (the renderer's
+    // `cc::LayerTreeHostImpl`) to reclaim the resources. This is fine,
+    // because the destruction of the renderer and its CC (as part of a
+    // cross-RenderFrame navigation) will implicitly reclaim all the
+    // resources. The `Surface` kept alive will still have a reference to
+    // the underlying GPU resources. The GPU resources will finally be
+    // released when the `Surface` is destroyed (in this case, after the
+    // CopyOutputRequest is fulfilled).
+    if (request.capture_exact_surface_id) {
+      const SurfaceId target_id(frame_sink_id_, request.local_surface_id);
+      auto* target_surface = surface_manager_->GetSurfaceForId(target_id);
+      if (target_surface) {
+        target_surface->RequestCopyOfOutput(std::move(request));
+
+        BeginFrameAck ack;
+        ack.has_damage = true;
+        surface_manager_->SurfaceModified(
+            target_id, ack, SurfaceObserver::HandleInteraction::kNoChange);
+      } else {
+        // We might not have a `Surface` if the renderer is crashed, or too busy
+        // to even submit a CompositorFrame (e.g., low end Android devices). In
+        // either cases we don't want to crash the GPU in production. The
+        // WARNING logs will show up in "chrome://gpu".
+        LOG(WARNING) << "Surface " << target_id
+                     << " is destroyed while there is an outstanding "
+                        "CopyOutputRequest specificc for it.";
+      }
+    } else {
+      // TODO(https://crbug.com/1467314): We should probably transfer all
+      // the requests to their corresponding `Surface`s or `RenderPass`es.
+    }
+  }
+  // Upon destruction, the `PendingOutputRequest` will invoke the callback to
+  // return an empty bitmap, signalling that the request is never satisfied.
+  copy_output_requests_.clear();
 }
 
 SurfaceAnimationManager*

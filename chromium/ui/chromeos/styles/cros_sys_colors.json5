@@ -161,6 +161,10 @@
       light: '$cros.ref.error10',
       dark:  '$cros.ref.error90',
     },
+    'error-highlight': {
+      light: 'rgba($cros.ref.error40.rgb, 0.30)',
+      dark: 'rgba($cros.ref.error80.rgb, 0.30)',
+    },
 
     /* Neutral */
     'surface-variant': {
@@ -180,23 +184,31 @@
       light: 'rgba($cros.ref.neutral10.rgb, 0.14)',
       dark:  'rgba($cros.ref.neutral90.rgb, 0.14)',
     },
+    white: {
+      light: '$cros.ref.neutral100',
+      dark: '$cros.ref.neutral100',
+    },
+    black: {
+      light: '$cros.ref.neutral0',
+      dark: '$cros.ref.neutral0',
+    },
 
     /* Bases */
     header: {
       light: '$cros.ref.secondary90',
-      dark:  '$cros.ref.secondary15',
+      dark:  '$cros.ref.secondary12',
     },
     'header-unfocused': {
       light: 'blend(rgba($cros.ref.secondary90.rgb, 0.28), $cros.ref.neutralvariant90)',
-      dark: 'blend(rgba($cros.ref.secondary15.rgb, 0.4), $cros.ref.neutral10)',
+      dark: 'blend(rgba($cros.ref.secondary12.rgb, 0.6), $cros.ref.neutral25)',
     },
     'app-base-shaded': {
       light: '$cros.ref.neutralvariant95',
-      dark:  'blend(rgba($black.rgb, 0.4), $cros.ref.neutral10)'
+      dark:  '$cros.ref.neutral0',
     },
     'app-base': {
       light: '$cros.ref.neutral99',
-      dark:  '$cros.ref.neutral10',
+      dark:  '$cros.ref.neutral8',
     },
     'base-elevated': {
       light: '$cros.ref.neutralvariant100',
@@ -317,8 +329,16 @@
       light: '$cros.ref.yellow90',
       dark: 'blend(rgba($cros.ref.yellow90.rgb, 0.20), $black)',
     },
+    'system-on-warning-container': {
+      light: '$cros.ref.yellow10',
+      dark: '$cros.ref.yellow10',
+    },
+    'system-warning-container': {
+      light: '$cros.ref.yellow80',
+      dark: '$cros.ref.yellow80',
+    },
     'warning': {
-      light: '$cros.ref.yellow30',
+      light: '$cros.ref.yellow50',
       dark: '$cros.ref.yellow80',
     },
 
@@ -564,7 +584,7 @@
      * elevated colors when the kJelly flag is OFF but with sys illo tokens when
      * the jelly flag is ON. To support this we map sys illo references for
      * assets on elevated surfaces to the following elevated sys token set.
-     * These colors are identical to their non elevated counterparts when the 
+     * These colors are identical to their non elevated counterparts when the
      * jelly flag is ON but when the flag is off they get remapped to the
      * correct GM2 eleavted token.
      */

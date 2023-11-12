@@ -47,17 +47,17 @@ enum class OobeDialogState;
 //
 // The inheritance graph is as folllows:
 //
-//                               LoginDisplayHost
-//                                   /       |
-//                LoginDisplayHostCommon   MockLoginDisplayHost
-//                      /      |
+//                                   LoginDisplayHost
+//                             /            |            \
+//        LoginDisplayHostCommon   MockLoginDisplayHost  FakeLoginDisplayHost
+//            /               \
 //   LoginDisplayHostMojo    LoginDisplayHostWebUI
 //
 //
 // - LoginDisplayHost defines the generic interface.
 // - LoginDisplayHostCommon is UI-agnostic code shared between the views and
 //   webui hosts.
-// - MockLoginDisplayHost is for tests.
+// - MockLoginDisplayHost and FakeLoginDisplayHost is for tests.
 // - LoginDisplayHostMojo is for the login screen which is implemented in Ash.
 //   TODO(estade): rename LoginDisplayHostMojo since it no longer uses Mojo.
 // - LoginDisplayHostWebUI is for OOBE, which is written in HTML/JS/CSS.
@@ -74,6 +74,17 @@ class LoginDisplayHost {
 
   // Returns the default LoginDisplayHost instance if it has been created.
   static LoginDisplayHost* default_host() { return default_host_; }
+
+  // Called when user enters or returns to browsing session so LoginDisplayHost
+  // instance may delete itself. `completion_callback` will be invoked when the
+  // instance is gone.
+  // `completion_callback` can be null.
+  virtual void Finalize(base::OnceClosure completion_callback);
+
+  // Starts screen for adding user into session.
+  // `completion_callback` is invoked after login display host shutdown.
+  // `completion_callback` can be null.
+  virtual void StartUserAdding(base::OnceClosure completion_callback);
 
   // Returns an unowned pointer to the ExistingUserController instance.
   virtual ExistingUserController* GetExistingUserController() = 0;
@@ -99,11 +110,6 @@ class LoginDisplayHost {
   // Whether the process of deleting LoginDisplayHost has been started.
   virtual bool IsFinalizing() = 0;
 
-  // Called when user enters or returns to browsing session so LoginDisplayHost
-  // instance may delete itself. `completion_callback` will be invoked when the
-  // instance is gone.
-  virtual void Finalize(base::OnceClosure completion_callback) = 0;
-
   // Called when current instance should be replaced with another one. After the
   // call the instance will be gone.
   virtual void FinalizeImmediately() = 0;
@@ -125,11 +131,6 @@ class LoginDisplayHost {
   // Returns current KioskLaunchController, if it exists.
   // Result should not be stored.
   virtual KioskLaunchController* GetKioskLaunchController() = 0;
-
-  // Starts screen for adding user into session.
-  // `completion_callback` is invoked after login display host shutdown.
-  // `completion_callback` can be null.
-  virtual void StartUserAdding(base::OnceClosure completion_callback) = 0;
 
   // Cancel addint user into session.
   virtual void CancelUserAdding() = 0;
@@ -179,17 +180,9 @@ class LoginDisplayHost {
   // user's displayed email value will be updated to `email`.
   virtual void SetDisplayEmail(const std::string& email) = 0;
 
-  // Sets the displayed name and given name for the next login attempt. If it
-  // succeeds, user's displayed name and give name values will be updated to
-  // `display_name` and `given_name`.
-  virtual void SetDisplayAndGivenName(const std::string& display_name,
-                                      const std::string& given_name) = 0;
-
-  // Load wallpaper for given `account_id`.
-  virtual void LoadWallpaper(const AccountId& account_id) = 0;
-
-  // Loads the default sign-in wallpaper.
-  virtual void LoadSigninWallpaper() = 0;
+  // Updates the wallpaper on the login screen for the prefilled
+  // account. If the account is not valid we show a default signin wallpaper.
+  virtual void UpdateWallpaper(const AccountId& prefilled_account) = 0;
 
   // Returns true if user is allowed to log in by domain policy.
   virtual bool IsUserAllowlisted(
@@ -270,6 +263,9 @@ class LoginDisplayHost {
  private:
   // Global LoginDisplayHost instance.
   static LoginDisplayHost* default_host_;
+
+  // Called after host deletion. All registered callbacks are non-null.
+  std::vector<base::OnceClosure> completion_callbacks_;
 
   // Callback to be executed when WebUI is started.
   base::RepeatingClosure on_wizard_controller_created_for_tests_;

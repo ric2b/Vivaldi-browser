@@ -47,6 +47,7 @@ template("ios_app_ext_toolchain") {
       # projects such as WebRTC that only uses //build but not //base.
       if (build_with_chromium) {
         use_partition_alloc = false
+        ios_partition_alloc_enabled = false
       }
     }
   }
@@ -99,5 +100,12 @@ ios_app_ext_toolchain("ios_clang_x64_app_ext_13_4") {
   toolchain_args = {
     current_cpu = "x64"
     ios_deployment_target = "13.4"
+  }
+}
+
+ios_toolchain("ios_clang_arm64_blink") {
+  toolchain_args = {
+    current_cpu = "arm64"
+    use_blink = true
   }
 }

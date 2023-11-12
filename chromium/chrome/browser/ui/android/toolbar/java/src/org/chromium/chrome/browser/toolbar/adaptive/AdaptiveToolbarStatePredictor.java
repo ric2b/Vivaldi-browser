@@ -152,6 +152,7 @@ public class AdaptiveToolbarStatePredictor {
             case AdaptiveToolbarButtonVariant.VOICE:
             case AdaptiveToolbarButtonVariant.TRANSLATE:
             case AdaptiveToolbarButtonVariant.ADD_TO_BOOKMARKS:
+            case AdaptiveToolbarButtonVariant.READ_ALOUD:
                 return true;
             case AdaptiveToolbarButtonVariant.UNKNOWN:
             case AdaptiveToolbarButtonVariant.NONE:
@@ -223,6 +224,8 @@ public class AdaptiveToolbarStatePredictor {
                 return AdaptiveToolbarFeatures.isAdaptiveToolbarTranslateEnabled();
             case AdaptiveToolbarButtonVariant.ADD_TO_BOOKMARKS:
                 return AdaptiveToolbarFeatures.isAdaptiveToolbarAddToBookmarksEnabled();
+            case AdaptiveToolbarButtonVariant.READ_ALOUD:
+                return AdaptiveToolbarFeatures.isAdaptiveToolbarReadAloudEnabled();
             default:
                 return true;
         }
@@ -249,13 +252,11 @@ public class AdaptiveToolbarStatePredictor {
     }
 
     /** For testing only. */
-    @VisibleForTesting
     public static void setSegmentationResultsForTesting(Pair<Boolean, Integer> results) {
         sSegmentationResultsForTesting = results;
     }
 
     /** For testing only. */
-    @VisibleForTesting
     public static void setToolbarStateForTesting(Integer toolbarState) {
         sToolbarStateForTesting = toolbarState;
     }

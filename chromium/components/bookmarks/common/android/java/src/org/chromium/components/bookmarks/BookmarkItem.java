@@ -4,8 +4,6 @@
 
 package org.chromium.components.bookmarks;
 
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.url.GURL;
@@ -23,11 +21,12 @@ public class BookmarkItem {
     private final boolean mIsManaged;
     private final long mDateAdded;
     private final boolean mRead;
+    private final long mDateLastOpened;
     private boolean mForceEditableForTesting;
 
     public BookmarkItem(BookmarkId id, String title, GURL url, boolean isFolder,
             BookmarkId parentId, boolean isEditable, boolean isManaged, long dateAdded,
-            boolean read) {
+            boolean read, long dateLastOpened) {
         mId = id;
         mTitle = title;
         mUrl = url;
@@ -37,6 +36,7 @@ public class BookmarkItem {
         mIsManaged = isManaged;
         mDateAdded = dateAdded;
         mRead = read;
+        mDateLastOpened = dateLastOpened;
     }
 
     /** Returns the title of the bookmark item. */
@@ -103,8 +103,15 @@ public class BookmarkItem {
         return mRead;
     }
 
+    /**
+     * Returns the timestamp in milliseconds since epoch that the bookmark was last opened. Folders
+     * have a value of 0 for this, but should use the most recent child.
+     */
+    public long getDateLastOpened() {
+        return mDateLastOpened;
+    }
+
     // TODO(https://crbug.com/1019217): Remove when BookmarkModel is stubbed in tests instead.
-    @VisibleForTesting
     public void forceEditableForTesting() {
         mForceEditableForTesting = true;
     }
@@ -114,6 +121,7 @@ public class BookmarkItem {
         private String mNickName;
         private String mDescription;
         private String mThumbnailPath;
+        private int mThemeColor;
         private long mCreated;
         private String mGUID;
 
@@ -121,13 +129,15 @@ public class BookmarkItem {
         public BookmarkItem(BookmarkId id, String title, GURL url, boolean isFolder,
                              BookmarkId parentId, boolean isEditable, boolean isManaged,
                              long dateAdded, boolean read, boolean isSpeedDial,
-                             String nickName, String description,
+                             String nickName, String description, int themeColor,
                              long created, String thumbnailPath, String guid) {
-            this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read);
+            this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read,
+                    created);
             mIsSpeedDial = isSpeedDial;
             mNickName = nickName;
             mDescription = description;
             mThumbnailPath = thumbnailPath;
+            mThemeColor = themeColor;
             mCreated = created;
             mGUID = guid;
         }
@@ -143,6 +153,9 @@ public class BookmarkItem {
 
         /** @return (Vivaldi) Thumbnail path of the bookmark item. */
         public String getThumbnailPath() { return mThumbnailPath; }
+
+        /** @return (Vivaldi) Theme color of the bookmark item's site. */
+        public int getThemeColor() { return mThemeColor; }
 
         /** @return (Vivaldi) Created date of the bookmark item */
         public long getCreated() { return mCreated; }

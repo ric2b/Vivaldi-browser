@@ -80,3 +80,12 @@ if (is_vivaldi_automotive && !is_vivaldi_polestar) {
     android_vivaldi_manifest_package += ".volvo"
   }
 }
+
+if (is_ios) {
+  ios_primary_app_icon_name = ""
+  if (release_kind == "final") {
+    ios_primary_app_icon_name = "AppIcon-Final"
+  } else {
+    ios_primary_app_icon_name = "AppIcon-Snapshot"
+  }
+}

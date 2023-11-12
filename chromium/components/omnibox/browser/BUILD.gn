@@ -181,6 +181,8 @@ static_library("browser") {
     "bookmark_scoring_signals_annotator.h",
     "builtin_provider.cc",
     "builtin_provider.h",
+    "calculator_provider.cc",
+    "calculator_provider.h",
     "clipboard_provider.cc",
     "clipboard_provider.h",
     "document_provider.cc",
@@ -237,6 +239,7 @@ static_library("browser") {
     "omnibox_navigation_observer.h",
     "omnibox_popup_selection.cc",
     "omnibox_popup_selection.h",
+    "omnibox_popup_view.cc",
     "omnibox_popup_view.h",
     "omnibox_prefs.cc",
     "omnibox_prefs.h",
@@ -392,9 +395,7 @@ static_library("browser") {
     deps += [ "//components/keep_alive_registry" ]
   }
 
-  if (is_ios) {
-    deps += [ "//base/ios" ]
-  } else {
+  if (!is_ios) {
     deps += [ "//ui/base/clipboard" ]
   }
 
@@ -465,6 +466,7 @@ static_library("location_bar") {
     ":buildflags",
     "//build:chromeos_buildflags",
     "//components/dom_distiller/core:core",
+    "//components/safe_browsing/core/common:common",
     "//components/search_engines",
     "//components/strings",
     "//components/url_formatter",
@@ -497,28 +499,25 @@ if (is_android) {
   android_resources("java_resources") {
     sources = [
       "android/java/res/drawable-hdpi/omnibox_https_valid.png",
-      "android/java/res/drawable-hdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-hdpi/omnibox_info.png",
       "android/java/res/drawable-hdpi/omnibox_not_secure_warning.png",
       "android/java/res/drawable-mdpi/omnibox_https_valid.png",
-      "android/java/res/drawable-mdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-mdpi/omnibox_info.png",
       "android/java/res/drawable-mdpi/omnibox_not_secure_warning.png",
       "android/java/res/drawable-xhdpi/omnibox_https_valid.png",
-      "android/java/res/drawable-xhdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-xhdpi/omnibox_info.png",
       "android/java/res/drawable-xhdpi/omnibox_not_secure_warning.png",
       "android/java/res/drawable-xxhdpi/omnibox_https_valid.png",
-      "android/java/res/drawable-xxhdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-xxhdpi/omnibox_info.png",
       "android/java/res/drawable-xxhdpi/omnibox_not_secure_warning.png",
       "android/java/res/drawable-xxxhdpi/omnibox_https_valid.png",
-      "android/java/res/drawable-xxxhdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-xxxhdpi/omnibox_info.png",
       "android/java/res/drawable-xxxhdpi/omnibox_not_secure_warning.png",
       "android/java/res/drawable/action_call.xml",
       "android/java/res/drawable/action_directions.xml",
       "android/java/res/drawable/action_reviews.xml",
+      "android/java/res/drawable/omnibox_dangerous.xml",
+      "android/java/res/drawable/omnibox_https_valid_refresh.xml",
       "android/java/res/values/colors.xml",
       "android/java/res/values/drawables.xml",
     ]
@@ -546,6 +545,7 @@ if (is_android) {
     deps = [
       ":java_resources",
       "//base:jni_java",
+      "//chrome/browser/flags:java",
       "//components/embedder_support/android:util_java",
       "//components/security_state/core:security_state_enums_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
@@ -581,6 +581,7 @@ if (is_android) {
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/androidx:androidx_collection_collection_java",
       "//third_party/androidx:androidx_core_core_java",
+      "//third_party/androidx:androidx_interpolator_interpolator_java",
       "//third_party/metrics_proto:metrics_proto_java",
       "//ui/android:ui_full_java",
       "//url:gurl_java",
@@ -613,7 +614,6 @@ if (is_android) {
       "//third_party/android_deps:protobuf_lite_runtime_java",
       "//third_party/junit:junit",
       "//third_party/mockito:mockito_java",
-      "//url:gurl_junit_shadows",
     ]
   }
 
@@ -627,6 +627,7 @@ if (is_android) {
     deps = [
       "//components/omnibox/browser:browser_java",
       "//components/query_tiles:query_tile_java",
+      "//third_party/android_deps:protobuf_lite_runtime_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/androidx:androidx_collection_collection_java",
       "//url:gurl_java",
@@ -779,7 +780,6 @@ source_set("unit_tests") {
     "keyword_provider_unittest.cc",
     "local_history_zero_suggest_provider_unittest.cc",
     "location_bar_model_impl_unittest.cc",
-    "most_visited_sites_provider_unittest.cc",
     "omnibox_controller_unittest.cc",
     "omnibox_edit_model_unittest.cc",
     "omnibox_field_trial_unittest.cc",
@@ -809,6 +809,10 @@ source_set("unit_tests") {
     "zero_suggest_provider_unittest.cc",
     "zero_suggest_verbatim_match_provider_unittest.cc",
   ]
+
+  if (is_android || is_ios) {
+    sources += [ "most_visited_sites_provider_unittest.cc" ]
+  }
 
   if ((!is_android || enable_vr) && !is_ios) {
     sources += [ "location_bar_model_util_unittest.cc" ]
@@ -840,6 +844,7 @@ source_set("unit_tests") {
     "//components/optimization_guide/core:test_support",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/prefs:test_support",
+    "//components/safe_browsing/core/common:common",
     "//components/search",
     "//components/search_engines",
     "//components/search_engines:test_support",

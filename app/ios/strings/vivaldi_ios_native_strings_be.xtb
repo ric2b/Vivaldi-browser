@@ -1,5 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+<translation id="1116694919640316211">Звесткі</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> нататак</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Умовы выкарыстання ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Палітыка прыватнасці ➔<ph name="END_LINK2" /></translation>
+<translation id="1751280147639351837">Блакаванне сачэння і рэкламы</translation>
+<translation id="21693288559538605">Падсумаванне блакавання сачэння і рэкламы</translation>
+<translation id="2272338747456392228">Акаўнт заблакаваны</translation>
+<translation id="2324160330092901720">Код пацвярджэння адпраўлены на <ph name="EMAIL_ID" /></translation>
+<translation id="2386793615875593361">Абрана 1</translation>
+<translation id="2392369802118427583">Актываваць</translation>
+<translation id="2677862276555105603">Заблакавана
+рэкламы</translation>
+<translation id="3894427358181296146">Дадаць каталог</translation>
 <translation id="4032606071208172574">(Прадвызначана)</translation>
+<translation id="4852383705713307704">Заблакавана
+рэкламы</translation>
+<translation id="4871370605780490696">Дадаць закладку</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Паўторна адправіць код<ph name="END_LINK" /></translation>
+<translation id="5822336771053074270">Дадаць нататку</translation>
+<translation id="5871497086027727873">Перамешчана 1 нататка</translation>
+<translation id="614539368862754027">Перамешчана <ph name="NUMBER_OF_SELECTED_NOTES" /> нататак</translation>
+<translation id="6438416544409849235">Абрана <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпартаванне<ph name="END_LINK" /></translation>
+<translation id="6614744450826097546">Звесткі пра рэкламу</translation>
+<translation id="6757792528048321576">Блакаванне сачэння і рэкламы</translation>
+<translation id="7388525939184421699">Дадаць новую крыніцу</translation>
+<translation id="750493650310597496">Абрана 0</translation>
+<translation id="7574321014880720413">Дадаць сайт</translation>
+<translation id="8458397775385147834">1 нататка выдалена</translation>
+<translation id="8517852590337319813">Актывуйце свой акаўнт</translation>
+<translation id="8740815429790728127">Выдалена <ph name="NUMBER_OF_SELECTED_NOTES" /> нататак</translation>
+<translation id="9083392325882095631">1 нататка</translation>
+<translation id="984650419570014454">Код актывацыі мусіць складацца з 6 лічбаў.</translation>
 </translationbundle>

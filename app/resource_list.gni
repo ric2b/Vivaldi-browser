@@ -32,7 +32,7 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//components/strings:components_google_chrome_strings",
+    "//components/strings:components_chromium_strings",
     "//vivaldi/app/resources/components/vivaldi_components.grd",
     {
       translation_dir_setting = "strings"
@@ -75,14 +75,6 @@ if(!is_ios) {
     ],
     [
       "//chrome/app:chromium_strings",
-      "//vivaldi/app/resources/strings/vivaldi_strings.grd",
-      {
-        have_strings_flag = false
-        merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=true"]
-      },
-    ],
-    [
-      "//chrome/app:google_chrome_strings",
       "//vivaldi/app/resources/strings/vivaldi_strings.grd",
       {
         merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=false"]
@@ -142,14 +134,6 @@ if(!is_ios) {
       "//vivaldi/app/resources/webui_resources/vivaldi_webui_resources.grd",
       {
         have_strings_flag = false
-      },
-    ],
-    [
-      "//components/strings:components_chromium_strings",
-      "//vivaldi/app/resources/components/vivaldi_components.grd",
-      {
-        have_strings_flag = false
-        merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=true"]
       },
     ],
     [
@@ -247,7 +231,7 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
 
 IOS_VIVALDI_RESOURCE_LIST = [
   [
-    "//ios/chrome/app/strings:ios_google_chrome_strings",
+    "//ios/chrome/app/strings:ios_chromium_strings",
     "//vivaldi/app/resources/ios_branding_strings/vivaldi_ios_branding_strings.grd",
     {
       translation_dir_setting = "resources"
@@ -271,7 +255,7 @@ IOS_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_google_chrome_strings",
+    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_chromium_strings",
     "//vivaldi/app/resources/ios_search_extension_google_chrome_strings/vivaldi_ios_search_widget_extension_google_chrome_strings.grd",
     {
       translation_dir_setting = "resources"
@@ -304,7 +288,7 @@ IOS_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_google_chrome_strings",
+    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_chromium_strings",
     "//vivaldi/app/resources/ios_content_extension_strings/vivaldi_ios_content_widget_extension_strings.grd",
     {
       translation_dir_setting = "resources"

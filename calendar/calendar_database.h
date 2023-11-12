@@ -17,6 +17,7 @@
 #include "calendar/account_table.h"
 #include "calendar/calendar_table.h"
 #include "calendar/event_database.h"
+#include "calendar/event_template_table.h"
 #include "calendar/event_type_database.h"
 #include "calendar/invite_table.h"
 #include "calendar/notification_table.h"
@@ -39,6 +40,7 @@ namespace calendar {
 // as the storage interface. Logic for manipulating this storage layer should
 // be in CalendarBackend.cc.
 class CalendarDatabase : public EventDatabase,
+                         public EventTemplateTable,
                          public EventTypeDatabase,
                          public CalendarTable,
                          public RecurrrenceExceptionTable,

@@ -14,7 +14,7 @@
 #include "base/dcheck_is_on.h"
 #include "base/memory/raw_ptr.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
-#include "components/autofill/core/browser/autofill_trigger_source.h"
+#include "components/autofill/core/browser/autofill_trigger_details.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -133,6 +133,9 @@ class AwAutofillClient : public autofill::ContentAutofillClient {
       const autofill::AutofillProfile* original_profile,
       SaveAddressProfilePromptOptions options,
       AddressProfileSavePromptCallback callback) override;
+  void ShowEditAddressProfileDialog(
+      const autofill::AutofillProfile& profile) override;
+  void ShowDeleteAddressProfileDialog() override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
   bool IsTouchToFillCreditCardSupported() override;
@@ -148,18 +151,22 @@ class AwAutofillClient : public autofill::ContentAutofillClient {
       const std::vector<std::u16string>& labels) override;
   std::vector<autofill::Suggestion> GetPopupSuggestions() const override;
   void PinPopupView() override;
-  autofill::AutofillClient::PopupOpenArgs GetReopenPopupArgs() const override;
-  void UpdatePopup(const std::vector<autofill::Suggestion>& suggestions,
-                   autofill::PopupType popup_type) override;
+  autofill::AutofillClient::PopupOpenArgs GetReopenPopupArgs(
+      autofill::AutofillSuggestionTriggerSource trigger_source) const override;
+  void UpdatePopup(
+      const std::vector<autofill::Suggestion>& suggestions,
+      autofill::PopupType popup_type,
+      autofill::AutofillSuggestionTriggerSource trigger_source) override;
   void HideAutofillPopup(autofill::PopupHidingReason reason) override;
   bool IsAutocompleteEnabled() const override;
   bool IsPasswordManagerEnabled() override;
-  void PropagateAutofillPredictions(
+  void PropagateAutofillPredictionsDeprecated(
       autofill::AutofillDriver* driver,
       const std::vector<autofill::FormStructure*>& forms) override;
-  void DidFillOrPreviewForm(autofill::mojom::RendererFormDataAction action,
-                            autofill::AutofillTriggerSource trigger_source,
-                            bool is_refill) override;
+  void DidFillOrPreviewForm(
+      autofill::mojom::AutofillActionPersistence action_persistence,
+      autofill::AutofillTriggerSource trigger_source,
+      bool is_refill) override;
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;

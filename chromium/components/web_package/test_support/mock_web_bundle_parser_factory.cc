@@ -27,18 +27,20 @@ void MockWebBundleParserFactory::AddReceiver(
 
 void MockWebBundleParserFactory::WaitUntilParseIntegrityBlockCalled(
     base::OnceClosure closure) {
-  if (parser_)
+  if (parser_) {
     parser_->WaitUntilParseIntegrityBlockCalled(std::move(closure));
-  else
+  } else {
     wait_parse_integrity_block_callback_ = std::move(closure);
+  }
 }
 
 void MockWebBundleParserFactory::WaitUntilParseMetadataCalled(
     base::OnceCallback<void(absl::optional<uint64_t> offset)> callback) {
-  if (parser_)
+  if (parser_) {
     parser_->WaitUntilParseMetadataCalled(std::move(callback));
-  else
+  } else {
     wait_parse_metadata_callback_ = std::move(callback);
+  }
 }
 
 void MockWebBundleParserFactory::RunIntegrityBlockCallback(
@@ -177,16 +179,9 @@ void MockWebBundleParserFactory::GetParser(
   }
 }
 
-void MockWebBundleParserFactory::GetParserForFile(
-    mojo::PendingReceiver<mojom::WebBundleParser> receiver,
-    const absl::optional<GURL>& base_url,
-    base::File file) {
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    file.Close();
-  }
-  GetParser(std::move(receiver), base_url);
-}
+void MockWebBundleParserFactory::BindFileDataSource(
+    mojo::PendingReceiver<mojom::BundleDataSource> data_source_receiver,
+    base::File file) {}
 
 void MockWebBundleParserFactory::GetParserForDataSource(
     mojo::PendingReceiver<mojom::WebBundleParser> receiver,

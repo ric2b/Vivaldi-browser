@@ -33,11 +33,11 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -197,9 +197,14 @@ bool PasswordGenerationPopupControllerImpl::PossiblyAcceptPassword() {
   return false;
 }
 
+bool PasswordGenerationPopupControllerImpl::IsPasswordSelectable() const {
+  return state_ == kOfferGeneration;
+}
+
 void PasswordGenerationPopupControllerImpl::PasswordSelected(bool selected) {
-  if (state_ == kEditGeneratedPassword || selected == password_selected_)
+  if (!IsPasswordSelectable() || selected == password_selected_) {
     return;
+  }
 
   password_selected_ = selected;
   view_->PasswordSelectionUpdated();
@@ -319,7 +324,20 @@ void PasswordGenerationPopupControllerImpl::SelectionCleared() {
 }
 
 void PasswordGenerationPopupControllerImpl::SetSelected() {
+  if (!IsPasswordSelectable()) {
+    return;
+  }
   PasswordSelected(true);
+  driver_->PreviewGenerationSuggestion(current_generated_password_);
+}
+
+void PasswordGenerationPopupControllerImpl::EditPasswordClicked() {
+  driver_->GeneratedPasswordAccepted(form_data_, generation_element_id_,
+                                     current_generated_password_);
+  Show(kEditGeneratedPassword);
+}
+
+void PasswordGenerationPopupControllerImpl::EditPasswordSelected() {
   driver_->PreviewGenerationSuggestion(current_generated_password_);
 }
 

@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
@@ -80,6 +81,11 @@ namespace {
 // characters, but this is enough to prevent the browser process from becoming
 // unresponsive or crashing.
 const int kMaxDownloadAttrLength = 1000000;
+
+// If feature flag kLinkPreview enabled and mouse keeps hovering anchor element,
+// preview will be started.
+// TODO(https://b.corp.google.com/issues/296992745): Make it configurable.
+const base::TimeDelta kLinkPreviewHoverDwellThreshold = base::Milliseconds(300);
 
 // Note: Here it covers download originated from clicking on <a download> link
 // that results in direct download. Features in this method can also be logged
@@ -123,30 +129,33 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
     : HTMLElement(tag_name, document),
       link_relations_(0),
       cached_visited_link_hash_(0),
-      rel_list_(MakeGarbageCollected<RelList>(this)) {}
+      rel_list_(MakeGarbageCollected<RelList>(this)),
+      hover_timer_(document.GetTaskRunner(TaskType::kIdleTask),
+                   this,
+                   &HTMLAnchorElement::InitiatePreview) {}
 
 HTMLAnchorElement::~HTMLAnchorElement() = default;
 
 bool HTMLAnchorElement::SupportsFocus() const {
-  if (IsEditable(*this))
-    return HTMLElement::SupportsFocus();
-  // If not a link we should still be able to focus the element if it has
-  // tabIndex.
-  return IsLink() || HTMLElement::SupportsFocus();
+  if (IsLink() && !IsEditable(*this)) {
+    return true;
+  }
+  return HTMLElement::SupportsFocus();
 }
 
 bool HTMLAnchorElement::ShouldHaveFocusAppearance() const {
+  // TODO(crbug.com/1444450): Can't this be done with focus-visible now?
   return (GetDocument().LastFocusType() != mojom::blink::FocusType::kMouse) ||
          HTMLElement::SupportsFocus();
 }
 
-bool HTMLAnchorElement::IsMouseFocusable() const {
+bool HTMLAnchorElement::IsFocusable() const {
   if (!IsFocusableStyleAfterUpdate())
     return false;
   if (IsLink())
     return SupportsFocus();
 
-  return HTMLElement::IsMouseFocusable();
+  return HTMLElement::IsFocusable();
 }
 
 bool HTMLAnchorElement::IsKeyboardFocusable() const {
@@ -154,8 +163,9 @@ bool HTMLAnchorElement::IsKeyboardFocusable() const {
     return false;
 
   // Anchor is focusable if the base element supports focus and is focusable.
-  if (IsBaseElementFocusable() && Element::SupportsFocus())
+  if (Element::SupportsFocus() && IsFocusable()) {
     return HTMLElement::IsKeyboardFocusable();
+  }
 
   if (IsLink() && !GetDocument().GetPage()->GetChromeClient().TabsToLinks())
     return false;
@@ -265,15 +275,20 @@ void HTMLAnchorElement::AttributeChanged(
 void HTMLAnchorElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kHrefAttr) {
+    if (params.old_value == params.new_value) {
+      return;
+    }
     bool was_link = IsLink();
     SetIsLink(!params.new_value.IsNull());
     if (was_link || IsLink()) {
       PseudoStateChanged(CSSSelector::kPseudoLink);
       PseudoStateChanged(CSSSelector::kPseudoVisited);
-      PseudoStateChanged(CSSSelector::kPseudoWebkitAnyLink);
-      PseudoStateChanged(CSSSelector::kPseudoAnyLink);
+      if (was_link != IsLink()) {
+        PseudoStateChanged(CSSSelector::kPseudoWebkitAnyLink);
+        PseudoStateChanged(CSSSelector::kPseudoAnyLink);
+      }
     }
-    if (isConnected()) {
+    if (isConnected() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->HrefAttributeChanged(this, params.old_value,
@@ -288,21 +303,21 @@ void HTMLAnchorElement::ParseAttribute(
   } else if (params.name == html_names::kRelAttr) {
     SetRel(params.new_value);
     rel_list_->DidUpdateAttributeValue(params.old_value, params.new_value);
-    if (isConnected() && IsLink()) {
+    if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->RelAttributeChanged(this);
       }
     }
   } else if (params.name == html_names::kReferrerpolicyAttr) {
-    if (isConnected() && IsLink()) {
+    if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->ReferrerPolicyAttributeChanged(this);
       }
     }
   } else if (params.name == html_names::kTargetAttr) {
-    if (isConnected() && IsLink()) {
+    if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->TargetAttributeChanged(this);
@@ -349,7 +364,12 @@ void HTMLAnchorElement::SetHref(const AtomicString& value) {
 }
 
 KURL HTMLAnchorElement::Url() const {
-  return Href();
+  KURL href = Href();
+  if (RuntimeEnabledFeatures::AnchorHrefCheckInvalidURLEnabled() &&
+      !href.IsValid()) {
+    return KURL();
+  }
+  return href;
 }
 
 void HTMLAnchorElement::SetURL(const KURL& url) {
@@ -472,7 +492,7 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
 
   if (const AtomicString& attribution_src =
           FastGetAttribute(html_names::kAttributionsrcAttr);
-      request.HasUserGesture() && !attribution_src.IsNull()) {
+      !attribution_src.IsNull()) {
     // An impression must be attached prior to the
     // `FindOrCreateFrameForNavigation()` call, as that call may result in
     // performing a navigation if the call results in creating a new window with
@@ -486,7 +506,7 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
     frame_request.SetImpression(
         frame->GetAttributionSrcLoader()->RegisterNavigation(
             /*navigation_url=*/completed_url, attribution_src,
-            /*element=*/this));
+            /*element=*/this, request.HasUserGesture()));
   }
 
   Frame* target_frame =
@@ -505,6 +525,30 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
 
   if (target_frame) {
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
+  }
+}
+
+void HTMLAnchorElement::InitiatePreview(TimerBase*) {
+  DocumentSpeculationRules::From(GetDocument()).InitiatePreview(Url());
+}
+
+void HTMLAnchorElement::SetHovered(bool hovered) {
+  HTMLElement::SetHovered(hovered);
+
+  if (!base::FeatureList::IsEnabled(features::kLinkPreview)) {
+    return;
+  }
+
+  if (!hovered) {
+    hover_timer_.Stop();
+  } else {
+    // Note that this trigger is a tentative version to develop Link
+    // Preview.
+    // TODO(https://b.corp.google.com/issues/296992745): Discuss about
+    // it and fix it.
+    if (Url().IsValid()) {
+      hover_timer_.StartOneShot(kLinkPreviewHoverDwellThreshold, FROM_HERE);
+    }
   }
 }
 
@@ -667,11 +711,15 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
   }
 
   if (isConnected() && IsLink() &&
-      base::FeatureList::IsEnabled(features::kSpeculativeServiceWorkerWarmUp) &&
-      features::kSpeculativeServiceWorkerWarmUpOnVisible.Get()) {
+      base::FeatureList::IsEnabled(features::kSpeculativeServiceWorkerWarmUp)) {
     if (auto* observer =
             AnchorElementObserverForServiceWorker::From(top_document)) {
-      observer->ObserveAnchorElementVisibility(*this);
+      if (features::kSpeculativeServiceWorkerWarmUpOnVisible.Get()) {
+        observer->ObserveAnchorElementVisibility(*this);
+      }
+      if (features::kSpeculativeServiceWorkerWarmUpOnInsertedIntoDom.Get()) {
+        observer->MaybeSendNavigationTargetLinks({this});
+      }
     }
   }
 
@@ -698,6 +746,7 @@ void HTMLAnchorElement::RemovedFrom(ContainerNode& insertion_point) {
 
 void HTMLAnchorElement::Trace(Visitor* visitor) const {
   visitor->Trace(rel_list_);
+  visitor->Trace(hover_timer_);
   HTMLElement::Trace(visitor);
 }
 

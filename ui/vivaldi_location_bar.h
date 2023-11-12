@@ -3,6 +3,7 @@
 #ifndef UI_VIVALDI_LOCATION_BAR_H_
 #define UI_VIVALDI_LOCATION_BAR_H_
 
+#include "base/memory/raw_ref.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 
 namespace content {
@@ -49,7 +50,7 @@ class VivaldiLocationBar : public LocationBar {
 
  private:
   // Owner
-  const VivaldiBrowserWindow& window_;
+  const raw_ref<const VivaldiBrowserWindow> window_;
 };
 
 #endif  // UI_VIVALDI_LOCATION_BAR_H_

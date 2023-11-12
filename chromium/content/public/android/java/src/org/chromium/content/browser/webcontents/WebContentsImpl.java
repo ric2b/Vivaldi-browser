@@ -87,11 +87,13 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     // Non-final for testing purposes, so resetting of the UUID can happen.
     private static UUID sParcelableUUID = UUID.randomUUID();
 
+    // Vivaldi
+    public static boolean sIsScreenLockActive;
+
     /**
      * Used to reset the internal tracking for whether or not a serialized {@link WebContents}
      * was created in this process or not.
      */
-    @VisibleForTesting
     public static void invalidateSerializedWebContentsForTesting() {
         sParcelableUUID = UUID.randomUUID();
     }
@@ -709,7 +711,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
-    @VisibleForTesting
     public void evaluateJavaScriptForTests(String script, JavaScriptCallback callback) {
         ThreadUtils.assertOnUiThread();
         if (script == null) return;
@@ -815,7 +816,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 mNativeWebContentsAndroid, root, builder, doneCallback);
     }
 
-    @VisibleForTesting
     public void simulateRendererKilledForTesting() {
         if (mObserverProxy != null) {
             mObserverProxy.renderProcessGone();
@@ -1020,7 +1020,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     /**
      * Convenience method to initialize test state. Only use for testing.
      */
-    @VisibleForTesting
     public void initializeForTesting() {
         if (mInternalsHolder == null) {
             mInternalsHolder = WebContents.createDefaultInternalsHolder();
@@ -1037,7 +1036,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     /**
      * Convenience method to set user data. Only use for testing.
      */
-    @VisibleForTesting
     public <T extends UserData> void setUserDataForTesting(Class<T> key, T userData) {
         // Be sure to call initializeForTesting() first.
         assert mInitialized;
@@ -1162,6 +1160,15 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+
+    /**
+     * Vivaldi: Native check for the screen lock.
+     */
+    @CalledByNative
+    public boolean isScreenLockActive() {
+        return sIsScreenLockActive;
+    }
+
     @NativeMethods
     public interface Natives {
         // This is static to avoid exposing a public destroy method on the native side of this

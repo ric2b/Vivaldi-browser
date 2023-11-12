@@ -13,7 +13,6 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/resources/release_callback.h"
-#include "components/viz/common/resources/resource_format.h"
 #include "services/viz/public/mojom/compositing/frame_timing_details.mojom-blink.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom-blink.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -308,7 +307,6 @@ bool CanvasResourceDispatcher::PrepareFrame(
                uv_bottom_right, SkColors::kTransparent, vertex_opacity,
                yflipped, nearest_neighbor, /*secure_output=*/false,
                gfx::ProtectedVideoType::kClear);
-
   frame->render_pass_list.push_back(std::move(pass));
 
   if (change_size_for_next_commit_ ||

@@ -121,6 +121,7 @@ class TestTargetConfig : public TargetConfig {
   void SetDesktop(Desktop desktop) override {}
   void SetFilterEnvironment(bool env) override {}
   bool GetEnvironmentFiltered() override { return false; }
+  void SetZeroAppShim() override {}
 
  private:
   std::vector<std::wstring> blocklisted_dlls_;
@@ -334,7 +335,8 @@ TEST_F(SandboxWinTest, AppContainerCheckProfile) {
       {sandbox::mojom::Sandbox::kNetwork,
        L"S-1-15-2-1204153576-2881085000-2101973085-273300490-2415804912-"
        L"3587146283-1585457728",
-       true,
+       base::FeatureList::IsEnabled(
+           features::kWinSboxNetworkServiceSandboxIsLPAC),
        {kInternetClient, kPrivateNetworkClientServer, kEnterpriseAuthentication,
         kLpacIdentityServices, kLpacCryptoServices, kLpacChromeInstallFiles,
         kRegistryRead},

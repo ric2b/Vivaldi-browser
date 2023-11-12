@@ -142,10 +142,10 @@ TEST_F(AccountsMutatorTest, UpdateAccountInfo) {
   identity_manager_observer()->SetOnRefreshTokenUpdatedCallback(
       run_loop.QuitClosure());
 
-  CoreAccountId account_id =
-      identity_test_env()
-          ->MakePrimaryAccountAvailable(kTestEmail, signin::ConsentLevel::kSync)
-          .account_id;
+  CoreAccountId account_id = identity_test_env()
+                                 ->MakePrimaryAccountAvailable(
+                                     kTestEmail, signin::ConsentLevel::kSignin)
+                                 .account_id;
   run_loop.Run();
 
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
@@ -328,7 +328,7 @@ TEST_F(AccountsMutatorTest,
   // Set up the primary account.
   std::string primary_account_email("primary.account@example.com");
   AccountInfo primary_account_info = MakePrimaryAccountAvailable(
-      identity_manager(), primary_account_email, signin::ConsentLevel::kSync);
+      identity_manager(), primary_account_email, signin::ConsentLevel::kSignin);
 
   // Now try invalidating the primary account, and check that it gets updated.
   base::RunLoop run_loop;
@@ -366,7 +366,7 @@ TEST_F(
   // Set up the primary account.
   std::string primary_account_email("primary.account@example.com");
   AccountInfo primary_account_info = MakePrimaryAccountAvailable(
-      identity_manager(), primary_account_email, signin::ConsentLevel::kSync);
+      identity_manager(), primary_account_email, signin::ConsentLevel::kSignin);
 
   // Next, add a secondary account.
   base::RunLoop run_loop;
@@ -428,7 +428,7 @@ TEST_F(AccountsMutatorTest,
     return;
 
   EXPECT_FALSE(
-      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
+      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
 
   // Now try invalidating the primary account, and make sure the test
   // expectedly fails, since the primary account is not set.
@@ -636,14 +636,14 @@ TEST_F(AccountsMutatorTest, MoveAccount) {
   auto* other_accounts_mutator =
       other_identity_test_env.identity_manager()->GetAccountsMutator();
 
-  std::string device_id_1 = GetOrCreateScopedDeviceId(pref_service());
+  std::string device_id_1 = GetSigninScopedDeviceId(pref_service());
   EXPECT_FALSE(device_id_1.empty());
 
   accounts_mutator()->MoveAccount(other_accounts_mutator,
                                   account_info.account_id);
   EXPECT_EQ(0U, identity_manager()->GetAccountsWithRefreshTokens().size());
 
-  std::string device_id_2 = GetOrCreateScopedDeviceId(pref_service());
+  std::string device_id_2 = GetSigninScopedDeviceId(pref_service());
   EXPECT_FALSE(device_id_2.empty());
   // |device_id_1| and |device_id_2| should be different as the device ID is
   // recreated in MoveAccount().

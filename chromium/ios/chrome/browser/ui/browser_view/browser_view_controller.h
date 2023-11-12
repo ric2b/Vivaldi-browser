@@ -15,10 +15,10 @@
 #import "ios/chrome/browser/ui/browser_view/tab_consumer.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
+#import "ios/chrome/browser/ui/lens/lens_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/logo_animation_controller.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
-#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_height_delegate.h"
 #import "ios/chrome/browser/web/web_state_container_view_provider.h"
 
@@ -39,7 +39,6 @@ class FullscreenController;
 @protocol HelpCommands;
 @class KeyCommandsProvider;
 @class NewTabPageCoordinator;
-@class LensCoordinator;
 @protocol OmniboxCommands;
 class PagePlaceholderBrowserAgent;
 @protocol PopupMenuCommands;
@@ -70,7 +69,6 @@ typedef struct {
   ToolbarAccessoryPresenter* toolbarAccessoryPresenter;
   PopupMenuCoordinator* popupMenuCoordinator;
   NewTabPageCoordinator* ntpCoordinator;
-  LensCoordinator* lensCoordinator;
   ToolbarCoordinator* toolbarCoordinator;
   TabStripCoordinator* tabStripCoordinator;
   TabStripLegacyCoordinator* legacyTabStripCoordinator;
@@ -105,11 +103,11 @@ typedef struct {
 @interface BrowserViewController
     : UIViewController <FindBarPresentationDelegate,
                         IncognitoReauthConsumer,
+                        LensPresentationDelegate,
                         LogoAnimationControllerOwnerOwner,
                         TabConsumer,
                         OmniboxFocusDelegate,
                         OmniboxPopupPresenterDelegate,
-                        ThumbStripSupporting,
                         ToolbarHeightDelegate,
                         WebStateContainerViewProvider,
                         BrowserCommands>
@@ -158,9 +156,6 @@ typedef struct {
 
 // Whether the receiver is currently the primary BVC.
 - (void)setPrimary:(BOOL)primary;
-
-// Called when the user explicitly opens the tab switcher.
-- (void)userEnteredTabSwitcher;
 
 // Opens a new tab as if originating from `originPoint` and `focusOmnibox`.
 - (void)openNewTabFromOriginPoint:(CGPoint)originPoint

@@ -51,6 +51,11 @@ namespace autofill {
 
 namespace {
 
+// The maximum size (in DIPs) of custom cursors that are permitted while the
+// popup is shown. The size is limited to avoid custom cursors that cover most
+// of the popup.
+constexpr int kMaximumAllowedCustomCursorDimension = 24;
+
 // The maximum number of pixels the suggestions dialog is shifted towards the
 // center the focused field.
 constexpr int kMaximumPixelsToMoveSuggestionToCenter = 120;
@@ -86,42 +91,42 @@ int PopupBaseView::GetHorizontalPadding() {
 // The widget that the PopupBaseView will be attached to.
 class PopupBaseView::Widget : public views::Widget {
  public:
-  explicit Widget(PopupBaseView* autofill_popup_base_view)
-      : autofill_popup_base_view_(autofill_popup_base_view) {
+  explicit Widget(PopupBaseView* autofill_popup_base_view) {
     views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
-    params.delegate = autofill_popup_base_view_;
-    params.parent = autofill_popup_base_view_->GetParentNativeView();
+    params.delegate = autofill_popup_base_view;
+    params.parent = autofill_popup_base_view->GetParentNativeView();
     // Ensure the popup border is not painted on an opaque background.
     params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
     params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
     Init(std::move(params));
-    AddObserver(autofill_popup_base_view_);
+    AddObserver(popup_base_view());
 
     // No animation for popup appearance (too distracting).
     SetVisibilityAnimationTransition(views::Widget::ANIMATE_HIDE);
   }
 
-  ~Widget() override = default;
+  PopupBaseView* popup_base_view() const {
+    // This cast is always safe since we pass the base view as a delegate.
+    return static_cast<PopupBaseView*>(widget_delegate());
+  }
 
   // views::Widget:
   const ui::ThemeProvider* GetThemeProvider() const override {
-    if (!autofill_popup_base_view_ ||
-        !autofill_popup_base_view_->GetBrowser()) {
+    if (!popup_base_view() || popup_base_view()->GetBrowser()) {
       return nullptr;
     }
 
     return &ThemeService::GetThemeProviderForProfile(
-        autofill_popup_base_view_->GetBrowser()->profile());
+        popup_base_view()->GetBrowser()->profile());
   }
 
   views::Widget* GetPrimaryWindowWidget() override {
-    if (!autofill_popup_base_view_ ||
-        !autofill_popup_base_view_->GetBrowser()) {
+    if (!popup_base_view() || !popup_base_view()->GetBrowser()) {
       return nullptr;
     }
 
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(
-        autofill_popup_base_view_->GetBrowser());
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForBrowser(popup_base_view()->GetBrowser());
     if (!browser_view) {
       return nullptr;
     }
@@ -129,13 +134,27 @@ class PopupBaseView::Widget : public views::Widget {
     return browser_view->GetWidget()->GetPrimaryWindowWidget();
   }
 
- private:
-  const raw_ptr<PopupBaseView, DanglingUntriaged> autofill_popup_base_view_;
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    // All move events go into the parent, so that there is no covering at all
+    // and mouse enter/exit events are detected and triggered properly.
+    if (event->type() == ui::EventType::ET_MOUSE_MOVED && parent()) {
+      parent()->SynthesizeMouseMoveEvent();
+    }
+
+    views::Widget::OnMouseEvent(event);
+  }
 };
 
-PopupBaseView::PopupBaseView(base::WeakPtr<AutofillPopupViewDelegate> delegate,
-                             views::Widget* parent_widget)
-    : delegate_(delegate), parent_widget_(parent_widget) {}
+PopupBaseView::PopupBaseView(
+    base::WeakPtr<AutofillPopupViewDelegate> delegate,
+    views::Widget* parent_widget,
+    base::span<const views::BubbleArrowSide> preferred_popup_sides,
+    bool show_arrow_pointer)
+    : delegate_(delegate),
+      parent_widget_(parent_widget),
+      preferred_popup_sides_(
+          {preferred_popup_sides.begin(), preferred_popup_sides.end()}),
+      show_arrow_pointer_(show_arrow_pointer) {}
 
 PopupBaseView::~PopupBaseView() {
   if (delegate_) {
@@ -176,12 +195,22 @@ bool PopupBaseView::DoShow() {
   if (!enough_height) {
     return false;
   }
+
+  if (content::WebContents* web_contents = GetWebContents()) {
+    custom_cursor_blocker_ = web_contents->CreateDisallowCustomCursorScope(
+        /*max_dimension_dips=*/kMaximumAllowedCustomCursorDimension + 1);
+  } else {
+    // `delegate_` is already gone and `WebContents` is destroying itself.
+    return false;
+  }
+
   GetWidget()->Show();
 
   // Showing the widget can change native focus (which would result in an
   // immediate hiding of the popup). Only start observing after shown.
   if (initialize_widget) {
-    views::WidgetFocusManager::GetInstance()->AddFocusChangeListener(this);
+    CHECK(!focus_observation_.IsObserving());
+    focus_observation_.Observe(views::WidgetFocusManager::GetInstance());
   }
 
   return true;
@@ -258,7 +287,7 @@ void PopupBaseView::NotifyAXSelection(views::View& selected_view) {
 
 void PopupBaseView::OnWidgetBoundsChanged(views::Widget* widget,
                                           const gfx::Rect& new_bounds) {
-  DCHECK(widget == parent_widget_ || widget == GetWidget());
+  CHECK(widget == parent_widget_ || widget == GetWidget());
   if (widget != parent_widget_) {
     return;
   }
@@ -269,7 +298,7 @@ void PopupBaseView::OnWidgetBoundsChanged(views::Widget* widget,
 void PopupBaseView::OnWidgetDestroying(views::Widget* widget) {
   // On Windows, widgets can be destroyed in any order. Regardless of which
   // widget is destroyed first, remove all observers and hide the popup.
-  DCHECK(widget == parent_widget_ || widget == GetWidget());
+  CHECK(widget == parent_widget_ || widget == GetWidget());
 
   // Normally this happens at destruct-time or hide-time, but because it depends
   // on |parent_widget_| (which is about to go away), it needs to happen sooner
@@ -289,8 +318,7 @@ void PopupBaseView::RemoveWidgetObservers() {
     parent_widget_->RemoveObserver(this);
   }
   GetWidget()->RemoveObserver(this);
-
-  views::WidgetFocusManager::GetInstance()->RemoveFocusChangeListener(this);
+  focus_observation_.Reset();
 }
 
 void PopupBaseView::UpdateClipPath() {
@@ -359,17 +387,19 @@ gfx::Rect PopupBaseView::GetOptionalPositionAndPlaceArrowOnPopup(
       maximum_pixel_offset_to_center,
       /*maximum_width_percentage_to_center=*/
       kMaximumWidthPercentageToMoveTheSuggestionToCenter,
-      /*popup_bounds=*/popup_bounds);
+      /*popup_bounds=*/popup_bounds, preferred_popup_sides_);
 
   // Those values are not supported for adding an arrow.
   // Currently, they can not be returned by GetOptimalPopupPlacement().
   DCHECK(arrow != views::BubbleBorder::Arrow::NONE);
   DCHECK(arrow != views::BubbleBorder::Arrow::FLOAT);
 
-  // Set the arrow position to the border.
-  border->set_arrow(arrow);
-  border->AddArrowToBubbleCornerAndPointTowardsAnchor(element_bounds,
-                                                      popup_bounds);
+  if (show_arrow_pointer_) {
+    // Set the arrow position to the border.
+    border->set_arrow(arrow);
+    border->AddArrowToBubbleCornerAndPointTowardsAnchor(element_bounds,
+                                                        popup_bounds);
+  }
 
   return popup_bounds;
 }

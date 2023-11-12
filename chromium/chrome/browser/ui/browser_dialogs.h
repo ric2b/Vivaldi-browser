@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_DIALOGS_H_
 #define CHROME_BROWSER_UI_BROWSER_DIALOGS_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -16,10 +17,14 @@
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "chrome/browser/web_applications/web_app_callback_app_identity.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_uninstall_dialog_user_options.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/bluetooth_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "extensions/buildflags/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/models/dialog_model.h"
@@ -29,7 +34,6 @@ class Browser;
 class GURL;
 class LoginHandler;
 class Profile;
-struct WebAppInstallInfo;
 
 namespace base {
 class FilePath;
@@ -78,6 +82,10 @@ namespace webapps {
 class MlInstallOperationTracker;
 struct Screenshot;
 }  // namespace webapps
+
+namespace web_app {
+struct WebAppInstallInfo;
+}  // namespace web_app
 
 namespace chrome {
 
@@ -153,7 +161,7 @@ void ShowBluetoothDevicePairConfirmDialog(
 // WebAppInstallInfo parameter contains the information about the app,
 // possibly modified by the user.
 using AppInstallationAcceptanceCallback =
-    base::OnceCallback<void(bool, std::unique_ptr<WebAppInstallInfo>)>;
+    base::OnceCallback<void(bool, std::unique_ptr<web_app::WebAppInstallInfo>)>;
 
 // Shows the Web App install bubble.
 //
@@ -162,9 +170,20 @@ using AppInstallationAcceptanceCallback =
 // (for a Desktop PWA), or the current url (when creating a shortcut app).
 void ShowWebAppInstallDialog(
     content::WebContents* web_contents,
-    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     AppInstallationAcceptanceCallback callback);
+
+// Creates a dialog that requests the consent from the user to install the
+// requested apps as sub apps to the named parent app. This is triggered by
+// an app calling the Multi App API add() function. The dialog is modal to
+// the browser containing the app calling the API. |sub_apps| contains the
+// information to represent each app to the user.
+views::Widget* CreateSubAppsInstallDialogWidget(
+    const std::string_view parent_app_name,
+    const std::string_view parent_app_scope,
+    const std::vector<std::unique_ptr<web_app::WebAppInstallInfo>>& sub_apps,
+    gfx::NativeWindow window);
 
 // When an app changes its icon or name, that is considered an app identity
 // change which (for some types of apps) needs confirmation from the user.
@@ -184,6 +203,16 @@ void ShowWebAppIdentityUpdateDialog(
     const SkBitmap& new_icon,
     content::WebContents* web_contents,
     web_app::AppIdentityDialogCallback callback);
+
+// Shows the web app uninstallation dialog on a page whenever user has decided
+// to uninstall an installed dPWA from a variety of OS surfaces and chrome.
+void ShowWebAppUninstallDialog(
+    Profile* profile,
+    const web_app::AppId& app_id,
+    webapps::WebappUninstallSource uninstall_source,
+    gfx::NativeWindow parent,
+    std::map<SquareSizePx, SkBitmap> icon_bitmaps,
+    web_app::UninstallDialogCallback uninstall_dialog_result_callback);
 
 #if !BUILDFLAG(IS_ANDROID)
 // Callback used to indicate whether a user has accepted the launch of a
@@ -234,7 +263,7 @@ enum class PwaInProductHelpState {
 // shown.
 void ShowPWAInstallBubble(
     content::WebContents* web_contents,
-    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     AppInstallationAcceptanceCallback callback,
     PwaInProductHelpState iph_state = PwaInProductHelpState::kNotShown);
@@ -244,7 +273,7 @@ void ShowPWAInstallBubble(
 // confirm or cancel install in this dialog.
 void ShowWebAppDetailedInstallDialog(
     content::WebContents* web_contents,
-    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     AppInstallationAcceptanceCallback callback,
     const std::vector<webapps::Screenshot>& screenshots,

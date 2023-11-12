@@ -68,8 +68,7 @@ class CastMediaNotificationItem
   void OnRouteUpdated(const media_router::MediaRoute& route);
 
   // Stops the cast session and logs UMA about the stop cast action.
-  virtual void StopCasting(
-      global_media_controls::GlobalMediaControlsEntryPoint entry_point);
+  virtual void StopCasting();
 
   // Returns a pending remote bound to |this|. This should not be called more
   // than once per instance.
@@ -130,9 +129,7 @@ class CastMediaNotificationItem
 
   void UpdateView();
   void ImageChanged(const SkBitmap& bitmap);
-  void RecordMetadataMetrics() const;
 
-  bool recorded_metadata_metrics_ = false;
   // The notification is shown when active.
   bool is_active_ = true;
 

@@ -3,8 +3,8 @@
 #import "ios/ui/notes/note_home_view_controller.h"
 
 #import "app/vivaldi_apptools.h"
+#import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
@@ -1045,7 +1045,7 @@ const int kRowsHiddenByNavigationBar = 3;
       itemsInSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
   for (TableViewItem* item in items) {
     NoteHomeNodeItem* nodeItem =
-        base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+        base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
     const NoteNode* node = nodeItem.noteNode;
     if (self.sharedState.editNodes.find(node) !=
         self.sharedState.editNodes.end()) {
@@ -1142,7 +1142,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
   if (item.type == NoteHomeItemTypeNote) {
     NoteHomeNodeItem* nodeItem =
-        base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+        base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
     return nodeItem.noteNode;
   }
 
@@ -1400,12 +1400,9 @@ const int kRowsHiddenByNavigationBar = 3;
   if ([self isAnyControllerPresenting]) {
     return;
   }
-  const std::set<const vivaldi::NoteNode*> nodes =
-      self.sharedState.editNodes;
-  // Center button is shown and is clickable only when at least
-  // one node is selected.
-  DCHECK(nodes.size() > 0);
-  [self deleteNodes:nodes];
+
+  // Toggle edit mode.
+  [self setTableViewEditing:!self.sharedState.currentlyInEditMode];
 }
 
 // Called when the empty trash button is clicked.
@@ -1834,12 +1831,12 @@ const int kRowsHiddenByNavigationBar = 3;
 
   if (item.type == NoteHomeItemTypeNote) {
     NoteHomeNodeItem* nodeItem =
-        base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+        base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
     if ((nodeItem.noteNode->is_folder() &&
         nodeItem.noteNode == self.sharedState.editingFolderNode)
         ) {
       TableViewNoteFolderCell* tableCell =
-          base::mac::ObjCCastStrict<TableViewNoteFolderCell>(cell);
+          base::apple::ObjCCastStrict<TableViewNoteFolderCell>(cell);
       // Delay starting edit, so that the cell is fully created. This is
       // needed when scrolling away and then back into the editingCell,
       // without the delay the cell will resign first responder before its
@@ -1885,7 +1882,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // nodes of type Note or Folder, but not the permanent ones. Only enable
   // swipe-to-delete if editing notes is allowed.
   NoteHomeNodeItem* nodeItem =
-      base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+      base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
   const NoteNode* node = nodeItem.noteNode;
   return [self isEditNotesEnabled] && [self isUrlOrFolder:node] &&
          [self isNodeEditableByUser:node];
@@ -1903,7 +1900,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
   if (editingStyle == UITableViewCellEditingStyleDelete) {
     NoteHomeNodeItem* nodeItem =
-        base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+        base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
     const NoteNode* node = nodeItem.noteNode;
     std::set<const NoteNode*> nodes;
     nodes.insert(node);

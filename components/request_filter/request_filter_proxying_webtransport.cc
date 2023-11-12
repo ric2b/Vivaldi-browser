@@ -7,6 +7,7 @@
 #include "components/request_filter/request_filter_proxying_webtransport.h"
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "components/request_filter/filtered_request_info.h"
 #include "content/public/browser/render_process_host.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -208,14 +209,14 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
     request_handler_->OnErrorOccurred(browser_context_, &info_,
                                       /*started=*/true, error_code);
 
-    proxies_.RemoveProxy(this);
+    proxies_->RemoveProxy(this);
     // `this` is deleted.
   }
 
   void OnCompleted() {
     request_handler_->OnCompleted(browser_context_, &info_, net::OK);
     // Delete `this`.
-    proxies_.RemoveProxy(this);
+    proxies_->RemoveProxy(this);
   }
 
  private:
@@ -223,7 +224,7 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
   const raw_ptr<RequestFilterManager::RequestHandler> request_handler_;
   // Weak reference to the ProxySet. This is safe as `proxies_` owns this
   // object.
-  RequestFilterManager::ProxySet& proxies_;
+  const raw_ref<RequestFilterManager::ProxySet> proxies_;
   raw_ptr<content::BrowserContext> browser_context_;
   FilteredRequestInfo info_;
   net::HttpRequestHeaders request_headers_;

@@ -149,6 +149,7 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
     private void setReadingListIconTint() {
         BookmarkId bookmarkId = this.getItem();
         BookmarkItem bookmarkItem = mDelegate.getModel().getBookmarkById(bookmarkId);
+        if (bookmarkItem == null) return;
         if (this.getItem().getType() == BookmarkType.READING_LIST && bookmarkItem.isRead()) {
             mStartIconView.setColorFilter(getContext().getColor(
                     R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);

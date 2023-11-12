@@ -19,10 +19,13 @@
 #include "chrome/browser/ash/file_manager/file_manager_copy_or_move_hook_delegate.h"
 #include "chrome/browser/ash/file_manager/file_manager_copy_or_move_hook_file_check_delegate.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/ash/policy/dlp/files_policy_notification_manager.h"
 #include "chrome/browser/ash/policy/dlp/files_policy_notification_manager_factory.h"
 #include "chrome/browser/enterprise/connectors/analysis/file_transfer_analysis_delegate.h"
+#include "chrome/browser/enterprise/data_controls/component.h"
+#include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/common/task_util.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -176,21 +179,54 @@ void CopyOrMoveIOTaskPolicyImpl::Resume(ResumeParams params) {
     return;
   }
 
-  if (params.policy_params->type == policy::Policy::kDlp) {
+  if (params.policy_params->type == policy::Policy::kDlp ||
+      params.policy_params->type == policy::Policy::kEnterpriseConnectors) {
     files_policy_manager->OnIOTaskResumed(progress_->task_id);
-  }
-
-  if (params.policy_params->type == policy::Policy::kEnterpriseConnectors) {
-    // TODO(b/281047180): Start transfer.
   }
 }
 
+void CopyOrMoveIOTaskPolicyImpl::MaybeSendConnectorsBlockedFilesNotification() {
+  if (connectors_blocked_files_.empty()) {
+    return;
+  }
+
+  // Blocked files are only added if kFileTransferEnterpriseConnectorUI is
+  // enabled.
+  CHECK(base::FeatureList::IsEnabled(
+      features::kFileTransferEnterpriseConnectorUI));
+
+  auto* files_policy_manager =
+      policy::FilesPolicyNotificationManagerFactory::GetForBrowserContext(
+          profile_);
+  if (!files_policy_manager) {
+    LOG(ERROR) << "Couldn't find FilesPolicyNotificationManager";
+    return;
+  }
+  files_policy_manager->AddConnectorsBlockedFiles(
+      progress_->task_id, std::move(connectors_blocked_files_),
+      progress_->type == file_manager::io_task::OperationType::kMove
+          ? policy::dlp::FileAction::kMove
+          : policy::dlp::FileAction::kCopy);
+}
+
 void CopyOrMoveIOTaskPolicyImpl::Complete(State state) {
-  if (has_blocked_files_) {
-    // It doesn't matter here which policy error we set because the panel
-    // strings in the files app are the same for all of them.
-    progress_->policy_error = PolicyErrorType::kDlp;
+  if (blocked_files_ > 0 &&
+      base::FeatureList::IsEnabled(features::kNewFilesPolicyUX)) {
+    bool has_dlp_errors = connectors_blocked_files_.size() < blocked_files_;
+    bool has_connector_errors = !connectors_blocked_files_.empty();
+
+    CHECK(has_dlp_errors || has_connector_errors);
+    // TODO(b/293425493): Support combined error type (if both dlp and connector
+    // errors exist).
+    PolicyErrorType error_type = has_dlp_errors
+                                     ? PolicyErrorType::kDlp
+                                     : PolicyErrorType::kEnterpriseConnectors;
+
+    progress_->policy_error.emplace(error_type, blocked_files_,
+                                    blocked_file_name_);
     state = State::kError;
+
+    MaybeSendConnectorsBlockedFilesNotification();
   }
 
   CopyOrMoveIOTaskImpl::Complete(state);
@@ -203,7 +239,7 @@ void CopyOrMoveIOTaskPolicyImpl::VerifyTransfer() {
 
   if (auto* files_controller =
           policy::DlpFilesControllerAsh::GetForPrimaryProfile();
-      policy::DlpFilesController::kNewFilesPolicyUXEnabled &&
+      base::FeatureList::IsEnabled(features::kNewFilesPolicyUX) &&
       files_controller) {
     std::vector<storage::FileSystemURL> transferred_urls;
     for (const auto& entry : progress_->sources) {
@@ -227,7 +263,7 @@ CopyOrMoveIOTaskPolicyImpl::GetErrorBehavior() {
   // This function is called when the transfer starts and DLP restrictions are
   // applied before the transfer. If there's any file blocked by DLP, the error
   // behavior should be skip instead of abort.
-  if (report_only_scans_ && !has_blocked_files_) {
+  if (report_only_scans_ && !blocked_files_) {
     return storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT;
   }
   // For the enterprise connectors, we want files to be copied/moved if they are
@@ -273,10 +309,7 @@ CopyOrMoveIOTaskPolicyImpl::GetHookDelegate(size_t idx) {
 void CopyOrMoveIOTaskPolicyImpl::MaybeScanForDisallowedFiles(size_t idx) {
   DCHECK_LE(idx, progress_->sources.size());
   if (idx == progress_->sources.size()) {
-    // Scanning is complete.
-    // TODO(ayaelattar): Set the policy error if any file was blocked.
-
-    StartTransfer();
+    ScanningCompleted();
     return;
   }
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -306,6 +339,77 @@ void CopyOrMoveIOTaskPolicyImpl::MaybeScanForDisallowedFiles(size_t idx) {
                      weak_ptr_factory_.GetWeakPtr(), idx + 1));
 }
 
+void CopyOrMoveIOTaskPolicyImpl::ScanningCompleted() {
+  if (!MaybeShowConnectorsWarning()) {
+    // Only start the transfer if no warning was shown.
+    // If a warning is shown, the transfer will be resumed or aborted through
+    // the warning dialog/toasts/etc.
+    StartTransfer();
+  }
+}
+
+bool CopyOrMoveIOTaskPolicyImpl::MaybeShowConnectorsWarning() {
+  bool connectors_new_ui_enabled = base::FeatureList::IsEnabled(
+      features::kFileTransferEnterpriseConnectorUI);
+  if (!connectors_new_ui_enabled) {
+    return false;
+  }
+
+  std::vector<base::FilePath> warning_files_paths;
+  for (const auto& delegate : file_transfer_analysis_delegates_) {
+    if (!delegate) {
+      continue;
+    }
+    for (const auto& warned_file : delegate->GetWarnedFiles()) {
+      warning_files_paths.push_back(warned_file.path());
+    }
+  }
+
+  if (warning_files_paths.empty()) {
+    return false;
+  }
+
+  auto* fpnm =
+      policy::FilesPolicyNotificationManagerFactory::GetForBrowserContext(
+          profile_);
+  if (!fpnm) {
+    LOG(ERROR) << "No FilesPolicyNotificationManager instantiated,"
+                  "can't show policy warning UI";
+    return false;
+  }
+
+  fpnm->ShowConnectorsWarning(
+      base::BindOnce(&CopyOrMoveIOTaskPolicyImpl::OnConnectorsWarnDialogResult,
+                     weak_ptr_factory_.GetWeakPtr()),
+      std::move(progress_->task_id), std::move(warning_files_paths),
+      progress_->type == file_manager::io_task::OperationType::kMove
+          ? policy::dlp::FileAction::kMove
+          : policy::dlp::FileAction::kCopy);
+  return true;
+}
+
+// TODO(b/293122562): The user justification should be passed to this callback
+// when proceeding a warning.
+void CopyOrMoveIOTaskPolicyImpl::OnConnectorsWarnDialogResult(
+    bool should_proceed) {
+  if (!should_proceed) {
+    // No need to cancel. Cancel will be called from
+    // FilesPolicyNotificationManager.
+    return;
+  }
+  // If the user has proceeded the warning, then we need to notify the
+  // `FileTransferAnalysisDelegate`s to report the bypass of the warning and to
+  // mark warned files as allowed for a transfer.
+  base::ranges::for_each(file_transfer_analysis_delegates_,
+                         [](const auto& delegate) {
+                           if (delegate) {
+                             // TODO(b/293122562): Pass user_justification.
+                             delegate->BypassWarnings(absl::nullopt);
+                           }
+                         });
+  StartTransfer();
+}
+
 void CopyOrMoveIOTaskPolicyImpl::IsTransferAllowed(
     size_t idx,
     const storage::FileSystemURL& source_url,
@@ -328,7 +432,17 @@ void CopyOrMoveIOTaskPolicyImpl::IsTransferAllowed(
       result ==
           enterprise_connectors::FileTransferAnalysisDelegate::RESULT_BLOCKED);
 
-  has_blocked_files_ = true;
+  if (base::FeatureList::IsEnabled(
+          features::kFileTransferEnterpriseConnectorUI)) {
+    blocked_files_++;
+    connectors_blocked_files_.push_back(source_url.path());
+    if (blocked_file_name_.empty()) {
+      blocked_file_name_ = util::GetDisplayablePath(profile_, source_url.path())
+                               .value_or(base::FilePath())
+                               .BaseName()
+                               .value();
+    }
+  }
 
   std::move(callback).Run(base::File::FILE_ERROR_SECURITY);
 }
@@ -341,10 +455,20 @@ void CopyOrMoveIOTaskPolicyImpl::OnCheckIfTransferAllowed(
   // Connectors scanning for them.
 
   if (!blocked_entries.empty()) {
-    has_blocked_files_ = true;
+    blocked_files_ = blocked_entries.size();
+    blocked_file_name_ =
+        util::GetDisplayablePath(profile_, *blocked_entries.begin())
+            .value_or(base::FilePath())
+            .BaseName()
+            .value();
   }
 
   if (settings_.empty() || report_only_scans_) {
+    // Re-enter state progress if needed.
+    if (progress_->state != State::kInProgress) {
+      progress_->state = State::kInProgress;
+      progress_callback_.Run(*progress_);
+    }
     // Don't do any scans. It's either dlp-only restrictions (if `settings_` is
     // empty), or the scans will performed after the copy/move is completed
     // (report_only_scans_ is true).

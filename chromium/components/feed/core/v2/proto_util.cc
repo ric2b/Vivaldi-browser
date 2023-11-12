@@ -146,6 +146,12 @@ feedwire::Request CreateFeedQueryRequest(
   for (auto capability : GetFeedConfig().experimental_capabilities)
     feed_request.add_client_capability(capability);
 
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(kFeedBottomSyncStringRemoval)) {
+    feed_request.add_client_capability(Capability::SYNC_STRING_REMOVAL);
+  }
+#endif
+
   if (base::FeatureList::IsEnabled(kInterestFeedV2Hearts)) {
     feed_request.add_client_capability(Capability::HEART);
   }
@@ -177,6 +183,10 @@ feedwire::Request CreateFeedQueryRequest(
 
   if (base::FeatureList::IsEnabled(kSyntheticCapabilities)) {
     feed_request.add_client_capability(Capability::SYNTHETIC_CAPABILITIES);
+  }
+
+  if (base::FeatureList::IsEnabled(kFeedSportsCard)) {
+    feed_request.add_client_capability(Capability::SPORTS_IN_GAME_UPDATE);
   }
 
   switch (request_metadata.tab_group_enabled_state) {

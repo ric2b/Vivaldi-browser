@@ -12,11 +12,15 @@
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/metrics_util.h"
+#include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/icon_button.h"
 #include "ash/style/pill_button.h"
 #include "ash/style/typography.h"
+#include "ash/system/model/clock_model.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/time/calendar_event_list_view.h"
 #include "ash/system/time/calendar_metrics.h"
 #include "ash/system/time/calendar_month_view.h"
@@ -26,13 +30,17 @@
 #include "ash/system/time/date_helper.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
+#include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -56,6 +64,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/scrollbar/scroll_bar.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/table_layout.h"
@@ -428,9 +437,8 @@ BEGIN_METADATA(CalendarHeaderView, views::View)
 END_METADATA
 
 CalendarView::CalendarView(DetailedViewDelegate* delegate,
-                           UnifiedSystemTrayController* controller)
-    : TrayDetailedView(delegate),
-      controller_(controller),
+                           bool for_glanceables_container)
+    : GlanceableTrayChildBubble(delegate, for_glanceables_container),
       calendar_view_controller_(std::make_unique<CalendarViewController>()),
       scrolling_settled_timer_(
           FROM_HERE,
@@ -583,6 +591,12 @@ CalendarView::CalendarView(DetailedViewDelegate* delegate,
   calendar_sliding_surface_->SetPaintToLayer();
   calendar_sliding_surface_->layer()->SetFillsBoundsOpaquely(false);
 
+  // Override the default focus order so the calendar contents (which contains
+  // the current date view) and the UI within calendar sliding surfaces get
+  // focused before the "Today" button in the calendar view header.
+  scroll_view_->InsertBeforeInFocusList(TrayDetailedView::tri_view());
+  calendar_sliding_surface_->InsertAfterInFocusList(scroll_view_);
+
   scoped_calendar_model_observer_.Observe(calendar_model_.get());
   scoped_calendar_view_controller_observer_.Observe(
       calendar_view_controller_.get());
@@ -620,9 +634,9 @@ void CalendarView::CreateExtraTitleRowButtons() {
     managed_button_ = tri_view()->AddView(
         TriView::Container::END,
         std::make_unique<IconButton>(
-            base::BindRepeating(
-                &UnifiedSystemTrayController::HandleEnterpriseInfoAction,
-                base::Unretained(controller_)),
+            base::BindRepeating([]() {
+              Shell::Get()->system_tray_model()->client()->ShowEnterpriseInfo();
+            }),
             IconButton::Type::kMedium, &kSystemTrayManagedIcon,
             IDS_ASH_CALENDAR_DISABLED_BY_ADMIN));
   }
@@ -638,9 +652,15 @@ void CalendarView::CreateExtraTitleRowButtons() {
 
   DCHECK(!settings_button_);
   settings_button_ = CreateSettingsButton(
-      base::BindRepeating(
-          &UnifiedSystemTrayController::HandleOpenDateTimeSettingsAction,
-          base::Unretained(controller_)),
+      base::BindRepeating([]() {
+        ClockModel* model = Shell::Get()->system_tray_model()->clock();
+
+        if (Shell::Get()->session_controller()->ShouldEnableSettings()) {
+          model->ShowDateSettings();
+        } else if (model->can_set_time()) {
+          model->ShowSetTimeDialog();
+        }
+      }),
       IDS_ASH_CALENDAR_SETTINGS);
   settings_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_CALENDAR_SETTINGS_TOOLTIP));
@@ -805,7 +825,7 @@ void CalendarView::UpdateOnScreenMonthMap() {
       calendar_model_->FindFetchingStatus(start_time);
 
   // Checks if `next_month_` is in the visible view. If so, adds it to
-  // `on_screen_month_` if not already presents. Otherwise updates the fetching
+  // `on_screen_month_` if not already present. Otherwise updates the fetching
   // status. This is needed since a refetching request may be sent when this
   // function is called and we need to update the fetching status to toggle the
   // visibility of the loading bar.
@@ -1129,7 +1149,7 @@ void CalendarView::OnEventsFetched(
     const CalendarModel::FetchingStatus status,
     const base::Time start_time,
     const google_apis::calendar::EventList* events) {
-  if (on_screen_month_.find(start_time) != on_screen_month_.end()) {
+  if (base::Contains(on_screen_month_, start_time)) {
     on_screen_month_[start_time] = status;
   }
 
@@ -1143,7 +1163,7 @@ void CalendarView::OnEventsFetched(
 }
 
 void CalendarView::OnTimeout(const base::Time start_time) {
-  if (on_screen_month_.find(start_time) != on_screen_month_.end()) {
+  if (base::Contains(on_screen_month_, start_time)) {
     on_screen_month_[start_time] = CalendarModel::kNever;
   }
 
@@ -1347,6 +1367,7 @@ void CalendarView::OnCalendarLoaded() {
 }
 
 void CalendarView::ScrollUpOneMonth() {
+  is_scrolling_up_ = true;
   calendar_view_controller_->UpdateMonth(
       calendar_view_controller_->GetPreviousMonthFirstDayUTC(1));
   content_view_->RemoveChildViewT(next_next_label_.get());
@@ -1387,6 +1408,7 @@ void CalendarView::ScrollUpOneMonth() {
 }
 
 void CalendarView::ScrollDownOneMonth() {
+  is_scrolling_up_ = false;
   // Renders the next month if the next month label is moving up and passing
   // the top of the visible area, or the next month body's bottom is passing
   // the bottom of the visible area.
@@ -1619,15 +1641,24 @@ void CalendarView::OnEvent(ui::Event* event) {
   }
 
   if (!IsDateCellViewFocused()) {
-    if (is_tab_key_pressed && key_event->IsShiftDown()) {
-      // If this is reverse tab navigation (Shift+Tab) and current focused view
-      // is the last focusable view, then make an attempt to navigate to the
-      // previous widget (most likely to the message center). Stop the
-      // propagation of the event if the attempt was successful.
-      const auto* next_reverse_view = focus_manager->GetNextFocusableView(
-          focus_manager->GetFocusedView(), GetWidget(), /*reverse=*/true,
+    if (is_tab_key_pressed) {
+      // If the current focused view is the last focusable view in the focus
+      // list, then make an attempt to navigate to the previous widget (most
+      // likely to the message center). Stop the propagation of the event if
+      // the attempt was successful.
+      const auto* next_view = focus_manager->GetNextFocusableView(
+          focus_manager->GetFocusedView(), GetWidget(),
+          /*reverse=*/key_event->IsShiftDown(),
           /*dont_loop=*/true);
-      if (!next_reverse_view && controller_->FocusOut(/*reverse=*/true)) {
+      auto* unified_system_tray_bubble =
+          RootWindowController::ForWindow(GetWidget()->GetNativeWindow())
+              ->GetStatusAreaWidget()
+              ->unified_system_tray()
+              ->bubble();
+
+      if (!next_view && unified_system_tray_bubble &&
+          unified_system_tray_bubble->unified_system_tray_controller()
+              ->FocusOut(/*reverse=*/true)) {
         event->StopPropagation();
       }
     }
@@ -1638,18 +1669,11 @@ void CalendarView::OnEvent(ui::Event* event) {
   // When tab key is pressed, stops focusing on any `CalendarDateCellView` and
   // goes to the next focusable button in the header.
   if (is_tab_key_pressed) {
-    // Set focus on `down_button_`/`event_list_view_` or null
-    // pointer to escape the focusing on the date cell.
-    if (key_event->IsShiftDown()) {
-      down_button_->RequestFocus();
-    } else if (event_list_view_) {
-      // Moves focusing ring to the close button of the event list.
-      event_list_view_->RequestFocus();
-      focus_manager->AdvanceFocus(/*reverse=*/false);
-    } else {
-      scroll_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
-      scroll_view_->RequestFocus();
-    }
+    // Focus the whole scroll view so `focus_manager->AdvanceFocus()` moves the
+    // focus out of the scroll view, to the next view in the focus order. This
+    // avoids focusing the next date cell view.
+    scroll_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    scroll_view_->RequestFocus();
 
     current_month_->DisableFocus();
     previous_month_->DisableFocus();
@@ -1658,12 +1682,11 @@ void CalendarView::OnEvent(ui::Event* event) {
 
     TrayDetailedView::OnEvent(event);
 
-    // Should move the focus to the next widget, so `AdvanceFocus` from the last
-    // view.
-    if (!key_event->IsShiftDown() && !event_list_view_) {
-      focus_manager->AdvanceFocus(/*reverse=*/false);
-      scroll_view_->SetFocusBehavior(FocusBehavior::NEVER);
-    }
+    // Should move the focus out of the scroll view (the whole scroll view
+    // temporarily grabbed focus in place of the initially focused date cell
+    // view).
+    focus_manager->AdvanceFocus(/*reverse=*/key_event->IsShiftDown());
+    scroll_view_->SetFocusBehavior(FocusBehavior::NEVER);
     event->StopPropagation();
     content_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
     return;
@@ -1912,9 +1935,7 @@ void CalendarView::OnCloseEventListAnimationComplete() {
 
 void CalendarView::RequestFocusForEventListCloseButton() {
   DCHECK(event_list_view_);
-  auto* focus_manager = GetFocusManager();
-  event_list_view_->RequestFocus();
-  focus_manager->AdvanceFocus(/*reverse=*/false);
+  event_list_view_->RequestCloseButtonFocus();
   current_month_->DisableFocus();
   previous_month_->DisableFocus();
   next_month_->DisableFocus();
@@ -2038,7 +2059,7 @@ void CalendarView::SetCalendarSlidingSurfaceBounds(bool event_list_view_open) {
     const int up_next_view_preferred_height =
         up_next_view_->GetPreferredSize().height();
     calendar_sliding_surface_->SetBounds(
-        x_position, GetVisibleBounds().bottom() - up_next_view_preferred_height,
+        x_position, GetLocalBounds().bottom() - up_next_view_preferred_height,
         width, event_list_view_height);
     return;
   }

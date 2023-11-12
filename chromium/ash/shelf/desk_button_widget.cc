@@ -9,14 +9,17 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/scrollable_shelf_view.h"
+#include "ash/shelf/shelf_focus_cycler.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desk_button/desk_button.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "base/i18n/rtl.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/transform_util.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -53,6 +56,9 @@ class DeskButtonWidget::DelegateView : public views::WidgetDelegateView {
   // views::WidgetDelegateView:
   bool CanActivate() const override;
 
+  // views::View:
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+
   // Notifies the `desk_button_` to update layout and values based on the new
   // expanded state.
   void OnExpandedStateUpdate(bool expanded);
@@ -74,12 +80,20 @@ void DeskButtonWidget::DelegateView::Init(
   desk_button_ = GetContentsView()->AddChildView(
       std::make_unique<DeskButton>(desk_button_widget_));
   OnExpandedStateUpdate(desk_button_widget->is_expanded());
+  AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 }
 
 bool DeskButtonWidget::DelegateView::CanActivate() const {
   // We don't want mouse clicks to activate us, but we need to allow
   // activation when the user is using the keyboard (FocusCycler).
   return Shell::Get()->focus_cycler()->widget_activating() == GetWidget();
+}
+
+bool DeskButtonWidget::DelegateView::AcceleratorPressed(
+    const ui::Accelerator& accelerator) {
+  CHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
+  GetWidget()->Deactivate();
+  return true;
 }
 
 void DeskButtonWidget::DelegateView::OnExpandedStateUpdate(bool expanded) {
@@ -101,7 +115,8 @@ DeskButtonWidget::DeskButtonWidget(Shelf* shelf)
 DeskButtonWidget::~DeskButtonWidget() = default;
 
 int DeskButtonWidget::GetPreferredLength() const {
-  return is_expanded_ ? GetPreferredExpandedWidth() : kDeskButtonHeight;
+  return is_expanded_ && is_horizontal_shelf_ ? GetPreferredExpandedWidth()
+                                              : kDeskButtonHeight;
 }
 
 int DeskButtonWidget::GetPreferredExpandedWidth() const {
@@ -137,6 +152,36 @@ gfx::Rect DeskButtonWidget::GetTargetExpandedBounds() const {
   return current_bounds;
 }
 
+void DeskButtonWidget::MaybeFocusOut(bool reverse) {
+  // The focus order is the previous desk button, the desk button, then the next
+  // desk button.
+  views::View* views[] = {GetDeskButton()->prev_desk_button(), GetDeskButton(),
+                          GetDeskButton()->next_desk_button()};
+
+  // The desk button will still be drawn in LTR, with the previous desk button
+  // on the left, when in RTL mode.
+  if (base::i18n::IsRTL()) {
+    std::swap(views[0], views[2]);
+  }
+
+  views::View* focused_view = GetFocusManager()->GetFocusedView();
+
+  const int count = std::size(views);
+  int focused = base::ranges::find(views, focused_view) - std::begin(views);
+  // This method is only called if the desk button widget already has focus.
+  CHECK(focused != count);
+
+  int next = focused + (reverse ? -1 : 1);
+  // Only the previous and next desk buttons can be disabled. If they are next,
+  // the current focus is on the desk button and focus should leave the desk
+  // button widget.
+  if (next < 0 || next >= count || !views[next]->GetEnabled()) {
+    FocusOut(reverse);
+    return;
+  }
+  views[next]->RequestFocus();
+}
+
 bool DeskButtonWidget::ShouldBeVisible() const {
   const ShelfLayoutManager* layout_manager = shelf_->shelf_layout_manager();
   const OverviewController* overview_controller =
@@ -151,6 +196,10 @@ bool DeskButtonWidget::ShouldBeVisible() const {
 }
 
 void DeskButtonWidget::SetExpanded(bool expanded) {
+  if (is_expanded_ == expanded) {
+    return;
+  }
+
   is_expanded_ = expanded;
 
   if (is_horizontal_shelf_ && ShouldBeVisible()) {
@@ -177,10 +226,9 @@ void DeskButtonWidget::PrepareForAlignmentChange(ShelfAlignment new_alignment) {
   delegate_view_->SetForceExpandedState(is_horizontal_shelf_);
   is_expanded_ = is_horizontal_shelf_;
   delegate_view_->OnExpandedStateUpdate(is_expanded_);
-  // Even if the expanded state changed, do not update the widget bounds.
-  // `PrepareForAlignmentChange()` is bound to be followed by the shelf
-  // layout, at which point desk button widget bounds will be updated to
-  // match the current expanded state.
+
+  // Hide the widget first to avoid unneeded animation.
+  Hide();
 }
 
 void DeskButtonWidget::CalculateTargetBounds() {
@@ -193,11 +241,45 @@ gfx::Rect DeskButtonWidget::GetTargetBounds() const {
 }
 
 void DeskButtonWidget::UpdateLayout(bool animate) {
-  if (ShouldBeVisible()) {
-    SetBounds(GetTargetBounds());
-    ShowInactive();
+  const gfx::Rect initial_bounds = GetWindowBoundsInScreen();
+  const bool visibility = GetVisible();
+  const bool target_visibility = ShouldBeVisible();
+  if (initial_bounds == target_bounds_ && visibility == target_visibility) {
+    return;
+  }
+
+  if (!animate || visibility != target_visibility) {
+    if (target_visibility) {
+      SetBounds(target_bounds_);
+      ShowInactive();
+    } else {
+      Hide();
+    }
+
+    return;
+  }
+
+  const bool animate_transform = initial_bounds.size() == target_bounds_.size();
+
+  if (animate_transform) {
+    const gfx::Transform initial_transform = gfx::TransformBetweenRects(
+        gfx::RectF(target_bounds_), gfx::RectF(initial_bounds));
+    SetBounds(target_bounds_);
+    GetNativeView()->layer()->SetTransform(initial_transform);
+  }
+
+  ui::ScopedLayerAnimationSettings animation_setter(
+      GetNativeView()->layer()->GetAnimator());
+  animation_setter.SetTransitionDuration(
+      ShelfConfig::Get()->shelf_animation_duration());
+  animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
+  animation_setter.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+
+  if (animate_transform) {
+    GetNativeView()->layer()->SetTransform(gfx::Transform());
   } else {
-    Hide();
+    SetBounds(target_bounds_);
   }
 }
 
@@ -209,7 +291,13 @@ void DeskButtonWidget::UpdateTargetBoundsForGesture(int shelf_position) {
   }
 }
 
-void DeskButtonWidget::HandleLocaleChange() {}
+void DeskButtonWidget::HandleLocaleChange() {
+  // The desk button be laid out LTR even in RTL mode.
+  GetDeskButton()->ReorderChildView(GetDeskButton()->prev_desk_button(),
+                                    base::i18n::IsRTL() ? 3 : 1);
+  GetDeskButton()->ReorderChildView(GetDeskButton()->next_desk_button(),
+                                    base::i18n::IsRTL() ? 1 : 3);
+}
 
 void DeskButtonWidget::Initialize(aura::Window* container) {
   CHECK(container);
@@ -228,6 +316,9 @@ void DeskButtonWidget::Initialize(aura::Window* container) {
 
   delegate_view_->Init(this);
   delegate_view_->SetForceExpandedState(is_horizontal_shelf_);
+
+  CalculateTargetBounds();
+  UpdateLayout(/*animate=*/false);
 }
 
 DeskButton* DeskButtonWidget::GetDeskButton() const {
@@ -245,7 +336,11 @@ gfx::Point DeskButtonWidget::GetCenteredOrigin() const {
   if (is_horizontal_shelf_) {
     // TODO(b/272383056): We might want to find a better way of calculating this
     // because shelf_padding is not sufficient.
-    return gfx::Point(navigation_bounds.right() + shelf_padding.left(),
+    const int shelf_padding_offset =
+        base::i18n::IsRTL() ? -navigation_bounds.width() -
+                                  shelf_padding.right() - GetPreferredLength()
+                            : shelf_padding.left();
+    return gfx::Point(navigation_bounds.right() + shelf_padding_offset,
                       navigation_bounds.y() + kDeskButtonInsets);
   }
 
@@ -254,6 +349,37 @@ gfx::Point DeskButtonWidget::GetCenteredOrigin() const {
   return gfx::Point(
       navigation_bounds.x() + kDeskButtonInsets,
       navigation_bounds.y() + navigation_bounds.height() + shelf_padding.top());
+}
+
+void DeskButtonWidget::FocusOut(bool reverse) {
+  GetDeskButton()->MaybeContract();
+  shelf_->shelf_focus_cycler()->FocusOut(reverse, SourceView::kDeskButton);
+}
+
+bool DeskButtonWidget::OnNativeWidgetActivationChanged(bool active) {
+  if (!Widget::OnNativeWidgetActivationChanged(active)) {
+    return false;
+  }
+
+  // The next desk button will always be on the right, even in RTL, so it should
+  // default focus if `default_last_focusable_child_` is true (meaning we are
+  // reverse tab cycling) or we are in RTL. If both are true or neither are true
+  // then the previous desk button should default focus.
+  const bool default_focus_right =
+      default_last_focusable_child_ != base::i18n::IsRTL();
+
+  if (active) {
+    if (default_focus_right &&
+        GetDeskButton()->next_desk_button()->GetEnabled()) {
+      GetDeskButton()->next_desk_button()->RequestFocus();
+    } else if (!default_focus_right &&
+               GetDeskButton()->prev_desk_button()->GetEnabled()) {
+      GetDeskButton()->prev_desk_button()->RequestFocus();
+    } else {
+      GetDeskButton()->RequestFocus();
+    }
+  }
+  return true;
 }
 
 }  // namespace ash

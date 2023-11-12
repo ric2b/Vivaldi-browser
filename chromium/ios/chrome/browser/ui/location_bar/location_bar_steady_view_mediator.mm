@@ -21,9 +21,14 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "app/vivaldi_constants.h"
+#import "ios/components/webui/web_ui_url_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+using vivaldi::kVivaldiUIScheme;
+// End Vivaldi
 
 @interface LocationBarSteadyViewMediator () <CRWWebStateObserver,
                                              WebStateListObserving,
@@ -66,7 +71,7 @@
 }
 
 - (void)dealloc {
-  [self disconnect];
+  CHECK(!self.webStateList);
 }
 
 - (void)disconnect {
@@ -167,16 +172,15 @@
   [self notifyConsumerOfChangedSecurityIcon];
 }
 
-#pragma mark - WebStateListObserver
+#pragma mark - WebStateListObserving
 
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
-  [self notifyConsumerOfChangedLocation];
-
-  [self notifyConsumerOfChangedSecurityIcon];
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                       status:(const WebStateListStatus&)status {
+  if (status.active_web_state_change()) {
+    [self notifyConsumerOfChangedLocation];
+    [self notifyConsumerOfChangedSecurityIcon];
+  }
 }
 
 #pragma mark - OverlayPresenterObserving
@@ -224,6 +228,24 @@
   if (self.webContentAreaShowingHTTPAuthDialog)
     return l10n_util::GetNSString(IDS_IOS_LOCATION_BAR_SIGN_IN);
   std::u16string string = self.locationBarModel->GetURLForDisplay();
+
+  // Note(VIB-250): (prio@vivaldi.com) - We use chrome scheme underneath
+  // everywhere but show Vivaldi scheme for UI.
+  if (IsVivaldiRunning()) {
+    NSString* locationString = base::SysUTF16ToNSString(string);
+    NSURLComponents* locationUrlComponents =
+        [NSURLComponents componentsWithString:locationString];
+    NSString* chromeSchemeString =
+        [NSString stringWithUTF8String:kChromeUIScheme];
+    NSString* vivaldiSchemeString =
+        [NSString stringWithUTF8String:kVivaldiUIScheme];
+
+    if ([[locationUrlComponents scheme] isEqualToString:chromeSchemeString]) {
+      [locationUrlComponents setScheme:vivaldiSchemeString];
+      return [[locationUrlComponents URL] absoluteString];
+    }
+  } // End Vivaldi
+
   return base::SysUTF16ToNSString(string);
 }
 

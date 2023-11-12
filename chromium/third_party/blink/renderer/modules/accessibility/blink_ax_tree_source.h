@@ -72,8 +72,6 @@ class MODULES_EXPORT BlinkAXTreeSource
   void Trace(Visitor*) const;
 
   void OnLoadInlineTextBoxes(AXObject& obj);
-  // Query or update a set of IDs for which we should load inline text boxes.
-  bool ShouldLoadInlineTextBoxes(const AXObject* obj) const;
 
   AXObject* GetPluginRoot();
 
@@ -95,9 +93,6 @@ class MODULES_EXPORT BlinkAXTreeSource
 
   AXObject* GetFocusedObject() const;
 
-  // A set of IDs for which we should always load inline text boxes.
-  WTF::HashSet<int32_t> load_inline_text_boxes_ids_;
-
   // The ID of the object to fetch image data for.
   int image_data_node_id_ = -1;
 
@@ -109,8 +104,8 @@ class MODULES_EXPORT BlinkAXTreeSource
 
   Member<AXObjectCacheImpl> ax_object_cache_;
 
-  // These are updated when calling |Freeze|.
   bool frozen_ = false;
+  // TODO(accessibility) If caching these does not improv perf, remove these.
   Member<AXObject> root_ = nullptr;
   Member<AXObject> focus_ = nullptr;
 

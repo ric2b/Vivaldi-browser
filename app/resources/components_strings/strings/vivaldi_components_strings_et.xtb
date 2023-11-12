@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Lehe laadimiseks vajalike andmete taassaatmiseks vajuta uuestilaadimise nuppu.</translation>
 <translation id="3234666976984236645">Sellel saidil tuvastatakse alati oluline sisu</translation>
 <translation id="3308738399950580893">reklaamid</translation>
+<translation id="3384522979010096022">Asutus ei luba seda saiti külastada</translation>
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
 <translation id="3447661539832366887">Seadme omanik lülitas dinosaurusemängu välja.</translation>
@@ -164,7 +165,6 @@
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ei pea turvastandarditest kinni.</translation>
 <translation id="7219179957768738017">Ühenduse jaoks on kasutusel <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">märguandeid näidata</translation>
-<translation id="7260504762447901703">Tühista juurdepääs</translation>
 <translation id="7353601530677266744">Käsurida</translation>
 <translation id="7364115444476960850">Vivaldi <ph name="BLOCKER_NAME" /> blokeeris juurdepääsu sellele lehele</translation>
 <translation id="7419106976560586862">Profiilikaust</translation>

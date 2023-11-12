@@ -2,8 +2,8 @@
 
 #import "ios/ui/notes/cells/note_folder_item.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/i18n/rtl.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/notes/cells/note_table_cell_title_edit_delegate.h"
@@ -50,7 +50,7 @@ const CGFloat textStackSpacing = 4;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:cell withStyler:styler];
   TableViewNoteFolderCell* folderCell =
-      base::mac::ObjCCastStrict<TableViewNoteFolderCell>(cell);
+      base::apple::ObjCCastStrict<TableViewNoteFolderCell>(cell);
   switch (self.style) {
     case NoteFolderStyleNewFolder: {
       folderCell.folderTitleTextField.text =

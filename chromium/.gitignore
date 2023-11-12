@@ -98,6 +98,8 @@ vs-chromium-project.txt
 /ash/webui/media_app_ui/resources/pkg
 /ash/webui/projector_app/resources/prod
 /base/base_unittests_run.xml
+/base/tracing/test/data/*
+!/base/tracing/test/data/*.sha256
 # See build/.gitignore for entries covering src/build.
 
 # The Chrome OS build creates a /c and /c_icu symlink due to http://crbug.com/54866.
@@ -209,6 +211,7 @@ vs-chromium-project.txt
 /components/autofill/core/browser/form_parsing/internal_resources
 /components/chrome_settings_proto_generated_compile.xml
 /components/cloud_policy_proto_generated_compile.xml
+/components/crash/core/app/internal
 /components/gcm_driver.xml
 /components/history_clusters/internal
 /components/leveldb_proto_test_support.xml
@@ -220,6 +223,7 @@ vs-chromium-project.txt
 /components/resources/default_300_percent/google_chrome
 /components/search_engines/prepopulated_engines.xml
 /components/site_isolation/internal
+/components/test/data/autofill/heuristics-json/internal
 /components/suggestions.xml
 /components/variations.xml
 /components/vector_icons/google_chrome/
@@ -319,8 +323,6 @@ vs-chromium-project.txt
 # See third_party/.gitignore for entries covering src/third_party.
 /tools/.bisect-builds-cache.json
 /tools/cygprofile/*.wprgo
-/tools/clang/dsymutil/bin/dsymutil
-/tools/clang/plugins/tests/*.txt.actual
 /tools/distcc
 /tools/gn/bin/linux
 /tools/gn/bin/mac

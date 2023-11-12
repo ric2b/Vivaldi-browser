@@ -1,0 +1,22 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("sync_manager") {
+  sources = [
+    "vivaldi_account_sync_manager.h",
+    "vivaldi_account_sync_manager.mm",
+    "vivaldi_account_sync_manager_observer_bridge.h",
+    "vivaldi_account_sync_manager_observer_bridge.mm",
+    "vivaldi_account_simplified_state.h",
+    "vivaldi_sync_simplified_state.h",
+    "vivaldi_session_simplified_state.h",
+    "vivaldi_account_sync_manager_consumer.h",
+  ]
+
+  deps = [
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+  ]
+}

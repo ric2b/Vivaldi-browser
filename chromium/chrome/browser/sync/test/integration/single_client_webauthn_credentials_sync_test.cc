@@ -124,6 +124,34 @@ IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
           .Wait());
 }
 
+// Getting passkeys by RP ID.
+IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
+                       GetPasskeysByRpId) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  constexpr char kRpId2[] = "rpid2.com";
+  sync_pb::WebauthnCredentialSpecifics passkey1 = NewPasskey();
+  sync_pb::WebauthnCredentialSpecifics passkey1_shadow = NewPasskey();
+  passkey1.add_newly_shadowed_credential_ids(passkey1_shadow.credential_id());
+  sync_pb::WebauthnCredentialSpecifics passkey2 = NewPasskey();
+  passkey2.set_rp_id(kRpId2);
+  const std::string sync_id1 = InjectPasskeyToFakeServer(passkey1);
+  const std::string sync_id1_shadow =
+      InjectPasskeyToFakeServer(passkey1_shadow);
+  const std::string sync_id2 = InjectPasskeyToFakeServer(passkey2);
+  EXPECT_TRUE(LocalPasskeysMatchChecker(
+                  kSingleProfile,
+                  UnorderedElementsAre(PasskeyHasSyncId(sync_id1),
+                                       PasskeyHasSyncId(sync_id1_shadow),
+                                       PasskeyHasSyncId(sync_id2)))
+                  .Wait());
+
+  EXPECT_THAT(GetModel().GetPasskeysForRelyingPartyId(passkey1.rp_id()),
+              UnorderedElementsAre(PasskeyHasSyncId(sync_id1)));
+  EXPECT_THAT(GetModel().GetPasskeysForRelyingPartyId(passkey2.rp_id()),
+              UnorderedElementsAre(PasskeyHasSyncId(sync_id2)));
+}
+
 // Deleting a local passkey should remove from the server.
 IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
                        UploadLocalPasskeyDeletion) {
@@ -444,6 +472,29 @@ IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
   ASSERT_TRUE(SetupSync());
   EXPECT_THAT(GetModel().GetAllSyncIds(),
               testing::UnorderedElementsAreArray(expected_sync_ids));
+}
+
+// Tests that disabling sync before sync startup correctly clears the passkey
+// cache.
+// Regression test for crbug.com/1476895.
+IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
+                       PRE_ClearingModelDataOnSyncStartup) {
+  ASSERT_TRUE(SetupSync());
+
+  sync_pb::WebauthnCredentialSpecifics passkey = NewPasskey();
+  GetModel().AddNewPasskeyForTesting(passkey);
+  EXPECT_TRUE(ServerPasskeysMatchChecker(
+                  UnorderedElementsAre(EntityHasSyncId(passkey.sync_id())))
+                  .Wait());
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
+                       ClearingModelDataOnSyncStartup) {
+  ASSERT_TRUE(SetupClients());
+  ASSERT_TRUE(GetClient(0)->DisableSyncForAllDatatypes());
+  ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
+
+  ASSERT_EQ(GetModel().GetAllPasskeys().size(), 0u);
 }
 
 // The unconsented primary account isn't supported on ChromeOS.

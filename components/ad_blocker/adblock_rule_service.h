@@ -32,7 +32,8 @@ class RuleService : public KeyedService {
     virtual void OnRuleServiceStateLoaded(RuleService* rule_service) {}
 
     virtual void OnRulesIndexBuilt(RuleGroup group, IndexBuildResult status) {}
-    virtual void OnIosRulesApplied(RuleGroup group) {}
+    virtual void OnStartApplyingIosRules(RuleGroup group) {}
+    virtual void OnDoneApplyingIosRules(RuleGroup group) {}
 
     // This is called when enabling/disabling groups
     virtual void OnGroupStateChanged(RuleGroup group) {}
@@ -47,6 +48,8 @@ class RuleService : public KeyedService {
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
+
+  virtual bool IsApplyingIosRules(RuleGroup group) = 0;
 
   // Gets the checksum of the index used for fast-finding of the rules.
   // This will be an empty string until an index gets built for the first time.

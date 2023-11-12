@@ -92,6 +92,8 @@ update_target("//chrome/browser:browser") {
 
 update_target("//chrome/browser/ui:ui") {
   sources += [
+    "//vivaldi/components/bookmarks/bookmark_thumbnail_theme_tab_helper.cc",
+    "//vivaldi/components/bookmarks/bookmark_thumbnail_theme_tab_helper.h",
     "//vivaldi/browser/ui/vivaldi_browser_navigator.cc",
     "//vivaldi/browser/ui/vivaldi_browser_navigator.h",
     "//vivaldi/browser/launch_update_notifier.h",

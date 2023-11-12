@@ -3,7 +3,6 @@
 //
 #include "ui/vivaldi_bookmark_menu_mac.h"
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/bookmark_sorter.h"
 #import "chrome/browser/app_controller_mac.h"
@@ -27,7 +26,7 @@ static std::u16string Separator;
 static std::u16string SeparatorDescription;
 static std::vector<int> MenuIds;
 static std::string ContainerEdge = "below";
-static unsigned int ContainerIndex = 0;
+static int ContainerIndex = 0;
 
 namespace vivaldi {
 
@@ -86,11 +85,12 @@ bool IsBookmarkMenuId(int candidate) {
   return false;
 }
 
-unsigned int GetMenuIndex() {
+// Can return a negative index. If so the bookmark content is not to be added.
+int GetMenuIndex() {
   return ContainerIndex;
 }
 
-void SetContainerState(const std::string& edge, unsigned int index) {
+void SetContainerState(const std::string& edge, int index) {
   if (ContainerEdge != edge || ContainerIndex != index) {
     ContainerEdge = edge;
     ContainerIndex = index;
@@ -100,8 +100,9 @@ void SetContainerState(const std::string& edge, unsigned int index) {
 
 void ClearBookmarkMenu() {
   AppController* appController = static_cast<AppController*>([NSApp delegate]);
-  if ([appController bookmarkMenuBridge])
+  if ([appController bookmarkMenuBridge]) {
     [appController bookmarkMenuBridge]->ClearBookmarkMenu();
+  }
 }
 
 void GetBookmarkNodes(const BookmarkNode* node,
@@ -132,11 +133,12 @@ void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
       *menu_index += 1;
     }
 
-    base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
+    // TODO: Test properly for problems wrt ARC transition
+    NSMenuItem* item = [[NSMenuItem alloc]
             initWithTitle:l10n_util::GetNSString(
                 IDS_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS)
                    action:nil
-            keyEquivalent:@""]);
+            keyEquivalent:@""];
     [item setTag:IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS];
     AppController* app_controller =
       static_cast<AppController*>([NSApp delegate]);

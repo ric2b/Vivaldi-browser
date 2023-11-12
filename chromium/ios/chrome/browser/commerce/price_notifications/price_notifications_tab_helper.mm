@@ -13,10 +13,6 @@
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Helper object to weakly bind `presenter` in the callback.
 @interface WeakPriceNotificationsPresenter : NSObject
 - (instancetype)initWithPresenter:(id<PriceNotificationsIPHPresenter>)presenter
@@ -42,7 +38,7 @@ namespace {
 void OnProductInfoUrl(
     WeakPriceNotificationsPresenter* presenter,
     const GURL& product_url,
-    const absl::optional<commerce::ProductInfo>& product_info) {
+    const absl::optional<const commerce::ProductInfo>& product_info) {
   DCHECK(presenter);
   if (!product_info) {
     return;

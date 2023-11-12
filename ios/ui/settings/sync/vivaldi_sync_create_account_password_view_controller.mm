@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/vivaldi_sync_create_account_password_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
@@ -142,7 +142,7 @@ BOOL subscribeToNewsletter;
   self.passwordItem.returnKeyType = UIReturnKeyDone;
   self.passwordItem.textFieldEnabled = YES;
   self.passwordItem.identifyingIcon =
-      [UIImage imageNamed:kShowPasswordIcon];
+      [UIImage systemImageNamed:kShowPasswordIcon];
   self.passwordItem.identifyingIconEnabled = YES;
   self.passwordItem.hideIcon = YES;
   self.passwordItem.textFieldEnabled = YES;
@@ -163,7 +163,7 @@ BOOL subscribeToNewsletter;
   self.confirmPasswordItem.returnKeyType = UIReturnKeyDone;
   self.confirmPasswordItem.textFieldEnabled = YES;
   self.confirmPasswordItem.identifyingIcon =
-      [UIImage imageNamed:kShowPasswordIcon];
+      [UIImage systemImageNamed:kShowPasswordIcon];
   self.confirmPasswordItem.identifyingIconEnabled = YES;
   self.confirmPasswordItem.hideIcon = YES;
   self.confirmPasswordItem.textFieldEnabled = YES;
@@ -280,7 +280,7 @@ BOOL subscribeToNewsletter;
   switch (itemType) {
     case ItemTypeCreateButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
-          base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(createButtonPressed:)
@@ -289,7 +289,7 @@ BOOL subscribeToNewsletter;
     }
     case ItemTypePassword: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
@@ -297,7 +297,7 @@ BOOL subscribeToNewsletter;
     }
     case ItemTypeConfirmPassword: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.identifyingIconButton addTarget:self
                                   action:@selector(toggleConfirmPasswordMasking)
                         forControlEvents:UIControlEventTouchUpInside];
@@ -306,13 +306,13 @@ BOOL subscribeToNewsletter;
     }
     case ItemTypeDeviceName: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       editCell.textField.delegate = self;
       break;
     }
     case ItemTypeTOSSwitch: {
       TableViewSwitchCell* editCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [editCell.switchView addTarget:self
                               action:@selector(switchAction:)
                     forControlEvents:UIControlEventValueChanged];
@@ -321,7 +321,7 @@ BOOL subscribeToNewsletter;
     }
     case ItemTypeNewsletterSwitch: {
       TableViewSwitchCell* editCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [editCell.switchView addTarget:self
                               action:@selector(switchAction:)
                     forControlEvents:UIControlEventValueChanged];
@@ -330,7 +330,7 @@ BOOL subscribeToNewsletter;
     }
     case ItemTypeExternalLinks: {
       VivaldiTableViewIllustratedCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
       editCell.subtitleLabel.delegate = self;
       break;
     }
@@ -381,8 +381,8 @@ BOOL subscribeToNewsletter;
       !self.passwordItem.textFieldSecureTextEntry;
   self.passwordItem.identifyingIcon =
       self.passwordItem.textFieldSecureTextEntry ?
-        [UIImage imageNamed:kShowPasswordIcon] :
-        [UIImage imageNamed:kHidePasswordIcon];
+        [UIImage systemImageNamed:kShowPasswordIcon] :
+        [UIImage systemImageNamed:kHidePasswordIcon];
   [self reconfigureCellsForItems:@[ self.passwordItem ]];
 }
 
@@ -391,8 +391,8 @@ BOOL subscribeToNewsletter;
       !self.confirmPasswordItem.textFieldSecureTextEntry;
   self.confirmPasswordItem.identifyingIcon =
       self.confirmPasswordItem.textFieldSecureTextEntry ?
-        [UIImage imageNamed:kShowPasswordIcon] :
-        [UIImage imageNamed:kHidePasswordIcon];
+        [UIImage systemImageNamed:kShowPasswordIcon] :
+        [UIImage systemImageNamed:kHidePasswordIcon];
   [self reconfigureCellsForItems:@[ self.confirmPasswordItem ]];
 }
 

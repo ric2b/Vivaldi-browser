@@ -31,6 +31,7 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -50,6 +51,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Locale;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Utilities for detecting multi-window/multi-instance support.
@@ -150,9 +154,9 @@ public class MultiWindowUtils implements ActivityStateListener {
         return ApiCompatibilityUtils.getTargetableDisplayIds(activity).size() == 2;
     }
 
-    @VisibleForTesting
     public void setIsInMultiWindowModeForTesting(boolean isInMultiWindowMode) {
         mIsInMultiWindowModeForTesting = isInMultiWindowMode;
+        ResettersForTesting.register(() -> mIsInMultiWindowModeForTesting = false);
     }
 
     /**
@@ -163,6 +167,9 @@ public class MultiWindowUtils implements ActivityStateListener {
         if (!isInMultiWindowMode(activity) && !isInMultiDisplayMode(activity)) return false;
         // Automotive is currently restricted to a single window.
         if (BuildInfo.getInstance().isAutomotive) return false;
+
+        // Vivaldi: The automotive build is restricted to a single window.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
 
         return getOpenInOtherWindowActivity(activity) != null;
     }
@@ -175,6 +182,9 @@ public class MultiWindowUtils implements ActivityStateListener {
     public boolean canEnterMultiWindowMode(Activity activity) {
         // Automotive is currently restricted to a single window.
         if (BuildInfo.getInstance().isAutomotive) return false;
+
+        // Vivaldi: The automotive build is restricted to a single window.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
 
         return aospMultiWindowModeSupported() || customMultiWindowModeSupported();
     }

@@ -344,10 +344,8 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
 void BookmarkEventRouter::BookmarkAllUserNodesRemoved(
     BookmarkModel* model,
     const std::set<GURL>& removed_urls) {
-  NOTREACHED();
-  // TODO(shashishekhar) Currently this notification is only used on Android,
-  // which does not support extensions. If Desktop needs to support this, add
-  // a new event to the extensions api.
+  // TODO(crbug.com/1468324): This used to be used only on Android, but that's
+  // no longer the case. We need to implement a new event to handle this.
 }
 
 void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
@@ -367,6 +365,7 @@ void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
   change_info.description = vivaldi_bookmark_kit::GetDescription(node);
   change_info.thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
   change_info.nickname = vivaldi_bookmark_kit::GetNickname(node);
+  change_info.theme_color = vivaldi_bookmark_kit::GetThemeColorForCSS(node);
 
   DispatchEvent(events::BOOKMARKS_ON_CHANGED,
                 api::bookmarks::OnChanged::kEventName,

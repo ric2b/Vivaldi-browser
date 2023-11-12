@@ -8,6 +8,7 @@ import "ash/public/mojom/accelerator_configuration.mojom";
 import "ash/public/mojom/accelerator_info.mojom";
 import "ash/public/mojom/accelerator_keys.mojom";
 import "mojo/public/mojom/base/string16.mojom";
+import "ui/base/accelerators/mojom/accelerator.mojom";
 
 // A struct that is returned from modifying an accelerator. It contains
 // an optional field for the accelerator name if the action has a conflict with
@@ -22,12 +23,24 @@ struct AcceleratorResultData {
   ash.mojom.AcceleratorConfigResult result;
 };
 
-// Represents an accelerator with only the KeyCode and Modifier. This struct
-// should only be used for sending data from the renderer to the browser
-// process.
+// Represents an accelerator with only the KeyCode, Modifier, and key state.
+// This struct should only be used for sending data from the renderer to the
+// browser process.
 struct SimpleAccelerator {
   ash.mojom.VKey key_code;
   int32 modifiers;
+  ui.mojom.AcceleratorKeyState key_state;
+};
+
+// Enum of possible options for text accelerators.
+enum UserAction {
+  kOpenEditDialog,
+  kStartAddAccelerator,
+  kStartReplaceAccelerator,
+  kRemoveAccelerator,
+  kSuccessfulModification,
+  kResetAction,
+  kResetAll,
 };
 
 // Observer interface, to be implemented by the Shortcut Customization SWA to
@@ -57,6 +70,18 @@ interface AcceleratorConfigurationProvider {
   // True if the keyboard has a launcher button.
   // False if the keyboard has a search button.
   HasLauncherButton() => (bool has_launcher_button);
+
+  // Checks if the `accelerator` from `action_id` is used by another
+  // accelerator. If an error is found with the input accelerator, return
+  // the error without the accelerator name.
+  GetConflictAccelerator(ash.mojom.AcceleratorSource source,
+                         uint32 action_id, SimpleAccelerator accelerator)
+      => (AcceleratorResultData result);
+
+  // Get the default accelerators for the given accelerator id. The
+  // accelerators are filtered and aliased accelerators are included.
+  GetDefaultAcceleratorsForId(uint32 action_id)
+    => (array<SimpleAccelerator> accelerators);
 
   // Get the accelerator mappings for all sources. This is formatted as
   // AcceleratorSource -> map<AcceleratorActionId, Array<AcceleratorInfo>>.
@@ -119,4 +144,7 @@ interface AcceleratorConfigurationProvider {
   // Restore all accelerators to their system-provided default state, overriding
   // user customization.
   RestoreAllDefaults() => (AcceleratorResultData result);
+
+  // Records the specific user action histogram.
+  RecordUserAction(UserAction user_action);
 };

@@ -24,6 +24,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
+#include "calendar/event_template_type.h"
 #include "calendar/event_type.h"
 #include "calendar/notification_type.h"
 #include "calendar/recurrence_exception_type.h"
@@ -145,9 +146,15 @@ class CalendarBackend
 
   AccountRows GetAllAccounts();
 
-  std::vector<calendar::EventRow> GetAllEventTemplates();
-
   EventResult FillEvent(EventID id);
+
+  EventTemplateResultCB CreateEventTemplate(EventTemplateRow event_template);
+  EventTemplateRows GetAllEventTemplates();
+  EventTemplateResultCB UpdateEventTemplate(
+      EventTemplateID template_id,
+      const EventTemplateRow& event_template);
+
+  bool DeleteEventTemplate(EventTemplateID event_template_id);
 
   void NotifyEventCreated(const EventResult& event) override;
   void NotifyNotificationChanged(const NotificationRow& row) override;

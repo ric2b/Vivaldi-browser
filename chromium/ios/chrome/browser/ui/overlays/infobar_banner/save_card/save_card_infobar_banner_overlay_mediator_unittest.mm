@@ -23,10 +23,6 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Test fixture for SaveCardInfobarBannerOverlayMediator.
 class SaveCardInfobarBannerOverlayMediatorTest : public PlatformTest {
  public:
@@ -48,9 +44,9 @@ class SaveCardInfobarBannerOverlayMediatorTest : public PlatformTest {
         OverlayRequest::CreateWithConfig<DefaultInfobarOverlayRequestConfig>(
             infobar_.get(), InfobarOverlayType::kBanner);
     consumer_ = [[FakeInfobarBannerConsumer alloc] init];
-    mediator_ = [[SaveCardInfobarBannerOverlayMediator alloc]
-        initWithRequest:request_.get()];
-    ;
+    mediator_ = OCMPartialMock([[SaveCardInfobarBannerOverlayMediator alloc]
+        initWithRequest:request_.get()]);
+
     mediator_.consumer = consumer_;
   }
 

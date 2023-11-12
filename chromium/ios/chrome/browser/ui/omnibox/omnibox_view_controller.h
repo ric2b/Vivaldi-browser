@@ -12,6 +12,10 @@
 #import "ios/chrome/browser/ui/orchestrator/edit_view_animatee.h"
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
 
+// Vivaldi
+#import "components/search_engines/template_url_service.h"
+// End Vivaldi
+
 @class LayoutGuideCenter;
 @protocol OmniboxKeyboardDelegate;
 @protocol OmniboxReturnDelegate;
@@ -25,6 +29,10 @@ class OmniboxTextChangeDelegate;
 // means that the active keyboard has changed.
 - (void)omniboxViewControllerTextInputModeDidChange:
     (OmniboxViewController*)omniboxViewController;
+
+// Vivaldi
+- (void)searchEngineShortcutActivatedForURL:(TemplateURL*)templateURL;
+// End Vivaldi
 
 @end
 

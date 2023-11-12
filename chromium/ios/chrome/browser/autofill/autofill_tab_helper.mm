@@ -14,10 +14,6 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 AutofillTabHelper::~AutofillTabHelper() = default;
 
 void AutofillTabHelper::SetBaseViewController(
@@ -29,9 +25,7 @@ id<FormSuggestionProvider> AutofillTabHelper::GetSuggestionProvider() {
   return autofill_agent_;
 }
 
-AutofillTabHelper::AutofillTabHelper(
-    web::WebState* web_state,
-    password_manager::PasswordManager* password_manager)
+AutofillTabHelper::AutofillTabHelper(web::WebState* web_state)
     : browser_state_(
           ChromeBrowserState::FromBrowserState(web_state->GetBrowserState())),
       autofill_agent_([[AutofillAgent alloc]
@@ -43,8 +37,7 @@ AutofillTabHelper::AutofillTabHelper(
       InfoBarManagerImpl::FromWebState(web_state);
   DCHECK(infobar_manager);
   autofill_client_ = std::make_unique<autofill::ChromeAutofillClientIOS>(
-      browser_state_, web_state, infobar_manager, autofill_agent_,
-      password_manager);
+      browser_state_, web_state, infobar_manager, autofill_agent_);
 
   autofill::AutofillDriverIOSFactory::CreateForWebState(
       web_state, autofill_client_.get(), autofill_agent_,

@@ -189,25 +189,29 @@ WebViewPermissionHelper::~WebViewPermissionHelper() {
 
 // static
 WebViewPermissionHelper* WebViewPermissionHelper::FromRenderFrameHost(
-    content::RenderFrameHost* rfh) {
-  WebViewGuest* web_view_guest = WebViewGuest::FromRenderFrameHost(rfh);
+    content::RenderFrameHost* render_frame_host) {
+  WebViewGuest* web_view_guest =
+      WebViewGuest::FromRenderFrameHost(render_frame_host);
   return web_view_guest ? web_view_guest->web_view_permission_helper()
                         : nullptr;
 }
 
 // static
 WebViewPermissionHelper* WebViewPermissionHelper::FromRenderFrameHostId(
-    const content::GlobalRenderFrameHostId& rfh_id) {
+    const content::GlobalRenderFrameHostId& render_frame_host_id) {
+
   // This can be a MimeHandlerViewGuest, used to show PDFs. In that case use the
   // owner webcontents which will give us a WebViewGuest.
   MimeHandlerViewGuest* mime_view_guest =
-      MimeHandlerViewGuest::FromRenderFrameHostId(rfh_id);
+      MimeHandlerViewGuest::FromRenderFrameHostId(render_frame_host_id);
   if (mime_view_guest) {
     WebViewGuest* web_view_guest =
         WebViewGuest::FromWebContents(mime_view_guest->owner_web_contents());
     return web_view_guest->web_view_permission_helper();
   }
-  WebViewGuest* web_view_guest = WebViewGuest::FromRenderFrameHostId(rfh_id);
+
+  WebViewGuest* web_view_guest =
+      WebViewGuest::FromRenderFrameHostId(render_frame_host_id);
   return web_view_guest ? web_view_guest->web_view_permission_helper()
                         : nullptr;
 }

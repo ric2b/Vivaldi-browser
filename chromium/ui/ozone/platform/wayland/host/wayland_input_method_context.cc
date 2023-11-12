@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/char_iterator.h"
@@ -405,6 +406,20 @@ void WaylandInputMethodContext::SetSurroundingText(
     const gfx::Range& selection_range,
     const absl::optional<GrammarFragment>& fragment,
     const absl::optional<AutocorrectInfo>& autocorrect) {
+  if (!selection_range.IsBoundedBy(text_range)) {
+    // There seems some edge case that selection_range is outside of text_range.
+    // In the case we ignore it temporarily, wishing the next event will
+    // update the tracking correctly.
+    // See also crbug.com/1457178.
+    LOG(ERROR) << "selection_range is not bounded by text_range: "
+               << selection_range.ToString() << ", " << text_range.ToString();
+    // Make a crash report for further investigation in the future.
+    // Temporarily disabling crash dump for release.
+    // TODO(crbug.com/1457178): restore this.
+    // base::debug::DumpWithoutCrashing();
+    return;
+  }
+
   size_t utf16_offset = text_range.GetMin();
   surrounding_text_tracker_.Update(text, utf16_offset, selection_range);
 
@@ -874,6 +889,10 @@ void WaylandInputMethodContext::OnInputPanelState(uint32_t state) {
 void WaylandInputMethodContext::OnModifiersMap(
     std::vector<std::string> modifiers_map) {
   modifiers_map_ = std::move(modifiers_map);
+}
+
+void WaylandInputMethodContext::OnInsertImage(const GURL& src) {
+  ime_delegate_->OnInsertImage(src);
 }
 
 void WaylandInputMethodContext::OnKeyboardFocusedWindowChanged() {

@@ -478,19 +478,18 @@ benchmarks/media.py
 benchmarks/memory.py
 benchmarks/octane.py
 benchmarks/power.py
-benchmarks/power_mobile.py
 benchmarks/press.py
 benchmarks/rasterize_and_record_micro.py
 benchmarks/rendering.py
 benchmarks/smoketests_versions_validator_unittest.py
 benchmarks/speedometer1.py
 benchmarks/speedometer2.py
+benchmarks/speedometer3.py
 benchmarks/startup_mobile.py
 benchmarks/system_health.py
 benchmarks/system_health_load_tests_smoke_test.py
 benchmarks/system_health_smoke_test.py
 benchmarks/system_health_unittest.py
-benchmarks/tab_switching.py
 benchmarks/v8.py
 benchmarks/v8_browsing.py
 benchmarks/v8_helper.py
@@ -691,6 +690,7 @@ page_sets/rendering/tough_webgl_cases.py
 page_sets/service_worker_micro_benchmark.py
 page_sets/speedometer1_pages.py
 page_sets/speedometer2_pages.py
+page_sets/speedometer3_pages.py
 page_sets/static_top_25_pages.py
 page_sets/story_set_unittest.py
 page_sets/system_health/__init__.py
@@ -701,7 +701,6 @@ page_sets/system_health/chrome_stories.py
 page_sets/system_health/loading_stories.py
 page_sets/system_health/long_running_stories.py
 page_sets/system_health/media_stories.py
-page_sets/system_health/multi_tab_stories.py
 page_sets/system_health/platforms.py
 page_sets/system_health/story_tags.py
 page_sets/system_health/system_health_stories.py

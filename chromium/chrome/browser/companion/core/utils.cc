@@ -52,6 +52,22 @@ std::string GetImageUploadURLForCompanion() {
   return url;
 }
 
+bool GetShouldIssuePreconnectForCompanion() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      *GetFeatureToUse(), "companion-issue-preconnect", true);
+}
+
+std::string GetPreconnectKeyForCompanion() {
+  // Allow multiple field trials to control the value. This is needed because
+  // companion may be enabled by any of the field trials.
+  std::string url = base::GetFieldTrialParamValueByFeature(
+      *GetFeatureToUse(), "companion-preconnect-key");
+  if (url.empty()) {
+    return std::string("chrome-untrusted://companion-side-panel.top-chrome");
+  }
+  return url;
+}
+
 bool ShouldEnableOpenCompanionForImageSearch() {
   // Allow multiple field trials to control the value. This is needed because
   // companion may be enabled by any of the field trials.
@@ -77,25 +93,6 @@ std::string GetExpsRegistrationSuccessPageURLs() {
   return base::GetFieldTrialParamValueByFeature(
       features::internal::kCompanionEnabledByObservingExpsNavigations,
       "exps-registration-success-page-urls");
-}
-
-// Checks to see if the page url is safe to open in Chrome.
-bool IsSafeURLFromCompanion(const GURL& url) {
-  if (!url.is_valid()) {
-    return false;
-  }
-
-  static constexpr auto chrome_domain_allowlists =
-      base::MakeFixedFlatSet<base::StringPiece>(
-          {"chrome://settings/syncSetup"});
-  base::StringPiece url_string(url.spec());
-
-  if (!url.SchemeIsHTTPOrHTTPS() &&
-      !chrome_domain_allowlists.contains(url_string)) {
-    return false;
-  }
-
-  return true;
 }
 
 std::string GetCompanionIPHBlocklistedPageURLs() {
@@ -125,6 +122,25 @@ bool IsValidPageURLForCompanion(const GURL& url) {
   if (url.has_username() || url.has_password()) {
     return false;
   }
+  return true;
+}
+
+// Checks to see if the page url is safe to open in Chrome.
+bool IsSafeURLFromCompanion(const GURL& url) {
+  if (!url.is_valid()) {
+    return false;
+  }
+
+  static constexpr auto chrome_domain_allowlists =
+      base::MakeFixedFlatSet<base::StringPiece>(
+          {"chrome://settings/syncSetup"});
+  base::StringPiece url_string(url.spec());
+
+  if (!url.SchemeIsHTTPOrHTTPS() &&
+      !chrome_domain_allowlists.contains(url_string)) {
+    return false;
+  }
+
   return true;
 }
 

@@ -18,6 +18,7 @@
 #include "base/types/expected.h"
 #include "base/unguessable_token.h"
 #include "net/extras/shared_dictionary/shared_dictionary_info.h"
+#include "net/extras/shared_dictionary/shared_dictionary_usage_info.h"
 #include "url/origin.h"
 
 namespace base {
@@ -33,17 +34,20 @@ class SharedDictionaryIsolationKey;
 // storage.
 class COMPONENT_EXPORT(NET_EXTRAS) SQLitePersistentSharedDictionaryStore {
  public:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum class Error {
-    kOk,
-    kFailedToInitializeDatabase,
-    kInvalidSql,
-    kFailedToExecuteSql,
-    kFailedToBeginTransaction,
-    kFailedToCommitTransaction,
-    kInvalidTotalDictSize,
-    kFailedToGetTotalDictSize,
-    kFailedToSetTotalDictSize,
-    kTooBigDictionary,
+    kOk = 0,
+    kFailedToInitializeDatabase = 1,
+    kInvalidSql = 2,
+    kFailedToExecuteSql = 3,
+    kFailedToBeginTransaction = 4,
+    kFailedToCommitTransaction = 5,
+    kInvalidTotalDictSize = 6,
+    kFailedToGetTotalDictSize = 7,
+    kFailedToSetTotalDictSize = 8,
+    kTooBigDictionary = 9,
+    kMaxValue = kTooBigDictionary
   };
   class COMPONENT_EXPORT(NET_EXTRAS) RegisterDictionaryResult {
    public:
@@ -80,6 +84,7 @@ class COMPONENT_EXPORT(NET_EXTRAS) SQLitePersistentSharedDictionaryStore {
     uint64_t total_dictionary_count_;
   };
 
+  using SizeOrError = base::expected<uint64_t, Error>;
   using RegisterDictionaryResultOrError =
       base::expected<RegisterDictionaryResult, Error>;
   using DictionaryListOrError =
@@ -89,6 +94,9 @@ class COMPONENT_EXPORT(NET_EXTRAS) SQLitePersistentSharedDictionaryStore {
       Error>;
   using UnguessableTokenSetOrError =
       base::expected<std::set<base::UnguessableToken>, Error>;
+  using UsageInfoOrError =
+      base::expected<std::vector<SharedDictionaryUsageInfo>, Error>;
+  using OriginListOrError = base::expected<std::vector<url::Origin>, Error>;
 
   SQLitePersistentSharedDictionaryStore(
       const base::FilePath& path,
@@ -102,8 +110,7 @@ class COMPONENT_EXPORT(NET_EXTRAS) SQLitePersistentSharedDictionaryStore {
 
   ~SQLitePersistentSharedDictionaryStore();
 
-  void GetTotalDictionarySize(
-      base::OnceCallback<void(base::expected<uint64_t, Error>)> callback);
+  void GetTotalDictionarySize(base::OnceCallback<void(SizeOrError)> callback);
   void RegisterDictionary(
       const SharedDictionaryIsolationKey& isolation_key,
       SharedDictionaryInfo dictionary_info,
@@ -115,11 +122,18 @@ class COMPONENT_EXPORT(NET_EXTRAS) SQLitePersistentSharedDictionaryStore {
       base::OnceCallback<void(DictionaryListOrError)> callback);
   void GetAllDictionaries(
       base::OnceCallback<void(DictionaryMapOrError)> callback);
+  void GetUsageInfo(base::OnceCallback<void(UsageInfoOrError)> callback);
+  void GetOriginsBetween(const base::Time start_time,
+                         const base::Time end_time,
+                         base::OnceCallback<void(OriginListOrError)> callback);
   void ClearAllDictionaries(base::OnceCallback<void(Error)> callback);
   void ClearDictionaries(
       const base::Time start_time,
       const base::Time end_time,
       base::RepeatingCallback<bool(const GURL&)> url_matcher,
+      base::OnceCallback<void(UnguessableTokenSetOrError)> callback);
+  void ClearDictionariesForIsolationKey(
+      const SharedDictionaryIsolationKey& isolation_key,
       base::OnceCallback<void(UnguessableTokenSetOrError)> callback);
   void DeleteExpiredDictionaries(
       const base::Time now,

@@ -47,6 +47,11 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     size_t* default_search_provider_index,
     SearchType search_type = SearchType::kMain);
 
+// Returns the prepopulated URLs for the current country, shuffled for display
+// in a search engine choice screen.
+std::vector<std::unique_ptr<TemplateURLData>>
+GetPrepopulatedEnginesForChoiceScreen(PrefService* prefs);
+
 // Returns the prepopulated search engine with the given |prepopulated_id|.
 std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,
                                                        int prepopulated_id);

@@ -36,10 +36,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 
-#if BUILDFLAG(USE_VAAPI_X11)
-#include "ui/gfx/x/xproto.h"  // nogncheck
-#endif                        // BUILDFLAG(USE_VAAPI_X11)
-
 namespace gfx {
 enum class BufferFormat : uint8_t;
 class NativePixmap;
@@ -481,14 +477,6 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       VASurfaceID va_surface_id,
       const std::vector<std::pair<VABufferID, VABufferDescriptor>>& va_buffers);
 
-#if BUILDFLAG(USE_VAAPI_X11)
-  // Put data from |va_surface_id| into |x_pixmap| of size
-  // |dest_size|, converting/scaling to it.
-  [[nodiscard]] bool PutSurfaceIntoPixmap(VASurfaceID va_surface_id,
-                                          x11::Pixmap x_pixmap,
-                                          gfx::Size dest_size);
-#endif  // BUILDFLAG(USE_VAAPI_X11)
-
   // Creates a ScopedVAImage from a VASurface |va_surface_id| and map it into
   // memory with the given |format| and |size|. If |format| is not equal to the
   // internal format, the underlying implementation will do format conversion if
@@ -552,11 +540,8 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       bool& packed_pps,
       bool& packed_slice);
 
-  // Checks if the driver supports frame rotation.
-  bool IsRotationSupported();
-
   // Blits a VASurface |va_surface_src| into another VASurface
-  // |va_surface_dest| applying pixel format conversion, rotation, cropping
+  // |va_surface_dest| applying pixel format conversion, cropping
   // and scaling if needed. |src_rect| and |dest_rect| are optional. They can
   // be used to specify the area used in the blit. If |va_protected_session_id|
   // is provided and is not VA_INVALID_ID, the corresponding protected session
@@ -566,8 +551,7 @@ class MEDIA_GPU_EXPORT VaapiWrapper
       const VASurface& va_surface_src,
       const VASurface& va_surface_dest,
       absl::optional<gfx::Rect> src_rect = absl::nullopt,
-      absl::optional<gfx::Rect> dest_rect = absl::nullopt,
-      VideoRotation rotation = VIDEO_ROTATION_0
+      absl::optional<gfx::Rect> dest_rect = absl::nullopt
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       ,
       VAProtectedSessionID va_protected_session_id = VA_INVALID_ID

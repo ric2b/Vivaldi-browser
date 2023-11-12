@@ -7,10 +7,12 @@
 #import "components/commerce/core/commerce_feature_list.h"
 #import "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #import "components/commerce/core/shopping_service.h"
+#import "components/keyed_service/core/service_access_type.h"
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/commerce/session_proto_db_factory.h"
+#import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service_factory.h"
 #import "ios/chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
@@ -20,10 +22,6 @@
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace commerce {
 
@@ -60,6 +58,7 @@ ShoppingServiceFactory::ShoppingServiceFactory()
             commerce_subscription_db::CommerceSubscriptionContentProto>::
                 GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
+  DependsOn(ios::HistoryServiceFactory::GetInstance());
 }
 
 std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
@@ -79,7 +78,9 @@ std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
       SessionProtoDBFactory<commerce_subscription_db::
                                 CommerceSubscriptionContentProto>::GetInstance()
           ->GetForBrowserState(chrome_state),
-      PowerBookmarkServiceFactory::GetForBrowserState(chrome_state));
+      PowerBookmarkServiceFactory::GetForBrowserState(chrome_state), nullptr,
+      ios::HistoryServiceFactory::GetForBrowserState(
+          chrome_state, ServiceAccessType::EXPLICIT_ACCESS));
 }
 
 bool ShoppingServiceFactory::ServiceIsNULLWhileTesting() const {

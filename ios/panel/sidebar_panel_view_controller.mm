@@ -28,7 +28,7 @@ using l10n_util::GetNSString;
 #error "This file requires ARC support."
 #endif
 
-UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(kAdaptiveToolbarMargin,0,0,0);
+UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(12, -7, 0, 0);
 
 @interface SidebarPanelViewController ()
         <PanelButtonViewDelegate> {

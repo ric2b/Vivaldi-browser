@@ -9,6 +9,7 @@
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/login/display_size_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/drive_pinning_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/theme_selection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/touchpad_scroll_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
@@ -32,6 +34,7 @@ const int kMaxScreensToShowChoobe = 10;
 // shown in the same order they are listed in this list.
 const StaticOobeScreenId kOptionalScreens[] = {
     TouchpadScrollScreenView::kScreenId,
+    DrivePinningScreenView::kScreenId,
     DisplaySizeScreenView::kScreenId,
     ThemeSelectionScreenView::kScreenId,
 };
@@ -204,7 +207,7 @@ void ChoobeFlowController::OnChoobeFlowExit() {
   for (auto static_id : kOptionalScreens) {
     OobeScreenId id = static_id.AsId();
     std::string screen_name = id.name;
-    screen_name[0] = std::toupper(screen_name[0]);
+    screen_name[0] = base::ToUpperASCII(screen_name[0]);
     std::string histogram_name = "OOBE.CHOOBE.ScreenCompleted." + screen_name;
     bool is_completed =
         completed_screens_ids_.find(id) != completed_screens_ids_.end();

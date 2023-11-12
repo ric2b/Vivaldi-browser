@@ -23,6 +23,7 @@
     "chrome://vivaldi-data/",
     "chrome://vivaldi-webui/"
   ],
+  "incognito": "split",
   "offline_enabled": true,
   "web_accessible_resources": [{
     "resources": [
@@ -120,7 +121,6 @@
       {
         "name": "storage",
         "accessible_resources": [
-          "browser.html",
           "saga/saga.html",
           "components/chat/chat.html",
           "components/mail/mail.html",

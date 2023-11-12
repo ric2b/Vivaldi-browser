@@ -75,6 +75,7 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
       const absl::optional<base::Uuid>& tab_guid = absl::nullopt) override;
   void SavedTabGroupReorderedLocally() override;
   void SavedTabGroupReorderedFromSync() override;
+  void SavedTabGroupTabsReorderedLocally(const base::Uuid& group_guid) override;
   void SavedTabGroupAddedFromSync(const base::Uuid& guid) override;
   void SavedTabGroupRemovedFromSync(
       const SavedTabGroup* removed_group) override;
@@ -88,6 +89,8 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   // Calculates what the visible width would be when a restriction on width is
   // placed on the bar.
   int CalculatePreferredWidthRestrictedBy(int width_restriction);
+
+  bool IsOverflowButtonVisible();
 
  private:
   // Overrides the View methods needed to be a drop target for saved tab groups.
@@ -167,7 +170,7 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   // Provides a callback that returns the page navigator
   base::RepeatingCallback<content::PageNavigator*()> GetPageNavigatorGetter();
 
-  raw_ptr<views::MenuButton, DanglingUntriaged> overflow_button_;
+  raw_ptr<views::MenuButton, AcrossTasksDanglingUntriaged> overflow_button_;
 
   // Used to show the overflow menu when clicked.
   raw_ptr<views::BubbleDialogDelegate> bubble_delegate_ = nullptr;
@@ -176,7 +179,8 @@ class SavedTabGroupBar : public views::AccessiblePaneView,
   raw_ptr<SavedTabGroupModel> saved_tab_group_model_;
 
   // The page navigator used to create tab groups
-  raw_ptr<content::PageNavigator, DanglingUntriaged> page_navigator_ = nullptr;
+  raw_ptr<content::PageNavigator, AcrossTasksDanglingUntriaged>
+      page_navigator_ = nullptr;
   raw_ptr<Browser> browser_;
 
   // During a drag and drop session, `drag_data_` owns the state for the drag.

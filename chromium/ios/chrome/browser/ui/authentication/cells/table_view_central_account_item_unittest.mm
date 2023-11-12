@@ -16,10 +16,6 @@
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using CentralAccountControlTableViewItemTest = PlatformTest;
 
 // Tests that the UIImageView and UILabels are set properly after a call to
@@ -28,9 +24,9 @@ TEST_F(CentralAccountControlTableViewItemTest, ImageViewAndTextLabels) {
   TableViewCentralAccountItem* item =
       [[TableViewCentralAccountItem alloc] initWithType:0];
   UIImage* image = ios::provider::GetSigninDefaultAvatar();
-  image = ResizeImage(
-      image, GetSizeForIdentityAvatarSize(IdentityAvatarSize::ExtraLarge),
-      ProjectionMode::kAspectFit);
+  image = ResizeImage(image,
+                      GetSizeForIdentityAvatarSize(IdentityAvatarSize::Large),
+                      ProjectionMode::kAspectFit);
   NSString* mainText = @"Main text";
   NSString* detailText = @"Detail text";
 
@@ -59,9 +55,9 @@ TEST_F(CentralAccountControlTableViewItemTest,
   TableViewCentralAccountItem* item =
       [[TableViewCentralAccountItem alloc] initWithType:0];
   UIImage* image = ios::provider::GetSigninDefaultAvatar();
-  image = ResizeImage(
-      image, GetSizeForIdentityAvatarSize(IdentityAvatarSize::ExtraLarge),
-      ProjectionMode::kAspectFit);
+  image = ResizeImage(image,
+                      GetSizeForIdentityAvatarSize(IdentityAvatarSize::Large),
+                      ProjectionMode::kAspectFit);
   NSString* mainlText = @"Detail text";
 
   item.avatarImage = image;

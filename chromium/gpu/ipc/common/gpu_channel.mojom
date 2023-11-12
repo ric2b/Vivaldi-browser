@@ -12,7 +12,6 @@ import "gpu/ipc/common/sync_token.mojom";
 import "gpu/ipc/common/vulkan_ycbcr_info.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
-import "services/viz/public/mojom/compositing/resource_format.mojom";
 import "services/viz/public/mojom/compositing/shared_image_format.mojom";
 import "skia/public/mojom/image_info.mojom";
 import "skia/public/mojom/surface_origin.mojom";
@@ -168,6 +167,16 @@ interface GpuChannel {
 
   // Sends a batch of DeferredRequests to be executed by the service.
   FlushDeferredRequests(array<DeferredRequest> requests);
+
+  // Gets the GpuMemoryBufferHandle for the corresponding `mailbox` from
+  // service side. Note that this needs to be a blocking call on calling
+  // client's thread in order to return the GpuMemoryBufferHandle and other
+  // metadata required by client to map the mailbox to CPU memory before it can
+  // read/write from/to it.
+  [Sync] GetGpuMemoryBufferHandleInfo(gpu.mojom.Mailbox mailbox)
+  => (gfx.mojom.GpuMemoryBufferHandle buffer_handle,
+      viz.mojom.SharedImageFormat format, gfx.mojom.Size size,
+      gfx.mojom.BufferUsage buffer_usage);
 
   // Creates a StreamTexture associated with the given `stream_id`.
   [Sync, EnableIf=is_android] CreateStreamTexture(
@@ -436,6 +445,9 @@ union DeferredSharedImageRequest {
   // See CreateSharedImageParams.
   CreateSharedImageParams create_shared_image;
 
+  // See CreateSharedImageBackedByBufferParams.
+  CreateSharedImageBackedByBufferParams create_shared_image_backed_by_buffer;
+
   // See CreateSharedImageWithDataParams.
   CreateSharedImageWithDataParams create_shared_image_with_data;
 
@@ -532,6 +544,41 @@ struct CreateSharedImageParams {
 
   // Indicates how the alpha component of each pixel is interpreted.
   skia.mojom.AlphaType alpha_type;
+};
+
+// Creates a new shared image backed by native buffer or shared memory.
+struct CreateSharedImageBackedByBufferParams {
+  // The mailbox used to identify the shared image.
+  Mailbox mailbox;
+
+  // The pixel format of the image.
+  viz.mojom.SharedImageFormat format;
+
+  // Size in pixels.
+  gfx.mojom.Size size;
+
+  // Color space.
+  gfx.mojom.ColorSpace color_space;
+
+  // Usage flags corresponding to values defined in
+  // gpu/command_buffer/common/shared_image_usage.h.
+  uint32 usage;
+
+  // Retained for heap dumps and passed to graphics APIs for tracing tools.
+  // Pick a name that is unique to the allocation site.
+  string debug_label;
+
+  // The fence to release once the image is created.
+  uint32 release_id;
+
+  // Which corner is considered the origin of the new image.
+  skia.mojom.SurfaceOrigin surface_origin;
+
+  // Indicates how the alpha component of each pixel is interpreted.
+  skia.mojom.AlphaType alpha_type;
+
+  // Usage flags which decides what GPU memory buffer can be supported.
+  gfx.mojom.BufferUsage buffer_usage;
 };
 
 // Creates a new shared image and populates it with pixel data from a shared

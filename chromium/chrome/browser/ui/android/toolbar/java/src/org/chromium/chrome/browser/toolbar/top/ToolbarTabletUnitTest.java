@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,6 +38,7 @@ import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinatorTablet;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
+import org.chromium.chrome.browser.omnibox.status.StatusView;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
@@ -67,7 +69,6 @@ public final class ToolbarTabletUnitTest {
     private MenuButtonCoordinator mMenuButtonCoordinator;
     @Mock
     private View mContainerView;
-
     private Activity mActivity;
     private ToolbarTablet mToolbarTablet;
     private LinearLayout mToolbarTabletLayout;
@@ -75,6 +76,11 @@ public final class ToolbarTabletUnitTest {
     private ImageButton mReloadingButton;
     private ImageButton mBackButton;
     private ImageButton mForwardButton;
+    private ImageButton mMenuButton;
+    private ImageButton mTabSwitcherButton;
+    private ImageButton mBookmarkButton;
+    private ImageButton mSaveOfflineButton;
+    private View mLocationBarButton;
 
     @Before
     public void setUp() {
@@ -94,6 +100,11 @@ public final class ToolbarTabletUnitTest {
         mBackButton = mToolbarTablet.findViewById(R.id.back_button);
         mForwardButton = mToolbarTablet.findViewById(R.id.forward_button);
         mReloadingButton = mToolbarTablet.findViewById(R.id.refresh_button);
+        mMenuButton = mToolbarTablet.findViewById(R.id.menu_button);
+        mTabSwitcherButton = mToolbarTablet.findViewById(R.id.tab_switcher_button);
+        mLocationBarButton = mToolbarTablet.findViewById(R.id.location_bar_status_icon);
+        mBookmarkButton = mToolbarTablet.findViewById(R.id.bookmark_button);
+        mSaveOfflineButton = mToolbarTablet.findViewById(R.id.save_offline_button);
     }
 
     @After
@@ -132,7 +143,7 @@ public final class ToolbarTabletUnitTest {
     }
 
     @Test
-    @DisableFeatures({ChromeFeatureList.TABLET_TOOLBAR_REORDERING})
+    @DisableFeatures(ChromeFeatureList.TABLET_TOOLBAR_REORDERING)
     public void testButtonPosition_ShutoffToolbarReordering() {
         mToolbarTablet.onFinishInflate();
 
@@ -303,6 +314,62 @@ public final class ToolbarTabletUnitTest {
         CaptureReadinessResult result = mToolbarTablet.isReadyForTextureCapture();
         Assert.assertFalse(result.isReady);
         Assert.assertEquals(TopToolbarBlockCaptureReason.URL_BAR_HAS_FOCUS, result.blockReason);
+    }
+
+    @Test
+    public void testHoverTooltipText() {
+        // verify tooltip texts for tablet toolbar button are set.
+        Assert.assertEquals("Tooltip text for Home button is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_toolbar_btn_home),
+                mHomeButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Reload button is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_btn_refresh),
+                mReloadingButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Forward button is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_menu_forward),
+                mForwardButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Back button is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_toolbar_btn_back),
+                mBackButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Tab Switcher button is not as expected",
+                mActivity.getResources().getString(
+                        R.string.accessibility_toolbar_btn_tabswitcher_toggle_default),
+                mTabSwitcherButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Bookmark button is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_menu_bookmark),
+                mBookmarkButton.getTooltipText());
+        Assert.assertEquals("Tooltip text for Save Offline button is not as expected",
+                mActivity.getResources().getString(R.string.download_page),
+                mSaveOfflineButton.getTooltipText());
+    }
+
+    @Test
+    public void testStatusViewHoverAction() {
+        StatusView statusViewSpy = spy(mToolbarTablet.findViewById(R.id.location_bar_status));
+        // Do NOT show status view tooltip and background when status icon is NOT visible.
+        when(statusViewSpy.isSearchEngineStatusIconVisible()).thenReturn(false);
+        statusViewSpy.setHoverActionOnVisibilityChange();
+        Assert.assertEquals("Tooltip text for Status view is not as expected", null,
+                statusViewSpy.getTooltipText());
+        Assert.assertEquals("Background for Status view is not as expected", null,
+                statusViewSpy.getBackground());
+
+        // Show status view tooltip and background when status icon is visible.
+        when(statusViewSpy.isSearchEngineStatusIconVisible()).thenReturn(true);
+        statusViewSpy.setHoverActionOnVisibilityChange();
+        Assert.assertEquals("Tooltip text for Status view is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_menu_info),
+                statusViewSpy.getTooltipText());
+        Assert.assertNotEquals("Background for Status view is not as expected", null,
+                statusViewSpy.getBackground());
+
+        // Only show status view tooltip when verbose status text is visible.
+        statusViewSpy.setVerboseStatusTextVisible(true);
+        Assert.assertEquals("Tooltip text for Status view is not as expected",
+                mActivity.getResources().getString(R.string.accessibility_menu_info),
+                statusViewSpy.getTooltipText());
+        Assert.assertEquals("Background for Status view is not as expected", null,
+                statusViewSpy.getBackground());
     }
 
     @Test

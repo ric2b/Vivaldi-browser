@@ -11,27 +11,30 @@
 #include <memory>
 #include <utility>
 
+#include "base/apple/scoped_cftyperef.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/functional/callback.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/decoder_status.h"
-#include "media/gpu/mac/video_toolbox_decompression_session.h"
 #include "media/gpu/media_gpu_export.h"
 
 namespace media {
 
 class MediaLog;
+struct VideoToolboxDecodeMetadata;
+struct VideoToolboxSessionMetadata;
+class VideoToolboxDecompressionSession;
 
 // Wraps VideoToolboxDecompressionSession to handle reconfiguration. Callbacks
 // are never called re-entrantly or after destruction.
 class MEDIA_GPU_EXPORT VideoToolboxDecompressionInterface {
  public:
-  using OutputCB =
-      base::RepeatingCallback<void(base::ScopedCFTypeRef<CVImageBufferRef>,
-                                   void*)>;
+  using OutputCB = base::RepeatingCallback<void(
+      base::apple::ScopedCFTypeRef<CVImageBufferRef>,
+      std::unique_ptr<VideoToolboxDecodeMetadata> metadata)>;
   using ErrorCB = base::OnceCallback<void(DecoderStatus)>;
 
   VideoToolboxDecompressionInterface(
@@ -43,13 +46,14 @@ class MEDIA_GPU_EXPORT VideoToolboxDecompressionInterface {
   ~VideoToolboxDecompressionInterface();
 
   // Decode |sample|, tagged with |context|.
-  void Decode(base::ScopedCFTypeRef<CMSampleBufferRef> sample, void* context);
+  void Decode(base::apple::ScopedCFTypeRef<CMSampleBufferRef> sample,
+              std::unique_ptr<VideoToolboxDecodeMetadata> metadata);
 
   // Discards decodes that have not been output yet.
   void Reset();
 
   // The number of decodes that have not been output yet.
-  size_t PendingDecodes();
+  size_t NumDecodes();
 
   // Public for testing.
   void SetDecompressionSessionForTesting(
@@ -59,7 +63,7 @@ class MEDIA_GPU_EXPORT VideoToolboxDecompressionInterface {
   void OnOutput(void* context,
                 OSStatus status,
                 VTDecodeInfoFlags flags,
-                base::ScopedCFTypeRef<CVImageBufferRef> image);
+                base::apple::ScopedCFTypeRef<CVImageBufferRef> image);
 
  private:
   // Shut down and call |error_cb_|.
@@ -70,10 +74,12 @@ class MEDIA_GPU_EXPORT VideoToolboxDecompressionInterface {
   void CallErrorCB(ErrorCB error_cb, DecoderStatus status);
 
   // Send queued decodes to VideoToolbox if possible.
-  [[nodiscard]] bool ProcessDecodes();
+  [[nodiscard]] bool Process();
 
   // Create a new VideoToolbox decompression session for |format|.
-  [[nodiscard]] bool CreateSession(CMFormatDescriptionRef format);
+  [[nodiscard]] bool CreateSession(
+      CMFormatDescriptionRef format,
+      const VideoToolboxSessionMetadata& session_metadata);
 
   // Shut down the active session, synchronously.
   void DestroySession();
@@ -84,15 +90,14 @@ class MEDIA_GPU_EXPORT VideoToolboxDecompressionInterface {
   ErrorCB error_cb_;  // |!error_cb_| indicates an error state.
 
   // Decodes that have not been sent to VideoToolbox.
-  base::queue<std::pair<base::ScopedCFTypeRef<CMSampleBufferRef>, void*>>
+  base::queue<std::pair<base::apple::ScopedCFTypeRef<CMSampleBufferRef>,
+                        std::unique_ptr<VideoToolboxDecodeMetadata>>>
       pending_decodes_;
 
   std::unique_ptr<VideoToolboxDecompressionSession> decompression_session_;
-  base::ScopedCFTypeRef<CMFormatDescriptionRef> active_format_;
-
-  // TODO(crbug.com/1331597): Check if it is efficient to query
-  // kVTDecompressionPropertyKey_NumberOfFramesBeingDecoded instead.
-  int active_decodes_ = 0;
+  base::apple::ScopedCFTypeRef<CMFormatDescriptionRef> active_format_;
+  base::flat_map<void*, std::unique_ptr<VideoToolboxDecodeMetadata>>
+      active_decodes_;
 
   // Destroy the active session once it becomes empty. Used to prepare for
   // format changes.

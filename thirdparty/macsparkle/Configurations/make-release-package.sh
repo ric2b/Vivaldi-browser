@@ -7,6 +7,7 @@ exit 0 # This script does not need to run for Vivaldi builds
 # This guards against our archives being corrupt / created incorrectly.
 function verify_code_signatures() {
     verification_directory="$1"
+    check_aux_apps="$2"
 
     if  [[ -z "$verification_directory" ]]; then
         echo "Provided verification directory does not exist" >&2
@@ -15,8 +16,11 @@ function verify_code_signatures() {
 
     # Search the current directory for all instances of the framework to verify them (XCFrameworks can have multiple copies of a framework for different platforms).
     find "${verification_directory}" -name "Sparkle.framework" -type d -exec codesign --verify -vvv --deep {} \;
-    codesign --verify -vvv --deep "${verification_directory}/sparkle.app"
-    codesign --verify -vvv --deep "${verification_directory}/Sparkle Test App.app"
+    
+    if [ "$check_aux_apps" = true ] ; then
+        codesign --verify -vvv --deep "${verification_directory}/sparkle.app"
+        codesign --verify -vvv --deep "${verification_directory}/Sparkle Test App.app"
+    fi
     codesign --verify -vvv --deep "${verification_directory}/bin/BinaryDelta"
     codesign --verify -vvv --deep "${verification_directory}/bin/generate_appcast"
     codesign --verify -vvv --deep "${verification_directory}/bin/sign_update"
@@ -40,9 +44,7 @@ if [ "$ACTION" = "" ] ; then
     cp "$CONFIGURATION_BUILD_DIR/generate_keys" "$CONFIGURATION_BUILD_DIR/staging/bin"
     cp "$CONFIGURATION_BUILD_DIR/sign_update" "$CONFIGURATION_BUILD_DIR/staging/bin"
     cp -R "$CONFIGURATION_BUILD_DIR/Sparkle Test App.app" "$CONFIGURATION_BUILD_DIR/staging"
-    cp -R "$CONFIGURATION_BUILD_DIR/Sparkle Test App.app" "$CONFIGURATION_BUILD_DIR/staging-spm"
     cp -R "$CONFIGURATION_BUILD_DIR/sparkle.app" "$CONFIGURATION_BUILD_DIR/staging"
-    cp -R "$CONFIGURATION_BUILD_DIR/sparkle.app" "$CONFIGURATION_BUILD_DIR/staging-spm"
     cp -R "$CONFIGURATION_BUILD_DIR/Sparkle.framework" "$CONFIGURATION_BUILD_DIR/staging"
     cp -R "$CONFIGURATION_BUILD_DIR/Sparkle.xcframework" "$CONFIGURATION_BUILD_DIR/staging-spm"
     
@@ -60,19 +62,28 @@ if [ "$ACTION" = "" ] ; then
     # because missing dSYMs in a release build SHOULD trigger a build failure
     if [ "$CONFIGURATION" = "Release" ] ; then
         cp -R "$CONFIGURATION_BUILD_DIR/BinaryDelta.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/generate_appcast.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/generate_keys.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+                
         cp -R "$CONFIGURATION_BUILD_DIR/sign_update.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/Sparkle Test App.app.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/sparkle.app.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/Sparkle.framework.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+        
         cp -R "$CONFIGURATION_BUILD_DIR/Autoupdate.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+                
         cp -R "$CONFIGURATION_BUILD_DIR/Updater.app.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+                
         cp -R "$CONFIGURATION_BUILD_DIR/${INSTALLER_LAUNCHER_NAME}.xpc.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
+                
         cp -R "$CONFIGURATION_BUILD_DIR/${DOWNLOADER_NAME}.xpc.dSYM" "$CONFIGURATION_BUILD_DIR/staging/Symbols"
     fi
     cp -R "$CONFIGURATION_BUILD_DIR/staging/bin" "$CONFIGURATION_BUILD_DIR/staging-spm"
-    cp -R "$CONFIGURATION_BUILD_DIR/staging/Symbols" "$CONFIGURATION_BUILD_DIR/staging-spm"
 
     cd "$CONFIGURATION_BUILD_DIR/staging"
 
@@ -104,7 +115,7 @@ if [ "$ACTION" = "" ] ; then
 
     # Test code signing validity of the extracted products
     # This guards against our archives being corrupt / created incorrectly
-    verify_code_signatures "/tmp/sparkle-extract"
+    verify_code_signatures "/tmp/sparkle-extract" true
 
     rm -rf "/tmp/sparkle-extract"
     rm -rf "$CONFIGURATION_BUILD_DIR/staging"
@@ -124,7 +135,7 @@ if [ "$ACTION" = "" ] ; then
         # Test code signing validity of the extracted Swift package
         # This guards against our archives being corrupt / created incorrectly
         ditto -x -k "../Sparkle-for-Swift-Package-Manager.zip" "/tmp/sparkle-spm-extract"
-        verify_code_signatures "/tmp/sparkle-spm-extract"
+        verify_code_signatures "/tmp/sparkle-spm-extract" false
 
         rm -rf "/tmp/sparkle-spm-extract"
         rm -rf "$CONFIGURATION_BUILD_DIR/staging-spm"

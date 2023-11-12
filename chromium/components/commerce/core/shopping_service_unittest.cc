@@ -5,16 +5,21 @@
 #include "components/commerce/core/shopping_service.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/commerce_utils.h"
 #include "components/commerce/core/mock_account_checker.h"
+#include "components/commerce/core/mock_discounts_storage.h"
 #include "components/commerce/core/pref_names.h"
+#include "components/commerce/core/proto/shopping_page_types.pb.h"
 #include "components/commerce/core/shopping_service_test_base.h"
 #include "components/commerce/core/test_utils.h"
-#include "components/optimization_guide/core/new_optimization_guide_decider.h"
+#include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -31,6 +36,8 @@ using optimization_guide::OptimizationGuideDecisionCallback;
 using optimization_guide::OptimizationMetadata;
 using optimization_guide::proto::Any;
 using optimization_guide::proto::OptimizationType;
+
+using testing::_;
 
 namespace commerce {
 
@@ -63,6 +70,18 @@ const char kAnotherCurrencyCode[] = "EUR";
 const char kAttributes[] = "Unlocked, 128GB";
 const char kJackpotUrl[] = "http://example.com/jackpot";
 
+const char kDiscountsUrl1[] = "http://example.com/discounts_1";
+const char kDiscountsUrl2[] = "http://example.com/discounts_2";
+const char kDiscountLanguageCode[] = "en-US";
+const char kDiscountDetail[] = "details";
+const char kDiscountTerms[] = "terms";
+const char kDiscountValueText[] = "10% off";
+const double kDiscountExpiryTime = 1000000;
+const char kDiscountCode[] = "discount code";
+const uint64_t kDiscountId1 = 111;
+const uint64_t kDiscountId2 = 222;
+const uint64_t kDiscountOfferId = 123456;
+
 }  // namespace
 
 class ShoppingServiceTest : public ShoppingServiceTestBase {
@@ -79,6 +98,11 @@ class ShoppingServiceTest : public ShoppingServiceTestBase {
                                      const std::string& locale) {
     return ShoppingService::IsShoppingListEligible(account_checker, prefs,
                                                    country, locale);
+  }
+
+  void SetDiscountsStorageForTesting(
+      std::unique_ptr<DiscountsStorage> storage) {
+    shopping_service_->SetDiscountsStorageForTesting(std::move(storage));
   }
 };
 
@@ -103,7 +127,7 @@ TEST_F(ShoppingServiceTest, TestProductInfoResponse) {
       GURL(kProductUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<ProductInfo>& info) {
+             const absl::optional<const ProductInfo>& info) {
             ASSERT_EQ(kProductUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -137,7 +161,7 @@ TEST_F(ShoppingServiceTest, TestProductInfoResponse_ApiDisabled) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<ProductInfo>& info) {
+                                const absl::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_FALSE(info.has_value());
                                run_loop->Quit();
@@ -169,7 +193,7 @@ TEST_F(ShoppingServiceTest, TestProductInfoResponse_CurrencyMismatch) {
       GURL(kProductUrl),
       base::BindOnce(
           [](base::RunLoop* run_loop, const GURL& url,
-             const absl::optional<ProductInfo>& info) {
+             const absl::optional<const ProductInfo>& info) {
             ASSERT_EQ(kProductUrl, url.spec());
             ASSERT_TRUE(info.has_value());
 
@@ -203,7 +227,7 @@ TEST_F(ShoppingServiceTest, TestProductInfoResponse_OptGuideFalse) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<ProductInfo>& info) {
+                                const absl::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_FALSE(info.has_value());
                                run_loop->Quit();
@@ -294,7 +318,7 @@ TEST_F(ShoppingServiceTest, TestProductInfoCacheFullLifecycle) {
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<ProductInfo>& info) {
+                                const absl::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -355,7 +379,7 @@ TEST_F(ShoppingServiceTest,
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<ProductInfo>& info) {
+                                const absl::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -433,7 +457,7 @@ TEST_F(ShoppingServiceTest,
   shopping_service_->GetProductInfoForUrl(
       GURL(kProductUrl), base::BindOnce(
                              [](base::RunLoop* run_loop, const GURL& url,
-                                const absl::optional<ProductInfo>& info) {
+                                const absl::optional<const ProductInfo>& info) {
                                ASSERT_EQ(kProductUrl, url.spec());
                                ASSERT_TRUE(info.has_value());
 
@@ -513,18 +537,18 @@ TEST_F(ShoppingServiceTest, TestGetUpdatedProductInfoForBookmarks) {
   opt_guide_->AddOnDemandShoppingResponse(
       GURL(kProductUrl), OptimizationGuideDecision::kTrue, updated_meta);
 
-  std::vector<int64_t> bookmark_ids;
-  bookmark_ids.push_back(product1->id());
-  int expected_calls = bookmark_ids.size();
+  std::vector<base::Uuid> bookmark_uuids;
+  bookmark_uuids.push_back(product1->uuid());
+  int expected_calls = bookmark_uuids.size();
 
   base::RunLoop run_loop;
 
   auto callback = base::BindRepeating(
       [](bookmarks::BookmarkModel* model, int* call_count,
-         base::RunLoop* run_loop, const int64_t id, const GURL& url,
+         base::RunLoop* run_loop, const base::Uuid& uuid, const GURL& url,
          absl::optional<ProductInfo> info) {
         const bookmarks::BookmarkNode* node =
-            bookmarks::GetBookmarkNodeByID(model, id);
+            bookmarks::GetBookmarkNodeByUuid(model, uuid);
         EXPECT_EQ(url.spec(), node->url().spec());
 
         (*call_count)--;
@@ -533,7 +557,8 @@ TEST_F(ShoppingServiceTest, TestGetUpdatedProductInfoForBookmarks) {
       },
       bookmark_model_.get(), &expected_calls, &run_loop);
 
-  shopping_service_->GetUpdatedProductInfoForBookmarks(bookmark_ids, callback);
+  shopping_service_->GetUpdatedProductInfoForBookmarks(bookmark_uuids,
+                                                       callback);
   run_loop.Run();
 
   EXPECT_EQ(0, expected_calls);
@@ -651,7 +676,7 @@ TEST_F(ShoppingServiceTest, TestShoppingListEligible_SignIn) {
   ASSERT_TRUE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
                                      kEligibleLocale));
 
-  checker.SetSignedIn(false);
+  checker.SetOptedIntoSync(false);
 
   ASSERT_FALSE(IsShoppingListEligible(&checker, &prefs, kEligibleCountry,
                                       kEligibleLocale));
@@ -1006,6 +1031,268 @@ TEST_F(ShoppingServiceTest, TestPriceInsightsInfoResponse_EmptyRange) {
             ASSERT_EQ(PriceBucket::kHighPrice, info->price_bucket);
             ASSERT_EQ(true, info->has_multiple_catalogs);
 
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceTest, TestIsShoppingPage) {
+  test_features_.InitAndEnableFeature(kShoppingPageTypes);
+  base::RunLoop run_loop[3];
+  OptimizationMetadata meta;
+  ShoppingPageTypes data;
+
+  data.add_shopping_page_types(commerce::ShoppingPageTypes::SHOPPING_PAGE);
+  data.add_shopping_page_types(
+      commerce::ShoppingPageTypes::MERCHANT_DOMAIN_PAGE);
+  Any any;
+  any.set_type_url(data.GetTypeName());
+  data.SerializeToString(any.mutable_value());
+  meta.set_any_metadata(any);
+  opt_guide_->SetResponse(GURL(kProductUrl),
+                          OptimizationType::SHOPPING_PAGE_TYPES,
+                          OptimizationGuideDecision::kTrue, meta);
+
+  shopping_service_->IsShoppingPage(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                absl::optional<bool> info) {
+                               ASSERT_TRUE(info.has_value());
+                               ASSERT_TRUE(info.value());
+                               run_loop->Quit();
+                             },
+                             &run_loop[0]));
+  run_loop[0].Run();
+
+  opt_guide_->SetResponse(GURL(kProductUrl),
+                          OptimizationType::SHOPPING_PAGE_TYPES,
+                          OptimizationGuideDecision::kFalse, meta);
+
+  shopping_service_->IsShoppingPage(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                absl::optional<bool> info) {
+                               ASSERT_FALSE(info.has_value());
+                               run_loop->Quit();
+                             },
+                             &run_loop[1]));
+  run_loop[1].Run();
+
+  data.clear_shopping_page_types();
+  data.add_shopping_page_types(
+      commerce::ShoppingPageTypes::MERCHANT_DOMAIN_PAGE);
+  data.SerializeToString(any.mutable_value());
+  meta.set_any_metadata(any);
+  opt_guide_->SetResponse(GURL(kProductUrl),
+                          OptimizationType::SHOPPING_PAGE_TYPES,
+                          OptimizationGuideDecision::kTrue, meta);
+
+  shopping_service_->IsShoppingPage(
+      GURL(kProductUrl), base::BindOnce(
+                             [](base::RunLoop* run_loop, const GURL& url,
+                                absl::optional<bool> info) {
+                               ASSERT_TRUE(info.has_value());
+                               ASSERT_FALSE(info.value());
+                               run_loop->Quit();
+                             },
+                             &run_loop[2]));
+  run_loop[2].Run();
+}
+
+TEST_F(ShoppingServiceTest, TestDiscountInfoResponse) {
+  test_features_.InitAndEnableFeature(kShowDiscountOnNavigation);
+
+  std::vector<DiscountInfo> infos;
+
+  // Valid info.
+  DiscountInfo valid_info;
+  valid_info.cluster_type = DiscountClusterType::kOfferLevel;
+  valid_info.type = DiscountType::kFreeListingWithCode;
+  valid_info.language_code = kDiscountLanguageCode;
+  valid_info.description_detail = kDiscountDetail;
+  valid_info.terms_and_conditions = kDiscountTerms;
+  valid_info.value_in_text = kDiscountValueText;
+  valid_info.discount_code = kDiscountCode;
+  valid_info.id = kDiscountId1;
+  valid_info.is_merchant_wide = true;
+  valid_info.expiry_time_sec = kDiscountExpiryTime;
+  valid_info.offer_id = kDiscountOfferId;
+  infos.push_back(valid_info);
+  // Another valid info with different cluster type.
+  DiscountInfo valid_info_2 = valid_info;
+  valid_info_2.id = kDiscountId2;
+  valid_info_2.cluster_type = DiscountClusterType::kUnspecified;
+  infos.push_back(valid_info_2);
+
+  opt_guide_->SetResponse(GURL(kDiscountsUrl2),
+                          OptimizationType::SHOPPING_DISCOUNTS,
+                          OptimizationGuideDecision::kTrue,
+                          opt_guide_->BuildDiscountsResponse(infos));
+
+  std::unique_ptr<MockDiscountsStorage> storage =
+      std::make_unique<MockDiscountsStorage>();
+  EXPECT_CALL(*storage, HandleServerDiscounts(
+                            std::vector<std::string>{kDiscountsUrl1}, _, _));
+  SetDiscountsStorageForTesting(std::move(storage));
+
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(kDiscountsFetchResultHistogramName, 0);
+
+  base::RunLoop run_loop;
+  shopping_service_->GetDiscountInfoForUrls(
+      std::vector<GURL>{GURL(kDiscountsUrl1), GURL(kDiscountsUrl2)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const DiscountsMap& map) {
+            ASSERT_EQ(1, (int)map.size());
+
+            auto discounts = map.find(GURL(kDiscountsUrl2))->second;
+            ASSERT_EQ(2, (int)discounts.size());
+
+            ASSERT_EQ(DiscountClusterType::kOfferLevel,
+                      discounts[0].cluster_type);
+            ASSERT_EQ(DiscountType::kFreeListingWithCode, discounts[0].type);
+            ASSERT_EQ(kDiscountLanguageCode, discounts[0].language_code);
+            ASSERT_EQ(kDiscountDetail, discounts[0].description_detail);
+            ASSERT_EQ(kDiscountTerms, discounts[0].terms_and_conditions);
+            ASSERT_EQ(kDiscountValueText, discounts[0].value_in_text);
+            ASSERT_EQ(kDiscountCode, discounts[0].discount_code);
+            ASSERT_EQ(kDiscountId1, discounts[0].id);
+            ASSERT_EQ(true, discounts[0].is_merchant_wide);
+            ASSERT_EQ(kDiscountExpiryTime, discounts[0].expiry_time_sec);
+            ASSERT_EQ(kDiscountOfferId, discounts[0].offer_id);
+
+            ASSERT_EQ(kDiscountId2, discounts[1].id);
+            ASSERT_EQ(DiscountClusterType::kUnspecified,
+                      discounts[1].cluster_type);
+
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+
+  histogram_tester.ExpectTotalCount(kDiscountsFetchResultHistogramName, 1);
+  histogram_tester.ExpectBucketCount(kDiscountsFetchResultHistogramName, 0, 1);
+}
+
+TEST_F(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutId) {
+  test_features_.InitAndEnableFeature(kShowDiscountOnNavigation);
+
+  std::vector<DiscountInfo> infos;
+
+  // Valid info.
+  DiscountInfo valid_info;
+  valid_info.cluster_type = DiscountClusterType::kOfferLevel;
+  valid_info.type = DiscountType::kFreeListingWithCode;
+  valid_info.language_code = kDiscountLanguageCode;
+  valid_info.description_detail = kDiscountDetail;
+  valid_info.terms_and_conditions = kDiscountTerms;
+  valid_info.value_in_text = kDiscountValueText;
+  valid_info.discount_code = kDiscountCode;
+  valid_info.id = kDiscountId1;
+  valid_info.is_merchant_wide = true;
+  valid_info.expiry_time_sec = kDiscountExpiryTime;
+  valid_info.offer_id = kDiscountOfferId;
+  infos.push_back(valid_info);
+  // Invalid info without id.
+  DiscountInfo invalid_info = valid_info;
+  invalid_info.id = kInvalidDiscountId;
+  infos.push_back(invalid_info);
+
+  opt_guide_->SetResponse(GURL(kDiscountsUrl2),
+                          OptimizationType::SHOPPING_DISCOUNTS,
+                          OptimizationGuideDecision::kTrue,
+                          opt_guide_->BuildDiscountsResponse(infos));
+
+  base::RunLoop run_loop;
+  shopping_service_->GetDiscountInfoForUrls(
+      std::vector<GURL>{GURL(kDiscountsUrl1), GURL(kDiscountsUrl2)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const DiscountsMap& map) {
+            ASSERT_EQ(1, (int)map.size());
+
+            auto discounts = map.find(GURL(kDiscountsUrl2))->second;
+            ASSERT_EQ(1, (int)discounts.size());
+            ASSERT_EQ(kDiscountId1, discounts[0].id);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutTerms) {
+  test_features_.InitAndEnableFeature(kShowDiscountOnNavigation);
+
+  std::vector<DiscountInfo> infos;
+
+  // Valid info.
+  DiscountInfo valid_info;
+  valid_info.cluster_type = DiscountClusterType::kOfferLevel;
+  valid_info.type = DiscountType::kFreeListingWithCode;
+  valid_info.language_code = kDiscountLanguageCode;
+  valid_info.description_detail = kDiscountDetail;
+  valid_info.terms_and_conditions = absl::nullopt;
+  valid_info.value_in_text = kDiscountValueText;
+  valid_info.discount_code = kDiscountCode;
+  valid_info.id = kDiscountId1;
+  valid_info.is_merchant_wide = true;
+  valid_info.expiry_time_sec = kDiscountExpiryTime;
+  valid_info.offer_id = kDiscountOfferId;
+  infos.push_back(valid_info);
+
+  opt_guide_->SetResponse(GURL(kDiscountsUrl2),
+                          OptimizationType::SHOPPING_DISCOUNTS,
+                          OptimizationGuideDecision::kTrue,
+                          opt_guide_->BuildDiscountsResponse(infos));
+
+  base::RunLoop run_loop;
+  shopping_service_->GetDiscountInfoForUrls(
+      std::vector<GURL>{GURL(kDiscountsUrl1), GURL(kDiscountsUrl2)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const DiscountsMap& map) {
+            ASSERT_EQ(1, (int)map.size());
+
+            auto discounts = map.find(GURL(kDiscountsUrl2))->second;
+            ASSERT_EQ(1, (int)discounts.size());
+            ASSERT_EQ(kDiscountId1, discounts[0].id);
+            ASSERT_FALSE(discounts[0].terms_and_conditions.has_value());
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceTest, TestDiscountInfoResponse_InfoWithoutDiscountCode) {
+  test_features_.InitAndEnableFeature(kShowDiscountOnNavigation);
+
+  std::vector<DiscountInfo> infos;
+
+  // Invalid info without discount code.
+  DiscountInfo invalid_info;
+  invalid_info.cluster_type = DiscountClusterType::kOfferLevel;
+  invalid_info.type = DiscountType::kFreeListingWithCode;
+  invalid_info.language_code = kDiscountLanguageCode;
+  invalid_info.description_detail = kDiscountDetail;
+  invalid_info.terms_and_conditions = kDiscountTerms;
+  invalid_info.value_in_text = kDiscountValueText;
+  invalid_info.discount_code = absl::nullopt;
+  invalid_info.id = kDiscountId1;
+  invalid_info.is_merchant_wide = true;
+  invalid_info.expiry_time_sec = kDiscountExpiryTime;
+  invalid_info.offer_id = kDiscountOfferId;
+  infos.push_back(invalid_info);
+
+  opt_guide_->SetResponse(GURL(kDiscountsUrl2),
+                          OptimizationType::SHOPPING_DISCOUNTS,
+                          OptimizationGuideDecision::kTrue,
+                          opt_guide_->BuildDiscountsResponse(infos));
+
+  base::RunLoop run_loop;
+  shopping_service_->GetDiscountInfoForUrls(
+      std::vector<GURL>{GURL(kDiscountsUrl1), GURL(kDiscountsUrl2)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const DiscountsMap& map) {
+            ASSERT_EQ(0, (int)map.size());
             run_loop->Quit();
           },
           &run_loop));

@@ -244,6 +244,12 @@ class TemplateURLService : public WebDataServiceConsumer,
   // by TemplateURLService and should not be deleted.
   TemplateURLVector GetTemplateURLs();
 
+  // Returns the list of prepopulated template URLs for the current country
+  // shuffled for display in a search engine choice screen.
+  // TODO (b/282656014): Update the returned list of search engines to comply
+  // with choice screen requirements.
+  OwnedTemplateURLVector GetTemplateURLsForChoiceScreen();
+
   // Increment the usage count of a keyword.
   // Called when a URL is loaded that was generated from a keyword.
   void IncrementUsageCount(TemplateURL* url);
@@ -266,11 +272,18 @@ class TemplateURLService : public WebDataServiceConsumer,
   // This method must NOT be called multiple times for the same |keyword|,
   // because that would create duplicate engines. Caller is responsible for
   // verifying there are no existing |keyword| created_from_play_api() engines.
-  TemplateURL* CreatePlayAPISearchEngine(const std::u16string& title,
-                                         const std::u16string& keyword,
-                                         const std::string& search_url,
-                                         const std::string& suggestions_url,
-                                         const std::string& favicon_url);
+  TemplateURL* CreatePlayAPISearchEngine(
+      const std::u16string& title,
+      const std::u16string& keyword,
+      const std::string& search_url,
+      const std::string& suggestions_url,
+      const std::string& favicon_url,
+      const std::string& new_tab_url,
+      const std::string& image_url,
+      const std::string& image_url_post_params,
+      const std::string& image_translate_url,
+      const std::string& image_translate_source_language_param_key,
+      const std::string& image_translate_target_language_param_key);
 
   // Updates any search providers matching |potential_search_url| with the new
   // favicon location |favicon_url|.
@@ -457,6 +470,10 @@ class TemplateURLService : public WebDataServiceConsumer,
   const SearchTermsData& search_terms_data() const {
     return *search_terms_data_;
   }
+
+  // Calls `ApplyDefaultSearchChangeNoMetrics`. Used for testing.
+  bool ApplyDefaultSearchChangeForTesting(const TemplateURLData* data,
+                                          DefaultSearchManager::Source source);
 
   // Obtains a session token, regenerating if necessary.
   std::string GetSessionToken();
@@ -718,7 +735,9 @@ class TemplateURLService : public WebDataServiceConsumer,
   // where old entries were being pushed to Sync without a sync_guid.
   void PatchMissingSyncGUIDs(OwnedTemplateURLVector* template_urls);
 
-  void OnSyncedDefaultSearchProviderGUIDChanged(DefaultSearchType type);
+  // Called when `kSyncedDefaultSearchProviderGUID` or
+  // `kDefaultSearchProviderGUID` is modified.
+  void OnDefaultSearchProviderGUIDChanged(DefaultSearchType type);
 
   // Goes through a vector of TemplateURLs and sets is_active to true if it was
   // not previously set (currently kUnspecified) and has been interacted with

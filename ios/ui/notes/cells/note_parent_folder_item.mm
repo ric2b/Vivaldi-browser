@@ -2,8 +2,8 @@
 
 #import "ios/ui/notes/cells/note_parent_folder_item.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/i18n/rtl.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -39,7 +39,7 @@
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   NoteParentFolderCell* cell =
-      base::mac::ObjCCastStrict<NoteParentFolderCell>(tableCell);
+      base::apple::ObjCCastStrict<NoteParentFolderCell>(tableCell);
   cell.parentFolderNameLabel.text = self.title;
 }
 

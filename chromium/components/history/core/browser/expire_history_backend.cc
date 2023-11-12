@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <utility>
+#include "app/vivaldi_apptools.h"
 
 #include "base/check.h"
 #include "base/compiler_specific.h"
@@ -24,6 +25,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "components/favicon/core/favicon_database.h"
+#include "components/history/core/browser/features.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
 #include "components/history/core/browser/history_database.h"
@@ -473,6 +475,25 @@ void ExpireHistoryBackend::DeleteVisitRelatedInfo(const VisitVector& visits,
     if (visit.visit_id)
       main_db_->DeleteAnnotationsForVisit(visit.visit_id);
 
+    // Decrease the visit count of the corresponding VisitedLinkRow if the flag
+    // is enabled.
+    if (base::FeatureList::IsEnabled(kPopulateVisitedLinkDatabase)) {
+      VisitedLinkRow visited_link_row;
+      if (visit.visited_link_id &&
+          main_db_->GetVisitedLinkRow(visit.visited_link_id,
+                                      visited_link_row)) {
+        int new_visit_count = visited_link_row.visit_count - 1;
+        // If we deleted the last visit associated with this VisitedLink, then
+        // we delete the VisitedLinkRow.
+        if (new_visit_count > 0) {
+          main_db_->UpdateVisitedLinkRowVisitCount(visited_link_row.id,
+                                                   new_visit_count);
+        } else {
+          main_db_->DeleteVisitedLinkRow(visit.visited_link_id);
+        }
+      }
+    }
+
     notifier_->NotifyVisitDeleted(visit);
   }
 }
@@ -549,7 +570,8 @@ void ExpireHistoryBackend::ExpireURLsForVisits(const VisitVector& visits,
     // Don't delete URLs with visits still in the DB, or pinned.
     bool is_pinned =
         (backend_client_ && backend_client_->IsPinnedURL(url_row.url()));
-    if (!is_pinned && url_row.last_visit().is_null()) {
+    if (::vivaldi::IsVivaldiRunning() ||
+        (!is_pinned && url_row.last_visit().is_null())) {
       // Not pinned and no more visits. Nuke the url.
       DeleteOneURL(url_row, is_pinned, effects);
     } else {

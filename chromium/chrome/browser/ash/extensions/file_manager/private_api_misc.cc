@@ -18,6 +18,7 @@
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "ash/public/cpp/tablet_mode.h"
+#include "ash/webui/settings/public/constants/routes_util.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -48,6 +49,7 @@
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/upload_office_to_cloud/upload_office_to_cloud.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/file_util_service.h"
@@ -64,11 +66,12 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes_util.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/api/manifest_types.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/settings/timezone_settings.h"
 #include "components/account_id/account_id.h"
 #include "components/drive/drive_pref_names.h"
@@ -77,6 +80,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/zoom/page_zoom.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_zoom.h"
 #include "extensions/browser/api/file_handlers/mime_util.h"
@@ -235,8 +239,8 @@ FileManagerPrivateGetPreferencesFunction::Run() {
   result.drive_enabled = drive::util::IsDriveEnabledForProfile(profile) &&
                          drive_integration_service &&
                          !drive_integration_service->mount_failed();
-  result.cellular_disabled =
-      service->GetBoolean(drive::prefs::kDisableDriveOverCellular);
+  result.drive_sync_enabled_on_metered_network =
+      !service->GetBoolean(drive::prefs::kDisableDriveOverCellular);
   if (drive::util::IsDriveFsBulkPinningEnabled(profile)) {
     result.drive_fs_bulk_pinning_enabled =
         service->GetBoolean(drive::prefs::kDriveFsBulkPinningEnabled);
@@ -274,14 +278,18 @@ FileManagerPrivateSetPreferencesFunction::Run() {
   Profile* const profile = Profile::FromBrowserContext(browser_context());
   PrefService* const service = profile->GetPrefs();
 
-  if (params->change_info.cellular_disabled) {
+  if (params->change_info.drive_sync_enabled_on_metered_network) {
+    const bool drive_sync_enabled_on_metered_network =
+        *params->change_info.drive_sync_enabled_on_metered_network;
     service->SetBoolean(drive::prefs::kDisableDriveOverCellular,
-                        *params->change_info.cellular_disabled);
+                        !drive_sync_enabled_on_metered_network);
   }
   if (drive::util::IsDriveFsBulkPinningEnabled(profile) &&
       params->change_info.drive_fs_bulk_pinning_enabled) {
     service->SetBoolean(drive::prefs::kDriveFsBulkPinningEnabled,
                         *params->change_info.drive_fs_bulk_pinning_enabled);
+    drivefs::pinning::RecordBulkPinningEnabledSource(
+        drivefs::pinning::BulkPinningEnabledSource::kBanner);
   }
   if (params->change_info.arc_enabled) {
     service->SetBoolean(arc::prefs::kArcEnabled,
@@ -508,9 +516,8 @@ FileManagerPrivateAddProvidedFileSystemFunction::Run() {
   // Show Connect To OneDrive dialog only when mounting ODFS for the first time.
   // There will already a ODFS mount if the user is requesting a new mount to
   // replace the unauthenticated one.
-  if (ash::cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud(profile) &&
-      params->provider_id ==
-          file_manager::file_tasks::GetODFSExtensionId(profile) &&
+  if (chromeos::cloud_upload::IsMicrosoftOfficeCloudUploadAllowed(profile) &&
+      params->provider_id == extension_misc::kODFSExtensionId &&
       first_file_system) {
     // Get Files App window, if it exists.
     Browser* browser =
@@ -621,8 +628,8 @@ FileManagerPrivateMountCrostiniFunction::Run() {
 void FileManagerPrivateMountCrostiniFunction::RestartCallback(
     crostini::CrostiniResult result) {
   if (result != crostini::CrostiniResult::SUCCESS) {
-    Respond(Error(
-        base::StringPrintf("Error mounting crostini container: %d", result)));
+    Respond(Error(base::StringPrintf("Error mounting crostini container: %d",
+                                     static_cast<int>(result))));
     return;
   }
   // Use OriginalProfile since using crostini in incognito such as saving
@@ -640,8 +647,8 @@ void FileManagerPrivateMountCrostiniFunction::RestartCallback(
 void FileManagerPrivateMountCrostiniFunction::MountCallback(
     crostini::CrostiniResult result) {
   if (result != crostini::CrostiniResult::SUCCESS) {
-    Respond(Error(
-        base::StringPrintf("Error mounting crostini container: %d", result)));
+    Respond(Error(base::StringPrintf("Error mounting crostini container: %d",
+                                     static_cast<int>(result))));
     return;
   }
   Respond(NoArguments());
@@ -1000,6 +1007,13 @@ FileManagerPrivateInternalGetRecentFilesFunction::Run() {
     return RespondNow(Error("Cannot convert category to file type"));
   }
 
+  if (base::FeatureList::IsEnabled(ash::features::kFSPsInRecents)) {
+    // If File System Provider is enabled, we set the maximum latency to be 3s.
+    // This is based on "User Preference and Search Engine Latency" paper, which
+    // stated that "[...] once latency exceeds 3 seconds for the slower engine,
+    // users are 1.5 times as likely to choose the faster engine."
+    model->SetScanTimeout(base::Milliseconds(3000));
+  }
   model->GetRecentFiles(
       file_system_context.get(), source_url(), file_type,
       params->invalidate_cache,
@@ -1142,6 +1156,18 @@ FileManagerPrivateSendFeedbackFunction::Run() {
                            /*category_tag=*/"chromeos-files-app",
                            /*extra_diagnostics=*/std::string());
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateGetDeviceConnectionStateFunction::Run() {
+  api::file_manager_private::DeviceConnectionState result =
+      content::GetNetworkConnectionTracker()->IsOffline()
+          ? api::file_manager_private::DEVICE_CONNECTION_STATE_OFFLINE
+          : api::file_manager_private::DEVICE_CONNECTION_STATE_ONLINE;
+
+  return RespondNow(ArgumentList(
+      api::file_manager_private::GetDeviceConnectionState::Results::Create(
+          result)));
 }
 
 }  // namespace extensions

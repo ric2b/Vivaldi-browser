@@ -10,14 +10,15 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/cable/v2_constants.h"
 #include "device/fido/ctap_get_assertion_request.h"
 #include "device/fido/fido_constants.h"
-#include "device/fido/fido_device_discovery.h"
 #include "device/fido/fido_discovery_base.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -55,8 +56,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
       FidoRequestType request_type,
       std::vector<CableDiscoveryData> cable_data,
       const absl::optional<std::array<uint8_t, cablev2::kQRKeySize>>&
-          qr_generator_key,
-      std::vector<std::unique_ptr<cablev2::Pairing>> v2_pairings);
+          qr_generator_key);
 
   // set_android_accessory_params configures values necessary for discovering
   // Android AOA devices. The |aoa_request_description| is a string that is sent
@@ -78,19 +78,26 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
   // will be called when a pairing is reported to be invalid by the
   // tunnelserver. It is passed the index of the invalid pairing.
   virtual void set_cable_invalidated_pairing_callback(
-      base::RepeatingCallback<void(size_t)>);
+      base::RepeatingCallback<void(std::unique_ptr<cablev2::Pairing>)>);
 
   // set_cable_event_callback installs a callback which will be called with
   // when a variety of events occur. See the definition of `cablev2::Event`.
   virtual void set_cable_event_callback(
       base::RepeatingCallback<void(cablev2::Event)> callback);
 
-  // get_cable_contact_callback returns a callback that can be called with
-  // indexes into the vector of pairings passed to |set_cable_data| in order
-  // to contact the indexed device. Only a single callback is supported.
-  virtual base::RepeatingCallback<void(size_t)> get_cable_contact_callback();
+  // get_cable_contact_callback returns a callback that can be called with a
+  // pairing to contact that device. Only a single callback is supported.
+  virtual base::RepeatingCallback<void(std::unique_ptr<cablev2::Pairing>)>
+  get_cable_contact_callback();
 
   void set_hid_ignore_list(base::flat_set<VidPid> hid_ignore_list);
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  // Provides the passkeys that will be made available to use for cloud-based
+  // enclave authentication.
+  void SetEnclavePasskeys(
+      std::vector<sync_pb::WebauthnCredentialSpecifics> passkeys);
+#endif
 
 #if BUILDFLAG(IS_MAC)
   // Configures the Touch ID authenticator. Set to absl::nullopt to disable it.
@@ -128,6 +135,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
       CtapGetAssertionRequest request);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+  // no_cable_linking requests that QR-linked and pre-linked phones be ignored
+  // for this discovery.
+  //
+  // TODO(crbug.com/1459443): remove this and everything else from the CL that
+  // added it if this is unused by June 2024.
+  bool no_cable_linking = false;
+
  protected:
   static std::vector<std::unique_ptr<FidoDiscoveryBase>> SingleDiscovery(
       std::unique_ptr<FidoDiscoveryBase> discovery);
@@ -136,6 +150,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
   std::vector<std::unique_ptr<FidoDiscoveryBase>> MaybeCreatePlatformDiscovery()
       const;
+#endif
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  void MaybeCreateEnclaveDiscovery(
+      std::vector<std::unique_ptr<FidoDiscoveryBase>>& discoveries);
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -149,13 +168,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
   absl::optional<std::vector<CableDiscoveryData>> cable_data_;
   absl::optional<std::array<uint8_t, cablev2::kQRKeySize>> qr_generator_key_;
   absl::optional<FidoRequestType> request_type_;
-  std::vector<std::unique_ptr<cablev2::Pairing>> v2_pairings_;
-  std::unique_ptr<FidoDeviceDiscovery::EventStream<size_t>>
+  std::unique_ptr<
+      FidoDeviceDiscovery::EventStream<std::unique_ptr<cablev2::Pairing>>>
       contact_device_stream_;
   absl::optional<
       base::RepeatingCallback<void(std::unique_ptr<cablev2::Pairing>)>>
       cable_pairing_callback_;
-  absl::optional<base::RepeatingCallback<void(size_t)>>
+  absl::optional<
+      base::RepeatingCallback<void(std::unique_ptr<cablev2::Pairing>)>>
       cable_invalidated_pairing_callback_;
   absl::optional<base::RepeatingCallback<void(cablev2::Event)>>
       cable_event_callback_;
@@ -166,6 +186,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDiscoveryFactory {
       get_assertion_request_for_legacy_credential_check_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   base::flat_set<VidPid> hid_ignore_list_;
+#if !BUILDFLAG(IS_CHROMEOS)
+  std::vector<sync_pb::WebauthnCredentialSpecifics> enclave_passkeys_;
+#endif
 };
 
 }  // namespace device

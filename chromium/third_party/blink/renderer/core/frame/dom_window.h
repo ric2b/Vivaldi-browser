@@ -42,7 +42,7 @@ struct BlinkTransferableMessage;
 // TODO(tkent): Rename DOMWindow to Window. The class was named as 'DOMWindow'
 // because WebKit already had KJS::Window.  We have no reasons to avoid
 // blink::Window now.
-class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
+class CORE_EXPORT DOMWindow : public EventTarget {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -117,8 +117,11 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
   // Indexed properties
   DOMWindow* AnonymousIndexedGetter(uint32_t index);
 
+  v8::Local<v8::Value> AnonymousNamedGetter(const AtomicString&);
+
   // Returns the opener and collects cross-origin access metrics.
-  DOMWindow* OpenerWithMetrics() const;
+  ScriptValue openerForBindings(v8::Isolate*) const;
+  void setOpenerForBindings(v8::Isolate*, ScriptValue, ExceptionState&);
 
   String SanitizedCrossDomainAccessErrorMessage(
       const LocalDOMWindow* accessing_window,

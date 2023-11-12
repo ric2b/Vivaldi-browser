@@ -37,6 +37,10 @@ class SkipAdLabelButton;
 class ToggleMicrophoneButton;
 class ToggleCameraButton;
 
+namespace vivaldi {
+class VolumeSlider;
+}
+
 // The Chrome desktop implementation of VideoOverlayWindow. This will only be
 // implemented in views, which will support all desktop platforms.
 class VideoOverlayWindowViews : public content::VideoOverlayWindow,
@@ -52,6 +56,10 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   ~VideoOverlayWindowViews() override;
 
   enum class WindowQuadrant { kBottomLeft, kBottomRight, kTopLeft, kTopRight };
+
+  // The amount of time to keep the controls hidden after a widget move.
+  static constexpr base::TimeDelta kControlHideDelayAfterMove =
+      base::Milliseconds(100);
 
   // VideoOverlayWindow:
   void Close() override;
@@ -122,7 +130,9 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // visible.
   bool AreControlsVisible() const;
 
-  // Updates the controls view::Views to reflect |is_visible|.
+  // Updates the controls view::Views to reflect |is_visible|. If the window is
+  // currently in motion, the update is queued until the end of motion. If
+  // multiple updates are requested, only the last update will be applied.
   void UpdateControlsVisibility(bool is_visible);
 
   // Gets the bounds of the controls.
@@ -238,6 +248,11 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void RecordButtonPressed(OverlayWindowControl);
   void RecordTapGesture(OverlayWindowControl);
 
+  // Re-enables controls after moving. Controls are hidden while the pip window
+  // is in motion. This will change the move status and set the control
+  // visibility to the last requested state.
+  void ReEnableControlsAfterMove();
+
   // Not owned; |controller_| owns |this|.
   raw_ptr<content::VideoPictureInPictureWindowController> controller_;
 
@@ -267,6 +282,14 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
 
   // Automatically hides the controls a few seconds after user tap gesture.
   base::RetainingOneShotTimer hide_controls_timer_;
+
+  // Used to track movement of the window. The mouse movement and the window
+  // movement can cause the overlay to flicker, because mouse movement shows
+  // the overlay while the window movement hides the overlay. A timer is used
+  // to prevent the rapid changes between states.
+  base::RetainingOneShotTimer enable_controls_after_move_timer_;
+  bool is_moving_ = false;
+  absl::optional<bool> queued_controls_visibility_status_;
 
   // Timer used to update controls bounds.
   std::unique_ptr<base::OneShotTimer> update_controls_bounds_timer_;
@@ -347,13 +370,14 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
 // Vivaldi
   raw_ptr<vivaldi::VideoProgress> progress_view_ = nullptr;
   raw_ptr<vivaldi::MuteButton> mute_button_ = nullptr;
+  raw_ptr<vivaldi::VolumeSlider> volume_slider_ = nullptr;
+
   bool show_progress_view_ = false;
 
-  void CreateVivaldiVideoControls();
+  void InitVivaldiControls();
   void HandleVivaldiMuteButton();
   void UpdateVivaldiControlsVisibility(bool is_visible);
   void UpdateVivaldiControlsBounds(int primary_control_y, int margin);
-  void CreateVivaldiVideoObserver();
   void HandleVivaldiKeyboardEvents(ui::KeyEvent* event);
   void HandleVivaldiGestureEvent(ui::GestureEvent* event);
 

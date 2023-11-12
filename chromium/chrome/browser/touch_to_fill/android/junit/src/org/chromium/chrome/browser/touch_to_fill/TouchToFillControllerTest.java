@@ -57,16 +57,13 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.UmaRecorderHolder;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.GetLoginMatchType;
-import org.chromium.chrome.browser.touch_to_fill.TouchToFillComponent.UserAction;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FaviconOrFallback;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
 import org.chromium.chrome.browser.touch_to_fill.common.BottomSheetFocusHelper;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
 import org.chromium.chrome.browser.touch_to_fill.data.WebAuthnCredential;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge;
@@ -89,7 +86,7 @@ import java.util.Collections;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class TouchToFillControllerTest {
-    private static final GURL TEST_URL = JUnitTestGURLs.getGURL(JUnitTestGURLs.EXAMPLE_URL);
+    private static final GURL TEST_URL = JUnitTestGURLs.EXAMPLE_URL;
     private static final String TEST_SUBDOMAIN_URL = "https://subdomain.example.xyz";
     private static final Credential ANA = new Credential(
             "Ana", "S3cr3t", "Ana", "https://m.a.xyz/", "m.a.xyz", GetLoginMatchType.PSL, 0);
@@ -147,7 +144,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsWithMultipleEntries() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA, CARL),
                 /*submitCredential=*/true, /*managePasskeysHidesPasswords=*/false,
@@ -174,12 +170,10 @@ public class TouchToFillControllerTest {
         assertThat(itemList.get(2).model.get(CREDENTIAL), is(CARL));
         assertNotNull(itemList.get(2).model.get(ON_CLICK_LISTENER));
         assertThat(itemList.get(2).model.get(FORMATTED_ORIGIN), is(CARL.getDisplayName()));
-        assertThat(itemList.get(0).model.get(IMAGE_DRAWABLE_ID),
-                is(R.drawable.touch_to_fill_header_image));
+        assertThat(itemList.get(0).model.get(IMAGE_DRAWABLE_ID), is(R.drawable.ic_vpn_key_blue));
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsWithSingleEntry() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -206,7 +200,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsWithSingleWebAuthnEntry() {
         mMediator.showCredentials(TEST_URL, true, Arrays.asList(DINO), Collections.emptyList(),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -229,7 +222,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsWithWebAuthnAndPasswordEntries() {
         mMediator.showCredentials(TEST_URL, true, Arrays.asList(DINO), Arrays.asList(ANA),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -255,7 +247,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsToSubmit() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA),
                 /*submitCredential=*/true, /*managePasskeysHidesPasswords=*/false,
@@ -273,7 +264,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsSetsCredentialListAndRequestsFavicons() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB), /*submitCredential=*/false,
@@ -299,7 +289,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testFetchFaviconUpdatesModel() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Collections.singletonList(CARL), /*submitCredential=*/false,
@@ -328,7 +317,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsFormatPslOrigins() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA, BOB),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -343,7 +331,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testClearsCredentialListWhenShowingAgain() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Collections.singletonList(ANA), /*submitCredential=*/false,
@@ -366,7 +353,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testShowCredentialsSetsVisibile() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB), /*submitCredential=*/false,
@@ -375,7 +361,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testCallsCallbackAndHidesOnSelectingItemDoesNotRecordIndexForSingleCredential() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -389,14 +374,9 @@ public class TouchToFillControllerTest {
         assertThat(RecordHistogram.getHistogramTotalCountForTesting(
                            TouchToFillMediator.UMA_TOUCH_TO_FILL_CREDENTIAL_INDEX),
                 is(0));
-        assertThat(RecordHistogram.getHistogramValueCountForTesting(
-                           TouchToFillMediator.UMA_TOUCH_TO_FILL_USER_ACTION,
-                           UserAction.SELECT_CREDENTIAL),
-                is(1));
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testCallsCallbackAndHidesOnSelectingItem() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA, CARL),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -410,14 +390,9 @@ public class TouchToFillControllerTest {
         assertThat(RecordHistogram.getHistogramValueCountForTesting(
                            TouchToFillMediator.UMA_TOUCH_TO_FILL_CREDENTIAL_INDEX, 1),
                 is(1));
-        assertThat(RecordHistogram.getHistogramValueCountForTesting(
-                           TouchToFillMediator.UMA_TOUCH_TO_FILL_USER_ACTION,
-                           UserAction.SELECT_CREDENTIAL),
-                is(1));
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testCallsDelegateAndHidesOnDismiss() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(), Arrays.asList(ANA, CARL),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/false,
@@ -429,13 +404,9 @@ public class TouchToFillControllerTest {
                            TouchToFillMediator.UMA_TOUCH_TO_FILL_DISMISSAL_REASON,
                            BottomSheetController.StateChangeReason.BACK_PRESS),
                 is(1));
-        assertThat(RecordHistogram.getHistogramValueCountForTesting(
-                           TouchToFillMediator.UMA_TOUCH_TO_FILL_USER_ACTION, UserAction.DISMISS),
-                is(1));
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testHidesWhenSelectingManagePasswords() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB), /*submitCredential=*/false,
@@ -446,14 +417,9 @@ public class TouchToFillControllerTest {
         itemList.get(itemList.size() - 1).model.get(ON_CLICK_MANAGE).run();
         verify(mMockDelegate).onManagePasswordsSelected(/*passkeysShown=*/false);
         assertThat(mModel.get(VISIBLE), is(false));
-        assertThat(RecordHistogram.getHistogramValueCountForTesting(
-                           TouchToFillMediator.UMA_TOUCH_TO_FILL_USER_ACTION,
-                           UserAction.SELECT_MANAGE_PASSWORDS),
-                is(1));
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testManagePasswordsWithPasskeysShown() {
         mMediator.showCredentials(TEST_URL, true, Arrays.asList(DINO), Collections.emptyList(),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/true,
@@ -466,7 +432,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testManagePasskeysButtonTitleWhenPasswordsHidden() {
         mMediator.showCredentials(TEST_URL, true, Arrays.asList(DINO), Arrays.asList(ANA),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/true,
@@ -479,7 +444,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testAddsTheBottomSheetHelperToObserveTheSheet() {
         mMediator.showCredentials(TEST_URL, true, Arrays.asList(DINO), Arrays.asList(ANA),
                 /*submitCredential=*/false, /*managePasskeysHidesPasswords=*/true,
@@ -489,7 +453,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testHybridPasskeysShown() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB), /*submitCredential=*/false,
@@ -499,7 +462,6 @@ public class TouchToFillControllerTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID})
     public void testHidesWhenSelectingHybridSignin() {
         mMediator.showCredentials(TEST_URL, true, Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB), /*submitCredential=*/false,
@@ -510,10 +472,6 @@ public class TouchToFillControllerTest {
         itemList.get(itemList.size() - 1).model.get(ON_CLICK_HYBRID).run();
         verify(mMockDelegate).onHybridSignInSelected();
         assertThat(mModel.get(VISIBLE), is(false));
-        assertThat(RecordHistogram.getHistogramValueCountForTesting(
-                           TouchToFillMediator.UMA_TOUCH_TO_FILL_USER_ACTION,
-                           UserAction.SELECT_HYBRID),
-                is(1));
     }
 
     /**

@@ -11,10 +11,9 @@ import {constants} from '../../common/constants.js';
 
 import {BridgeConstants} from './bridge_constants.js';
 import {BridgeHelper} from './bridge_helper.js';
-import {Command} from './command_store.js';
+import {Command} from './command.js';
 import {EarconId} from './earcon_id.js';
-import {BaseLog, SerializableLog} from './log_types.js';
-import {PanelTabMenuItemData} from './panel_menu_data.js';
+import {SerializableLog} from './log_types.js';
 import {QueueMode, TtsSpeechProperties} from './tts_types.js';
 
 export const BackgroundBridge = {};
@@ -29,6 +28,16 @@ BackgroundBridge.Braille = {
     return BridgeHelper.sendMessage(
         BridgeConstants.Braille.TARGET,
         BridgeConstants.Braille.Action.BACK_TRANSLATE, cells);
+  },
+
+  /**
+   * @param {boolean} enabled
+   * @return {!Promise}
+   */
+  async enableCommandHandler(enabled) {
+    return BridgeHelper.sendMessage(
+        BridgeConstants.Braille.TARGET,
+        BridgeConstants.Braille.Action.ENABLE_COMMAND_HANDLER, enabled);
   },
 
   /** @return {!Promise} */
@@ -53,18 +62,6 @@ BackgroundBridge.Braille = {
     return BridgeHelper.sendMessage(
         BridgeConstants.Braille.TARGET, BridgeConstants.Braille.Action.WRITE,
         text);
-  },
-};
-
-BackgroundBridge.BrailleCommandHandler = {
-  /**
-   * @param {boolean} enabled
-   * @return {!Promise}
-   */
-  async setEnabled(enabled) {
-    return BridgeHelper.sendMessage(
-        BridgeConstants.BrailleCommandHandler.TARGET,
-        BridgeConstants.BrailleCommandHandler.Action.SET_ENABLED, enabled);
   },
 };
 
@@ -177,7 +174,7 @@ BackgroundBridge.GestureCommandHandler = {
   async setEnabled(enabled) {
     return BridgeHelper.sendMessage(
         BridgeConstants.GestureCommandHandler.TARGET,
-        BridgeConstants.GestureCommandHandler.Action.SET_ENABLED);
+        BridgeConstants.GestureCommandHandler.Action.SET_ENABLED, enabled);
   },
 };
 
@@ -257,17 +254,6 @@ BackgroundBridge.PanelBackground = {
   },
 
   /**
-   * @param {number} windowId
-   * @param {number} tabId
-   * @return {!Promise}
-   */
-  async focusTab(windowId, tabId) {
-    return BridgeHelper.sendMessage(
-        BridgeConstants.PanelBackground.TARGET,
-        BridgeConstants.PanelBackground.Action.FOCUS_TAB, windowId, tabId);
-  },
-
-  /**
    * @return {!Promise<{
    *     standardActions: !Array<!chrome.automation.ActionType>,
    *     customActions: !Array<!chrome.automation.CustomAction>
@@ -277,13 +263,6 @@ BackgroundBridge.PanelBackground = {
     return BridgeHelper.sendMessage(
         BridgeConstants.PanelBackground.TARGET,
         BridgeConstants.PanelBackground.Action.GET_ACTIONS_FOR_CURRENT_NODE);
-  },
-
-  /** @return {!Promise<!Array<!PanelTabMenuItemData>>} */
-  async getTabMenuData() {
-    return BridgeHelper.sendMessage(
-        BridgeConstants.PanelBackground.TARGET,
-        BridgeConstants.PanelBackground.Action.GET_TAB_MENU_DATA);
   },
 
   /**

@@ -16,12 +16,13 @@
 #include "ash/style/ash_color_id.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/media_message_center/media_controls_progress_view.h"
 #include "components/media_message_center/media_notification_util.h"
 #include "components/vector_icons/vector_icons.h"
+#include "media/base/media_switches.h"
 #include "services/media_session/public/cpp/util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -29,6 +30,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -136,6 +138,7 @@ const gfx::VectorIcon& GetVectorIconForMediaAction(MediaSessionAction action) {
     case MediaSessionAction::kSetMute:
     case MediaSessionAction::kPreviousSlide:
     case MediaSessionAction::kNextSlide:
+    case MediaSessionAction::kEnterAutoPictureInPicture:
       NOTREACHED();
       break;
   }
@@ -216,16 +219,6 @@ class MediaActionButton : public views::ImageButton {
 
 }  // namespace
 
-const char LockScreenMediaControlsView::kMediaControlsHideHistogramName[] =
-    "Media.LockScreenControls.Hide";
-
-const char LockScreenMediaControlsView::kMediaControlsShownHistogramName[] =
-    "Media.LockScreenControls.Shown";
-
-const char
-    LockScreenMediaControlsView::kMediaControlsUserActionHistogramName[] =
-        "Media.LockScreenControls.UserAction";
-
 LockScreenMediaControlsView::Callbacks::Callbacks() = default;
 
 LockScreenMediaControlsView::Callbacks::~Callbacks() = default;
@@ -261,8 +254,12 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
 
   contents_view_->SetPaintToLayer();  // Needed for opacity animation.
   contents_view_->layer()->SetFillsBoundsOpaquely(false);
+  ui::ColorId background_color_id =
+      chromeos::features::IsJellyEnabled()
+          ? static_cast<ui::ColorId>(cros_tokens::kCrosSysScrim2)
+          : kColorAshShieldAndBase80;
   contents_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-      kColorAshShieldAndBase80, kMediaControlsCornerRadius));
+      background_color_id, kMediaControlsCornerRadius));
 
   // |header_row_| contains the app icon and source title of the current media
   // session. It also contains the close button.
@@ -451,22 +448,6 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
 }
 
 LockScreenMediaControlsView::~LockScreenMediaControlsView() {
-  // If the screen is now unlocked and we were not hidden for another reason
-  // then we are being hidden because the device is now unlocked.
-  if (shown_ == Shown::kShown) {
-    if (!hide_reason_ &&
-        !Shell::Get()->session_controller()->IsScreenLocked()) {
-      hide_reason_ = HideReason::kUnlocked;
-    }
-
-    // Only record hide reason if there is one. The value could be missing
-    // when ash shuts down with the media controls.
-    if (hide_reason_) {
-      base::UmaHistogramEnumeration(kMediaControlsHideHistogramName,
-                                    *hide_reason_);
-    }
-  }
-
   base::PowerMonitor::RemovePowerSuspendObserver(this);
 }
 
@@ -525,8 +506,16 @@ void LockScreenMediaControlsView::MediaSessionInfoChanged(
     return;
   }
 
+  // We only consider the session as sensitive if its metadata comes from an OTR
+  // session and the kHideIncognitoMediaMetadata flag is off. When the flag is
+  // on, the session's metadata is obscured (in Incognito mode), so don't need
+  // to hide the media controls.
+  bool is_sensitive =
+      !base::FeatureList::IsEnabled(media::kHideIncognitoMediaMetadata) &&
+      session_info->is_sensitive;
+
   // If the session is marked as sensitive then don't show the controls.
-  if (session_info->is_sensitive && !IsDrawn()) {
+  if (is_sensitive && !IsDrawn()) {
     SetShown(Shown::kNotShownSessionSensitive);
     return;
   }
@@ -717,8 +706,6 @@ void LockScreenMediaControlsView::ButtonPressed(
     media_session::mojom::MediaSessionAction action) {
   if (base::Contains(enabled_actions_, action) &&
       media_session_id_.has_value()) {
-    base::UmaHistogramEnumeration(kMediaControlsUserActionHistogramName,
-                                  action);
     media_session::PerformMediaSessionAction(action, media_controller_remote_);
   }
 }
@@ -771,16 +758,9 @@ void LockScreenMediaControlsView::SeekTo(double seek_progress) {
   DCHECK(position_.has_value());
 
   media_controller_remote_->SeekTo(seek_progress * position_->duration());
-
-  base::UmaHistogramEnumeration(kMediaControlsUserActionHistogramName,
-                                MediaSessionAction::kSeekTo);
 }
 
 void LockScreenMediaControlsView::Hide(HideReason reason) {
-  if (!hide_reason_ && GetVisible()) {
-    hide_reason_ = reason;
-  }
-
   hide_media_controls_.Run();
 }
 
@@ -797,8 +777,6 @@ void LockScreenMediaControlsView::SetShown(Shown shown) {
 
   shown_ = shown;
 
-  base::UmaHistogramEnumeration(kMediaControlsShownHistogramName, shown);
-
   if (shown == Shown::kShown) {
     show_media_controls_.Run();
   } else {
@@ -808,9 +786,6 @@ void LockScreenMediaControlsView::SetShown(Shown shown) {
 
 void LockScreenMediaControlsView::Dismiss() {
   media_controller_remote_->Stop();
-
-  base::UmaHistogramEnumeration(kMediaControlsUserActionHistogramName,
-                                MediaSessionAction::kStop);
 
   Hide(HideReason::kDismissedByUser);
 }

@@ -31,8 +31,10 @@ BASE_DECLARE_FEATURE(kIPHCompanionSidePanelRegionSearchFeature);
 BASE_DECLARE_FEATURE(kIPHDesktopSharedHighlightingFeature);
 BASE_DECLARE_FEATURE(kIPHDesktopTabGroupsNewGroupFeature);
 BASE_DECLARE_FEATURE(kIPHDesktopCustomizeChromeFeature);
+BASE_DECLARE_FEATURE(kIPHDesktopCustomizeChromeRefreshFeature);
 BASE_DECLARE_FEATURE(kIPHDownloadToolbarButtonFeature);
 BASE_DECLARE_FEATURE(kIPHExtensionsMenuFeature);
+BASE_DECLARE_FEATURE(kIPHExtensionsRequestAccessButtonFeature);
 BASE_DECLARE_FEATURE(kIPHFocusHelpBubbleScreenReaderPromoFeature);
 BASE_DECLARE_FEATURE(kIPHGMCCastStartStopFeature);
 BASE_DECLARE_FEATURE(kIPHHighEfficiencyModeFeature);
@@ -47,11 +49,13 @@ BASE_DECLARE_FEATURE(kIPHPerformanceNewBadgeFeature);
 BASE_DECLARE_FEATURE(kIPHPowerBookmarksSidePanelFeature);
 BASE_DECLARE_FEATURE(kIPHPriceInsightsPageActionIconLabelFeature);
 BASE_DECLARE_FEATURE(kIPHPriceTrackingChipFeature);
+BASE_DECLARE_FEATURE(kIPHPriceTrackingEmailConsentFeature);
 BASE_DECLARE_FEATURE(kIPHPriceTrackingPageActionIconLabelFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListDiscoveryFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListEntryPointFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListInSidePanelFeature);
 BASE_DECLARE_FEATURE(kIPHReadingModeSidePanelFeature);
+BASE_DECLARE_FEATURE(kIPHShoppingCollectionFeature);
 BASE_DECLARE_FEATURE(kIPHSideSearchAutoTriggeringFeature);
 BASE_DECLARE_FEATURE(kIPHSideSearchFeature);
 BASE_DECLARE_FEATURE(kIPHSideSearchPageActionLabelFeature);
@@ -78,6 +82,8 @@ BASE_DECLARE_FEATURE(
     kIPHAdaptiveButtonInTopToolbarCustomizationTranslateFeature);
 BASE_DECLARE_FEATURE(
     kIPHAdaptiveButtonInTopToolbarCustomizationAddToBookmarksFeature);
+BASE_DECLARE_FEATURE(
+    kIPHAdaptiveButtonInTopToolbarCustomizationReadAloudFeature);
 BASE_DECLARE_FEATURE(kIPHAddToHomescreenMessageFeature);
 BASE_DECLARE_FEATURE(kIPHAutoDarkOptOutFeature);
 BASE_DECLARE_FEATURE(kIPHAutoDarkUserEducationMessageFeature);
@@ -143,7 +149,6 @@ BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteAppMenuFeature);
 BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteDefaultOnFeature);
 BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteOptInFeature);
 BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteExceptionsGenericFeature);
-BASE_DECLARE_FEATURE(kIPHRequestDesktopSiteExceptionsSpecificFeature);
 BASE_DECLARE_FEATURE(kIPHShoppingListMenuItemFeature);
 BASE_DECLARE_FEATURE(kIPHShoppingListSaveFlowFeature);
 BASE_DECLARE_FEATURE(kIPHTabGroupsQuicklyComparePagesFeature);
@@ -192,7 +197,6 @@ BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserBadgeEligibilityFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserOverflowMenuBadgeFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserSettingsBadgeFeature);
 BASE_DECLARE_FEATURE(kIPHiOSPromoAppStoreFeature);
-BASE_DECLARE_FEATURE(kIPHTabPinnedFeature);
 BASE_DECLARE_FEATURE(kIPHiOSPromoWhatsNewFeature);
 BASE_DECLARE_FEATURE(kIPHiOSPromoPostRestoreFeature);
 BASE_DECLARE_FEATURE(kIPHiOSPromoCredentialProviderExtensionFeature);
@@ -203,12 +207,15 @@ BASE_DECLARE_FEATURE(kIPHiOSHistoryOnOverflowMenuFeature);
 BASE_DECLARE_FEATURE(kIPHiOSShareToolbarItemFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserVideoPromoTriggerFeature);
 BASE_DECLARE_FEATURE(kIPHiOSPromoPostRestoreDefaultBrowserFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoPasswordManagerWidgetFeature);
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
 BASE_DECLARE_FEATURE(kIPHAutofillExternalAccountProfileSuggestionFeature);
+BASE_DECLARE_FEATURE(kIPHAutofillVirtualCardCVCSuggestionFeature);
 BASE_DECLARE_FEATURE(kIPHAutofillVirtualCardSuggestionFeature);
+BASE_DECLARE_FEATURE(kIPHCookieControlsFeature);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) ||
         // BUILDFLAG(IS_FUCHSIA)
@@ -216,6 +223,37 @@ BASE_DECLARE_FEATURE(kIPHAutofillVirtualCardSuggestionFeature);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 BASE_DECLARE_FEATURE(kIPHGoogleOneOfferNotificationFeature);
 BASE_DECLARE_FEATURE(kIPHLauncherSearchHelpUiFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedOneFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedTwoFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedThreeFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedFourFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedFiveFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedSixFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedSevenFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedEightFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedNineFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphTimerBasedTenFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedOneFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedTwoFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedThreeFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedFourFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedFiveFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedSixFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedSevenFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedEightFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedNineFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphUnlockedBasedTenFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedNudgeFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedOneFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedTwoFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedThreeFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedFourFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedFiveFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedSixFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedSevenFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedEightFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedNineFeature);
+BASE_DECLARE_FEATURE(kIPHScalableIphHelpAppBasedTenFeature);
 #endif
 
 #if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)

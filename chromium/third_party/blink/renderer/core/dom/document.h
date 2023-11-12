@@ -141,7 +141,6 @@ class Comment;
 class ComputedAccessibleNode;
 class ComputedStyle;
 class ConsoleMessage;
-class ContextFeatures;
 class CookieJar;
 class DOMFeaturePolicy;
 class DOMImplementation;
@@ -203,6 +202,7 @@ class Location;
 class MediaQueryListListener;
 class MediaQueryMatcher;
 class NodeIterator;
+class NodeMoveScopeItem;
 class NthIndexCache;
 class Page;
 class PendingAnimations;
@@ -737,7 +737,12 @@ class CORE_EXPORT Document : public ContainerNode,
   void UpdateStyleAndLayoutForNode(const Node*, DocumentUpdateReason);
   void UpdateStyleAndLayoutForRange(const Range*, DocumentUpdateReason);
 
-  scoped_refptr<const ComputedStyle> StyleForPage(uint32_t page_index);
+  // Get the computed style for a given page and name. Note that when using the
+  // function that doesn't provide a page name, layout needs to be complete,
+  // since page names are determined during layout.
+  const ComputedStyle* StyleForPage(uint32_t page_index);
+  const ComputedStyle* StyleForPage(uint32_t page_index,
+                                    const AtomicString& page_name);
 
   // Ensures that location-based data will be valid for a given node.
   //
@@ -749,18 +754,14 @@ class CORE_EXPORT Document : public ContainerNode,
   // data, otherwise use one of the |UpdateStyleAndLayout...| methods above.
   void EnsurePaintLocationDataValidForNode(const Node*,
                                            DocumentUpdateReason reason);
-  void EnsurePaintLocationDataValidForNode(const Node*,
-                                           DocumentUpdateReason reason,
-                                           CSSPropertyID property_id);
-
-  // Returns true if page box (margin boxes and page borders) is visible.
-  bool IsPageBoxVisible(uint32_t page_index);
 
   // Gets the description for the specified page. This includes preferred page
   // size and margins in pixels, assuming 96 pixels per inch. The size and
   // margins must be initialized to the default values that are used if auto is
-  // specified.
+  // specified. Note that, if the |page_index| variant of the function is used,
+  // layout needs to be complete, since page names are determined during layout.
   void GetPageDescription(uint32_t page_index, WebPrintPageDescription*);
+  void GetPageDescription(const ComputedStyle&, WebPrintPageDescription*);
 
   ResourceFetcher* Fetcher() const { return fetcher_.Get(); }
 
@@ -930,7 +931,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool BeforePrintingOrPrinting() const {
     return printing_ == kPrinting || printing_ == kBeforePrinting;
   }
-  bool FinishingOrIsPrinting() {
+  bool FinishingOrIsPrinting() const {
     return printing_ == kPrinting || printing_ == kFinishingPrinting;
   }
   void SetPrinting(PrintingState);
@@ -1532,9 +1533,6 @@ class CORE_EXPORT Document : public ContainerNode,
   void AdjustRectForScrollAndAbsoluteZoom(gfx::RectF&,
                                           const LayoutObject&) const;
 
-  void SetContextFeatures(ContextFeatures&);
-  ContextFeatures& GetContextFeatures() const { return *context_features_; }
-
   ElementDataCache* GetElementDataCache() { return element_data_cache_.Get(); }
 
   void DidLoadAllScriptBlockingResources();
@@ -1557,6 +1555,12 @@ class CORE_EXPORT Document : public ContainerNode,
   WorkletAnimationController& GetWorkletAnimationController() {
     return *worklet_animation_controller_;
   }
+
+  // This uses an inline capacity of 2: typically there is only one scope active
+  // in a Document, but in some cases there will be a ShadowRoot being
+  // constructed, bringing the total to 2.
+  using NodeMoveScopeItemSet = HeapVector<Member<NodeMoveScopeItem>, 2>;
+  NodeMoveScopeItemSet& NodeMoveScopeItems() { return node_move_scope_items_; }
 
   void AttachCompositorTimeline(cc::AnimationTimeline*) const;
 
@@ -1613,6 +1617,8 @@ class CORE_EXPORT Document : public ContainerNode,
   // https://crbug.com/1453291
   // The DOM Parts API: https://github.com/tbondwilkinson/dom-parts.
   DocumentPartRoot& getPartRoot();
+  DocumentPartRoot& EnsureDocumentPartRoot();
+  bool DOMPartsInUse() const { return document_part_root_; }
 
   // A non-null template_document_host_ implies that |this| was created by
   // EnsureTemplateDocument().
@@ -1655,6 +1661,8 @@ class CORE_EXPORT Document : public ContainerNode,
   }
 
   void LayoutViewportWasResized();
+  void MarkViewportUnitsDirty();
+
   // dv*
   void DynamicViewportUnitsChanged();
 
@@ -1911,6 +1919,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void RenderBlockingResourceUnblocked();
 
   bool RenderingHasBegun() const { return rendering_has_begun_; }
+  bool RenderingHadBegunForLastStyleUpdate() const {
+    return rendering_had_begun_for_last_style_update_;
+  }
 
   void IncrementLazyAdsFrameCount();
   void IncrementLazyEmbedsFrameCount();
@@ -1949,8 +1960,10 @@ class CORE_EXPORT Document : public ContainerNode,
     Document& document_;
   };
 
-  bool IsDirAttributeDirty() { return dir_attribute_dirty_; }
-  void SetDirAttributeDirty() { dir_attribute_dirty_ = true; }
+  // Does an element in this document have an HTML dir attribute (or its
+  // implicit equivalent)?
+  bool HasDirAttribute() const { return has_dir_attribute_; }
+  void SetHasDirAttribute() { has_dir_attribute_ = true; }
 
   ResizeObserver& EnsureResizeObserver();
 
@@ -1982,6 +1995,8 @@ class CORE_EXPORT Document : public ContainerNode,
   }
 
   void ResetAgent(Agent& agent);
+
+  bool SupportsLegacyDOMMutations();
 
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
@@ -2110,7 +2125,10 @@ class CORE_EXPORT Document : public ContainerNode,
 
   String nodeName() const final;
   bool ChildTypeAllowed(NodeType) const final;
-  Node* Clone(Document&, CloneChildrenFlag) const override;
+  Node* Clone(Document& factory,
+              NodeCloningData& data,
+              ContainerNode* append_to,
+              ExceptionState& append_exception_state) const override;
   void CloneDataFromDocument(const Document&);
 
   void UpdateTitle(const String&);
@@ -2184,47 +2202,16 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void RunPostPrerenderingActivationSteps();
 
-  // Resolves/rejects the promise if an existing permission grant can
-  // approve/deny; otherwise rejects if without user gesture, or
-  // resolves/rejects based on the requested status.
-  void OnGotExistingStorageAccessPermissionState(
-      ScriptPromiseResolver* resolver,
-      bool has_user_gesture,
-      mojom::blink::PermissionStatus previous_status);
-
-  // Similar to `OnGotExistingStorageAccessPermissionState`, but for the
-  // top-level variant. Allows bypassing user activation checks in the event
-  // that the permission is already granted.
-  void OnGotExistingTopLevelStorageAccessPermissionState(
-      ScriptPromiseResolver* resolver,
-      bool has_user_gesture,
-      mojom::blink::PermissionDescriptorPtr descriptor,
-      mojom::blink::PermissionStatus previous_status);
-
-  // Wraps `ProcessStorageAccessPermissionState` to handle the requested
-  // permission status.
-  void OnRequestedStorageAccessPermissionState(
-      ScriptPromiseResolver* resolver,
-      mojom::blink::PermissionStatus status);
-
-  // Similar to `OnRequestedStorageAccessPermissionState`, but for the top-level
-  // variant. Used to react to the result of a permission request.
-  void OnRequestedTopLevelStorageAccessPermissionState(
-      ScriptPromiseResolver* resolver,
-      mojom::blink::PermissionStatus status);
-
   // Resolves the promise if the `status` can approve; rejects the promise
   // otherwise, and consumes user activation.
   void ProcessStorageAccessPermissionState(
       ScriptPromiseResolver* resolver,
-      bool use_existing_status,
       mojom::blink::PermissionStatus status);
 
   // Similar to `ProcessStorageAccessPermissionState`, but for the top-level
   // variant. Notably, does not modify the per-frame storage access bit.
   void ProcessTopLevelStorageAccessPermissionState(
       ScriptPromiseResolver* resolver,
-      bool use_existing_status,
       mojom::blink::PermissionStatus status);
 
   // Fetch the compression dictionary sent in the response header after the
@@ -2281,7 +2268,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Member<ResourceFetcher> fetcher_;
   Member<DocumentParser> parser_;
-  Member<ContextFeatures> context_features_;
   Member<HttpRefreshScheduler> http_refresh_scheduler_;
 
   bool well_formed_;
@@ -2495,6 +2481,11 @@ class CORE_EXPORT Document : public ContainerNode,
   // removed from top_layer_elements_ when overlay computes to none. Each
   // element also has a "reason" for being in the top layer which corresponds to
   // the API which caused the element to enter the top layer in the first place.
+  // TODO(http://crbug.com/1472330): This data structure is a Vector in order to
+  // preserve ordering, but ideally it would be a map so that we could key into
+  // it with an Element and access the TopLayerReason. However, there is no
+  // ordered map oilpan data structure, so some methods that access this will be
+  // O(n) instead of O(1).
   class TopLayerPendingRemoval
       : public GarbageCollected<TopLayerPendingRemoval> {
    public:
@@ -2565,6 +2556,8 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<DocumentTimeline> timeline_;
   Member<PendingAnimations> pending_animations_;
   Member<WorkletAnimationController> worklet_animation_controller_;
+
+  NodeMoveScopeItemSet node_move_scope_items_;
 
   Member<Document> template_document_;
   Member<Document> template_document_host_;
@@ -2672,13 +2665,20 @@ class CORE_EXPORT Document : public ContainerNode,
   bool had_find_in_page_render_subtree_active_match_ = false;
   bool had_find_in_page_beforematch_expanded_hidden_matchable_ = false;
 
-  bool dir_attribute_dirty_ = false;
+  bool has_dir_attribute_ = false;
 
   // True if the developer supplied a media query indicating that
   // the site has support for reduced motion.
   bool supports_reduced_motion_ = false;
 
   Member<RenderBlockingResourceManager> render_blocking_resource_manager_;
+
+  // Record if the previous UpdateStyleAndLayoutTreeForThisDocument() happened
+  // while RenderingHasBegun() returned true.
+  // UpdateStyleAndLayoutTreeForThisDocument() can happen while render-blocking.
+  // For instance a forced update from devtools queries. If rendering_had_begun
+  // is false we should not
+  bool rendering_had_begun_for_last_style_update_ = false;
 
   bool rendering_has_begun_ = false;
 
@@ -2705,6 +2705,9 @@ class CORE_EXPORT Document : public ContainerNode,
   // This is incremented when a module script is evaluated.
   // http://crbug.com/1079044
   unsigned ignore_destructive_write_module_script_count_ = 0;
+
+  // If legacy DOM Mutation event listeners are supported by the embedder.
+  absl::optional<bool> legacy_dom_mutations_supported_;
 
   // If you want to add new data members to blink::Document, please reconsider
   // if the members really should be in blink::Document.  document.h is a very

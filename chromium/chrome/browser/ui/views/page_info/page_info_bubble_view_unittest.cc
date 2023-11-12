@@ -14,16 +14,18 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/privacy_sandbox/mock_privacy_sandbox_service.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/hats/mock_trust_safety_sentiment_service.h"
 #include "chrome/browser/ui/hats/trust_safety_sentiment_service_factory.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/controls/page_switcher_view.h"
+#include "chrome/browser/ui/views/controls/rich_controls_container_view.h"
 #include "chrome/browser/ui/views/controls/rich_hover_button.h"
 #include "chrome/browser/ui/views/page_info/chosen_object_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_main_view.h"
-#include "chrome/browser/ui/views/page_info/page_info_row_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_security_content_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "chrome/browser/ui/views/page_info/permission_toggle_row_view.h"
@@ -35,6 +37,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chrome/test/views/chrome_test_views_delegate.h"
+#include "components/browsing_data/core/features.h"
 #include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -249,7 +252,7 @@ class PageInfoBubbleViewTestApi {
   }
 
   std::u16string GetPermissionLabelTextAt(int index) {
-    return GetPermissionToggleRowAt(index)->row_view_->title_->GetText();
+    return GetPermissionToggleRowAt(index)->row_view_->GetTitleForTesting();
   }
 
   bool GetPermissionToggleIsOnAt(int index) {
@@ -272,11 +275,6 @@ class PageInfoBubbleViewTestApi {
       --actual_count;
 
     return actual_count;
-  }
-
-  // Simulates updating the number of cookies.
-  void SetCookieInfo(const CookieInfoList& list) {
-    presenter_->ui_for_testing()->SetCookieInfo(list);
   }
 
   // Simulates updating the number of blocked and allowed sites and fps info.
@@ -344,6 +342,8 @@ class PageInfoBubbleViewTestApi {
 namespace {
 
 using ::base::test::ParseJson;
+using ::testing::_;
+using ::testing::Return;
 
 constexpr char kTestUserEmail[] = "user@example.com";
 
@@ -952,7 +952,8 @@ TEST_F(PageInfoBubbleViewTest, UpdatingSiteDataRetainsLayout) {
   // Create a fake cookies info.
   PageInfoUI::CookiesNewInfo cookies;
   cookies.allowed_sites_count = 10;
-  cookies.blocked_sites_count = 32;
+  cookies.allowed_third_party_sites_count = 8;
+  cookies.blocked_third_party_sites_count = 32;
   cookies.status = CookieControlsStatus::kDisabled;
   cookies.enforcement = CookieControlsEnforcement::kNoEnforcement;
 
@@ -1132,19 +1133,30 @@ class PageInfoBubbleViewCookiesSubpageTest : public PageInfoBubbleViewTest {
  public:
   PageInfoBubbleViewCookiesSubpageTest() {
     feature_list.InitWithFeatures(
-        {page_info::kPageInfoCookiesSubpage,
-         privacy_sandbox::kPrivacySandboxFirstPartySetsUI},
-        {});
+        {privacy_sandbox::kPrivacySandboxFirstPartySetsUI}, {});
   }
 
+  void SetUp() override {
+    mock_privacy_sandbox_service_ = static_cast<MockPrivacySandboxService*>(
+        PrivacySandboxServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+            web_contents_helper_->profile(),
+            base::BindRepeating(&BuildMockPrivacySandboxService)));
+
+    PageInfoBubbleViewTest::SetUp();
+  }
   void ExpectViewContainsText(views::View* view, const std::u16string& text) {
     EXPECT_TRUE(view);
     EXPECT_THAT(base::UTF16ToUTF8(api_->GetTextOnView(view)),
                 ::testing::HasSubstr(base::UTF16ToUTF8(text)));
   }
 
+  MockPrivacySandboxService* mock_privacy_sandbox_service() {
+    return mock_privacy_sandbox_service_.get();
+  }
+
  private:
   base::test::ScopedFeatureList feature_list;
+  raw_ptr<MockPrivacySandboxService> mock_privacy_sandbox_service_;
 };
 
 }  // namespace
@@ -1155,13 +1167,28 @@ TEST_F(PageInfoBubbleViewCookiesSubpageTest, TextsOnButtonsAreCorrect) {
   base::HistogramTester histogram_tester;
   // Create fake cookie information.
   PageInfoUI::CookiesNewInfo cookie_info;
-  cookie_info.blocked_sites_count = 10;
+  cookie_info.blocked_third_party_sites_count = 10;
+  cookie_info.allowed_third_party_sites_count = 1;
   cookie_info.allowed_sites_count = 3;
   cookie_info.status = CookieControlsStatus::kEnabled;
   cookie_info.enforcement = CookieControlsEnforcement::kNoEnforcement;
   size_t kExpectedChildren = 3;
   const std::u16string owner_name = u"example_owner";
   cookie_info.fps_info = {PageInfoMainView::CookiesFpsInfo(owner_name)};
+
+  if (base::FeatureList::IsEnabled(
+          browsing_data::features::kMigrateStorageToBDM)) {
+    // The initial `SetCookieInfo` call coming from `OpenCookiesPage` through
+    // the `PageInfo` constructor synchronously has an empty
+    // `cookie_info.fps_info` which causes a persistent false state for FPS info
+    // and consequently persisting incorrect histogram reports in this test.
+    // Mocking the call into `GetFirstPartySetOwnerForDisplay` resolves this by
+    // overriding the `owner_name` for synchronous init call to `SetCookieInfo`.
+    EXPECT_CALL(*mock_privacy_sandbox_service(),
+                GetFirstPartySetOwnerForDisplay(_))
+        .Times(1)
+        .WillOnce(Return(owner_name));
+  }
 
   // Open cookies subpage to get the buttons.
   api_->navigation_handler()->OpenCookiesPage();
@@ -1190,7 +1217,7 @@ TEST_F(PageInfoBubbleViewCookiesSubpageTest, TextsOnButtonsAreCorrect) {
   ExpectViewContainsText(api_->blocking_third_party_cookies_subtitle(),
                          l10n_util::GetPluralStringFUTF16(
                              IDS_PAGE_INFO_COOKIES_BLOCKED_SITES_COUNT,
-                             cookie_info.blocked_sites_count));
+                             cookie_info.blocked_third_party_sites_count));
 
   EXPECT_TRUE(blocking_third_party_cookies_row->GetVisible());
   EXPECT_TRUE(fps_button->GetVisible());

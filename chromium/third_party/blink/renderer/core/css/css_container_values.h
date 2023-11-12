@@ -38,6 +38,8 @@ class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
   float RicFontSize(float zoom) const override;
   float LineHeight(float zoom) const override;
   float RootLineHeight(float zoom) const override;
+  float CapFontSize(float zoom) const override;
+  float RcapFontSize(float zoom) const override;
   // Note that ContainerWidth/ContainerHeight are used to resolve
   // container *units*. See `container_sizes_`.
   Element* ContainerElement() const override { return element_; }
@@ -54,6 +56,7 @@ class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
   }
   ContainerStuckLogical StuckInline() const override;
   ContainerStuckLogical StuckBlock() const override;
+  ContainerSnappedFlags SnappedFlags() const override { return snapped_; }
 
  private:
   // The current computed style for the container.
@@ -68,6 +71,11 @@ class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
   ContainerStuckPhysical stuck_horizontal_ = ContainerStuckPhysical::kNo;
   // Whether a sticky container is vertically stuck and against which edge.
   ContainerStuckPhysical stuck_vertical_ = ContainerStuckPhysical::kNo;
+  // Union of flags for whether a scroll-snapped container is snapped in block
+  // or inline directions.
+  // TODO(crbug.com/1475231): Need to update this from the scroll snapshot.
+  ContainerSnappedFlags snapped_ =
+      static_cast<ContainerSnappedFlags>(ContainerSnapped::kNone);
   // Container font sizes for resolving relative lengths.
   CSSToLengthConversionData::FontSizes font_sizes_;
   // LineHeightSize of the container element.

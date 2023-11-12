@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/memory/raw_ptr.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
@@ -69,7 +68,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   static NativeWidgetMacNSWindowHost* GetFromNativeView(gfx::NativeView view);
 
   // Key used to bind the content NSView to the widget when it becomes
-  // a child widget.
+  // a child widget. NOTE: This is unowned because it is owned by another
+  // widget; use a __bridge cast to convert to and from NSView*.
   static const char kMovedContentNSView[];
 
   // Unique integer id handles are used to bridge between the
@@ -135,8 +135,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   }
 
   // Create and set the bridge object to be in this process.
-  void CreateInProcessNSWindowBridge(
-      base::scoped_nsobject<NativeWidgetMacNSWindow> window);
+  void CreateInProcessNSWindowBridge(NativeWidgetMacNSWindow* window);
 
   // Create and set the bridge object to be potentially in another process.
   void CreateRemoteNSWindow(
@@ -155,6 +154,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // views::Widget::SetBounds method, when the argument is only sometimes in
   // screen coordinates).
   void SetBoundsInScreen(const gfx::Rect& bounds);
+
+  // Changes the size of the window, leaving the top-left corner in its current
+  // location.
+  void SetSize(const gfx::Size& size);
 
   // Tell the window to transition to being fullscreen or not-fullscreen.
   // If `fullscreen` is true, then `target_display_id` specifies the display to
@@ -227,6 +230,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   bool IsWindowKey() const { return is_window_key_; }
   bool IsMouseCaptureActive() const { return is_mouse_capture_active_; }
   bool IsZoomed() const { return is_zoomed_; }
+
+  void SetVisibilityState(remote_cocoa::mojom::WindowVisibilityState new_state);
 
   // Add a NSEvent local event monitor, which will send events to `client`
   // before they are dispatched to their ordinary target. Clients may specify
@@ -453,9 +458,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   // Remote accessibility objects corresponding to the NSWindow and its root
   // NSView.
-  base::scoped_nsobject<NSAccessibilityRemoteUIElement>
-      remote_window_accessible_;
-  base::scoped_nsobject<NSAccessibilityRemoteUIElement> remote_view_accessible_;
+  NSAccessibilityRemoteUIElement* __strong remote_window_accessible_;
+  NSAccessibilityRemoteUIElement* __strong remote_view_accessible_;
 
   // Used to force the NSApplication's focused accessibility element to be the
   // views::Views accessibility tree when the NSView for this is focused.
@@ -469,7 +473,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   // Window that is guaranteed to exist in this process (see
   // GetInProcessNSWindow).
-  base::scoped_nsobject<NativeWidgetMacNSWindow> in_process_ns_window_;
+  NativeWidgetMacNSWindow* __strong in_process_ns_window_;
 
   // Id mapping for |in_process_ns_window_|'s content NSView.
   std::unique_ptr<remote_cocoa::ScopedNSViewIdMapping>

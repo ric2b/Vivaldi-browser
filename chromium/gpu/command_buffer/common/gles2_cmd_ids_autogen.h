@@ -332,7 +332,7 @@
   OP(CopySharedImageINTERNALImmediate)                         /* 573 */ \
   OP(CopySharedImageToTextureINTERNALImmediate)                /* 574 */ \
   OP(ReadbackARGBImagePixelsINTERNAL)                          /* 575 */ \
-  OP(WritePixelsINTERNAL)                                      /* 576 */ \
+  OP(WritePixelsYUVINTERNAL)                                   /* 576 */ \
   OP(EnableiOES)                                               /* 577 */ \
   OP(DisableiOES)                                              /* 578 */ \
   OP(BlendEquationiOES)                                        /* 579 */ \
@@ -353,7 +353,10 @@
   OP(FramebufferPixelLocalStorageInterruptANGLE)               /* 594 */ \
   OP(FramebufferPixelLocalStorageRestoreANGLE)                 /* 595 */ \
   OP(GetFramebufferPixelLocalStorageParameterfvANGLE)          /* 596 */ \
-  OP(GetFramebufferPixelLocalStorageParameterivANGLE)          /* 597 */
+  OP(GetFramebufferPixelLocalStorageParameterivANGLE)          /* 597 */ \
+  OP(ClipControlEXT)                                           /* 598 */ \
+  OP(PolygonModeANGLE)                                         /* 599 */ \
+  OP(PolygonOffsetClampEXT)                                    /* 600 */
 
 enum CommandId {
   kOneBeforeStartPoint =

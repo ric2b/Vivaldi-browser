@@ -2,6 +2,8 @@
 
 #include "extensions/renderer/vivaldi_utilities_hook_delegate.h"
 
+#include "base/i18n/case_conversion.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/version_info/version_info.h"
@@ -11,6 +13,7 @@
 #include "extensions/renderer/bindings/api_signature.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
@@ -48,6 +51,8 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
        "utilities.getUrlFragments"},
       {&VivaldiUtilitiesHookDelegate::HandleGetVersion, "utilities.getVersion"},
       {&VivaldiUtilitiesHookDelegate::HandleIsUrlValid, "utilities.isUrlValid"},
+      {&VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText,
+       "utilities.urlToThumbnailText"},
       {&VivaldiUtilitiesHookDelegate::HandleSupportsProxy,
        "utilities.supportsProxy"},
   };
@@ -134,10 +139,14 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
     set_fragment16("urlForSecurityDisplay", formatted_url);
   }
   if (parsed_unicode.Length()) {
-    set_fragment16_for_sd(formatted_url, "hostForSecurityDisplay", parsed_unicode.host);
-    set_fragment16_for_sd(formatted_url, "pathForSecurityDisplay", parsed_unicode.path);
-    set_fragment16_for_sd(formatted_url, "queryForSecurityDisplay", parsed_unicode.query);
-    set_fragment16_for_sd(formatted_url, "refForSecurityDisplay", parsed_unicode.ref);
+    set_fragment16_for_sd(formatted_url, "hostForSecurityDisplay",
+                          parsed_unicode.host);
+    set_fragment16_for_sd(formatted_url, "pathForSecurityDisplay",
+                          parsed_unicode.path);
+    set_fragment16_for_sd(formatted_url, "queryForSecurityDisplay",
+                          parsed_unicode.query);
+    set_fragment16_for_sd(formatted_url, "refForSecurityDisplay",
+                          parsed_unicode.ref);
 
     lookalikes::DomainInfo info = lookalikes::GetDomainInfo(url);
     std::u16string tld(info.idn_result.result);
@@ -198,6 +207,39 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
   return result;
 }
 
+RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
+    v8::Local<v8::Context> context,
+    const std::vector<v8::Local<v8::Value>>& arguments) {
+  constexpr char kChrome[] = "chrome";
+  DCHECK_EQ(1u, arguments.size());
+  DCHECK(arguments[0]->IsString());
+  v8::Isolate* isolate = context->GetIsolate();
+  std::string url_string = gin::V8ToString(isolate, arguments[0]);
+
+  RequestResult result(RequestResult::HANDLED);
+  GURL url(url_string);
+  if (!url.is_valid()) {
+    result.return_value = arguments[0];
+  } else if (url.scheme().substr(0, 5) == kChrome) {
+    result.return_value = gin::StringToV8(isolate, kChrome);
+  } else {
+    std::string domain_and_registry =
+        net::registry_controlled_domains::GetDomainAndRegistry(
+            url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+    if (domain_and_registry.empty()) {
+      result.return_value = gin::StringToV8(isolate, url.host());
+    } else {
+      domain_and_registry[0] = base::UTF16ToUTF8(base::i18n::ToUpper(
+          base::UTF8ToUTF16(domain_and_registry.substr(0, 1))))[0];
+      base::StringPiece domain(domain_and_registry);
+
+      result.return_value =
+          gin::StringToV8(isolate, domain.substr(0, domain.find_first_of('.')));
+    }
+  }
+  return result;
+}
+
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
     v8::Local<v8::Context> context,
     const std::vector<v8::Local<v8::Value>>& arguments) {
@@ -211,11 +253,6 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
       ->Set(context, gin::StringToV8(isolate, "chromiumVersion"),
             gin::StringToV8(isolate, version_info::GetVersionNumber()))
       .ToChecked();
-  version_object
-      ->Set(context, gin::StringToV8(isolate, "mailVersion"),
-            gin::StringToV8(isolate, ::vivaldi::GetVivaldiMailVersionString()))
-      .ToChecked();
-
 
   RequestResult result(RequestResult::HANDLED);
   result.return_value = std::move(version_object);
@@ -285,11 +322,11 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
     const std::vector<v8::Local<v8::Value>>& arguments) {
   bool support =
 #if defined(ARCH_CPU_ARM_FAMILY) && (BUILDFLAG(IS_LINUX))
-    false;
+      false;
 #elif BUILDFLAG(IS_WIN) && defined(ARCH_CPU_32_BITS)
-    false;
+      false;
 #else
-    true;
+      true;
 #endif
   v8::Isolate* isolate = context->GetIsolate();
   v8::Local<v8::Object> object = v8::Object::New(isolate);
@@ -299,7 +336,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
       .ToChecked();
 
   RequestResult result(RequestResult::HANDLED);
-  result.return_value =  std::move(object);
+  result.return_value = std::move(object);
   return result;
 }
 

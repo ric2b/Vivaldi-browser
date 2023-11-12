@@ -14,10 +14,10 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
+import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.firstrun.MobileFreProgress;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -53,6 +53,8 @@ import java.util.List;
 public class SigninFirstRunMediator
         implements AccountsChangeObserver, ProfileDataCache.Observer,
                    AccountPickerCoordinator.Listener, FreUMADialogCoordinator.Listener {
+    private static final String TAG = "SigninFRMediator";
+
     /**
      * Used for MobileFre.SlowestLoadPoint histogram. Should be treated as append-only.
      * See {@code LoadPoint} in tools/metrics/histograms/enums.xml.
@@ -82,8 +84,10 @@ public class SigninFirstRunMediator
     private boolean mInitialLoadCompleted;
 
     private AccountPickerDialogCoordinator mDialogCoordinator;
-    private @Nullable String mSelectedAccountName;
-    private @Nullable String mDefaultAccountName;
+    // TODO(crbug.com/1462558): Replace with CoreAccountInfo.
+    private @Nullable String mSelectedAccountEmail;
+    // TODO(crbug.com/1462558): Replace with CoreAccountInfo.
+    private @Nullable String mDefaultAccountEmail;
     private boolean mAllowMetricsAndCrashUploading;
 
     SigninFirstRunMediator(Context context, ModalDialogManager modalDialogManager,
@@ -106,8 +110,8 @@ public class SigninFirstRunMediator
 
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
         mAccountManagerFacade.addObserver(this);
-        updateAccounts(
-                AccountUtils.getAccountsIfFulfilledOrEmpty(mAccountManagerFacade.getAccounts()));
+        updateAccounts(AccountUtils.getCoreAccountInfosIfFulfilledOrEmpty(
+                mAccountManagerFacade.getCoreAccountInfos()));
     }
 
     PropertyModel getModel() {
@@ -127,7 +131,7 @@ public class SigninFirstRunMediator
     }
 
     private Account getSelectedAccount() {
-        return AccountUtils.createAccountFromName(mSelectedAccountName);
+        return AccountUtils.createAccountFromName(mSelectedAccountEmail);
     }
 
     private void onNativeLoaded() {
@@ -188,11 +192,15 @@ public class SigninFirstRunMediator
 
         boolean isSigninDisabledByPolicy = false;
         boolean isMetricsReportingDisabledByPolicy = false;
+        Log.i(TAG, "#onInitialLoadCompleted() hasPolicies:" + hasPolicies);
         if (hasPolicies) {
             isSigninDisabledByPolicy =
                     IdentityServicesProvider.get()
-                            .getSigninManager(Profile.getLastUsedRegularProfile())
+                            .getSigninManager(mDelegate.getProfileSupplier().get())
                             .isSigninDisabledByPolicy();
+            Log.i(TAG,
+                    "#onInitialLoadCompleted() isSigninDisabledByPolicy:"
+                            + isSigninDisabledByPolicy);
             isMetricsReportingDisabledByPolicy =
                     !mPrivacyPreferencesManager.isUsageAndCrashReportingPermittedByPolicy();
 
@@ -216,15 +224,18 @@ public class SigninFirstRunMediator
         updateSelectedAccountData(accountEmail);
     }
 
-    /** Implements {@link AccountsChangeObserver}. */
+    /**
+     * Implements {@link AccountsChangeObserver}.
+     */
     @Override
-    public void onAccountsChanged() {
-        mAccountManagerFacade.getAccounts().then(this::updateAccounts);
+    public void onCoreAccountInfosChanged() {
+        // TODO(crbug.com/1450614): Replace onAccountsChanged() with this method.
+        mAccountManagerFacade.getCoreAccountInfos().then(this::updateAccounts);
     }
 
     @Override
     public void onAccountSelected(String accountName) {
-        setSelectedAccountName(accountName);
+        setSelectedAccountEmail(accountName);
         if (mDialogCoordinator != null) mDialogCoordinator.dismissDialog();
     }
 
@@ -267,7 +278,7 @@ public class SigninFirstRunMediator
             mDelegate.advanceToNextPage();
             return;
         }
-        if (mSelectedAccountName == null) {
+        if (mSelectedAccountEmail == null) {
             mDelegate.addAccount();
             return;
         }
@@ -291,7 +302,7 @@ public class SigninFirstRunMediator
             return;
         }
         mDelegate.recordFreProgressHistogram(
-                TextUtils.equals(mDefaultAccountName, mSelectedAccountName)
+                TextUtils.equals(mDefaultAccountEmail, mSelectedAccountEmail)
                         ? MobileFreProgress.WELCOME_SIGNIN_WITH_DEFAULT_ACCOUNT
                         : MobileFreProgress.WELCOME_SIGNIN_WITH_NON_DEFAULT_ACCOUNT);
         // If the user signs into an account on the FRE, goes to the sync consent page and presses
@@ -299,15 +310,15 @@ public class SigninFirstRunMediator
         @Nullable
         CoreAccountInfo signedInAccount =
                 IdentityServicesProvider.get()
-                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getIdentityManager(mDelegate.getProfileSupplier().get())
                         .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
-        if (signedInAccount != null && signedInAccount.getEmail().equals(mSelectedAccountName)) {
+        if (signedInAccount != null && signedInAccount.getEmail().equals(mSelectedAccountEmail)) {
             mDelegate.advanceToNextPage();
             return;
         }
         mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT, true);
         final SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
-                Profile.getLastUsedRegularProfile());
+                mDelegate.getProfileSupplier().get());
         signinManager.signin(
                 getSelectedAccount(), SigninAccessPoint.START_PAGE, new SignInCallback() {
                     @Override
@@ -352,7 +363,7 @@ public class SigninFirstRunMediator
         mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
         SigninPreferencesManager.getInstance().temporarilySuppressNewTabPagePromos();
         if (IdentityServicesProvider.get()
-                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getIdentityManager(mDelegate.getProfileSupplier().get())
                         .hasPrimaryAccount(ConsentLevel.SIGNIN)) {
             mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER, true);
             SignOutCallback signOutCallback = () -> {
@@ -364,7 +375,7 @@ public class SigninFirstRunMediator
                 mDelegate.advanceToNextPage();
             };
             IdentityServicesProvider.get()
-                    .getSigninManager(Profile.getLastUsedRegularProfile())
+                    .getSigninManager(mDelegate.getProfileSupplier().get())
                     .signOut(SignoutReason.ABORT_SIGNIN, signOutCallback,
                             /* forceWipeUserData= */ false);
         } else {
@@ -383,36 +394,38 @@ public class SigninFirstRunMediator
                 || mModel.get(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER);
     }
 
-    private void setSelectedAccountName(String accountName) {
-        mSelectedAccountName = accountName;
-        updateSelectedAccountData(mSelectedAccountName);
+    private void setSelectedAccountEmail(String accountEmail) {
+        mSelectedAccountEmail = accountEmail;
+        updateSelectedAccountData(mSelectedAccountEmail);
     }
 
     private void updateSelectedAccountData(String accountEmail) {
-        if (TextUtils.equals(mSelectedAccountName, accountEmail)) {
+        if (TextUtils.equals(mSelectedAccountEmail, accountEmail)) {
             mModel.set(SigninFirstRunProperties.SELECTED_ACCOUNT_DATA,
                     mProfileDataCache.getProfileDataOrDefault(accountEmail));
         }
     }
 
-    private void updateAccounts(List<Account> accounts) {
-        if (accounts.isEmpty()) {
-            mDefaultAccountName = null;
-            mSelectedAccountName = null;
+    private void updateAccounts(List<CoreAccountInfo> coreAccountInfos) {
+        if (coreAccountInfos.isEmpty()) {
+            mDefaultAccountEmail = null;
+            mSelectedAccountEmail = null;
             mModel.set(SigninFirstRunProperties.SELECTED_ACCOUNT_DATA, null);
             if (mDialogCoordinator != null) {
                 mDialogCoordinator.dismissDialog();
             }
         } else {
-            mDefaultAccountName = accounts.get(0).name;
-            if (mSelectedAccountName == null
-                    || AccountUtils.findAccountByName(accounts, mSelectedAccountName) == null) {
-                setSelectedAccountName(mDefaultAccountName);
+            mDefaultAccountEmail = coreAccountInfos.get(0).getEmail();
+            if (mSelectedAccountEmail == null
+                    || AccountUtils.findCoreAccountInfoByEmail(
+                               coreAccountInfos, mSelectedAccountEmail)
+                            == null) {
+                setSelectedAccountEmail(mDefaultAccountEmail);
             }
         }
 
         AccountUtils.checkChildAccountStatus(
-                mAccountManagerFacade, accounts, this::onChildAccountStatusReady);
+                mAccountManagerFacade, coreAccountInfos, this::onChildAccountStatusReady);
     }
 
     private void onChildAccountStatusReady(boolean isChild, @Nullable Account childAccount) {

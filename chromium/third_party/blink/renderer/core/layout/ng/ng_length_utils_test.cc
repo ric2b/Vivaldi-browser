@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 
-#include "base/memory/scoped_refptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
@@ -88,7 +87,7 @@ class NGLengthUtilsTest : public testing::Test {
                                            length, content_size);
   }
 
-  scoped_refptr<const ComputedStyle> initial_style_;
+  Persistent<const ComputedStyle> initial_style_;
 };
 
 class NGLengthUtilsTestWithNode : public RenderingTest {
@@ -477,7 +476,7 @@ TEST_F(NGLengthUtilsTest, TestMargins) {
   builder.SetMarginRight(Length::Fixed(52));
   builder.SetMarginBottom(Length::Auto());
   builder.SetMarginLeft(Length::Percent(11));
-  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
+  const ComputedStyle* style = builder.TakeStyle();
 
   NGConstraintSpace constraint_space = ConstructConstraintSpace(200, 300);
 
@@ -500,7 +499,7 @@ TEST_F(NGLengthUtilsTest, TestBorders) {
   builder.SetBorderBottomStyle(EBorderStyle::kSolid);
   builder.SetBorderLeftStyle(EBorderStyle::kSolid);
   builder.SetWritingMode(WritingMode::kVerticalLr);
-  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
+  const ComputedStyle* style = builder.TakeStyle();
 
   NGBoxStrut borders = ComputeBordersForTest(*style);
 
@@ -517,7 +516,7 @@ TEST_F(NGLengthUtilsTest, TestPadding) {
   builder.SetPaddingBottom(Length::Auto());
   builder.SetPaddingLeft(Length::Percent(11));
   builder.SetWritingMode(WritingMode::kVerticalRl);
-  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
+  const ComputedStyle* style = builder.TakeStyle();
 
   NGConstraintSpace constraint_space = ConstructConstraintSpace(
       200, 300, false, false, WritingMode::kVerticalRl);
@@ -534,14 +533,14 @@ TEST_F(NGLengthUtilsTest, TestAutoMargins) {
   ComputedStyleBuilder builder(*initial_style_);
   builder.SetMarginRight(Length::Auto());
   builder.SetMarginLeft(Length::Auto());
-  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
+  const ComputedStyle* style = builder.TakeStyle();
 
   LayoutUnit kInlineSize(150);
   LayoutUnit kAvailableInlineSize(200);
 
   NGBoxStrut margins;
-  ResolveInlineMargins(*style, *style, kAvailableInlineSize, kInlineSize,
-                       &margins);
+  ResolveInlineAutoMargins(*style, *style, kAvailableInlineSize, kInlineSize,
+                           &margins);
 
   EXPECT_EQ(LayoutUnit(), margins.block_start);
   EXPECT_EQ(LayoutUnit(), margins.block_end);
@@ -552,8 +551,8 @@ TEST_F(NGLengthUtilsTest, TestAutoMargins) {
   builder.SetMarginLeft(Length::Fixed(0));
   style = builder.TakeStyle();
   margins = NGBoxStrut();
-  ResolveInlineMargins(*style, *style, kAvailableInlineSize, kInlineSize,
-                       &margins);
+  ResolveInlineAutoMargins(*style, *style, kAvailableInlineSize, kInlineSize,
+                           &margins);
   EXPECT_EQ(LayoutUnit(0), margins.inline_start);
   EXPECT_EQ(LayoutUnit(50), margins.inline_end);
 
@@ -562,8 +561,8 @@ TEST_F(NGLengthUtilsTest, TestAutoMargins) {
   builder.SetMarginRight(Length::Fixed(0));
   style = builder.TakeStyle();
   margins = NGBoxStrut();
-  ResolveInlineMargins(*style, *style, kAvailableInlineSize, kInlineSize,
-                       &margins);
+  ResolveInlineAutoMargins(*style, *style, kAvailableInlineSize, kInlineSize,
+                           &margins);
   EXPECT_EQ(LayoutUnit(50), margins.inline_start);
   EXPECT_EQ(LayoutUnit(0), margins.inline_end);
 
@@ -575,10 +574,10 @@ TEST_F(NGLengthUtilsTest, TestAutoMargins) {
   style = builder.TakeStyle();
   margins = NGBoxStrut();
   margins.inline_end = LayoutUnit(5000);
-  ResolveInlineMargins(*style, *style, kAvailableInlineSize, kInlineSize,
-                       &margins);
+  ResolveInlineAutoMargins(*style, *style, kAvailableInlineSize, kInlineSize,
+                           &margins);
   EXPECT_EQ(LayoutUnit(0), margins.inline_start);
-  EXPECT_EQ(LayoutUnit(50), margins.inline_end);
+  EXPECT_EQ(LayoutUnit(5000), margins.inline_end);
 }
 
 // Simple wrappers that don't use LayoutUnit(). Their only purpose is to make

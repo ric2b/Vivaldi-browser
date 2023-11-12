@@ -12,10 +12,6 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_navigation_controller.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using base::RecordAction;
 using base::UserMetricsAction;
 using unified_consent::metrics::RecordSyncSetupDataTypesHistrogam;
@@ -61,8 +57,7 @@ using unified_consent::metrics::RecordSyncSetupDataTypesHistrogam;
     case SigninCoordinatorResultSuccess: {
       RecordAction(
           UserMetricsAction("Signin_Signin_ConfirmAdvancedSyncSettings"));
-      RecordSyncSetupDataTypesHistrogam(self.syncService->GetUserSettings(),
-                                        self.prefService);
+      RecordSyncSetupDataTypesHistrogam(self.syncService->GetUserSettings());
       break;
     }
     case SigninCoordinatorResultCanceledByUser:
@@ -91,8 +86,6 @@ using unified_consent::metrics::RecordSyncSetupDataTypesHistrogam;
     case IdentitySigninStateSignedInWithSyncDisabled: {
       // Sync consent is not granted in Advanced Settings, therefore
       // there should be no syncing identity.
-      DCHECK(!self.authenticationService->GetPrimaryIdentity(
-          signin::ConsentLevel::kSync));
       break;
     }
     case IdentitySigninStateSignedInWithSyncEnabled: {

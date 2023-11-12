@@ -25,10 +25,6 @@
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface PasswordInfobarBannerOverlayMediator ()
 
 // The password banner config from the request.
@@ -82,19 +78,6 @@
     }
   }
   [self dismissOverlay];
-}
-
-#pragma mark - InfobarBannerOverlayMediator
-
-- (void)finishDismissal {
-  if (!self.request) {
-    return;
-  }
-  if (!self.passwordDelegate) {
-    return;
-  }
-
-  self.passwordDelegate->InfoBarDismissed();
 }
 
 #pragma mark - Private

@@ -45,12 +45,10 @@ namespace gpu {
 
 CommandBufferProxyImpl::CommandBufferProxyImpl(
     scoped_refptr<GpuChannelHost> channel,
-    GpuMemoryBufferManager* gpu_memory_buffer_manager,
     int32_t stream_id,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     base::SharedMemoryMapper* transfer_buffer_mapper)
     : channel_(std::move(channel)),
-      gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       channel_id_(channel_->channel_id()),
       route_id_(channel_->GenerateRouteID()),
       stream_id_(stream_id),
@@ -65,6 +63,7 @@ CommandBufferProxyImpl::~CommandBufferProxyImpl() {
   for (auto& observer : deletion_observers_)
     observer.OnWillDeleteImpl();
   DisconnectChannel();
+  CancelAllQueries();
 }
 
 ContextResult CommandBufferProxyImpl::Initialize(
@@ -420,8 +419,18 @@ void CommandBufferProxyImpl::EnsureWorkVisible() {
   if (disconnected_)
     return;
 
+  constexpr char kEnsureWorkVisible[] = "EnsureWorkVisible";
+
   const base::ElapsedTimer elapsed_timer;
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("gpu,login", kEnsureWorkVisible,
+                                    TRACE_ID_LOCAL(kEnsureWorkVisible));
+
   channel_->VerifyFlush(UINT32_MAX);
+
+  TRACE_EVENT_NESTABLE_ASYNC_END0("gpu,login", kEnsureWorkVisible,
+                                  TRACE_ID_LOCAL(kEnsureWorkVisible));
+
   GetUMAHistogramEnsureWorkVisibleDuration()->Add(
       elapsed_timer.Elapsed().InMicroseconds());
 
@@ -508,6 +517,11 @@ void CommandBufferProxyImpl::SignalQuery(uint32_t query,
   uint32_t signal_id = next_signal_id_++;
   command_buffer_->SignalQuery(query, signal_id);
   signal_tasks_.insert(std::make_pair(signal_id, std::move(callback)));
+}
+
+void CommandBufferProxyImpl::CancelAllQueries() {
+  // Clear all of the signal query callbacks.
+  signal_tasks_.clear();
 }
 
 void CommandBufferProxyImpl::CreateGpuFence(uint32_t gpu_fence_id,

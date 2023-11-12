@@ -18,6 +18,7 @@ RustTool::RustTool(const char* n) : Tool(n) {
   CHECK(ValidateName(n));
   // TODO: should these be settable in toolchain definition?
   set_framework_switch("-lframework=");
+  set_framework_dir_switch("-Lframework=");
   set_lib_dir_switch("-Lnative=");
   set_lib_switch("-l");
   set_linker_arg("-Clink-arg=");

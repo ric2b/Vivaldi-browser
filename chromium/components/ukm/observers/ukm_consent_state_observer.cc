@@ -49,10 +49,6 @@ bool CanUploadUkmForType(syncer::SyncService* sync_service,
 }
 }  // namespace
 
-BASE_FEATURE(kAppMetricsOnlyRelyOnAppSync,
-             "AppMetricsOnlyRelyOnAppSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 UkmConsentStateObserver::UkmConsentStateObserver() = default;
 
 UkmConsentStateObserver::~UkmConsentStateObserver() {
@@ -94,16 +90,22 @@ UkmConsentStateObserver::ProfileState UkmConsentStateObserver::GetProfileState(
     state.SetConsentType(EXTENSIONS);
   }
 
-  if ((msbb_consent ||
-       base::FeatureList::IsEnabled(kAppMetricsOnlyRelyOnAppSync)) &&
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  const bool app_sync_consent =
       CanUploadUkmForType(sync_service, syncer::ModelType::APPS,
-                          msbb_consent)) {
+                          msbb_consent) ||
+      // Demo mode is a special managed guest session that doesn't support
+      // AppKM. To support AppKM an exception needs to be made within UKM.
+      IsDeviceInDemoMode();
+
+  if (app_sync_consent) {
     state.SetConsentType(APPS);
   }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (base::FeatureList::IsEnabled(kAppMetricsOnlyRelyOnAppSync) &&
-      IsDeviceInDemoMode()) {
+#else
+  // This separation isn't actually needed for non-ChromeOS devices. But for
+  // clarity it is added.
+  if (msbb_consent && CanUploadUkmForType(sync_service, syncer::ModelType::APPS,
+                                          msbb_consent)) {
     state.SetConsentType(APPS);
   }
 #endif
@@ -196,7 +198,7 @@ void UkmConsentStateObserver::UpdateProfileState(
   ProfileState state = GetProfileState(sync, consent_helper);
 
   // Trigger a total purge of all local UKM data if the current state no longer
-  // allows tracking UKM.
+  // allows recording of UKMs.
   bool total_purge = previous_state.IsUkmConsented() && !state.IsUkmConsented();
 
   base::UmaHistogramBoolean("UKM.ConsentObserver.Purge", total_purge);

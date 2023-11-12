@@ -181,10 +181,10 @@ export class RemoteCall {
    *     If query is an array, |query[0]| specifies the first
    *     element(s), |query[1]| specifies elements inside the shadow DOM of
    *     the first element, and so on.
-   * @return {Promise<ElementObject>} Promise to be fulfilled when the element
+   * @return {!Promise<!ElementObject>} Promise to be fulfilled when the element
    *     appears.
    */
-  waitForElement(appId, query) {
+  async waitForElement(appId, query) {
     return this.waitForElementStyles(appId, query, []);
   }
 
@@ -197,10 +197,10 @@ export class RemoteCall {
    *     the first element, and so on.
    * @param {!Array<string>} styleNames List of CSS property name to be
    *     obtained. NOTE: Causes element style re-calculation.
-   * @return {Promise<ElementObject>} Promise to be fulfilled when the element
+   * @return {!Promise<!ElementObject>} Promise to be fulfilled when the element
    *     appears.
    */
-  waitForElementStyles(appId, query, styleNames) {
+  async waitForElementStyles(appId, query, styleNames) {
     const caller = getCaller();
     return repeatUntil(async () => {
       const elements = await this.callRemoteTestUtil(
@@ -276,7 +276,7 @@ export class RemoteCall {
    * @param {number} count The expected element match count.
    * @return {Promise} Promise to be fulfilled on success.
    */
-  waitForElementsCount(appId, query, count) {
+  async waitForElementsCount(appId, query, count) {
     const caller = getCaller();
     return repeatUntil(async () => {
       const expect = `Waiting for [${query}] to match ${count} elements`;
@@ -359,7 +359,8 @@ export class RemoteCall {
    *     element(s), |query[1]| specifies elements inside the shadow DOM of
    *     the first element, and so on.
    * @param {KeyModifiers=} opt_keyModifiers Object
-   * @return {Promise} Promise to be fulfilled with the clicked element.
+   * @return {!Promise<ElementObject>} Promise to be fulfilled with the clicked
+   *     element.
    */
   async waitAndClickElement(appId, query, opt_keyModifiers) {
     const element = await this.waitForElement(appId, query);
@@ -698,17 +699,24 @@ export class RemoteCallFilesApp extends RemoteCall {
 
     const caller = getCaller();
     return repeatUntil(async () => {
-      let element =
+      const element =
           await this.callRemoteTestUtil('getActiveElement', appId, []);
       if (element && element.attributes['id'] === elementId) {
         return true;
       }
       // Try to check the shadow root.
-      element =
-          await this.callRemoteTestUtil('deepGetActiveElement', appId, []);
-      if (element && element.attributes['id'] === elementId) {
+      const activeElements =
+          await this.callRemoteTestUtil('deepGetActivePath', appId, []);
+      const matches =
+          activeElements.filter(el => el.attributes['id'] === elementId);
+      if (matches.length === 1) {
         return true;
       }
+      if (matches.length > 1) {
+        console.error(`Found ${
+            matches.length} active elements with the same id: ${elementId}`);
+      }
+
       return pending(
           caller,
           'Waiting for active element with id: "' + elementId +
@@ -1034,10 +1042,10 @@ export class RemoteCallFilesApp extends RemoteCall {
    * @param {string} appId app window ID
    * @returns {Promise<boolean>}
    */
-  async isJellybean(appId) {
+  async isCrosComponents(appId) {
     return await sendTestMessage({
              appId,
-             name: 'isJellybean',
+             name: 'isCrosComponents',
            }) === 'true';
   }
 
@@ -1152,6 +1160,37 @@ export class RemoteCallFilesApp extends RemoteCall {
   }
 
   /**
+   * Wait for the feedback panel to show an item with the provided messages.
+   * @param {!string} appId app window ID
+   * @param {!RegExp} expectedPrimaryMessageRegex The expected primary-text of
+   *     the item.
+   * @param {!RegExp} expectedSecondaryMessageRegex The expected secondary-text
+   *     of the item.
+   */
+  async waitForFeedbackPanelItem(
+      appId, expectedPrimaryMessageRegex, expectedSecondaryMessageRegex) {
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      const element = await this.waitForElement(
+          appId, ['#progress-panel', 'xf-panel-item']);
+
+      const actualPrimaryText = element.attributes['primary-text'];
+      const actualSecondaryText = element.attributes['secondary-text'];
+
+      if (expectedPrimaryMessageRegex.test(actualPrimaryText) &&
+          expectedSecondaryMessageRegex.test(actualSecondaryText)) {
+        return;
+      }
+      return pending(
+          caller,
+          `Expected feedback panel item with primary-text regex:"${
+              expectedPrimaryMessageRegex}" and secondary-text regex:"${
+              expectedSecondaryMessageRegex}", got item with primary-text "${
+              actualPrimaryText}" and secondary-text "${actualSecondaryText}"`);
+    });
+  }
+
+  /**
    * Clicks the enabled and visible move to trash button and ensures the delete
    * button is hidden.
    * @param {string} appId
@@ -1185,7 +1224,7 @@ export class RemoteCallFilesApp extends RemoteCall {
    *     element appears.
    */
   waitForElementJelly(appId, query_jelly, query_old) {
-    return this.isJellybean(appId).then(
+    return this.isCrosComponents(appId).then(
         isJellybean =>
             this.waitForElement(appId, isJellybean ? query_jelly : query_old));
   }
@@ -1203,8 +1242,24 @@ export class RemoteCallFilesApp extends RemoteCall {
    */
   async waitAndClickElementJelly(
       appId, query_jelly, query_old, opt_keyModifiers) {
-    const isJellybean = await this.isJellybean(appId);
+    const isJellybean = await this.isCrosComponents(appId);
     return await this.waitAndClickElement(
         appId, isJellybean ? query_jelly : query_old, opt_keyModifiers);
+  }
+
+  /**
+   * Sets the pooled storage quota on Drive volume.
+   * @param {number} usedUserBytes
+   * @param {number} totalUserBytes
+   * @param {boolean} organizationLimitExceeded
+   */
+  async setPooledStorageQuotaUsage(
+      usedUserBytes, totalUserBytes, organizationLimitExceeded) {
+    return sendTestMessage({
+      name: 'setPooledStorageQuotaUsage',
+      usedUserBytes,
+      totalUserBytes,
+      organizationLimitExceeded,
+    });
   }
 }

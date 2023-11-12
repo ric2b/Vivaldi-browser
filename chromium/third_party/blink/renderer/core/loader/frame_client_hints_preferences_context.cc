@@ -74,6 +74,10 @@ ClientHintToWebFeatureMap MakeClientHintToWebFeatureMap() {
        WebFeature::kClientHintsSaveData},
       {network::mojom::WebClientHintsType::kPrefersReducedMotion,
        WebFeature::kClientHintsPrefersReducedMotion},
+      {network::mojom::WebClientHintsType::kUAFormFactor,
+       WebFeature::kClientHintsUAFormFactor},
+      {network::mojom::WebClientHintsType::kPrefersReducedTransparency,
+       WebFeature::kClientHintsPrefersReducedTransparency},
   };
 }
 

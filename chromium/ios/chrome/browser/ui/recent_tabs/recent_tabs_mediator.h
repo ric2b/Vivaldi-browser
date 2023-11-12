@@ -11,11 +11,16 @@
 #import "ios/chrome/browser/synced_sessions/synced_sessions_bridge.h"
 #import "ios/chrome/browser/ui/recent_tabs/closed_tabs_observer_bridge.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_mutator.h"
 
 class BrowserList;
 class FaviconLoader;
+@protocol GridToolbarsMutator;
 @protocol RecentTabsConsumer;
-class SyncSetupService;
+
+//Vivaldi
+class Browser;
+//End Vivaldi
 
 namespace signin {
 class IdentityManager;
@@ -24,6 +29,10 @@ class IdentityManager;
 namespace sync_sessions {
 class SessionSyncService;
 }  // namespace sync_sessions
+
+namespace syncer {
+class SyncService;
+}  // namespace syncer
 
 namespace sessions {
 class TabRestoreService;
@@ -36,11 +45,14 @@ class TabRestoreService;
 // ChromeToDevice and changes/updates the RecentTabsConsumer accordingly.
 @interface RecentTabsMediator : NSObject <ClosedTabsObserving,
                                           RecentTabsTableViewControllerDelegate,
+                                          TabGridPageMutator,
                                           TableViewFaviconDataSource>
 
 // The consumer for this object. This can change during the lifetime of this
 // object and may be nil.
 @property(nonatomic, strong) id<RecentTabsConsumer> consumer;
+// Mutator to handle toolbars modification.
+@property(nonatomic, weak) id<GridToolbarsMutator> toolbarsMutator;
 
 - (instancetype)
     initWithSessionSyncService:
@@ -48,7 +60,7 @@ class TabRestoreService;
                identityManager:(signin::IdentityManager*)identityManager
                 restoreService:(sessions::TabRestoreService*)restoreService
                  faviconLoader:(FaviconLoader*)faviconLoader
-              syncSetupService:(SyncSetupService*)syncSetupService
+                   syncService:(syncer::SyncService*)syncService
                    browserList:(BrowserList*)browserList
     NS_DESIGNATED_INITIALIZER;
 
@@ -63,6 +75,14 @@ class TabRestoreService;
 // Configures the consumer with current data. Intended to be called immediately
 // after initialization.
 - (void)configureConsumer;
+
+// Vivaldi
+@property(nonatomic, assign) Browser* browser;
+
+/// Triggers history sync from tab switcher remote tabs page.
+/// When user is logged in but either all sync or history sync is disabled.
+- (void)enableTabsSync;
+// End Vivaldi
 
 @end
 

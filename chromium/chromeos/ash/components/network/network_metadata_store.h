@@ -13,12 +13,14 @@
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
+#include "chromeos/ash/components/network/cellular_utils.h"
 #include "chromeos/ash/components/network/managed_network_configuration_handler.h"
 #include "chromeos/ash/components/network/network_configuration_observer.h"
 #include "chromeos/ash/components/network/network_connection_observer.h"
 #include "chromeos/ash/components/network/network_metadata_observer.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/text_message_suppression_state.h"
 
 class PrefService;
 class PrefRegistrySimple;
@@ -158,6 +160,17 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkMetadataStore
   bool secure_dns_templates_with_identifiers_active() const {
     return secure_dns_templates_with_identifiers_active_;
   }
+
+  // Sets user suppression state to configure text message notifications.
+  virtual void SetUserTextMessageSuppressionState(
+      const std::string& network_guid,
+      const UserTextMessageSuppressionState& state);
+
+  // Returns the user set text message suppression state. When no user state has
+  // been configured this will return |TextMessageSuppressionState::kAllow|
+  // which will default to allowing text message notifications.
+  virtual UserTextMessageSuppressionState GetUserTextMessageSuppressionState(
+      const std::string& network_guid);
 
   // Sets whether the deviceReportXDREvents policy is enabled.
   void SetReportXdrEventsEnabled(bool enabled);

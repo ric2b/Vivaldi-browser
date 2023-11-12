@@ -54,6 +54,13 @@ export class Page {
 
     this.mainSection = getRequiredElement('main-section');
 
+    const policyElement = getRequiredElement('policy-ui');
+    // Add or remove header shadow based on scroll position.
+    policyElement.addEventListener('scroll', () => {
+      document.getElementsByTagName('header')[0]!.classList.toggle(
+          'header-shadow', policyElement.scrollTop > 0);
+    });
+
     // Place the initial focus on the search input field.
     const filterElement =
         getRequiredElement('search-field-input') as HTMLInputElement;
@@ -74,6 +81,23 @@ export class Page {
           loadTimeData.getString('loadingPolicies');
       sendWithPromise('reloadPolicies');
     };
+
+    const moreActionsButton =
+        getRequiredElement('more-actions-button') as HTMLButtonElement;
+    const moreActionsIcon = getRequiredElement('dropdown-icon') as HTMLElement;
+    const moreActionsList =
+        getRequiredElement('more-actions-list') as HTMLElement;
+    moreActionsButton.onclick = () => {
+      moreActionsList!.classList.toggle('more-actions-visibility');
+    };
+
+    // Close dropdown if user clicks anywhere on page.
+    document.addEventListener('click', function(event) {
+      if (moreActionsList && event.target !== moreActionsButton &&
+          event.target !== moreActionsIcon) {
+        moreActionsList.classList.add('more-actions-visibility');
+      }
+    });
 
     const exportButton = getRequiredElement('export-policies');
     const hideExportButton = loadTimeData.valueExists('hideExportButton') &&
@@ -171,8 +195,9 @@ export class Page {
 
     // <if expr="not is_chromeos">
     this.updateReportButton(
-        (policyValues['chrome']?.policies['CloudReportingEnabled']?.value) ===
-        true);
+      !!policyValues['chrome']?.policies['CloudReportingEnabled']?.value ||
+      !!policyValues['chrome']?.policies['CloudProfileReportingEnabled']?.value,
+    );
     // </if>
     this.reloadPoliciesDone();
   }
@@ -251,7 +276,7 @@ export class Page {
    */
   updateReportButton(enabled: boolean) {
     getRequiredElement('upload-report').style.display =
-        enabled ? 'inline-block' : 'none';
+        enabled ? 'block' : 'none';
   }
   // </if>
 

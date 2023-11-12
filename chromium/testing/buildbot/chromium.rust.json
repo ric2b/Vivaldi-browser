@@ -11,8 +11,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -31,8 +31,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -48,8 +48,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -65,8 +65,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -82,8 +82,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -101,7 +101,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -119,7 +118,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -143,8 +141,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -163,8 +161,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -180,8 +178,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -197,8 +195,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -214,8 +212,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -233,7 +231,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -251,7 +248,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -275,8 +271,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -295,8 +291,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -312,8 +308,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -329,8 +325,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -346,8 +342,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -365,7 +361,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -383,7 +378,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "PQ3A.190801.002",
             "device_os_flavor": "google",
@@ -409,8 +403,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -426,8 +420,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -440,8 +434,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -454,8 +448,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -468,8 +462,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -484,7 +478,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -499,7 +492,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -517,7 +509,6 @@
         },
         "name": "build_rust_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -540,8 +531,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -557,8 +548,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -571,8 +562,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -585,8 +576,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -599,8 +590,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -615,7 +606,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -630,7 +620,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -648,7 +637,6 @@
         },
         "name": "build_rust_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "os": "Ubuntu-22.04"
           },
@@ -671,8 +659,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -689,8 +677,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -704,8 +692,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -719,8 +707,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -734,8 +722,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -751,7 +739,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -767,7 +754,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -786,7 +772,6 @@
         },
         "name": "build_rust_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Mac-13"
@@ -810,8 +795,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -828,8 +813,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -843,8 +828,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -858,8 +843,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -873,8 +858,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -890,7 +875,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -906,7 +890,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -925,7 +908,6 @@
         },
         "name": "build_rust_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -949,8 +931,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "base_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -967,8 +949,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "components_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -982,8 +964,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_integration_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -997,8 +979,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "mojo_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -1012,8 +994,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "rust_gtest_interop_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -1029,7 +1011,6 @@
         },
         "name": "test_cpp_including_rust_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -1045,7 +1026,6 @@
         },
         "name": "test_serde_json_lenient",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"
@@ -1064,7 +1044,6 @@
         },
         "name": "build_rust_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "cpu": "x86-64",
             "os": "Windows-10"

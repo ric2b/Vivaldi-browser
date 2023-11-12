@@ -4,8 +4,7 @@
 
 #include "components/segmentation_platform/internal/selection/result_refresh_manager.h"
 
-#include "base/task/single_thread_task_runner.h"
-#include "components/segmentation_platform/internal/post_processor/post_processor.h"
+#include "components/segmentation_platform/internal/selection/selection_utils.h"
 #include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/public/config.h"
 
@@ -49,21 +48,19 @@ void ResultRefreshManager::RefreshModelResults(
   result_providers_ = std::move(result_providers);
 
   for (const auto& config : config_holder_->configs()) {
-    if (config->on_demand_execution ||
-        metadata_utils::ConfigUsesLegacyOutput(config.get())) {
-      continue;
-    }
-    auto* segment_result_provider =
-        result_providers_[config->segmentation_key].get();
-    GetCachedResultOrRunModel(segment_result_provider, config.get(),
-                              execution_service);
+    GetCachedResultOrRunModel(config.get(), execution_service);
   }
 }
 
 void ResultRefreshManager::GetCachedResultOrRunModel(
-    SegmentResultProvider* segment_result_provider,
     const Config* config,
     ExecutionService* execution_service) {
+  if (!config->auto_execute_and_cache ||
+      metadata_utils::ConfigUsesLegacyOutput(config)) {
+    return;
+  }
+  auto* segment_result_provider =
+      result_providers_[config->segmentation_key].get();
   auto result_options =
       std::make_unique<SegmentResultProvider::GetResultOptions>();
   // Not required, checking only for testing.
@@ -90,8 +87,7 @@ void ResultRefreshManager::OnModelUpdated(proto::SegmentInfo* segment_info,
   if (config->segmentation_key.empty()) {
     return;
   }
-  GetCachedResultOrRunModel(result_providers_[config->segmentation_key].get(),
-                            config, execution_service);
+  GetCachedResultOrRunModel(config, execution_service);
 }
 
 void ResultRefreshManager::OnGetCachedResultOrRunModel(
@@ -103,18 +99,10 @@ void ResultRefreshManager::OnGetCachedResultOrRunModel(
 
   // If the model result is available either from database or running the
   // model, update prefs if expired.
-  bool unexpired_score_from_db =
-      (result_state ==
-       SegmentResultProvider::ResultState::kSuccessFromDatabase);
-  bool expired_score_and_run_model =
-      ((result_state ==
-        SegmentResultProvider::ResultState::kTfliteModelScoreUsed) ||
-       (result_state ==
-        SegmentResultProvider::ResultState::kDefaultModelScoreUsed));
+  PredictionStatus status =
+      selection_utils::ResultStateToPredictionStatus(result_state);
 
-  bool success = (unexpired_score_from_db || expired_score_and_run_model);
-
-  if (!success) {
+  if (status != PredictionStatus::kSucceeded) {
     stats::RecordSegmentSelectionFailure(
         *config, stats::GetSuccessOrFailureReason(result_state));
     return;
@@ -126,6 +114,10 @@ void ResultRefreshManager::OnGetCachedResultOrRunModel(
         stats::SegmentationSelectionFailureReason::kMultiOutputNotSupported);
     return;
   }
+
+  // Recording this even for success case.
+  stats::RecordSegmentSelectionFailure(
+      *config, stats::GetSuccessOrFailureReason(result_state));
 
   proto::PredictionResult pred_result = result->result;
   stats::RecordClassificationResultComputed(*config, pred_result);

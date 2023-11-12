@@ -166,10 +166,12 @@ SaveAddressProfileView::SaveAddressProfileView(
   SetAcceptCallback(base::BindOnce(
       &SaveUpdateAddressProfileBubbleController::OnUserDecision,
       base::Unretained(controller_),
-      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted));
+      AutofillClient::SaveAddressProfileOfferUserDecision::kAccepted,
+      controller->GetProfileToSave()));
   SetCancelCallback(base::BindOnce(
       &SaveUpdateAddressProfileBubbleController::OnUserDecision,
-      base::Unretained(controller_), controller_->GetCancelCallbackValue()));
+      base::Unretained(controller_), controller_->GetCancelCallbackValue(),
+      controller->GetProfileToSave()));
 
   SetProperty(views::kElementIdentifierKey, kTopViewId);
   SetTitle(controller_->GetWindowTitle());
@@ -277,6 +279,7 @@ SaveAddressProfileView::SaveAddressProfileView(
             .SetMultiLine(true)
             .Build());
   }
+  AlignIcons();
 
   Profile* browser_profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -330,14 +333,9 @@ void SaveAddressProfileView::AddedToWidget() {
   }
 }
 
-void SaveAddressProfileView::OnThemeChanged() {
-  LocationBarBubbleDelegateView::OnThemeChanged();
-  AlignIcons();
-}
-
 void SaveAddressProfileView::AlignIcons() {
-  DCHECK(edit_button_);
-  DCHECK(address_components_view_);
+  CHECK(edit_button_);
+  CHECK(address_components_view_);
   // Adjust margins to make sure the edit button is vertically centered with the
   // first line in the address components view.
   int label_line_height = views::style::GetLineHeight(

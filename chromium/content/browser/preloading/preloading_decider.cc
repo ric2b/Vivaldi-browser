@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "content/browser/preloading/prefetch/prefetch_document_manager.h"
 #include "content/browser/preloading/prefetch/prefetch_params.h"
 #include "content/browser/preloading/preloading.h"
+#include "content/browser/preloading/preloading_data_impl.h"
 #include "content/browser/preloading/prerenderer_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/navigation_handle.h"
@@ -96,7 +97,7 @@ PreloadingDecider::PreloadingDecider(RenderFrameHost* rfh)
       preconnector_(render_frame_host()),
       prefetcher_(render_frame_host()),
       prerenderer_(std::make_unique<PrerendererImpl>(render_frame_host())) {
-  if (PrefetchContentRefactorIsEnabled() && PrefetchNewLimitsEnabled()) {
+  if (PrefetchNewLimitsEnabled()) {
     PrefetchDocumentManager::GetOrCreateForCurrentDocument(rfh)
         ->SetPrefetchDestructionCallback(base::BindRepeating(
             &PrefetchDestructionCallback, rfh->GetWeakDocumentPtr()));
@@ -138,8 +139,9 @@ void PreloadingDecider::OnPointerDown(const GURL& url) {
                               preloading_predictor::kUrlPointerDownOnAnchor);
       return;
     }
-    if (ShouldWaitForPrerenderResult(url))
+    if (ShouldWaitForPrerenderResult(url)) {
       return;
+    }
 
     if (MaybePrefetch(url, preloading_predictor::kUrlPointerDownOnAnchor)) {
       AddPreloadingPrediction(url,
@@ -149,10 +151,26 @@ void PreloadingDecider::OnPointerDown(const GURL& url) {
     // Ideally it is preferred to fallback to preconnect asynchronously if a
     // prefetch attempt fails. We should revisit it later perhaps after having
     // data showing it is worth doing so.
-    if (ShouldWaitForPrefetchResult(url))
+    if (ShouldWaitForPrefetchResult(url)) {
       return;
+    }
   }
   preconnector_.MaybePreconnect(url);
+}
+
+void PreloadingDecider::OnPreloadingHeuristicsModelDone(const GURL& url,
+                                                        float score) {
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(&render_frame_host());
+  auto* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
+  preloading_data->AddExperimentalPreloadingPrediction(
+      /*name=*/"OnPreloadingHeuristicsMLModel",
+      /*url_match_predicate=*/PreloadingData::GetSameURLMatcher(url),
+      /*score=*/score,
+      /*min_score=*/0.0,
+      /*max_score=*/1.0,
+      /*buckets=*/100);
 }
 
 void PreloadingDecider::OnPointerHover(
@@ -161,6 +179,19 @@ void PreloadingDecider::OnPointerHover(
   if (observer_for_testing_) {
     observer_for_testing_->OnPointerHover(url);
   }
+
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(&render_frame_host());
+  auto* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
+  preloading_data->AddExperimentalPreloadingPrediction(
+      /*name=*/"OnPointerHoverWithMotionEstimator",
+      /*url_match_predicate=*/PreloadingData::GetSameURLMatcher(url),
+      /*score=*/std::clamp(mouse_data->mouse_velocity, 0.0, 500.0),
+      /*min_score=*/0,
+      /*max_score=*/500,
+      /*buckets=*/100);
+
   if (base::FeatureList::IsEnabled(
           blink::features::kSpeculationRulesPointerHoverHeuristics)) {
     // First try to prerender the |url|, if not possible try to prefetch,
@@ -170,8 +201,9 @@ void PreloadingDecider::OnPointerHover(
                               preloading_predictor::kUrlPointerHoverOnAnchor);
       return;
     }
-    if (ShouldWaitForPrerenderResult(url))
+    if (ShouldWaitForPrerenderResult(url)) {
       return;
+    }
 
     if (MaybePrefetch(url, preloading_predictor::kUrlPointerHoverOnAnchor)) {
       AddPreloadingPrediction(url,
@@ -179,8 +211,9 @@ void PreloadingDecider::OnPointerHover(
       return;
     }
     // ditto (async fallback)
-    if (ShouldWaitForPrefetchResult(url))
+    if (ShouldWaitForPrefetchResult(url)) {
       return;
+    }
   }
 }
 
@@ -230,8 +263,8 @@ void PreloadingDecider::UpdateSpeculationCandidates(
 
   WebContents* web_contents =
       WebContents::FromRenderFrameHost(&render_frame_host());
-  auto* preloading_data =
-      PreloadingData::GetOrCreateForWebContents(web_contents);
+  auto* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
   preloading_data->SetIsNavigationInDomainCallback(
       content_preloading_predictor::kSpeculationRules,
       base::BindRepeating([](NavigationHandle* navigation_handle) -> bool {
@@ -396,8 +429,9 @@ bool PreloadingDecider::ShouldWaitForPrefetchResult(const GURL& url) {
   // using the processed_candidate at all. We will revisit this later.
   auto it = processed_candidates_.find(
       {url, blink::mojom::SpeculationAction::kPrefetch});
-  if (it == processed_candidates_.end())
+  if (it == processed_candidates_.end()) {
     return false;
+  }
   return !prefetcher_.IsPrefetchAttemptFailedOrDiscarded(url);
 }
 
@@ -428,8 +462,9 @@ bool PreloadingDecider::MaybePrerender(const GURL& url,
 bool PreloadingDecider::ShouldWaitForPrerenderResult(const GURL& url) {
   auto it = processed_candidates_.find(
       {url, blink::mojom::SpeculationAction::kPrerender});
-  if (it == processed_candidates_.end())
+  if (it == processed_candidates_.end()) {
     return false;
+  }
   return prerenderer_->ShouldWaitForPrerenderResult(url);
 }
 

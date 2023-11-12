@@ -121,7 +121,8 @@ class PrinterConfigurerImpl : public PrinterConfigurer {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     DCHECK(!printer.id().empty());
     DCHECK(printer.HasUri());
-    PRINTER_LOG(USER) << printer.make_and_model() << " Printer setup requested";
+    PRINTER_LOG(USER) << printer.make_and_model()
+                      << " Printer setup requested as " << printer.id();
 
     if (!printer.IsIppEverywhere()) {
       PRINTER_LOG(DEBUG) << printer.make_and_model() << " Lookup PPD";
@@ -134,9 +135,11 @@ class PrinterConfigurerImpl : public PrinterConfigurer {
     }
 
     PRINTER_LOG(DEBUG) << printer.make_and_model()
-                       << " Attempting autoconf setup";
+                       << " Attempting driverless setup at "
+                       << printer.uri().GetNormalized();
     DebugDaemonClient::Get()->CupsAddAutoConfiguredPrinter(
         printer.id(), printer.uri().GetNormalized(true /*always_print_port*/),
+        g_browser_process->GetApplicationLocale(),
         base::BindOnce(&PrinterConfigurerImpl::OnAddedPrinter,
                        weak_factory_.GetWeakPtr(), printer,
                        std::move(callback)));
@@ -162,10 +165,12 @@ class PrinterConfigurerImpl : public PrinterConfigurer {
   void AddPrinter(const Printer& printer,
                   const std::string& ppd_contents,
                   PrinterSetupCallback cb) {
-    PRINTER_LOG(EVENT) << printer.make_and_model() << " Manual printer setup";
+    PRINTER_LOG(EVENT) << printer.make_and_model()
+                       << " Attempting setup with PPD at "
+                       << printer.uri().GetNormalized();
     DebugDaemonClient::Get()->CupsAddManuallyConfiguredPrinter(
         printer.id(), printer.uri().GetNormalized(true /*always_print_port*/),
-        ppd_contents,
+        g_browser_process->GetApplicationLocale(), ppd_contents,
         base::BindOnce(&PrinterConfigurerImpl::OnAddedPrinter,
                        weak_factory_.GetWeakPtr(), printer, std::move(cb)));
   }

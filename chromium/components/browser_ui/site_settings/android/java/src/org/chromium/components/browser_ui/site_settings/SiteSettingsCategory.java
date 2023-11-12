@@ -48,7 +48,7 @@ public class SiteSettingsCategory {
             Type.USE_STORAGE, Type.AUTO_DARK_WEB_CONTENT, Type.REQUEST_DESKTOP_SITE,
             Type.FEDERATED_IDENTITY_API, Type.THIRD_PARTY_COOKIES, Type.SITE_DATA, Type.ANTI_ABUSE,
             Type.AUTOPLAY, // Vivaldi
-            Type.NUM_ENTRIES})
+            Type.ZOOM, Type.NUM_ENTRIES})
     @Retention(RetentionPolicy.SOURCE)
     public @interface Type {
         // All updates here must also be reflected in {@link #preferenceKey(int)
@@ -82,13 +82,13 @@ public class SiteSettingsCategory {
         int THIRD_PARTY_COOKIES = 26;
         int SITE_DATA = 27;
         int ANTI_ABUSE = 28;
+        int ZOOM = 29;
 
-
-        int AUTOPLAY = 29; // Vivaldi
+        int AUTOPLAY = 30; // Vivaldi
         /**
          * Number of handled categories used for calculating array sizes.
          */
-        int NUM_ENTRIES = 30; // Vivaldi
+        int NUM_ENTRIES = 31 ;
     }
 
     private final BrowserContextHandle mBrowserContextHandle;
@@ -221,6 +221,7 @@ public class SiteSettingsCategory {
                 return ContentSettingsType.AUTOPLAY;
             case Type.ALL_SITES:
             case Type.USE_STORAGE:
+            case Type.ZOOM:
                 return ContentSettingsType.DEFAULT; // Conversion unavailable.
         }
         assert false;
@@ -306,6 +307,8 @@ public class SiteSettingsCategory {
                 return "site_data";
             case Type.THIRD_PARTY_COOKIES:
                 return "third_party_cookies";
+            case Type.ZOOM:
+                return "zoom";
 
             case Type.AUTOPLAY: // Vivaldi
                 return "autoplay";

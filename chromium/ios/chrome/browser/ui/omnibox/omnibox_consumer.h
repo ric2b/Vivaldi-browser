@@ -7,6 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+// Vivaldi
+#import "components/search_engines/template_url_service.h"
+// End Vivaldi
+
 @protocol OmniboxConsumer<NSObject>
 
 // Notifies the consumer to update the autocomplete icon for the currently
@@ -28,6 +32,15 @@
 
 // Notifies the consumer to update the text immediately.
 - (void)updateText:(NSAttributedString*)text;
+
+// Vivaldi
+@optional
+- (void)updateSearchEngineList:(std::vector<TemplateURL*>)templateURLs;
+// Notifies the consumer to update the omnibox placeholder to default
+// immediately.
+@optional
+- (void)restorePlaceholderToDefault;
+// End Vivaldi
 
 @end
 

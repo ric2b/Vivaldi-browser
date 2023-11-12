@@ -40,6 +40,7 @@
 #include "components/page_image_service/features.h"
 #include "components/page_image_service/image_service.h"
 #include "components/page_image_service/image_service_handler.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -156,6 +157,8 @@ BookmarksSidePanelUI::BookmarksSidePanelUI(content::WebUI* web_ui)
       {"checkboxA11yLabel", IDS_BOOKMARKS_CHECKBOX_LABEL},
       {"editInvalidUrl", IDS_BOOKMARK_MANAGER_INVALID_URL},
       {"bookmarkFolderChildCount", IDS_BOOKMARK_FOLDER_CHILD_COUNT},
+      {"primaryFilterHeading", IDS_BOOKMARKS_PRIMARY_FILTER_HEADING},
+      {"secondaryFilterHeading", IDS_BOOKMARKS_SECONDARY_FILTER_HEADING},
   };
   for (const auto& str : kLocalizedStrings)
     webui::AddLocalizedString(source, str.name, str.id);
@@ -177,6 +180,7 @@ BookmarksSidePanelUI::BookmarksSidePanelUI(content::WebUI* web_ui)
 
   source->AddBoolean("guestMode", profile->IsGuestSession());
   source->AddBoolean("incognitoMode", profile->IsIncognitoProfile());
+  source->AddBoolean("isIncognitoModeAvailable", IsIncognitoModeAvailable());
   source->AddInteger(
       "sortOrder",
       prefs->GetInteger(bookmarks_webui::prefs::kBookmarksSortOrder));
@@ -298,4 +302,10 @@ void BookmarksSidePanelUI::CreateShoppingListHandler(
   shopping_list_context_menu_controller_ =
       std::make_unique<commerce::ShoppingListContextMenuController>(
           bookmark_model, shopping_service, shopping_list_handler_.get());
+}
+
+bool BookmarksSidePanelUI::IsIncognitoModeAvailable() {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  return prefs->GetInteger(policy::policy_prefs::kIncognitoModeAvailability) ==
+         static_cast<int>(policy::IncognitoModeAvailability::kEnabled);
 }

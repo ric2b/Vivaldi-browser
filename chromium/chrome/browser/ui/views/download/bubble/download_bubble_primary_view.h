@@ -14,7 +14,12 @@
 class Browser;
 class DownloadBubbleNavigationHandler;
 class DownloadBubbleRowListView;
+class DownloadBubbleRowView;
 class DownloadBubbleUIController;
+
+namespace offline_items_collection {
+struct ContentId;
+}
 
 namespace views {
 class ScrollView;
@@ -33,6 +38,12 @@ class DownloadBubblePrimaryView : public views::FlexLayoutView {
   DownloadBubblePrimaryView(const DownloadBubblePrimaryView&) = delete;
   DownloadBubblePrimaryView& operator=(const DownloadBubblePrimaryView&) =
       delete;
+
+  // Gets the row view with the given id. Returns nullptr if not found.
+  DownloadBubbleRowView* GetRow(const offline_items_collection::ContentId& id);
+
+  // Gets the row view at the given index.
+  DownloadBubbleRowView* GetRowForTesting(size_t index);
 
  protected:
   // TODO(crbug.com/1344515): Add support for refreshing the scroll view

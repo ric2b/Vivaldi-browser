@@ -5,7 +5,6 @@
 #include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
 
 #include "chrome/browser/screen_ai/screen_ai_service_router.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
 
 namespace screen_ai {
@@ -25,21 +24,21 @@ ScreenAIServiceRouterFactory* ScreenAIServiceRouterFactory::GetInstance() {
 }
 
 ScreenAIServiceRouterFactory::ScreenAIServiceRouterFactory()
-    : BrowserContextKeyedServiceFactory(
+    : ProfileKeyedServiceFactory(
           "ScreenAIService",
-          BrowserContextDependencyManager::GetInstance()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 ScreenAIServiceRouterFactory::~ScreenAIServiceRouterFactory() = default;
 
-KeyedService* ScreenAIServiceRouterFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ScreenAIServiceRouterFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* /*context*/) const {
-  return new screen_ai::ScreenAIServiceRouter();
-}
-
-// Incognito profiles should use their own instance.
-content::BrowserContext* ScreenAIServiceRouterFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return context;
+  return std::make_unique<screen_ai::ScreenAIServiceRouter>();
 }
 
 // static

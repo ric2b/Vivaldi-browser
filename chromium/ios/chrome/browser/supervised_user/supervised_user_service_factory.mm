@@ -13,29 +13,13 @@
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/supervised_user/kids_chrome_management_client_factory.h"
 #import "ios/chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
-
-// Returns true if we need to show the first time banner on the interstitial.
-// The banner informs Desktop/iOS users about the application of parental controls.
-bool ShouldShowFirstTimeBanner(ChromeBrowserState* browser_state) {
-  // Show first time banner if the preference files has just been created,
-  // except on first run, because the installer may create a preference file.
-  // This implementation mimics `Profile::IsNewProfile()`, used in native.
-  if (FirstRun::IsChromeFirstRun()) {
-    return true;
-  }
-  return browser_state->GetPrefs()->GetInitializationStatus() ==
-         PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
-}
 
 // Implementation of the supervised user filter delegate interface.
 class FilterDelegateImpl
@@ -57,6 +41,20 @@ class FilterDelegateImpl
 
 }  // namespace
 
+namespace supervised_user {
+bool ShouldShowFirstTimeBanner(ChromeBrowserState* browser_state) {
+  // We perceive the current user as an existing one if there is an existing
+  // preference file, except on first run, because the installer may create a
+  // preference file.
+  // This implementation mimics `Profile::IsNewProfile()`, used in native.
+  if (FirstRun::IsChromeFirstRun()) {
+    return false;
+  }
+  return browser_state->GetPrefs()->GetInitializationStatus() !=
+         PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
+}
+}  // namespace supervised_user
+
 // static
 supervised_user::SupervisedUserService*
 SupervisedUserServiceFactory::GetForBrowserState(
@@ -75,6 +73,7 @@ SupervisedUserServiceFactory::SupervisedUserServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "SupervisedUserService",
           BrowserStateDependencyManager::GetInstance()) {
+  DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(KidsChromeManagementClientFactory::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
@@ -98,11 +97,12 @@ SupervisedUserServiceFactory::BuildServiceInstanceFor(
   // TODO (b/279766165): Once have an active Settings Service instance, initialize
   // this service on ChromeBrowserStateManagerImpl::DoFinalInitForServices().
   return std::make_unique<supervised_user::SupervisedUserService>(
+      IdentityManagerFactory::GetForBrowserState(browser_state),
       KidsChromeManagementClientFactory::GetForBrowserState(browser_state),
       *user_prefs, *settings_service, *sync_service,
       // iOS does not support extensions, check_webstore_url_callback returns
       // false.
       base::BindRepeating([](const GURL& url) { return false; }),
       std::make_unique<FilterDelegateImpl>(),
-      ShouldShowFirstTimeBanner(browser_state));
+      supervised_user::ShouldShowFirstTimeBanner(browser_state));
 }

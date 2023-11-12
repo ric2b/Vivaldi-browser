@@ -30,6 +30,9 @@
     <message name="IDS_PICTURE_IN_PICTURE_MUTE_TAB_CONTROL_TEXT" desc="The tooltip for the PIP mute tab button.">
       Mute tab
     </message>
+    <message name="IDS_PICTURE_IN_PICTURE_VOLUME_CONTROL_TEXT" desc="Name of volumeslider in pip-windows. Only for accessibility.">
+      Volume
+    </message>
   </if>
 
   <if expr="use_titlecase">
@@ -59,6 +62,9 @@
     </message>
     <message name="IDS_PICTURE_IN_PICTURE_MUTE_TAB_CONTROL_TEXT" desc="The tooltip for the PIP mute tab button.">
       Mute Tab
+    </message>
+    <message name="IDS_PICTURE_IN_PICTURE_VOLUME_CONTROL_TEXT" desc="Name of volumeslider in pip-windows. Only for accessibility.">
+      Volume
     </message>
   </if>
   <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_1" desc="The default name given to a newly created profile with the Landscape 1 avatar.">

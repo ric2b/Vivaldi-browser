@@ -7,7 +7,9 @@
 #include <memory>
 
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/debug/stack_trace.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -31,7 +33,6 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/use_case.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
-#include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 namespace blink {
@@ -161,6 +162,7 @@ PageSchedulerImpl::PageSchedulerImpl(
       page_visibility_(kDefaultPageVisibility),
       page_visibility_changed_time_(main_thread_scheduler_->NowTicks()),
       audio_state_(AudioState::kSilent),
+      audio_state_changed_time_(page_visibility_changed_time_),
       is_frozen_(false),
       opted_out_from_aggressive_throttling_(false),
       nested_runloop_(false),
@@ -174,10 +176,6 @@ PageSchedulerImpl::PageSchedulerImpl(
           base::FeatureList::IsEnabled(features::kThrottleForegroundTimers)),
       foreground_timers_throttled_wake_up_interval_(
           GetForegroundTimersThrottledWakeUpInterval()) {
-  current_lifecycle_state_ =
-      (kDefaultPageVisibility == PageVisibilityState::kVisible
-           ? PageLifecycleState::kActive
-           : PageLifecycleState::kHiddenBackgrounded);
   do_throttle_cpu_time_callback_.Reset(base::BindRepeating(
       &PageSchedulerImpl::DoThrottleCPUTime, base::Unretained(this)));
   do_intensively_throttle_wake_ups_callback_.Reset(
@@ -188,8 +186,9 @@ PageSchedulerImpl::PageSchedulerImpl(
       base::Unretained(this)));
   on_audio_silent_closure_.Reset(base::BindRepeating(
       &PageSchedulerImpl::OnAudioSilent, base::Unretained(this)));
-  do_freeze_page_callback_.Reset(base::BindRepeating(
-      &PageSchedulerImpl::DoFreezePage, base::Unretained(this)));
+  update_frozen_state_callback_.Reset(base::BindRepeating(
+      &PageSchedulerImpl::UpdateFrozenState, base::Unretained(this),
+      NotificationPolicy::kNotifyFrames));
 }
 
 PageSchedulerImpl::~PageSchedulerImpl() {
@@ -215,17 +214,6 @@ void PageSchedulerImpl::SetPageVisible(bool page_visible) {
     return;
   page_visibility_ = page_visibility;
   page_visibility_changed_time_ = main_thread_scheduler_->NowTicks();
-
-  switch (page_visibility_) {
-    case PageVisibilityState::kVisible:
-      SetPageLifecycleState(PageLifecycleState::kActive);
-      break;
-    case PageVisibilityState::kHidden:
-      SetPageLifecycleState(IsBackgrounded()
-                                ? PageLifecycleState::kHiddenBackgrounded
-                                : PageLifecycleState::kHiddenForegrounded);
-      break;
-  }
 
   for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_)
     frame_scheduler->SetPageVisibilityForTracing(page_visibility_);
@@ -261,7 +249,7 @@ void PageSchedulerImpl::SetPageFrozenImpl(
   // Only pages owned by web views can be frozen.
   DCHECK(!frozen || IsOrdinary());
 
-  do_freeze_page_callback_.Cancel();
+  update_frozen_state_callback_.Cancel();
   if (is_frozen_ == frozen)
     return;
   is_frozen_ = frozen;
@@ -273,7 +261,6 @@ void PageSchedulerImpl::SetPageFrozenImpl(
       PageSchedulerImpl::NotificationPolicy::kNotifyFrames)
     NotifyFrames();
   if (frozen) {
-    SetPageLifecycleState(PageLifecycleState::kFrozen);
     main_thread_scheduler_->OnPageFrozen();
     if (audio_state_ == AudioState::kRecentlyAudible) {
       // A recently audible page is being frozen before the audio silent timer
@@ -284,15 +271,6 @@ void PageSchedulerImpl::SetPageFrozenImpl(
       OnAudioSilent();
     }
   } else {
-    // The new state may have already been set if unfreezing through the
-    // renderer, but that's okay - duplicate state changes won't be recorded.
-    if (IsPageVisible()) {
-      SetPageLifecycleState(PageLifecycleState::kActive);
-    } else if (IsBackgrounded()) {
-      SetPageLifecycleState(PageLifecycleState::kHiddenBackgrounded);
-    } else {
-      SetPageLifecycleState(PageLifecycleState::kHiddenForegrounded);
-    }
     // Since the page is no longer frozen, detach the handler that watches for
     // IPCs posted to frozen pages (or cancel setting up the handler).
     set_ipc_posted_handler_task_.Cancel();
@@ -347,8 +325,11 @@ bool PageSchedulerImpl::IsMainFrameLocal() const {
 }
 
 bool PageSchedulerImpl::IsLoading() const {
-  return IsWaitingForMainFrameContentfulPaint() ||
-         IsWaitingForMainFrameMeaningfulPaint();
+  if (base::FeatureList::IsEnabled(
+          features::kLoadingPhaseBufferTimeAfterFirstMeaningfulPaint)) {
+    return IsMainFrameLoading();
+  }
+  return IsWaitingForMainFrameContentfulPaint();
 }
 
 bool PageSchedulerImpl::IsOrdinary() const {
@@ -383,7 +364,7 @@ std::unique_ptr<blink::FrameScheduler> PageSchedulerImpl::CreateFrameScheduler(
 }
 
 void PageSchedulerImpl::Unregister(FrameSchedulerImpl* frame_scheduler) {
-  DCHECK(frame_schedulers_.find(frame_scheduler) != frame_schedulers_.end());
+  DCHECK(base::Contains(frame_schedulers_, frame_scheduler));
   frame_schedulers_.erase(frame_scheduler);
 }
 
@@ -393,13 +374,10 @@ void PageSchedulerImpl::ReportIntervention(const String& message) {
 
 void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {
   if (is_audio_playing) {
-    audio_state_ = AudioState::kAudible;
     on_audio_silent_closure_.Cancel();
-    if (!IsPageVisible()) {
-      SetPageLifecycleState(PageLifecycleState::kHiddenForegrounded);
-    }
-    // Pages with audio playing should not be frozen.
-    SetPageFrozenImpl(false, NotificationPolicy::kDoNotNotifyFrames);
+    audio_state_ = AudioState::kAudible;
+    audio_state_changed_time_ = main_thread_scheduler_->NowTicks();
+    UpdateFrozenState(NotificationPolicy::kDoNotNotifyFrames);
     NotifyFrames();
     main_thread_scheduler_->OnAudioStateChanged();
     MoveTaskQueuesToCorrectWakeUpBudgetPoolAndUpdate();
@@ -407,8 +385,9 @@ void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {
     if (audio_state_ != AudioState::kAudible)
       return;
     on_audio_silent_closure_.Cancel();
-
     audio_state_ = AudioState::kRecentlyAudible;
+    audio_state_changed_time_ = main_thread_scheduler_->NowTicks();
+
     if (IsFrozen()) {
       // The page was frozen from outside the scheduler before receiving the the
       // audio state change notification. Transition to silent and bypass the
@@ -427,19 +406,13 @@ void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {
 void PageSchedulerImpl::OnAudioSilent() {
   DCHECK_EQ(audio_state_, AudioState::kRecentlyAudible);
   audio_state_ = AudioState::kSilent;
-  NotifyFrames();
+  audio_state_changed_time_ = main_thread_scheduler_->NowTicks();
   main_thread_scheduler_->OnAudioStateChanged();
-  if (IsBackgrounded() && !IsFrozen()) {
-    SetPageLifecycleState(PageLifecycleState::kHiddenBackgrounded);
-  }
   if (IsBackgrounded()) {
     MoveTaskQueuesToCorrectWakeUpBudgetPoolAndUpdate();
   }
-  if (ShouldFreezePage()) {
-    main_thread_scheduler_->ControlTaskRunner()->PostDelayedTask(
-        FROM_HERE, do_freeze_page_callback_.GetCallback(),
-        delay_for_background_tab_freezing_);
-  }
+  UpdateFrozenState(NotificationPolicy::kDoNotNotifyFrames);
+  NotifyFrames();
 }
 
 bool PageSchedulerImpl::IsExemptFromBudgetBasedThrottling() const {
@@ -499,9 +472,6 @@ void PageSchedulerImpl::OnThrottlingStatusUpdated() {
 }
 
 void PageSchedulerImpl::OnVirtualTimeEnabled() {
-  if (page_visibility_ == PageVisibilityState::kHidden) {
-    SetPageLifecycleState(PageLifecycleState::kHiddenForegrounded);
-  }
   UpdatePolicyOnVisibilityChange(NotificationPolicy::kNotifyFrames);
 }
 
@@ -526,6 +496,14 @@ bool PageSchedulerImpl::IsWaitingForMainFrameMeaningfulPaint() const {
       frame_schedulers_, [](const FrameSchedulerImpl* fs) {
         return fs->IsWaitingForMeaningfulPaint() &&
                !fs->IsInEmbeddedFrameTree() &&
+               fs->GetFrameType() == FrameScheduler::FrameType::kMainFrame;
+      });
+}
+
+bool PageSchedulerImpl::IsMainFrameLoading() const {
+  return base::ranges::any_of(
+      frame_schedulers_, [](const FrameSchedulerImpl* fs) {
+        return fs->IsLoading() && !fs->IsInEmbeddedFrameTree() &&
                fs->GetFrameType() == FrameScheduler::FrameType::kMainFrame;
       });
 }
@@ -688,13 +666,7 @@ void PageSchedulerImpl::UpdatePolicyOnVisibilityChange(
         GetIntensiveWakeUpThrottlingGracePeriod(IsLoading()));
   }
 
-  if (ShouldFreezePage()) {
-    main_thread_scheduler_->ControlTaskRunner()->PostDelayedTask(
-        FROM_HERE, do_freeze_page_callback_.GetCallback(),
-        delay_for_background_tab_freezing_);
-  } else {
-    SetPageFrozenImpl(false, NotificationPolicy::kDoNotNotifyFrames);
-  }
+  UpdateFrozenState(NotificationPolicy::kDoNotNotifyFrames);
 
   if (notification_policy == NotificationPolicy::kNotifyFrames)
     NotifyFrames();
@@ -818,28 +790,6 @@ bool PageSchedulerImpl::IsBackgrounded() const {
          !main_thread_scheduler_->IsVirtualTimeEnabled();
 }
 
-bool PageSchedulerImpl::ShouldFreezePage() const {
-  if (!base::FeatureList::IsEnabled(blink::features::kStopInBackground))
-    return false;
-  return IsOrdinary() && IsBackgrounded() && !IsFrozen();
-}
-
-void PageSchedulerImpl::DoFreezePage() {
-  DCHECK(ShouldFreezePage());
-
-  SetPageFrozenImpl(true, NotificationPolicy::kNotifyFrames);
-}
-
-PageLifecycleState PageSchedulerImpl::GetPageLifecycleState() const {
-  return current_lifecycle_state_;
-}
-
-void PageSchedulerImpl::SetPageLifecycleState(PageLifecycleState new_state) {
-  if (new_state == current_lifecycle_state_)
-    return;
-  current_lifecycle_state_ = new_state;
-}
-
 FrameSchedulerImpl* PageSchedulerImpl::SelectFrameForUkmAttribution() {
   for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
     if (frame_scheduler->GetUkmRecorder())
@@ -868,6 +818,48 @@ void PageSchedulerImpl::MoveTaskQueuesToCorrectWakeUpBudgetPoolAndUpdate() {
   // attached WakeUpBudgetPools
   base::LazyNow lazy_now(main_thread_scheduler_->GetTickClock());
   UpdateWakeUpBudgetPools(&lazy_now);
+}
+
+void PageSchedulerImpl::UpdateFrozenState(
+    NotificationPolicy notification_policy) {
+  // Only ordinary pages can be frozen.
+  if (!IsOrdinary()) {
+    CHECK(!IsFrozen());
+    return;
+  }
+
+  base::TimeTicks now = main_thread_scheduler_->NowTicks();
+
+  // `freeze_time` indicates when the page should be frozen. If Max(), the page
+  // is unfrozen immediately. Else if <= now, the page is frozen immediately.
+  // Else, a task is scheduled to freeze the page later.
+  base::TimeTicks freeze_time = base::TimeTicks::Max();
+
+  if (IsBackgrounded()) {
+    if (IsFrozen()) {
+      // Special case: A page can remain frozen even if less than
+      // `delay_for_backround_tab_freezing_` has elapsed since it was
+      // backgrounded. This can happen when the page is frozen via
+      // SetPageFrozen().
+      freeze_time = now;
+    } else if (base::FeatureList::IsEnabled(
+                   blink::features::kStopInBackground)) {
+      freeze_time =
+          std::max(page_visibility_changed_time_, audio_state_changed_time_) +
+          delay_for_background_tab_freezing_;
+    }
+  }
+
+  if (freeze_time > now) {
+    SetPageFrozenImpl(/* frozen=*/false, notification_policy);
+    if (!freeze_time.is_max()) {
+      main_thread_scheduler_->ControlTaskRunner()->PostDelayedTask(
+          FROM_HERE, update_frozen_state_callback_.GetCallback(),
+          freeze_time - now);
+    }
+  } else {
+    SetPageFrozenImpl(/* frozen=*/true, notification_policy);
+  }
 }
 
 std::array<WakeUpBudgetPool*, PageSchedulerImpl::kNumWakeUpBudgetPools>

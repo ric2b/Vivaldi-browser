@@ -145,6 +145,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   void EnsureFileAccess(const std::vector<base::FilePath>& file_paths,
                         EnsureFileAccessCallback callback) override;
   void OnExecutionReady() override;
+  void GetRunningStatus(GetRunningStatusCallback callback) override;
 
   // ServiceWorkerRegistration::Listener overrides.
   void OnVersionAttributesChanged(
@@ -348,6 +349,9 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // as late as possible is more idiomatic for new Mojo types.
   mojo::Remote<blink::mojom::ControllerServiceWorker>
   GetRemoteControllerServiceWorker();
+
+  // Get an associated cache storage interface.
+  mojo::PendingRemote<blink::mojom::CacheStorage> GetRemoteCacheStorage();
 
   // |registration| claims the client (document, dedicated worker when
   // PlzDedicatedWorker is enabled, or shared worker) to be controlled.

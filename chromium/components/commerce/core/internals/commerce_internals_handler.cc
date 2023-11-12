@@ -5,7 +5,9 @@
 #include "components/commerce/core/internals/commerce_internals_handler.h"
 
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/shopping_service.h"
+#include "components/prefs/pref_service.h"
 
 namespace commerce {
 
@@ -33,6 +35,11 @@ void CommerceInternalsHandler::GetShoppingListEligibleDetails(
   mojom::ShoppingListEligibleDetailPtr detail =
       mojom::ShoppingListEligibleDetail::New();
 
+  if (!shopping_service_) {
+    std::move(callback).Run(std::move(detail));
+    return;
+  }
+
   detail->is_region_locked_feature_enabled = mojom::EligibleEntry::New(
       IsRegionLockedFeatureEnabled(kShoppingList, kShoppingListRegionLaunched,
                                    shopping_service_->country_on_startup_,
@@ -52,8 +59,9 @@ void CommerceInternalsHandler::GetShoppingListEligibleDetails(
   }
   detail->is_account_checker_valid =
       mojom::EligibleEntry::New(true, /*expected_value=*/true);
-  detail->is_signed_in = mojom::EligibleEntry::New(
-      account_checker->IsSignedIn(), /*expected_value=*/true);
+  detail->is_signed_in =
+      mojom::EligibleEntry::New(account_checker->IsOptedIntoSync(),
+                                /*expected_value=*/true);
   detail->is_syncing_bookmarks = mojom::EligibleEntry::New(
       account_checker->IsSyncingBookmarks(), /*expected_value=*/true);
   detail->is_anonymized_url_data_collection_enabled = mojom::EligibleEntry::New(
@@ -65,6 +73,13 @@ void CommerceInternalsHandler::GetShoppingListEligibleDetails(
       account_checker->IsSubjectToParentalControls(), /*expected_value=*/false);
 
   std::move(callback).Run(std::move(detail));
+}
+
+void CommerceInternalsHandler::ResetPriceTrackingEmailPref() {
+  if (!shopping_service_) {
+    return;
+  }
+  shopping_service_->pref_service_->ClearPref(kPriceEmailNotificationsEnabled);
 }
 
 }  // namespace commerce

@@ -118,6 +118,11 @@ void NetErrorPageController::ListVisibilityChanged(bool is_visible) {
     delegate_->ListVisibilityChanged(is_visible);
 }
 
+void NetErrorPageController::OpenVivaldia() {
+  if (delegate_)
+    delegate_->OpenVivaldia();
+}
+
 NetErrorPageController::NetErrorPageController(base::WeakPtr<Delegate> delegate)
     : delegate_(delegate) {
 }
@@ -150,5 +155,7 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
       .SetMethod("savePageForLater", &NetErrorPageController::SavePageForLater)
       .SetMethod("cancelSavePage", &NetErrorPageController::CancelSavePage)
       .SetMethod("listVisibilityChanged",
-                 &NetErrorPageController::ListVisibilityChanged);
+                 &NetErrorPageController::ListVisibilityChanged)
+      .SetMethod("openVivaldia",
+                 &NetErrorPageController::OpenVivaldia);
 }

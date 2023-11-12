@@ -7,17 +7,14 @@
 #include <IOKit/IOCFPlugIn.h>
 
 #include "base/apple/bridging.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/feature_list.h"
-#include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/capture/video/video_capture_device.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace media {
 
@@ -146,33 +143,38 @@ static constexpr int kCtZoomAbsoluteControlBitIndex = 9;
 static constexpr int kCtPanTiltAbsoluteControlBitIndex = 11;
 static constexpr int kCtFocusAutoControlBitIndex = 17;
 
-static const base::flat_map<int, size_t> kProcessingUnitControlBitIndexes = {
-    {uvc::kPuBrightnessAbsoluteControl, kPuBrightnessAbsoluteControlBitIndex},
-    {uvc::kPuContrastAbsoluteControl, kPuContrastAbsoluteControlBitIndex},
-    {uvc::kPuSaturationAbsoluteControl, kPuSaturationAbsoluteControlBitIndex},
-    {uvc::kPuSharpnessAbsoluteControl, kPuSharpnessAbsoluteControlBitIndex},
-    {uvc::kPuWhiteBalanceTemperatureControl,
-     kPuWhiteBalanceTemperatureControlBitIndex},
-    {uvc::kPuPowerLineFrequencyControl, kPuPowerLineFrequencyControlBitIndex},
-    {uvc::kPuWhiteBalanceTemperatureAutoControl,
-     kPuWhiteBalanceTemperatureAutoControlBitIndex},
-};
+static constexpr auto kProcessingUnitControlBitIndexes =
+    base::MakeFixedFlatMap<int, size_t>(
+        {{uvc::kPuBrightnessAbsoluteControl,
+          kPuBrightnessAbsoluteControlBitIndex},
+         {uvc::kPuContrastAbsoluteControl, kPuContrastAbsoluteControlBitIndex},
+         {uvc::kPuSaturationAbsoluteControl,
+          kPuSaturationAbsoluteControlBitIndex},
+         {uvc::kPuSharpnessAbsoluteControl,
+          kPuSharpnessAbsoluteControlBitIndex},
+         {uvc::kPuWhiteBalanceTemperatureControl,
+          kPuWhiteBalanceTemperatureControlBitIndex},
+         {uvc::kPuPowerLineFrequencyControl,
+          kPuPowerLineFrequencyControlBitIndex},
+         {uvc::kPuWhiteBalanceTemperatureAutoControl,
+          kPuWhiteBalanceTemperatureAutoControlBitIndex}});
 
-static const base::flat_map<int, size_t> kCameraTerminalControlBitIndexes = {
-    {uvc::kCtAutoExposureModeControl, kCtAutoExposureModeControlBitIndex},
-    {uvc::kCtExposureTimeAbsoluteControl,
-     kCtExposureTimeAbsoluteControlBitIndex},
-    {uvc::kCtFocusAbsoluteControl, kCtFocusAbsoluteControlBitIndex},
-    {uvc::kCtZoomAbsoluteControl, kCtZoomAbsoluteControlBitIndex},
-    {uvc::kCtPanTiltAbsoluteControl, kCtPanTiltAbsoluteControlBitIndex},
-    {uvc::kCtFocusAutoControl, kCtFocusAutoControlBitIndex},
-};
+static constexpr auto kCameraTerminalControlBitIndexes =
+    base::MakeFixedFlatMap<int, size_t>({
+        {uvc::kCtAutoExposureModeControl, kCtAutoExposureModeControlBitIndex},
+        {uvc::kCtExposureTimeAbsoluteControl,
+         kCtExposureTimeAbsoluteControlBitIndex},
+        {uvc::kCtFocusAbsoluteControl, kCtFocusAbsoluteControlBitIndex},
+        {uvc::kCtZoomAbsoluteControl, kCtZoomAbsoluteControlBitIndex},
+        {uvc::kCtPanTiltAbsoluteControl, kCtPanTiltAbsoluteControlBitIndex},
+        {uvc::kCtFocusAutoControl, kCtFocusAutoControlBitIndex},
+    });
 
 static bool FindDeviceWithVendorAndProductIds(int vendor_id,
                                               int product_id,
                                               io_iterator_t* usb_iterator) {
   // Compose a search dictionary with vendor and product ID.
-  base::ScopedCFTypeRef<CFMutableDictionaryRef> query_dictionary(
+  base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> query_dictionary(
       IOServiceMatching(kIOUSBDeviceClassName));
   CFDictionarySetValue(query_dictionary, CFSTR(kUSBVendorName),
                        base::apple::NSToCFPtrCast(@(vendor_id)));
@@ -364,7 +366,8 @@ static ScopedIOUSBInterfaceInterface OpenVideoClassSpecificControlInterface(
     VLOG(1) << "Unable to open control interface";
 
     // Temporary additional debug logging for crbug.com/1270335
-    VLOG_IF(1, base::mac::IsAtLeastOS12() && ret == kIOReturnExclusiveAccess)
+    VLOG_IF(1, base::mac::MacOSMajorVersion() >= 12 &&
+                   ret == kIOReturnExclusiveAccess)
         << "Camera USBInterfaceOpen failed with "
         << "kIOReturnExclusiveAccess";
     return ScopedIOUSBInterfaceInterface();
@@ -657,13 +660,13 @@ bool UvcControl::IsControlAvailable(int control_selector) const {
   }
   size_t bitIndex;
   if (descriptor_subtype_ == uvc::kVcProcessingUnit) {
-    auto it = kProcessingUnitControlBitIndexes.find(control_selector);
+    const auto* it = kProcessingUnitControlBitIndexes.find(control_selector);
     if (it == kProcessingUnitControlBitIndexes.end()) {
       return false;
     }
     bitIndex = it->second;
   } else if (descriptor_subtype_ == uvc::kVcInputTerminal) {
-    auto it = kCameraTerminalControlBitIndexes.find(control_selector);
+    const auto* it = kCameraTerminalControlBitIndexes.find(control_selector);
     if (it == kCameraTerminalControlBitIndexes.end()) {
       return false;
     }

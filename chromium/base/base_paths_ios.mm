@@ -8,11 +8,11 @@
 #import <Foundation/Foundation.h>
 
 #include "base/apple/bundle_locations.h"
+#include "base/apple/foundation_util.h"
 #include "base/base_paths.h"
 #include "base/base_paths_apple.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/mac/foundation_util.h"
 #include "base/path_service.h"
 
 namespace base {
@@ -25,7 +25,8 @@ bool PathProviderIOS(int key, base::FilePath* result) {
 
     case base::DIR_APP_DATA: {
       base::FilePath path;
-      if (!base::mac::GetUserDirectory(NSApplicationSupportDirectory, &path)) {
+      if (!base::apple::GetUserDirectory(NSApplicationSupportDirectory,
+                                         &path)) {
         return false;
       }
 
@@ -39,8 +40,10 @@ bool PathProviderIOS(int key, base::FilePath* result) {
     }
 
     case base::DIR_SRC_TEST_DATA_ROOT:
-      // On iOS, there is no access to source root, however, the necessary
-      // resources are packaged into the test as assets.
+    case base::DIR_OUT_TEST_DATA_ROOT:
+      // On iOS, there is no access to source root, nor build dir,
+      // however, the necessary resources are packaged into the
+      // test app as assets.
       [[fallthrough]];
 
     case base::DIR_ASSETS:
@@ -56,7 +59,7 @@ bool PathProviderIOS(int key, base::FilePath* result) {
       return true;
 
     case base::DIR_CACHE:
-      return base::mac::GetUserDirectory(NSCachesDirectory, result);
+      return base::apple::GetUserDirectory(NSCachesDirectory, result);
 
     default:
       return false;

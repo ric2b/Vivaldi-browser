@@ -156,31 +156,13 @@ class BookmarksPrivateIOFunction : public BookmarksFunction,
 
   void ShowSelectFileDialog(
       ui::SelectFileDialog::Type type,
+      int window_id,
       const base::FilePath& default_path);
 
  protected:
   ~BookmarksPrivateIOFunction() override;
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
-};
-
-class BookmarksPrivateImportFunction
-    : public BookmarksPrivateIOFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.import",
-                             BOOKMARKSPRIVATE_IMPORT)
-
-  // BookmarkManagerIOFunction:
-  void FileSelected(const base::FilePath& path,
-                    int index,
-                    void* params) override;
-
- protected:
-  ~BookmarksPrivateImportFunction() override = default;
-
- private:
-  // BookmarksFunction:
-  ResponseValue RunOnReady() override;
 };
 
 class BookmarksPrivateExportFunction

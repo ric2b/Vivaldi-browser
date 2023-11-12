@@ -1,5 +1,6 @@
 import("//vivaldi/gn/config/version.gni")
 import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/testing/testing.gni")
 
 import("//vivaldi/app/source_updates_all.gni")
 import("//vivaldi/base/source_updates_all.gni")
@@ -91,4 +92,14 @@ if (is_ios) {
     ]
   }
 
+}
+
+if (vivaldi_build_tests) {
+  update_template_instance("//chrome/test/data/webui/settings:build") {
+    files -= [
+      "privacy_page_test.ts",
+      "privacy_sandbox_page_test.ts",
+      "privacy_sandbox_test.ts",
+    ]
+  }
 }

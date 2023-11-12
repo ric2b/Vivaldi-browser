@@ -231,30 +231,6 @@ void V8Initializer::MessageHandlerInWorker(v8::Local<v8::Message> message,
   }
 }
 
-namespace {
-
-bool IsRejectedPromisesPerWindowAgent() {
-  static bool g_rejected_promises_per_window_agent =
-      base::FeatureList::IsEnabled(scheduler::kRejectedPromisesPerWindowAgent);
-  return g_rejected_promises_per_window_agent;
-}
-
-static RejectedPromises& RejectedPromisesOnMainThread() {
-  DCHECK(IsMainThread());
-  DCHECK(!IsRejectedPromisesPerWindowAgent());
-  DEFINE_STATIC_LOCAL(scoped_refptr<RejectedPromises>, rejected_promises,
-                      (RejectedPromises::Create()));
-  return *rejected_promises;
-}
-
-}  // namespace
-
-void V8Initializer::ReportRejectedPromisesOnMainThread() {
-  if (IsRejectedPromisesPerWindowAgent())
-    return;
-  RejectedPromisesOnMainThread().ProcessQueue();
-}
-
 static void PromiseRejectHandler(v8::PromiseRejectMessage data,
                                  RejectedPromises& rejected_promises,
                                  ScriptState* script_state) {
@@ -332,12 +308,8 @@ static void PromiseRejectHandlerInMainThread(v8::PromiseRejectMessage data) {
   if (!script_state->ContextIsValid())
     return;
 
-  RejectedPromises* rejected_promises;
-  if (IsRejectedPromisesPerWindowAgent()) {
-    rejected_promises = &window->GetAgent()->GetRejectedPromises();
-  } else {
-    rejected_promises = &RejectedPromisesOnMainThread();
-  }
+  RejectedPromises* rejected_promises =
+      &window->GetAgent()->GetRejectedPromises();
   PromiseRejectHandler(data, *rejected_promises, script_state);
 }
 
@@ -659,14 +631,23 @@ v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
           script_state->GetContext(), v8::Local<v8::Module>(),
           v8_import_assertions, /*v8_import_assertions_has_positions=*/false));
 
-  ReferrerScriptInfo referrer_info =
-      ReferrerScriptInfo::FromV8HostDefinedOptions(
-          context, v8_host_defined_options, referrer_resource_url);
-
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   resolver->SetPropertyName("import");
   ScriptPromise promise = resolver->Promise();
-  modulator->ResolveDynamically(module_request, referrer_info, resolver);
+
+  String invalid_attribute_key;
+  if (module_request.HasInvalidImportAttributeKey(&invalid_attribute_key)) {
+    resolver->Reject(V8ThrowException::CreateTypeError(
+        script_state->GetIsolate(),
+        "Invalid attribute key \"" + invalid_attribute_key + "\"."));
+  } else {
+    ReferrerScriptInfo referrer_info =
+        ReferrerScriptInfo::FromV8HostDefinedOptions(
+            context, v8_host_defined_options, referrer_resource_url);
+
+    modulator->ResolveDynamically(module_request, referrer_info, resolver);
+  }
+
   return v8::Local<v8::Promise>::Cast(promise.V8Value());
 }
 
@@ -868,8 +849,8 @@ void V8Initializer::InitializeMainThread(
     add_histogram_sample_callback = AddHistogramSample;
   }
   v8::Isolate* isolate = V8PerIsolateData::Initialize(
-      scheduler->V8TaskRunner(), snapshot_mode, create_histogram_callback,
-      add_histogram_sample_callback);
+      scheduler->V8TaskRunner(), scheduler->V8LowPriorityTaskRunner(),
+      snapshot_mode, create_histogram_callback, add_histogram_sample_callback);
   scheduler->SetV8Isolate(isolate);
 
   // ThreadState::isolate_ needs to be set before setting the EmbedderHeapTracer
@@ -911,12 +892,13 @@ void V8Initializer::InitializeMainThread(
 }
 
 // Stack size for workers is limited to 500KB because default stack size for
-// secondary threads is 512KB on Mac OS X. See GetDefaultThreadStackSize() in
-// base/threading/platform_thread_mac.mm for details.
-// For 32bit Windows, the stack region always starts with an odd number of
+// secondary threads is 512KB on macOS. See GetDefaultThreadStackSize() in
+// base/threading/platform_thread_apple.mm for details.
+//
+// For 32-bit Windows, the stack region always starts with an odd number of
 // reserved pages, followed by two guard pages, followed by the committed
 // memory for the stack, and the worker stack size need to be reduced
-// (crbug.com/1412239).
+// (https://crbug.com/1412239).
 #if defined(ARCH_CPU_32_BITS) && BUILDFLAG(IS_WIN)
 static const int kWorkerMaxStackSize = 492 * 1024;
 #else

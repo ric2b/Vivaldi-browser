@@ -23,6 +23,8 @@
 <translation id="1379470994139227452">Vivaldi'yi varsayılan olarak ayarla</translation>
 <translation id="1381484244248892686">Kayıtlı şifreleri herhangi bir cihazda kullanabilirsiniz. <ph name="EMAIL" /> için Vivaldi Şifre Yöneticisine kaydedilirler</translation>
 <translation id="1383876407941801731">Ara</translation>
+<translation id="1397515084080510783">Senkronize Sekme Yok</translation>
+<translation id="1410197035576869800">Uygulama Simgesi</translation>
 <translation id="1430638949087011281">Engelleme Yok</translation>
 <translation id="1446108955355168157">Senkronizasyon verilerinizi (şifreler, yer işaretleri, notlar ve daha fazlası) şifrelemek ve korumak için lütfen bir şifreleme parolası oluşturun. Bu şifre asla bize gönderilmeyecektir.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> öğe</translation>
@@ -67,6 +69,7 @@
 <translation id="2391028308389203648">Türkçe (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Etkinleştir</translation>
 <translation id="2434910957904013691">Tümünü Senkronize Et</translation>
+<translation id="2448144008809286557"><ph name="BEGIN_LINK" />Kullanıcı adı<ph name="END_LINK" /> veya <ph name="BEGIN_LINK" />Şifreyi<ph name="END_LINK" /> unuttunuz mu?</translation>
 <translation id="2536780277491102902">İSTİSNALAR</translation>
 <translation id="2558801801411970131">İzleyiciler Engelleniyor</translation>
 <translation id="2577446409661931381">Yeni Not</translation>
@@ -82,6 +85,7 @@ engellendi</translation>
 <translation id="2842985007712546952">Ana klasör</translation>
 <translation id="2843343418360315034">Macarca (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Senkronizasyon başlatılıyor...</translation>
+<translation id="2874111661876416905">Vivaldi ile ara</translation>
 <translation id="2874121295511641364">Yazılan URL'leri ve açık sekmeleri senkronize edin</translation>
 <translation id="2898963176829412617">Yeni Klasör…</translation>
 <translation id="2961573414320947355">Vivaldi'deki tüm bağlantıları açmak ister misiniz? Bizi Varsayılan olarak ayarladığınızdan emin olun.</translation>
@@ -146,12 +150,14 @@ engellendi</translation>
 engellendi</translation>
 <translation id="4299298331965375737">Vivaldi varsayılan tarayıcınız yapılsın mı?</translation>
 <translation id="4304224509867189079">Giriş Yap</translation>
+<translation id="4316955624679873896">Yer işaretlerine eklendi</translation>
 <translation id="432696242656678770">Rusça (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">İspanyolca (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Vietnamca (<ph name="ORIGIN" />)</translation>
 <translation id="4394049700291259645">Devre dışı</translation>
 <translation id="4413780690230851155">Tarayıcı Geçmişini Temizle</translation>
 <translation id="4452878871193896747">Endonezce (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Şu anda diğer cihazlardan senkronize edilmiş sekmeniz yok.</translation>
 <translation id="4493850495402472953">ve</translation>
 <translation id="4497115807425788318">Konum</translation>
 <translation id="4507213865286211606">Boyut Önizlemesi</translation>
@@ -184,10 +190,12 @@ engellendi</translation>
 <translation id="497942794017668482">İzleyiciler ve Reklamlar Engelleniyor</translation>
 <translation id="5037761343305489956">Nota kopyalandı</translation>
 <translation id="504986598654589766">Özel Sekmede gezinme, aramaların, ziyaret edilen sitelerin, çerezlerin ve geçici dosyaların Vivaldi tarafından saklanmayacağı anlamına gelir. Bağlantınızı şifrelemez veya başka şekilde değiştirmez.</translation>
+<translation id="5094376253685335202">Senkronizasyonu Etkinleştir</translation>
 <translation id="5116316489033177455">Yer işaretlerini ve Hızlı Aramaları senkronize edin</translation>
 <translation id="5122095890854520072">Letonca (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Giriş Başarısız Oldu</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kodu Tekrar Gönder<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Sekmeler ve geçmiş getiriliyor...</translation>
 <translation id="5238642303473095117">Verileri Sil</translation>
 <translation id="5245732982828228444">Notlarınızı burada bulacaksınız</translation>
 <translation id="5249199221558969362">Lütfen gerçekçi bir kullanım ömrü numarası girin.</translation>
@@ -214,6 +222,7 @@ engellendi</translation>
 <translation id="5857090052475505287">Yeni Klasör</translation>
 <translation id="5859825823508296659">Etki Alanını Düzenle</translation>
 <translation id="5867841422488265304">Web adresini arayın veya yazın</translation>
+<translation id="5869217094746242845">Gizlilik &amp; Güvenlik hakkında daha fazla bilgi edinin</translation>
 <translation id="5871497086027727873">1 öğe taşındı</translation>
 <translation id="5898502570200301364">Vivaldi Şifre Yöneticisine kaydettiğiniz şifreleri iPhone'unuzdaki diğer uygulamalarda kullanabilirsiniz.</translation>
 <translation id="5900160494089383343">Bu kullanıcı adı mevcut değil.</translation>
@@ -255,8 +264,10 @@ engellendi</translation>
 <translation id="6946395294519639514">Paneller sayesinde, tarayıcının kenar çubuğunda kolayca erişebileceğiniz araçları tutabilirsiniz.</translation>
 <translation id="6967884871145366229">Gizlilik Ayarlarını Yönetin</translation>
 <translation id="6973630695168034713">Klasörler</translation>
+<translation id="7006864796794806241">Şifreyi Kurtar</translation>
 <translation id="7029809446516969842">Şifreler</translation>
 <translation id="7041964446309059643">Manuel</translation>
+<translation id="7110758301321962823">Kullanıcı Adını Kurtar</translation>
 <translation id="7194677467200983873">Son senkronizasyon:</translation>
 <translation id="7196846668589096106">Masaüstü sekmeleri</translation>
 <translation id="7210372243397300116">Klasör Ara</translation>
@@ -266,6 +277,7 @@ engellendi</translation>
 <translation id="7311118006561484338">Başlığa Göre</translation>
 <translation id="7325310788570036874">Vivaldi ile web'de daha akıllı, daha sorunsuz ve daha hızlı gezinmeye devam edin.</translation>
 <translation id="734110743815267231">İbranice (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Özelde Aç?</translation>
 <translation id="7362952245780030555">Tam masaüstü sekmeleri veya basitleştirilmiş sekme değiştirici arasında seçim yapın.</translation>
 <translation id="7379938540614588640">Felemenkçe (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Yeni Kaynak Ekle</translation>
@@ -305,8 +317,10 @@ engellendi</translation>
 <translation id="8275038454117074363">İçe Aktar</translation>
 <translation id="8329813750766387010">Güncellendi: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Çerez uyarılarını kaldır (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Diğer cihazlardaki sekmeleri görmek için Senkronizasyonu etkinleştirmeniz gerekir.</translation>
 <translation id="8366175803122817174">Tüm Not Adreslerini Aç</translation>
 <translation id="8384409685584033392">Sayfa Bilgisi</translation>
+<translation id="839736845446313156">Kayıt ol</translation>
 <translation id="8414685983518053656">Notlar</translation>
 <translation id="8423076545503792640">Bir hata nedeniyle istek başarısız oldu. Lütfen daha sonra tekrar deneyiniz.</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
@@ -322,6 +336,7 @@ engellendi</translation>
 <translation id="8677007239430848917">Aşağıdaki artı simgesine dokunarak ilk notunuzu ekleyin</translation>
 <translation id="8684294196284714094">Vivaldi'yi varsayılan tarayıcınız olarak ayarlamaya hazır mısınız?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> öğe silindi</translation>
+<translation id="8763006697839582351">Vivaldi Özel'de aç</translation>
 <translation id="8804164990146287819">Gizlilik Politikası</translation>
 <translation id="8819841443522803117">Varsayılan tarayıcınızı değiştirmenin zamanı geldi mi? Vivaldi'yi seçin.</translation>
 <translation id="8820817407110198400">Yer işaretleri</translation>
@@ -333,7 +348,6 @@ engellendi</translation>
 <translation id="9043882097999887291">Reklamlar
 engellendi</translation>
 <translation id="9065203028668620118">Düzenle</translation>
-<translation id="9078193189520575214">Değişiklikler uygulanıyor...</translation>
 <translation id="9079251484401922158">Fince (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 öğe</translation>
 <translation id="9091665118798175641">Form otomatik doldurma bilgilerini senkronize et</translation>

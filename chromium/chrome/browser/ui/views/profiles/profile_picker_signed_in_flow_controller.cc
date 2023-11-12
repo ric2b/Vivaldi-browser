@@ -7,6 +7,7 @@
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/views/profiles/profile_management_types.h"
@@ -21,15 +22,18 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
+#include "google_apis/gaia/core_account_id.h"
 
 ProfilePickerSignedInFlowController::ProfilePickerSignedInFlowController(
     ProfilePickerWebContentsHost* host,
     Profile* profile,
+    const CoreAccountId& account_id,
     std::unique_ptr<content::WebContents> contents,
     signin_metrics::AccessPoint signin_access_point,
     absl::optional<SkColor> profile_color)
     : host_(host),
       profile_(profile),
+      account_id_(account_id),
       contents_(std::move(contents)),
       signin_access_point_(signin_access_point),
       profile_color_(profile_color) {
@@ -52,10 +56,10 @@ void ProfilePickerSignedInFlowController::Init() {
   contents()->SetDelegate(this);
 
   const CoreAccountInfo& account_info =
-      IdentityManagerFactory::GetForProfile(profile_)->GetPrimaryAccountInfo(
-          signin::ConsentLevel::kSignin);
-  DCHECK(!account_info.IsEmpty()) << "A profile with valid (unconsented) "
-                                     "primary account must be passed in.";
+      IdentityManagerFactory::GetForProfile(profile_)
+          ->FindExtendedAccountInfoByAccountId(account_id_);
+  DCHECK(!account_info.IsEmpty())
+      << "A profile with a valid account must be passed in.";
   email_ = account_info.email;
 
   base::OnceClosure sync_consent_completed_closure =
@@ -66,7 +70,10 @@ void ProfilePickerSignedInFlowController::Init() {
   new TurnSyncOnHelper(
       profile_, signin_access_point_,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
-      signin_metrics::Reason::kSigninPrimaryAccount, account_info.account_id,
+      signin_util::IsForceSigninEnabled()
+          ? signin_metrics::Reason::kForcedSigninPrimaryAccount
+          : signin_metrics::Reason::kSigninPrimaryAccount,
+      account_info.account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
       std::make_unique<ProfilePickerTurnSyncOnDelegate>(
           weak_ptr_factory_.GetWeakPtr(), profile_),

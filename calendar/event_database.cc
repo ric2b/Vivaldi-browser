@@ -157,21 +157,6 @@ bool EventDatabase::GetAllCalendarEvents(EventRows* events) {
   return true;
 }
 
-bool EventDatabase::GetAllCalendarEventTemplates(EventRows* events) {
-  events->clear();
-  sql::Statement s(GetDB().GetCachedStatement(
-      SQL_FROM_HERE, "SELECT" CALENDAR_EVENT_ROW_FIELDS " FROM events "
-                     "where is_template = 1"));
-
-  while (s.Step()) {
-    EventRow event;
-    FillEventRow(s, &event);
-    events->push_back(event);
-  }
-
-  return true;
-}
-
 bool EventDatabase::GetRowForEvent(calendar::EventID event_id,
                                    EventRow* out_event) {
   sql::Statement statement(GetDB().GetCachedStatement(

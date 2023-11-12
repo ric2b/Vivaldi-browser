@@ -18,6 +18,4 @@ source_set("custom_views") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

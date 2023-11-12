@@ -6,6 +6,7 @@
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/user_action_tester.h"
@@ -33,6 +34,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/display/display.h"
 #include "ui/views/vector_icons.h"
@@ -44,7 +46,9 @@ class AppServiceShelfContextMenuBrowserTest : public InProcessBrowserTest {
 
   struct MenuSection {
     std::unique_ptr<ui::SimpleMenuModel> menu_model;
-    ui::MenuModel* sub_model = nullptr;
+    // This field is not a raw_ptr<> because it was filtered by the rewriter
+    // for: #addr-of, #union
+    RAW_PTR_EXCLUSION ui::MenuModel* sub_model = nullptr;
     size_t command_index = 0;
   };
 
@@ -82,7 +86,7 @@ class AppServiceShelfContextMenuWebAppBrowserTest
  public:
   AppServiceShelfContextMenuWebAppBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsTabStrip,
+        {blink::features::kDesktopPWAsTabStrip,
          features::kDesktopPWAsTabStripSettings},
         {});
   }
@@ -106,7 +110,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app_install_info->display_mode = blink::mojom::DisplayMode::kMinimalUi;
   web_app::AppId app_id =
@@ -134,7 +138,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app_install_info->display_mode = blink::mojom::DisplayMode::kMinimalUi;
   web_app::AppId app_id =
@@ -162,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app::AppId app_id =
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
@@ -182,7 +186,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
 IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
                        LaunchNewMenuItemDynamicallyChanges) {
   Profile* profile = browser()->profile();
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app::AppId app_id =
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
@@ -223,7 +227,7 @@ class AppServiceShelfContextMenuTabbedWebAppBrowserTest
  public:
   AppServiceShelfContextMenuTabbedWebAppBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsTabStrip},
+        {blink::features::kDesktopPWAsTabStrip},
         {features::kDesktopPWAsTabStripSettings});
   }
   ~AppServiceShelfContextMenuTabbedWebAppBrowserTest() override = default;
@@ -237,7 +241,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuTabbedWebAppBrowserTest,
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app_install_info->display_mode = blink::mojom::DisplayMode::kStandalone;
   web_app_install_info->display_override = {blink::mojom::DisplayMode::kTabbed};
@@ -267,7 +271,7 @@ class AppServiceShelfContextMenuNonTabbedWebAppBrowserTest
  public:
   AppServiceShelfContextMenuNonTabbedWebAppBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {}, {features::kDesktopPWAsTabStrip,
+        {}, {blink::features::kDesktopPWAsTabStrip,
              features::kDesktopPWAsTabStripSettings});
   }
   ~AppServiceShelfContextMenuNonTabbedWebAppBrowserTest() override = default;
@@ -281,7 +285,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuNonTabbedWebAppBrowserTest,
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
-  auto web_app_install_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   web_app_install_info->display_mode = blink::mojom::DisplayMode::kStandalone;
   web_app_install_info->display_override = {blink::mojom::DisplayMode::kTabbed};

@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Ripristina Impostazioni</translation>
 <translation id="4478664379124702289">Salva lin&amp;k come...</translation>
 <translation id="4520385623207007473">Cookie in uso</translation>
+<translation id="456449593072900590">Elimina all'uscita</translation>
 <translation id="4580596421317071374">Le password sono salvate in <ph name="GOOGLE_PASSWORD_MANAGER" /> su questo dispositivo.</translation>
 <translation id="4593021220803146968">Vai alla pa&amp;gina <ph name="URL" /></translation>
 <translation id="4595560905247879544">Le app e le estensioni possono essere modificate solo dal gestore (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">A colori</translation>
 <translation id="5485102783864353244">Aggiungi app</translation>
 <translation id="5486561344817861625">Simula riavvio browser</translation>
-<translation id="5487521232677179737">Cancella dati</translation>
 <translation id="5509693895992845810">S&amp;alva con nome...</translation>
 <translation id="5521078259930077036">È la pagina iniziale prevista?</translation>
 <translation id="5542132724887566711">Profilo</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Sconosciuto</translation>
 <translation id="5851868085455377790">Emittente</translation>
 <translation id="5860491529813859533">Attiva</translation>
-<translation id="5867841422488265304">Cerca o digita l'indirizzo web</translation>
 <translation id="5910363049092958439">Sal&amp;va Immagine Come...</translation>
 <translation id="5914724413750400082">Modulo (<ph name="MODULUS_NUM_BITS" /> bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Accesso negato.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Controlla ortografia durante la digitazione</translation>
-<translation id="73786666777299047">Apri Chrome Web Store</translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
 <translation id="7412226954991670867">Memoria GPU</translation>
 <translation id="7421925624202799674">&amp;Visualizza sorgente pagina</translation>
@@ -442,6 +440,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8382913212082956454">Copia indirizzo &amp;email</translation>
 <translation id="8434480141477525001">Porta di Debug NaCl</translation>
 <translation id="8449008133205184768">Incolla e Mantieni lo Stile</translation>
+<translation id="8477178913400731244">Elimina dati</translation>
 <translation id="8477384620836102176">&amp;Generale</translation>
 <translation id="8496717697661868878">Esegui Questo Plug-in</translation>
 <translation id="8512476990829870887">Termina processo</translation>

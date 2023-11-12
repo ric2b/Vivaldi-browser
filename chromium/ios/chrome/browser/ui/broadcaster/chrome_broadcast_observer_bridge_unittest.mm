@@ -4,11 +4,9 @@
 
 #import "ios/chrome/browser/ui/broadcaster/chrome_broadcast_observer_bridge.h"
 
+#import "base/test/scoped_feature_list.h"
+#import "ios/web/common/features.h"
 #import "testing/platform_test.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 // Test implementation of ChromeBroadcastObserverInterface.
 class TestChromeBroadcastObserver : public ChromeBroadcastObserverInterface {
@@ -91,6 +89,9 @@ TEST_F(ChromeBroadcastObserverBridgeTest, ContentOffset) {
 // Tests that `-broadcastScrollViewIsScrolling:` is correctly forwarded to the
 // observer.
 TEST_F(ChromeBroadcastObserverBridgeTest, ScrollViewIsScrolling) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSmoothScrollingDefault);
   ASSERT_FALSE(observer().scroll_view_scrolling());
   [bridge() broadcastScrollViewIsScrolling:YES];
   EXPECT_TRUE(observer().scroll_view_scrolling());
@@ -99,6 +100,10 @@ TEST_F(ChromeBroadcastObserverBridgeTest, ScrollViewIsScrolling) {
 // Tests that `-broadcastScrollViewIsDragging:` is correctly forwarded to the
 // observer.
 TEST_F(ChromeBroadcastObserverBridgeTest, ScrollViewIsDragging) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSmoothScrollingDefault);
+
   ASSERT_FALSE(observer().scroll_view_dragging());
   [bridge() broadcastScrollViewIsDragging:YES];
   EXPECT_TRUE(observer().scroll_view_dragging());

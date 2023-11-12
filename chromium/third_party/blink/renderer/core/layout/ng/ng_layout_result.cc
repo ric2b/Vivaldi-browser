@@ -27,7 +27,7 @@ struct SameSizeAsNGLayoutResult
   Member<void*> rare_data_;
   union {
     NGBfcOffset bfc_offset;
-    LogicalOffset oof_positioned_offset;
+    NGBoxStrut oof_insets_for_get_computed_style;
   };
   LayoutUnit intrinsic_block_size;
   unsigned bitfields[1];
@@ -48,6 +48,8 @@ const NGLayoutResult* NGLayoutResult::Clone(const NGLayoutResult& other) {
 const NGLayoutResult* NGLayoutResult::CloneWithPostLayoutFragments(
     const NGLayoutResult& other,
     const absl::optional<PhysicalRect> updated_layout_overflow) {
+  DCHECK(!RuntimeEnabledFeatures::LayoutOverflowNoCloneEnabled() ||
+         !updated_layout_overflow);
   return MakeGarbageCollected<NGLayoutResult>(
       other, NGPhysicalBoxFragment::CloneWithPostLayoutFragments(
                  To<NGPhysicalBoxFragment>(other.PhysicalFragment()),
@@ -167,7 +169,7 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
                      : nullptr),
       intrinsic_block_size_(other.intrinsic_block_size_),
       bitfields_(other.bitfields_) {
-  if (!bitfields_.has_oof_positioned_offset) {
+  if (!bitfields_.has_oof_insets_for_get_computed_style) {
     bfc_offset_.line_offset = bfc_line_offset;
     bfc_offset_.block_offset = bfc_block_offset.value_or(LayoutUnit());
     bitfields_.is_bfc_block_offset_nullopt = !bfc_block_offset.has_value();
@@ -175,7 +177,7 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
     DCHECK(physical_fragment_->IsOutOfFlowPositioned());
     DCHECK_EQ(bfc_line_offset, LayoutUnit());
     DCHECK(bfc_block_offset && bfc_block_offset.value() == LayoutUnit());
-    oof_positioned_offset_ = LogicalOffset();
+    oof_insets_for_get_computed_style_ = NGBoxStrut();
   }
 
   NGExclusionSpace new_exclusion_space = MergeExclusionSpaces(
@@ -202,11 +204,12 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
                      : nullptr),
       intrinsic_block_size_(other.intrinsic_block_size_),
       bitfields_(other.bitfields_) {
-  if (!bitfields_.has_oof_positioned_offset) {
+  if (!bitfields_.has_oof_insets_for_get_computed_style) {
     bfc_offset_ = other.bfc_offset_;
   } else {
     DCHECK(physical_fragment_->IsOutOfFlowPositioned());
-    oof_positioned_offset_ = other.oof_positioned_offset_;
+    oof_insets_for_get_computed_style_ =
+        other.oof_insets_for_get_computed_style_;
   }
 
   DCHECK_EQ(physical_fragment_->Size(), other.physical_fragment_->Size());
@@ -299,6 +302,18 @@ NGLayoutResult::RareData* NGLayoutResult::EnsureRareData() {
     rare_data_ = MakeGarbageCollected<RareData>();
   }
   return rare_data_;
+}
+
+void NGLayoutResult::CopyMutableOutOfFlowData(
+    const NGLayoutResult& other) const {
+  if (bitfields_.has_oof_insets_for_get_computed_style) {
+    return;
+  }
+  GetMutableForOutOfFlow().SetOutOfFlowInsetsForGetComputedStyle(
+      other.OutOfFlowInsetsForGetComputedStyle(),
+      other.CanUseOutOfFlowPositionedFirstTierCache());
+  GetMutableForOutOfFlow().SetOutOfFlowPositionedOffset(
+      other.OutOfFlowPositionedOffset());
 }
 
 #if DCHECK_IS_ON()

@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1063263220330818888">Prywatne wyszukiwanie</translation>
+<translation id="1137850887415122856">Aby zablokować prywatne karty, skonfiguruj Touch ID, Face ID lub kod dostępu.</translation>
+<translation id="1310184829257917508">Poproś o prywatne otwieranie linków z innych aplikacji</translation>
 <translation id="1512201558627495343">Nowa karta prywatna</translation>
+<translation id="1786453623676543866">Rozpocznij wyszukiwanie w nowej karcie Vivaldi.</translation>
+<translation id="207677936531967364">Nowa strona karty prywatnej</translation>
+<translation id="2899836479226240291">Ustaw Vivaldi jako przeglądarkę domyślną, aby linki otwierały się w niej automatycznie.</translation>
+<translation id="3171582312249481866">Otwórz ustawienia Vivaldi</translation>
+<translation id="3372807273343182542">Otwórz adresy URL w Vivaldi w trybie prywatnym</translation>
+<translation id="3379322781901918214">1. Otwórz ustawienia Vivaldi</translation>
+<translation id="3473652525653758699">Nowe okno prywatne</translation>
+<translation id="3501504415290398157">Użyj <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />, aby odblokować Twoje prywatne karty.</translation>
+<translation id="3692650606013198282">Otwórz w trybie prywatnym</translation>
+<translation id="3709782636417497984">Otwórz w nowej karcie prywatnej</translation>
+<translation id="3981599532037327317">Otwórz ${url} w trybie prywatnym</translation>
+<translation id="4755216899422789286">Otwórz adresy URL w Vivaldi</translation>
+<translation id="6233792867654386826">Otwiera wprowadzone adresy URL w Vivaldi.</translation>
 <translation id="6827597288286078054">Prywatne wyszukiwanie</translation>
+<translation id="7175743738896712454">Otwiera wprowadzone adresy URL w Vivaldi w trybie prywatnym.</translation>
+<translation id="7307970171564921489">Odblokuj prywatne karty używając <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Otworzyć w trybie prywatnym?</translation>
+<translation id="7549299604720382000">Nowa karta prywatna</translation>
+<translation id="8326104954595890674">Nowa karta prywatna</translation>
+<translation id="8763006697839582351">Otwórz w trybie prywatnym Vivaldi</translation>
+<translation id="9060728682512999830">Szukaj w Vivaldi</translation>
 </translationbundle>

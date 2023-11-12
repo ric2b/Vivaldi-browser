@@ -1,0 +1,11 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_app_icon_settings_table_view_cells") {
+  sources = [
+    "vivaldi_app_icon_item.h",
+    "vivaldi_app_icon_item.mm",
+  ]
+  deps = [
+    "//base",
+  ]
+}

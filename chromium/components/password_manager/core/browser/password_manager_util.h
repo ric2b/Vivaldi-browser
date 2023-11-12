@@ -25,6 +25,7 @@ class NetworkContext;
 
 namespace password_manager {
 class CredentialsCleanerRunner;
+struct GroupedFacets;
 class PasswordManagerDriver;
 class PasswordManagerClient;
 }  // namespace password_manager
@@ -216,8 +217,15 @@ std::string GetExtendedTopLevelDomain(
     const GURL& url,
     const base::flat_set<std::string>& psl_extensions);
 
+// This functions merges groups together if one of the following applies:
+// * the same facet is present in both groups.
+// * eTLD+1 of a facet in one group matches eTLD+1 of a facet in another group.
+std::vector<password_manager::GroupedFacets> MergeRelatedGroups(
+    const base::flat_set<std::string>& psl_extensions,
+    const std::vector<password_manager::GroupedFacets>& groups);
+
 // Contains all special symbols considered for password-generation.
-constexpr char kSpecialSymbols[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+inline constexpr char kSpecialSymbols[] = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
 // Helper functions for character type classification. The built-in functions
 // depend on locale, platform and other stuff. To make the output more
@@ -233,6 +241,9 @@ bool IsUppercaseLetter(char16_t c);
 // Checks if a supplied character |c| is a special symbol.
 // Special symbols are defined by the string |kSpecialSymbols|.
 bool IsSpecialSymbol(char16_t c);
+
+// Returns true if 'type' is a username in a password-less form.
+bool IsSingleUsernameType(autofill::ServerFieldType type);
 
 }  // namespace password_manager_util
 

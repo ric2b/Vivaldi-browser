@@ -6,7 +6,7 @@
 
 #import <string>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/time.h"
@@ -33,10 +33,6 @@
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/gtest_support.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 class FakeResultDelegate
     : public autofill::payments::FullCardRequest::ResultDelegate {
@@ -99,8 +95,7 @@ class PaymentRequestFullCardRequesterTest : public PlatformTest {
     infobars::InfoBarManager* infobar_manager =
         InfoBarManagerImpl::FromWebState(web_state());
     autofill_client_.reset(new autofill::ChromeAutofillClientIOS(
-        browser_state(), web_state(), infobar_manager, autofill_agent_,
-        /*password_generation_manager=*/nullptr));
+        browser_state(), web_state(), infobar_manager, autofill_agent_));
 
     std::string locale("en");
     autofill::AutofillDriverIOSFactory::CreateForWebState(
@@ -164,12 +159,12 @@ TEST_F(PaymentRequestFullCardRequesterTest, PresentAndDismissNewPrompt) {
       autofill::AutofillJavaScriptFeature::GetInstance();
   web::WebFrame* main_frame =
       feature->GetWebFramesManager(web_state())->GetMainWebFrame();
-  autofill::BrowserAutofillManager* autofill_manager =
+  autofill::BrowserAutofillManager& autofill_manager =
       autofill::AutofillDriverIOS::FromWebStateAndWebFrame(web_state(),
                                                            main_frame)
-          ->autofill_manager();
+          ->GetAutofillManager();
   FakeResultDelegate* fake_result_delegate = new FakeResultDelegate;
-  full_card_requester.GetFullCard(*credit_cards()[0], autofill_manager,
+  full_card_requester.GetFullCard(*credit_cards()[0], &autofill_manager,
                                   fake_result_delegate->GetWeakPtr());
 
   // Spin the run loop to trigger the animation.
@@ -177,7 +172,7 @@ TEST_F(PaymentRequestFullCardRequesterTest, PresentAndDismissNewPrompt) {
   EXPECT_TRUE([base_view_controller.presentedViewController
       isMemberOfClass:[UINavigationController class]]);
   UINavigationController* navigation_controller =
-      base::mac::ObjCCast<UINavigationController>(
+      base::apple::ObjCCast<UINavigationController>(
           base_view_controller.presentedViewController);
 
   EXPECT_TRUE([navigation_controller.topViewController
@@ -188,10 +183,9 @@ TEST_F(PaymentRequestFullCardRequesterTest, PresentAndDismissNewPrompt) {
 
   // Wait until the view controller is ordered to be dismissed and the animation
   // completes.
-  base::test::ios::WaitUntilCondition(
-      ^bool {
+  ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::Seconds(10), true, ^bool {
         return !base_view_controller.presentedViewController;
-      },
-      true, base::Seconds(10));
+      }));
   EXPECT_EQ(nil, base_view_controller.presentedViewController);
 }

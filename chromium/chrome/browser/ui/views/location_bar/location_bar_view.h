@@ -121,7 +121,8 @@ class LocationBarView : public LocationBar,
       SkColor background_color,
       SkColor stroke_color,
       SkBlendMode blend_mode = SkBlendMode::kSrcOver,
-      bool antialias = true) const;
+      bool antialias = true,
+      bool should_border_scale = false) const;
 
   // Returns the delegate.
   Delegate* delegate() const { return delegate_; }
@@ -453,8 +454,8 @@ class LocationBarView : public LocationBar,
   // Animation to change whole location bar background color on hover.
   gfx::SlideAnimation hover_animation_{this};
 
-  // Whether we're in popup mode. This value also controls whether the location
-  // bar is read-only.
+  // Whether we're in popup mode (i.e. location bar is situated within a popup
+  // window). This value also controls whether the location bar is read-only.
   const bool is_popup_mode_;
 
   bool is_initialized_ = false;

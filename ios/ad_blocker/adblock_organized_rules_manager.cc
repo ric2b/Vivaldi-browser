@@ -8,6 +8,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "components/ad_blocker/adblock_rule_service.h"
 #include "components/ad_blocker/utils.h"
+#include "ios/ad_blocker/adblock_content_injection_handler.h"
 #include "ios/ad_blocker/adblock_content_rule_list_provider.h"
 #include "ios/ad_blocker/adblock_rules_organizer.h"
 #include "ios/ad_blocker/ios_rules_compiler.h"
@@ -41,14 +42,15 @@ std::unique_ptr<base::Value> GetJsonFromFile(
   return result;
 }
 
-std::string WriteMetadataAndGetChecksum(const base::FilePath& filename,
-                                        base::Value metadata) {
+std::pair<std::string, base::Value> WriteRulesAndGetChecksum(
+    const base::FilePath& filename,
+    base::Value non_ios_rules_and_metadata) {
   std::string json;
-  if (!JSONStringValueSerializer(&json).Serialize(metadata))
+  if (!JSONStringValueSerializer(&json).Serialize(non_ios_rules_and_metadata))
     NOTREACHED();
   if (!base::WriteFile(filename, json))
-    return "";
-  return CalculateBufferChecksum(json);
+    return {"", std::move(non_ios_rules_and_metadata)};
+  return {CalculateBufferChecksum(json), std::move(non_ios_rules_and_metadata)};
 }
 }  // namespace
 
@@ -56,14 +58,17 @@ OrganizedRulesManager::OrganizedRulesManager(
     RuleService* rule_service,
     std::unique_ptr<AdBlockerContentRuleListProvider>
         content_rule_list_provider,
+    ContentInjectionHandler* content_injection_handler,
     RuleGroup group,
     base::FilePath browser_state_path,
     const std::string& organized_rules_checksum,
     OrganizedRulesChangedCallback organized_rules_changed_callback,
     RulesReadFailCallback rule_read_fail_callback,
+    base::RepeatingClosure on_start_applying_rules,
     scoped_refptr<base::SequencedTaskRunner> file_task_runner)
     : rule_manager_(rule_service->GetRuleManager()),
       content_rule_list_provider_(std::move(content_rule_list_provider)),
+      content_injection_handler_(content_injection_handler),
       group_(group),
       is_loaded_(false),
       rule_sources_(rule_manager_->GetRuleSources(group)),
@@ -71,43 +76,9 @@ OrganizedRulesManager::OrganizedRulesManager(
                              .Append(GetGroupFolderName(group_))),
       organized_rules_changed_callback_(organized_rules_changed_callback),
       rule_read_fail_callback_(rule_read_fail_callback),
+      on_start_applying_rules_(on_start_applying_rules),
       file_task_runner_(file_task_runner) {
   rule_manager_->AddObserver(this);
-
-/*  {
-    std::string test_rules_str = R"===(
-      {
-        "network": {
-          "block": {
-            "specific": [
-              {
-               "action" : {
-                  "type" : "block"
-               },
-               "trigger" : {
-                  "if-top-url" : [
-                     "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?testpages\\.adblockplus\\.org[:\\/]"
-                  ],
-                  "resource-type" : [
-                     "raw"
-                  ],
-                  "top-url-filter-is-case-sensitive" : true,
-                  "url-filter" : ".*",
-                  "url-filter-is-case-sensitive" : false
-               }
-              }
-            ]
-          }
-        }
-      }
-    )===";
-    std::string checksum = CalculateBufferChecksum(test_rules_str);
-    auto test_rules = JSONStringValueDeserializer(test_rules_str)
-                          .Deserialize(nullptr, nullptr);
-    DCHECK(test_rules);
-    compiled_rules_[0] = base::MakeRefCounted<CompiledRules>(
-        std::move(*test_rules), std::move(checksum));
-  }*/
 
   UpdateExceptions();
 
@@ -238,12 +209,12 @@ void OrganizedRulesManager::ReorganizeRules() {
     return;
   }
 
-  if (rule_sources_.empty())
-    Disable();
-
   organized_rules_ready_callback_.Reset(
       base::BindOnce(&OrganizedRulesManager::OnOrganizedRulesReady,
                      weak_factory_.GetWeakPtr()));
+
+  if (rule_sources_.empty())
+    Disable();
 
   if (rule_manager_->GetActiveExceptionList(group_) ==
           RuleManager::ExceptionsList::kProcessList &&
@@ -251,6 +222,8 @@ void OrganizedRulesManager::ReorganizeRules() {
     Disable();
     return;
   }
+
+  on_start_applying_rules_.Run();
 
   file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -260,31 +233,37 @@ void OrganizedRulesManager::ReorganizeRules() {
 
 void OrganizedRulesManager::OnOrganizedRulesLoaded(
     std::string checksum,
-    std::unique_ptr<base::Value> metadata) {
+    std::unique_ptr<base::Value> non_ios_rules_and_metadata) {
   is_loaded_ = true;
   if (rule_sources_.empty()) {
     Disable();
     return;
   }
 
-  if (!metadata) {
+  if (!non_ios_rules_and_metadata) {
     ReorganizeRules();
     return;
   }
-  DCHECK(metadata->is_dict());
+  DCHECK(non_ios_rules_and_metadata->is_dict());
 
   // Older versions of the files contained all the rules and were systematically
   // used to reload rules on startup. If we get one of those old versions, we
   // can't assume that the rules stored on the webkit side are sound. Try
   // starting fresh instead.
-  if (metadata->GetDict().contains(rules_json::kOrganizedRules)) {
+  if (non_ios_rules_and_metadata->GetDict().contains("organized-rules")) {
     content_rule_list_provider_->InstallContentRuleLists(base::Value::List());
     ReorganizeRules();
     return;
   }
 
-  absl::optional<int> version =
-      metadata->GetDict().FindInt(rules_json::kVersion);
+  base::Value::Dict* metadata =
+      non_ios_rules_and_metadata->GetDict().FindDict(rules_json::kMetadata);
+  if (!metadata) {
+    ReorganizeRules();
+    return;
+  }
+
+  absl::optional<int> version = metadata->FindInt(rules_json::kVersion);
   DCHECK(version);
   if (*version != GetOrganizedRulesVersionNumber()) {
     ReorganizeRules();
@@ -292,7 +271,7 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
   }
 
   base::Value::Dict* list_checksums =
-      metadata->GetDict().FindDict(rules_json::kListChecksums);
+      metadata->FindDict(rules_json::kListChecksums);
   DCHECK(list_checksums);
 
   if (list_checksums->size() != compiled_rules_.size()) {
@@ -314,7 +293,7 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
   }
 
   std::string* exceptions_checksum =
-      metadata->GetDict().FindString(rules_json::kExceptionRule);
+      metadata->FindString(rules_json::kExceptionRule);
   if ((exceptions_checksum == nullptr) != exception_rule_.is_none()) {
     ReorganizeRules();
     return;
@@ -324,13 +303,20 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
     DCHECK(exception_rule_.is_dict());
     std::string serialized_exception;
     if (!JSONStringValueSerializer(&serialized_exception)
-            .Serialize(exception_rule_))
+             .Serialize(exception_rule_))
       NOTREACHED();
     if (*exceptions_checksum != CalculateBufferChecksum(serialized_exception)) {
       ReorganizeRules();
       return;
     }
   }
+
+  base::Value::Dict* scriptlet_rules =
+      non_ios_rules_and_metadata->GetDict().FindDict(
+          rules_json::kScriptletRules);
+  if (scriptlet_rules)
+    content_injection_handler_->SetScriptletInjectionRules(
+        group_, std::move(*scriptlet_rules));
 
   content_rule_list_provider_->ApplyLoadedRules();
   organized_rules_checksum_ = checksum;
@@ -352,27 +338,42 @@ void OrganizedRulesManager::OnOrganizedRulesReady(base::Value rules) {
   }
 
   DCHECK(rules.is_dict());
-  base::Value::List* organized_rules =
-      rules.GetDict().FindList(rules_json::kOrganizedRules);
-  DCHECK(organized_rules);
-  content_rule_list_provider_->InstallContentRuleLists(*organized_rules);
+  base::Value::List* ios_content_blocker_rules_rules =
+      rules.GetDict().FindList(rules_json::kIosContentBlockerRules);
+  DCHECK(ios_content_blocker_rules_rules);
+  content_rule_list_provider_->InstallContentRuleLists(
+      *ios_content_blocker_rules_rules);
 
-  base::Value::Dict* metadata = rules.GetDict().FindDict(rules_json::kMetadata);
-  DCHECK(metadata);
+  base::Value::Dict* non_ios_rules_and_metadata =
+      rules.GetDict().FindDict(rules_json::kNonIosRulesAndMetadata);
+  DCHECK(non_ios_rules_and_metadata);
 
   file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&WriteMetadataAndGetChecksum,
+      base::BindOnce(&WriteRulesAndGetChecksum,
                      rules_list_folder_.Append(kOrganizedRulesFileName),
-                     base::Value(std::move(*metadata))),
+                     base::Value(std::move(*non_ios_rules_and_metadata))),
       base::BindOnce(
           [](base::WeakPtr<OrganizedRulesManager> self,
-             RuleService::IndexBuildResult build_result, std::string checksum) {
+             RuleService::IndexBuildResult build_result,
+             std::pair<std::string, base::Value> checksum_and_rules) {
+            auto& [checksum, non_ios_rules] = checksum_and_rules;
+            base::Value::Dict* scriptlet_rules =
+                non_ios_rules.GetDict().FindDict(rules_json::kScriptletRules);
+            if (scriptlet_rules) {
+              self->content_injection_handler_->SetScriptletInjectionRules(
+                  self->group_, std::move(*scriptlet_rules));
+            }
             if (self && !checksum.empty()) {
               self->organized_rules_checksum_ = checksum;
               self->organized_rules_changed_callback_.Run(build_result);
             }
           },
           weak_factory_.GetWeakPtr(), build_result_));
+}
+
+bool OrganizedRulesManager::IsApplyingRules() {
+  return !organized_rules_ready_callback_.callback().is_null() ||
+         content_rule_list_provider_->IsApplyingRules();
 }
 }  // namespace adblock_filter

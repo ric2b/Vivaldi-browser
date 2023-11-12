@@ -961,12 +961,12 @@ void UnmarkInCardTable(uintptr_t slot_start, SlotSpanMetadata* slot_span) {
   return slot_span->bucket->slot_size;
 }
 
-[[maybe_unused]] void SweepSuperPage(ThreadSafePartitionRoot* root,
+[[maybe_unused]] void SweepSuperPage(PartitionRoot* root,
                                      uintptr_t super_page,
                                      size_t epoch,
                                      SweepStat& stat) {
   auto* bitmap = StateBitmapFromAddr(super_page);
-  ThreadSafePartitionRoot::FromFirstSuperPage(super_page);
+  PartitionRoot::FromFirstSuperPage(super_page);
   bitmap->IterateUnmarkedQuarantined(epoch, [root,
                                              &stat](uintptr_t slot_start) {
     auto* slot_span = SlotSpanMetadata::FromSlotStart(slot_start);
@@ -975,7 +975,7 @@ void UnmarkInCardTable(uintptr_t slot_start, SlotSpanMetadata* slot_span) {
 }
 
 [[maybe_unused]] void SweepSuperPageAndDiscardMarkedQuarantine(
-    ThreadSafePartitionRoot* root,
+    PartitionRoot* root,
     uintptr_t super_page,
     size_t epoch,
     SweepStat& stat) {
@@ -1005,22 +1005,21 @@ void UnmarkInCardTable(uintptr_t slot_start, SlotSpanMetadata* slot_span) {
   });
 }
 
-[[maybe_unused]] void SweepSuperPageWithBatchedFree(
-    ThreadSafePartitionRoot* root,
-    uintptr_t super_page,
-    size_t epoch,
-    SweepStat& stat) {
+[[maybe_unused]] void SweepSuperPageWithBatchedFree(PartitionRoot* root,
+                                                    uintptr_t super_page,
+                                                    size_t epoch,
+                                                    SweepStat& stat) {
   using SlotSpan = SlotSpanMetadata;
 
   auto* bitmap = StateBitmapFromAddr(super_page);
   SlotSpan* previous_slot_span = nullptr;
-  internal::PartitionFreelistEntry* freelist_tail = nullptr;
-  internal::PartitionFreelistEntry* freelist_head = nullptr;
+  internal::EncodedNextFreelistEntry* freelist_tail = nullptr;
+  internal::EncodedNextFreelistEntry* freelist_head = nullptr;
   size_t freelist_entries = 0;
 
   const auto bitmap_iterator = [&](uintptr_t slot_start) {
     SlotSpan* current_slot_span = SlotSpan::FromSlotStart(slot_start);
-    auto* entry = PartitionFreelistEntry::EmplaceAndInitNull(slot_start);
+    auto* entry = EncodedNextFreelistEntry::EmplaceAndInitNull(slot_start);
 
     if (current_slot_span != previous_slot_span) {
       // We started scanning a new slot span. Flush the accumulated freelist to
@@ -1071,17 +1070,18 @@ void PCScanTask::SweepQuarantine() {
   StarScanSnapshot::SweepingView sweeping_view(*snapshot_);
   sweeping_view.VisitNonConcurrently(
       [this, &stat, should_discard](uintptr_t super_page) {
-        auto* root = ThreadSafePartitionRoot::FromFirstSuperPage(super_page);
+        auto* root = PartitionRoot::FromFirstSuperPage(super_page);
 
 #if PA_CONFIG(STARSCAN_BATCHED_FREE)
         SweepSuperPageWithBatchedFree(root, super_page, pcscan_epoch_, stat);
         (void)should_discard;
 #else
-        if (PA_UNLIKELY(should_discard && !root->settings.allow_cookie))
+        if (PA_UNLIKELY(should_discard && !root->settings.use_cookie)) {
           SweepSuperPageAndDiscardMarkedQuarantine(root, super_page,
                                                    pcscan_epoch_, stat);
-        else
+        } else {
           SweepSuperPage(root, super_page, pcscan_epoch_, stat);
+        }
 #endif  // PA_CONFIG(STARSCAN_BATCHED_FREE)
       });
 

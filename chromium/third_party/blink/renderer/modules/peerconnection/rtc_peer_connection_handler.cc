@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 
-#include <ctype.h>
 #include <string.h>
 
 #include <functional>
@@ -169,9 +168,9 @@ void RunSynchronousOnceClosure(base::OnceClosure closure,
 
 // Converter functions from Blink types to WebRTC types.
 
-std::vector<const GoogMediaConstraintsSet*> AllMediaConstraintSets(
+HeapVector<Member<const GoogMediaConstraintsSet>> AllMediaConstraintSets(
     GoogMediaConstraints* media_constraints) {
-  std::vector<const GoogMediaConstraintsSet*> result;
+  HeapVector<Member<const GoogMediaConstraintsSet>> result;
   if (media_constraints->hasMandatory()) {
     result.push_back(media_constraints->mandatory());
   }
@@ -195,12 +194,12 @@ void CopyConstraintsIntoRtcConfiguration(
   // Legacy constraints parsing looks at both mandatory and optional constraints
   // sets (similar to how ScanConstraintsForExactValue() looks at basic and
   // advanced constraints). The sets are iterated until a value is found.
-  std::vector<const GoogMediaConstraintsSet*> all_constraints_sets =
+  HeapVector<Member<const GoogMediaConstraintsSet>> all_constraints_sets =
       AllMediaConstraintSets(media_constraints);
 
   // TODO(crbug.com/804275): Delete when Fuchsia no longer depends on it.
   absl::optional<bool> dtls_srtp_key_agreement;
-  for (auto* constraints_set : all_constraints_sets) {
+  for (auto& constraints_set : all_constraints_sets) {
     if (constraints_set->hasDtlsSrtpKeyAgreement()) {
       dtls_srtp_key_agreement = constraints_set->dtlsSrtpKeyAgreement();
       break;
@@ -1067,7 +1066,7 @@ bool RTCPeerConnectionHandler::Initialize(
   initialize_called_ = true;
 
   // Prevent garbage collection of client_ during processing.
-  auto* client_on_stack = client_;
+  auto* client_on_stack = client_.Get();
   peer_connection_tracker_ = PeerConnectionTracker::From(*frame);
 
   configuration_ = server_configuration;
@@ -2127,9 +2126,10 @@ void RTCPeerConnectionHandler::OnSessionDescriptionsUpdated(
     std::unique_ptr<webrtc::SessionDescriptionInterface>
         current_remote_description) {
   // Prevent garbage collection of client_ during processing.
-  auto* client_on_stack = client_;
-  if (!client_ || is_closed_)
+  auto* client_on_stack = client_.Get();
+  if (!client_on_stack || is_closed_) {
     return;
+  }
   client_on_stack->DidChangeSessionDescriptions(
       pending_local_description
           ? CreateWebKitSessionDescription(pending_local_description.get())
@@ -2323,7 +2323,7 @@ void RTCPeerConnectionHandler::OnIceCandidate(const String& sdp,
                                               int address_family) {
   // In order to ensure that the RTCPeerConnection is not garbage collected
   // from under the function, we keep a pointer to it on the stack.
-  auto* client_on_stack = client_;
+  auto* client_on_stack = client_.Get();
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnIceCandidateImpl");
   // This line can cause garbage collection.
@@ -2334,8 +2334,9 @@ void RTCPeerConnectionHandler::OnIceCandidate(const String& sdp,
         this, platform_candidate, PeerConnectionTracker::kSourceLocal, true);
   }
 
-  if (!is_closed_)
+  if (!is_closed_ && client_on_stack) {
     client_on_stack->DidGenerateICECandidate(platform_candidate);
+  }
 }
 
 void RTCPeerConnectionHandler::OnIceCandidateError(

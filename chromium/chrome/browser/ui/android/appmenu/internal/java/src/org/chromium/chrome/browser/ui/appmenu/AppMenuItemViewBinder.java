@@ -27,6 +27,10 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.widget.ChromeImageButton;
 import org.chromium.ui.widget.ChromeImageView;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+// End Vivaldi
+
 /**
  * The binder to bind the app menu  {@link PropertyModel} with the view.
  */
@@ -67,6 +71,9 @@ class AppMenuItemViewBinder {
             int colorResId = model.get(AppMenuItemProperties.ICON_COLOR_RES);
             if (colorResId == 0) {
                 // If there is no color assigned to the icon, use the default color.
+                if (BuildConfig.IS_VIVALDI)
+                    colorResId = R.color.vivaldi_icon_fg_faded;
+                else
                 colorResId = R.color.default_icon_color_secondary_tint_list;
             }
             ImageViewCompat.setImageTintList(imageView,
@@ -126,6 +133,11 @@ class AppMenuItemViewBinder {
                 button.setVisibility(View.GONE);
                 checkbox.setVisibility(View.VISIBLE);
                 checkbox.setChecked(checked);
+                if (BuildConfig.IS_VIVALDI) {
+                    ImageViewCompat.setImageTintList(checkbox,
+                            AppCompatResources.getColorStateList(checkbox.getContext(),
+                            R.color.vivaldi_icon_fg_faded));
+                } else
                 ImageViewCompat.setImageTintList(checkbox,
                         AppCompatResources.getColorStateList(
                                 checkbox.getContext(), R.color.selection_control_button_tint_list));
@@ -138,6 +150,11 @@ class AppMenuItemViewBinder {
                     // Only grey out the icon when disabled. When the menu is enabled, use the
                     // icon's original color.
                     Drawable icon = buttonModel.get(AppMenuItemProperties.ICON);
+                    if (BuildConfig.IS_VIVALDI)
+                        DrawableCompat.setTintList(icon,
+                                AppCompatResources.getColorStateList(button.getContext(),
+                                        R.color.vivaldi_icon_fg_faded));
+                    else
                     DrawableCompat.setTintList(icon,
                             AppCompatResources.getColorStateList(button.getContext(),
                                     R.color.default_icon_color_secondary_tint_list));
@@ -213,6 +230,11 @@ class AppMenuItemViewBinder {
         // TODO(gangwu): Resetting this tint if we go from checked -> not checked while the menu is
         // visible.
         if (model.get(AppMenuItemProperties.CHECKED)) {
+            if (BuildConfig.IS_VIVALDI)
+                ImageViewCompat.setImageTintList(button,
+                        AppCompatResources.getColorStateList(
+                                button.getContext(), R.color.vivaldi_icon_fg_faded));
+            else
             ImageViewCompat.setImageTintList(button,
                     AppCompatResources.getColorStateList(
                             button.getContext(), R.color.default_icon_color_accent1_tint_list));

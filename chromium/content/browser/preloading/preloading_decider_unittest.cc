@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@
 #include "content/browser/preloading/prerenderer.h"
 #include "content/public/browser/anchor_element_preconnect_delegate.h"
 #include "content/public/common/content_client.h"
+#include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
@@ -674,7 +675,7 @@ TEST_F(PreloadingDeciderTest, CandidateCanBeReprefetchedAfterEviction) {
 // a reinserted candidate with the same url is re-processed.
 TEST_F(PreloadingDeciderTest, ProcessCandidates_EagerCandidateRemoval) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kPrefetchNewLimits}, {});
+  scoped_feature_list.InitWithFeatures({::features::kPrefetchNewLimits}, {});
 
   auto* preloading_decider =
       PreloadingDecider::GetOrCreateForCurrentDocument(&GetPrimaryMainFrame());
@@ -726,7 +727,7 @@ TEST_F(PreloadingDeciderTest, ProcessCandidates_EagerCandidateRemoval) {
 // that a non-eager candidate is reprocessed correctly after re-insertion.
 TEST_F(PreloadingDeciderTest, ProcessCandidates_NonEagerCandidateRemoval) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kPrefetchNewLimits}, {});
+  scoped_feature_list.InitWithFeatures({::features::kPrefetchNewLimits}, {});
 
   auto* preloading_decider =
       PreloadingDecider::GetOrCreateForCurrentDocument(&GetPrimaryMainFrame());
@@ -790,7 +791,7 @@ TEST_F(PreloadingDeciderTest, ProcessCandidates_NonEagerCandidateRemoval) {
 TEST_F(PreloadingDeciderTest,
        ProcessCandidates_SecondCandidateWithSameUrlKeepsPrefetchAlive) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({features::kPrefetchNewLimits}, {});
+  scoped_feature_list.InitWithFeatures({::features::kPrefetchNewLimits}, {});
 
   auto* preloading_decider =
       PreloadingDecider::GetOrCreateForCurrentDocument(&GetPrimaryMainFrame());
@@ -822,6 +823,88 @@ TEST_F(PreloadingDeciderTest,
 
   EXPECT_EQ(prefetches.size(), 1u);
   EXPECT_TRUE(prefetches[0]);
+}
+
+TEST_F(PreloadingDeciderTest,
+       OnPointerHoverWithMotionEstimatorIsRecordedToUMA) {
+  base::HistogramTester histogram_tester;
+  auto* preloading_decider =
+      PreloadingDecider::GetOrCreateForCurrentDocument(&GetPrimaryMainFrame());
+  ASSERT_TRUE(preloading_decider != nullptr);
+
+  GURL url1{"https://www.example.com"};
+  preloading_decider->OnPointerHover(
+      url1, blink::mojom::AnchorElementPointerData::New(
+                /*is_mouse_pointer=*/true,
+                /*mouse_velocity=*/50.0,
+                /*mouse_acceleration=*/0.0));
+
+  GURL url2{"https://www.google.com"};
+  preloading_decider->OnPointerHover(
+      url2, blink::mojom::AnchorElementPointerData::New(
+                /*is_mouse_pointer=*/true,
+                /*mouse_velocity=*/75.0,
+                /*mouse_acceleration=*/0.0));
+
+  // Navigate to `url2`.
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(&GetPrimaryMainFrame());
+  PreloadingDataImpl* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
+  ASSERT_TRUE(preloading_data);
+  MockNavigationHandle navigation_handle{url2,
+                                         web_contents->GetPrimaryMainFrame()};
+  preloading_data->DidStartNavigation(&navigation_handle);
+
+  // Check UMA records.
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPointerHoverWithMotionEstimator.Negative",
+      /*100*(50-0/500)=*/10, 1);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPointerHoverWithMotionEstimator.Negative",
+      /*100*(75-0/500)=*/15, 0);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPointerHoverWithMotionEstimator.Positive",
+      /*100*(50-0/500)=*/10, 0);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPointerHoverWithMotionEstimator.Positive",
+      /*100*(75-0/500)=*/15, 1);
+}
+
+TEST_F(PreloadingDeciderTest, OnPreloadingHeuristicsModelDone) {
+  base::HistogramTester histogram_tester;
+
+  GURL url1{"https://www.example.com"};
+  GetPrimaryMainFrame().OnPreloadingHeuristicsModelDone(
+      /*url=*/url1, /*score=*/0.2);
+
+  GURL url2{"https://www.google.com"};
+  GetPrimaryMainFrame().OnPreloadingHeuristicsModelDone(
+      /*url=*/url2, /*score=*/0.9);
+
+  // Navigate to `url2`.
+  WebContents* web_contents =
+      WebContents::FromRenderFrameHost(&GetPrimaryMainFrame());
+  PreloadingDataImpl* preloading_data = static_cast<PreloadingDataImpl*>(
+      PreloadingData::GetOrCreateForWebContents(web_contents));
+  ASSERT_TRUE(preloading_data);
+  MockNavigationHandle navigation_handle{url2,
+                                         web_contents->GetPrimaryMainFrame()};
+  preloading_data->DidStartNavigation(&navigation_handle);
+
+  // Check UMA records.
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPreloadingHeuristicsMLModel.Negative",
+      /*100*0.2=*/20, 1);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPreloadingHeuristicsMLModel.Negative",
+      /*100*0.9=*/90, 0);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPreloadingHeuristicsMLModel.Positive",
+      /*100*0.2=*/20, 0);
+  histogram_tester.ExpectBucketCount(
+      "Preloading.Experimental.OnPreloadingHeuristicsMLModel.Positive",
+      /*100*0.9=*/90, 1);
 }
 
 }  // namespace

@@ -71,7 +71,7 @@ std::string getSystemAccentColor() {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
     if ([defaults stringForKey:@"AppleAccentColor"]) {
       NSColor* c = [[NSColor controlAccentColor]
-          colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+          colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
       accentColorString =
           RgbToHexString(c.redComponent,c.greenComponent,c.blueComponent);
     }

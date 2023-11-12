@@ -90,6 +90,31 @@ class BlockListListMaker {
   base::Value::List allow_rules_;
 };
 
+void MergeRules(const base::Value::Dict& from, base::Value::Dict& into) {
+  for (const auto [key, value] : from) {
+    if (const base::Value::Dict* from_dict = value.GetIfDict()) {
+      if (base::Value::Dict* into_dict = into.FindDict(key)) {
+        MergeRules(*from_dict, *into_dict);
+        continue;
+      }
+      DCHECK(!into.contains(key));
+    }
+
+    if (const base::Value::List* from_list = value.GetIfList()) {
+      if (base::Value::List* into_list = into.FindList(key)) {
+        into_list->reserve(into_list->size() + from_list->size());
+        for (const auto& item : *from_list) {
+          into_list->Append(item.Clone());
+        }
+        continue;
+      }
+      DCHECK(!into.contains(key));
+    }
+
+    into.Set(key, value.Clone());
+  }
+}
+
 }  // namespace
 
 CompiledRules::CompiledRules(base::Value rules, std::string checksum)
@@ -110,6 +135,8 @@ base::Value OrganizeRules(
   // This is essentially generichide allow rules
   base::Value::List all_cosmetic_allow_and_generic_allow_rules;
   all_cosmetic_allow_and_generic_allow_rules.reserve(kMaxGenericAllowRules);
+
+  base::Value::Dict merged_scriptlet_rules;
 
   base::Value::Dict metadata;
   metadata.Set(rules_json::kVersion, GetOrganizedRulesVersionNumber());
@@ -157,6 +184,11 @@ base::Value OrganizeRules(
           all_cosmetic_allow_and_generic_allow_rules.Append(rule.Clone());
       }
     }
+
+    const base::Value::Dict* scriptlet_rules =
+        rules.FindDict(rules_json::kScriptletRules);
+    if (scriptlet_rules)
+      MergeRules(*scriptlet_rules, merged_scriptlet_rules);
   }
 
   if (all_network_allow_rules.size() > kMaxAllowRules ||
@@ -225,18 +257,18 @@ base::Value OrganizeRules(
       if (cosmetic_rules_selectors) {
         for (const auto [selector, rules_for_selector] :
              *cosmetic_rules_selectors)
-          rules_for_selectors[selector].Merge(
-              rules_for_selector.GetDict().Clone());
+          MergeRules(rules_for_selector.GetDict(),
+                     rules_for_selectors[selector]);
       }
     }
   }
 
-  base::Value::List organized_rules;
+  base::Value::List ios_content_blocker_rules;
   for (auto* maker : {&network_specific_block_lists_maker,
                       &network_generic_block_lists_maker}) {
     base::Value::List lists = maker->GetAndReset();
     for (auto& list : lists) {
-      organized_rules.Append(std::move(list));
+      ios_content_blocker_rules.Append(std::move(list));
     }
   }
 
@@ -305,7 +337,7 @@ base::Value OrganizeRules(
             selector_specific_cosmetic_generic_block_lists_maker.get()}) {
         base::Value::List lists = maker->GetAndReset();
         for (auto& list : lists) {
-          organized_rules.Append(std::move(list));
+          ios_content_blocker_rules.Append(std::move(list));
         }
       }
     }
@@ -315,13 +347,20 @@ base::Value OrganizeRules(
                       &cosmetic_generic_block_list_maker}) {
     base::Value::List lists = maker->GetAndReset();
     for (auto& list : lists) {
-      organized_rules.Append(std::move(list));
+      ios_content_blocker_rules.Append(std::move(list));
     }
   }
 
+  base::Value::Dict non_ios_rules_and_metadata;
+  non_ios_rules_and_metadata.Set(rules_json::kMetadata, std::move(metadata));
+  non_ios_rules_and_metadata.Set(rules_json::kScriptletRules,
+                                 std::move(merged_scriptlet_rules));
+
   base::Value::Dict result;
-  result.Set(rules_json::kMetadata, std::move(metadata));
-  result.Set(rules_json::kOrganizedRules, std::move(organized_rules));
+  result.Set(rules_json::kNonIosRulesAndMetadata,
+             std::move(non_ios_rules_and_metadata));
+  result.Set(rules_json::kIosContentBlockerRules,
+             std::move(ios_content_blocker_rules));
 
   return base::Value(std::move(result));
 }

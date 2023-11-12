@@ -325,7 +325,6 @@ public class MenuButton extends FrameLayout implements TintObserver {
         drawable.draw(canvas);
     }
 
-    @VisibleForTesting
     public @BrandedColorScheme int getBrandedColorSchemeForTesting() {
         return mBrandedColorScheme;
     }
@@ -434,7 +433,6 @@ public class MenuButton extends FrameLayout implements TintObserver {
         return set;
     }
 
-    @VisibleForTesting
     void setOriginalBackgroundForTesting(Drawable background) {
         mOriginalBackground = background;
         setBackground(mOriginalBackground);

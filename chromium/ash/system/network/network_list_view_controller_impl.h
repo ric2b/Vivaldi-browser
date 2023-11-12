@@ -20,6 +20,7 @@
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/timer/timer.h"
 #include "chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
@@ -52,7 +53,7 @@ class ASH_EXPORT NetworkListViewControllerImpl
   ~NetworkListViewControllerImpl() override;
 
  protected:
-  TrayNetworkStateModel* model() { return model_; }
+  TrayNetworkStateModel* model() const { return model_; }
 
   NetworkDetailedNetworkView* network_detailed_network_view() {
     return network_detailed_network_view_;
@@ -124,8 +125,16 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // `unknown_header_`.
   size_t CreateWifiGroupHeader(size_t index, const bool is_known);
 
-  // Creates and adds the join wifi entry at the bottom of the wifi networks.
-  size_t CreateJoinWifiEntry(size_t index);
+  // Creates and adds the "+ <network>" entry at the bottom of the wifi
+  // networks (for `NetworkType::kWiFi`) or mobile networks (for
+  // `NetworkType::kMobile`) based on the value of `type`.
+  // `plus_network_entry_ptr` is the pointer to the "+ <network>" entry, and
+  // `index` is increased by 1 to indicate the order of this view so that this
+  // view can be reordered later if necessary.
+  size_t CreateConfigureNetworkEntry(
+      HoverHighlightView** plus_network_entry_ptr,
+      NetworkType type,
+      size_t index);
 
   // Updates Mobile data section, updates add eSIM button states and
   // calls UpdateMobileToggleAndSetStatusMessage().
@@ -196,6 +205,9 @@ class ASH_EXPORT NetworkListViewControllerImpl
   // if the default network has a proxy configured or if a VPN is active.
   void MaybeShowConnectionWarningManagedIcon(bool using_proxy);
 
+  // For QsRevamp: whether to add eSim entry or not.
+  bool ShouldAddESimEntry() const;
+
   raw_ptr<TrayNetworkStateModel, ExperimentalAsh> model_;
 
   mojo::Remote<bluetooth_config::mojom::CrosBluetoothConfig>
@@ -206,29 +218,52 @@ class ASH_EXPORT NetworkListViewControllerImpl
   bluetooth_config::mojom::BluetoothSystemState bluetooth_system_state_ =
       bluetooth_config::mojom::BluetoothSystemState::kUnavailable;
 
-  TrayInfoLabel* mobile_status_message_ = nullptr;
-  NetworkListMobileHeaderView* mobile_header_view_ = nullptr;
-  views::Separator* mobile_separator_view_ = nullptr;
-  TriView* connection_warning_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION TrayInfoLabel* mobile_status_message_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION NetworkListMobileHeaderView* mobile_header_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Separator* mobile_separator_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION TriView* connection_warning_ = nullptr;
 
   // Pointer to the icon displayed next to the connection warning message when
   // a proxy or a VPN is active. Owned by `connection_warning_`. If the network
   // is monitored by the admin, via policy, it displays the managed icon,
   // otherwise the system icon.
-  views::ImageView* connection_warning_icon_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::ImageView* connection_warning_icon_ = nullptr;
   // Owned by `connection_warning_`.
   raw_ptr<views::Label, DanglingUntriaged | ExperimentalAsh>
       connection_warning_label_ = nullptr;
 
-  raw_ptr<NetworkListWifiHeaderView, ExperimentalAsh> wifi_header_view_ =
-      nullptr;
-  views::Separator* wifi_separator_view_ = nullptr;
-  TrayInfoLabel* wifi_status_message_ = nullptr;
+  raw_ptr<NetworkListWifiHeaderView, DanglingUntriaged | ExperimentalAsh>
+      wifi_header_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Separator* wifi_separator_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION TrayInfoLabel* wifi_status_message_ = nullptr;
 
   // Owned by views hierarchy.
-  views::Label* known_header_ = nullptr;
-  views::Label* unknown_header_ = nullptr;
-  HoverHighlightView* join_wifi_entry_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Label* known_header_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Label* unknown_header_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION HoverHighlightView* join_wifi_entry_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION HoverHighlightView* add_esim_entry_ = nullptr;
 
   bool has_mobile_networks_;
   bool has_wifi_networks_;
@@ -243,7 +278,7 @@ class ASH_EXPORT NetworkListViewControllerImpl
   absl::optional<bool> is_proxy_managed_;
   absl::optional<bool> is_vpn_managed_;
 
-  raw_ptr<NetworkDetailedNetworkView, ExperimentalAsh>
+  raw_ptr<NetworkDetailedNetworkView, DanglingUntriaged | ExperimentalAsh>
       network_detailed_network_view_;
   NetworkIdToViewMap network_id_to_view_map_;
 

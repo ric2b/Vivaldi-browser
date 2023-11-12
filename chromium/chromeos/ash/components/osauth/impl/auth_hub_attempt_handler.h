@@ -55,7 +55,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_OSAUTH) AuthHubAttemptHandler
   ~AuthHubAttemptHandler() override;
 
   AuthHubConnector* GetConnector();
-  void SetConsumer(base::raw_ptr<AuthFactorStatusConsumer> consumer);
+  void SetConsumer(raw_ptr<AuthFactorStatusConsumer> consumer);
 
   // Returns true if there is an ongoing factor attempt.
   bool HasOngoingAttempt() const;
@@ -116,16 +116,18 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_OSAUTH) AuthHubAttemptHandler
   void PropagateStatusUpdates();
   void UpdateAllFactorStates();
 
-  base::raw_ptr<Owner> owner_;
+  raw_ptr<Owner> owner_;
   AuthAttemptVector attempt_;
   AuthEnginesMap engines_;
   AuthFactorsSet initial_factors_;
 
   AuthFactorsSet available_factors_;
-  base::raw_ptr<AuthFactorStatusConsumer> status_consumer_;
+  raw_ptr<AuthFactorStatusConsumer> status_consumer_;
 
   base::flat_map<AshAuthFactor, FactorAttemptState> factor_state_;
+
   absl::optional<AshAuthFactor> ongoing_attempt_factor_;
+  bool authenticated_ = false;
 
   bool shutting_down_ = false;
 

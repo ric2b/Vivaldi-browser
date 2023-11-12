@@ -251,6 +251,10 @@ class CONTENT_EXPORT WebContentsAndroid {
   base::ObserverList<DestructionObserver> destruction_observers_;
 
   base::WeakPtrFactory<WebContentsAndroid> weak_factory_{this};
+
+ // Vivaldi
+ public:
+  bool IsScreenLockActive();
 };
 
 }  // namespace content

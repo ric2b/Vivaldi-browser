@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include "base/time/time.h"
-#include "content/browser/attribution_reporting/destination_throttler.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -109,12 +108,24 @@ struct CONTENT_EXPORT AttributionConfig {
     base::TimeDelta second_event_report_window_deadline =
         kDefaultSecondReportWindowDeadline;
 
+    // Default constants for max info gain in bits per source type.
+    // Rounded up to nearest e-5 digit.
+    static constexpr double kDefaultMaxNavigationInfoGain = 11.46173;
+    static constexpr double kDefaultMaxEventInfoGain = 6.5;
+
+    // Controls the max number bits of information that can be associated with
+    // a single a source.
+    double max_navigation_info_gain = kDefaultMaxNavigationInfoGain;
+    double max_event_info_gain = kDefaultMaxEventInfoGain;
+
     // When adding new members, the corresponding `Validate()` definition and
     // `operator==()` definition in `attribution_interop_parser_unittest.cc`
     // should also be updated.
   };
 
-  struct AggregateLimit {
+  struct CONTENT_EXPORT AggregateLimit {
+    AggregateLimit();
+
     // Returns true if this config is valid.
     [[nodiscard]] bool Validate() const;
 
@@ -148,6 +159,19 @@ struct CONTENT_EXPORT AttributionConfig {
     // should also be updated.
   };
 
+  struct CONTENT_EXPORT DestinationRateLimit {
+    // Returns true if this config is valid.
+    [[nodiscard]] bool Validate() const;
+
+    int max_total = 200;
+    int max_per_reporting_site = 50;
+    base::TimeDelta rate_limit_window = base::Minutes(1);
+
+    // When adding new members, the corresponding `Validate()` definition and
+    // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+    // should also be updated.
+  };
+
   AttributionConfig();
 
   AttributionConfig(const AttributionConfig&);
@@ -171,7 +195,7 @@ struct CONTENT_EXPORT AttributionConfig {
   RateLimitConfig rate_limit;
   EventLevelLimit event_level_limit;
   AggregateLimit aggregate_limit;
-  DestinationThrottler::Policy throttler_policy;
+  DestinationRateLimit destination_rate_limit;
 
   // When adding new members, the corresponding `Validate()` definition and
   // `operator==()` definition in `attribution_interop_parser_unittest.cc`

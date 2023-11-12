@@ -41,7 +41,7 @@ void ShutdownServiceWorkerContext(StoragePartition* partition) {
   ServiceWorkerContextWrapper* wrapper =
       static_cast<ServiceWorkerContextWrapper*>(
           partition->GetServiceWorkerContext());
-  wrapper->process_manager()->Shutdown();
+  wrapper->Shutdown();
 }
 
 void ShutdownSharedWorkerContext(StoragePartition* partition) {
@@ -295,8 +295,9 @@ storage::ExternalMountPoints* BrowserContextImpl::GetMountPoints() {
 }
 
 PrefetchService* BrowserContextImpl::GetPrefetchService() {
-  if (!prefetch_service_)
-    prefetch_service_ = PrefetchService::CreateIfPossible(self_);
+  if (!prefetch_service_) {
+    prefetch_service_ = std::make_unique<PrefetchService>(self_);
+  }
 
   return prefetch_service_.get();
 }

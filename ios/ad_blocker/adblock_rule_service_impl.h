@@ -15,6 +15,7 @@
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
 #include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"
@@ -31,6 +32,7 @@ class BrowserState;
 }
 
 namespace adblock_filter {
+class ContentInjectionHandler;
 class RuleServiceImpl : public RuleService, public RuleManager::Observer {
  public:
   explicit RuleServiceImpl(web::BrowserState* browser_state,
@@ -48,6 +50,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
   void AddObserver(RuleService::Observer* observer) override;
   void RemoveObserver(RuleService::Observer* observer) override;
+  bool IsApplyingIosRules(RuleGroup group) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
   IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;
@@ -69,7 +72,8 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   void OnRulesIndexChanged(RuleGroup group,
                            RuleService::IndexBuildResult build_result);
 
-  void OnRulesApplied(RuleGroup group);
+  void OnStartApplyingRules(RuleGroup group);
+  void OnDoneApplyingRules(RuleGroup group);
 
   web::BrowserState* browser_state_;
   RuleSourceHandler::RulesCompiler rules_compiler_;
@@ -82,6 +86,9 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
   std::array<absl::optional<OrganizedRulesManager>, kRuleGroupCount>
       organized_rules_manager_;
+
+  absl::optional<Resources> resources_;
+  std::unique_ptr<ContentInjectionHandler> content_injection_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

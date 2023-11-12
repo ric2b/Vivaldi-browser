@@ -18,9 +18,11 @@
 #include "base/time/default_clock.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -225,11 +227,11 @@ PasswordFormMetricsRecorder::~PasswordFormMetricsRecorder() {
     ukm_entry_builder_.SetSubmission_Observed(0 /*false*/);
   }
 
-  if (submitted_form_type_ != SubmittedFormType::kUnspecified) {
-    UMA_HISTOGRAM_ENUMERATION("PasswordManager.SubmittedFormType",
-                              submitted_form_type_, SubmittedFormType::kCount);
-    ukm_entry_builder_.SetSubmission_SubmittedFormType(
-        static_cast<int64_t>(submitted_form_type_));
+  if (submit_result_ != SubmitResult::kNotSubmitted && submitted_form_type_) {
+    base::UmaHistogramEnumeration("PasswordManager.SubmittedFormType2",
+                                  submitted_form_type_.value());
+    ukm_entry_builder_.SetSubmission_SubmittedFormType2(
+        static_cast<int64_t>(submitted_form_type_.value()));
   }
 
   ukm_entry_builder_.SetUpdating_Prompt_Shown(update_prompt_shown_);
@@ -433,7 +435,7 @@ void PasswordFormMetricsRecorder::SetPasswordGenerationPopupShown(
 }
 
 void PasswordFormMetricsRecorder::SetSubmittedFormType(
-    SubmittedFormType form_type) {
+    metrics_util::SubmittedFormType form_type) {
   submitted_form_type_ = form_type;
 }
 
@@ -500,10 +502,29 @@ void PasswordFormMetricsRecorder::RecordFirstWaitForUsernameReason(
   recorded_wait_for_username_reason_ = true;
 }
 
-void PasswordFormMetricsRecorder::RecordMatchedFormType(MatchedFormType type) {
-  if (!std::exchange(recorded_preferred_matched_password_type, true)) {
-    UMA_HISTOGRAM_ENUMERATION("PasswordManager.MatchedFormType", type);
+void PasswordFormMetricsRecorder::RecordMatchedFormType(
+    const PasswordForm& form) {
+  if (std::exchange(recorded_preferred_matched_password_type, true)) {
+    return;
   }
+
+  using FormMatchType =
+      password_manager::PasswordFormMetricsRecorder::MatchedFormType;
+  FormMatchType match_type;
+  switch (password_manager_util::GetMatchType(form)) {
+    case password_manager_util::GetLoginMatchType::kExact:
+      match_type = FormMatchType::kExactMatch;
+      break;
+    case password_manager_util::GetLoginMatchType::kAffiliated:
+      match_type = IsValidAndroidFacetURI(form.signon_realm)
+                       ? FormMatchType::kAffiliatedApp
+                       : FormMatchType::kAffiliatedWebsites;
+      break;
+    case password_manager_util::GetLoginMatchType::kPSL:
+      match_type = FormMatchType::kPublicSuffixMatch;
+      break;
+  }
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.MatchedFormType", match_type);
 }
 
 void PasswordFormMetricsRecorder::CalculateFillingAssistanceMetric(
@@ -666,6 +687,7 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     case metrics_util::AUTOMATIC_BIOMETRIC_AUTHENTICATION_FOR_FILLING:
     case metrics_util::MANUAL_BIOMETRIC_AUTHENTICATION_FOR_FILLING:
     case metrics_util::AUTOMATIC_BIOMETRIC_AUTHENTICATION_CONFIRMATION:
+    case metrics_util::AUTOMATIC_SHARED_PASSWORDS_NOTIFICATION:
       // Do nothing.
       return;
 

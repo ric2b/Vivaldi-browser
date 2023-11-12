@@ -14,6 +14,7 @@
 namespace ash {
 
 struct AnchoredNudgeData;
+class ScopedNudgePause;
 
 // Public interface to show anchored nudges.
 class ASH_PUBLIC_EXPORT AnchoredNudgeManager {
@@ -39,9 +40,25 @@ class ASH_PUBLIC_EXPORT AnchoredNudgeManager {
   // No op if the nudge specified by `catalog_name` hasn't been shown before.
   virtual void MaybeRecordNudgeAction(NudgeCatalogName catalog_name) = 0;
 
+  // Returns true if the nudge with `id` is shown at the moment.
+  virtual bool IsNudgeShown(const std::string& id) = 0;
+
+  // Creates a `ScopedNudgePause`, which closes all `AnchoredNudge`'s and
+  // `SystemNudge`'s, and prevents more from being shown while any
+  // `ScopedNudgePause` is in scope.
+  virtual std::unique_ptr<ScopedNudgePause> CreateScopedPause() = 0;
+
  protected:
   AnchoredNudgeManager();
   virtual ~AnchoredNudgeManager();
+
+ private:
+  friend class ScopedNudgePause;
+
+  // `Pause()` will stop all the nudges from showing up, until `Resume()` is
+  // called.
+  virtual void Pause() = 0;
+  virtual void Resume() = 0;
 };
 
 }  // namespace ash

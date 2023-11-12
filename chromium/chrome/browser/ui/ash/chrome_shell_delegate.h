@@ -12,6 +12,10 @@
 #include "base/functional/callback_forward.h"
 #include "url/gurl.h"
 
+namespace ash {
+class WindowState;
+}
+
 class ChromeShellDelegate : public ash::ShellDelegate {
  public:
   ChromeShellDelegate();
@@ -27,6 +31,8 @@ class ChromeShellDelegate : public ash::ShellDelegate {
       const override;
   std::unique_ptr<ash::GameDashboardDelegate> CreateGameDashboardDelegate()
       const override;
+  std::unique_ptr<ash::AcceleratorPrefsDelegate>
+  CreateAcceleratorPrefsDelegate() const override;
   std::unique_ptr<ash::GlanceablesDelegate> CreateGlanceablesDelegate(
       ash::GlanceablesController* controller) const override;
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
@@ -62,7 +68,8 @@ class ChromeShellDelegate : public ash::ShellDelegate {
       override;
   media_session::MediaSessionService* GetMediaSessionService() override;
   bool IsSessionRestoreInProgress() const override;
-  void SetUpEnvironmentForLockedFullscreen(bool locked) override;
+  void SetUpEnvironmentForLockedFullscreen(
+      const ash::WindowState& window_state) override;
   bool IsUiDevToolsStarted() const override;
   void StartUiDevTools() override;
   void StopUiDevTools() override;

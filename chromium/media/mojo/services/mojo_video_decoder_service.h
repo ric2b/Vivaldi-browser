@@ -104,7 +104,7 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
   raw_ptr<MojoMediaClient, LeakedDanglingUntriaged> mojo_media_client_;
 
   // A helper object required to get the CDM from a CDM ID.
-  const raw_ptr<MojoCdmServiceContext, LeakedDanglingUntriaged>
+  raw_ptr<MojoCdmServiceContext, LeakedDanglingUntriaged>
       mojo_cdm_service_context_ = nullptr;
 
   // Channel for sending async messages to the client.

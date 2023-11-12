@@ -50,13 +50,14 @@ robolectric_library("junit") {
     ":java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//base:jni_java",
     "//chrome/test/android:chrome_java_unit_test_support",
+    "//components/browser_ui/notifications/android:java",
     "//components/browser_ui/notifications/android:test_support_java",
     "//components/url_formatter/android:url_formatter_java",
     "//third_party/junit:junit",
     "//third_party/mockito:mockito_java",
     "//url:gurl_java",
-    "//url:gurl_junit_shadows",
     "//url:gurl_junit_test_support",
   ]
 }

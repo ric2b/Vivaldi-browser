@@ -11,7 +11,7 @@
 <translation id="1454726940098520109">Jangan Tampilkan Konfirmasi Lagi</translation>
 <translation id="1462666970065907900">Anda yakin ingin menutup jendela ini?</translation>
 <translation id="1480046233931937785">Akuan</translation>
-<translation id="1526344461589023948">Galat terjadi saat mencoba menyimpan pembaruan terunduh. Mohon periksa kecukupan ruang disk Anda dan coba lagi nanti.</translation>
+<translation id="1526344461589023948">Galat terjadi saat mencoba menyimpan pemutakhiran terunduh. Mohon periksa kecukupan ruang diska Anda dan coba lagi nanti.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Jendela Pribadi Baru</translation>
 <translation id="1702758681952953055">Jika galat masih terjadi, mohon laporkan ini dan sertakan detail berikut:</translation>
@@ -26,7 +26,7 @@
 <translation id="1973351931613083086">putar otomatis</translation>
 <translation id="1985669426322966465">Pemutakhiran Software</translation>
 <translation id="2079036669923635404">Klik di sini untuk memperbarui Vivaldi ke versi <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Galat terjadi saat mengunduh berkas pembaruan. Mohon periksa sambungan internet Anda dan coba lagi nanti.</translation>
+<translation id="2141974047387702305">Galat terjadi saat mengunduh berkas pemutakhiran. Mohon periksa sambungan internet Anda dan coba lagi nanti.</translation>
 <translation id="2339641773402824483">Memeriksa pemutakhiran...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Masukkan Catatan</translation>
@@ -85,6 +85,7 @@
 <translation id="4324492550286218827">Lanskap 2</translation>
 <translation id="4406101500523955324">Buka di Jendela Pribadi Baru</translation>
 <translation id="4420816922321010053">Anda yakin ingin keluar dari Vivaldi?</translation>
+<translation id="4430019312045809116">Volume</translation>
 <translation id="443008484043213881">Alat</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Buka Tautan di Tab Latar Belakang Baru</translation>
@@ -111,7 +112,7 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera versi 15+ (Beta)</translation>
 <translation id="5648110075441906505">Buka Gambar di Jendela Baru</translation>
-<translation id="5656371807944747581">Pembaruan Galat!</translation>
+<translation id="5656371807944747581">Pemutakhiran Galat!</translation>
 <translation id="5716238312826274098">Mematikan notifikasi</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> sudah tersedia (Anda memiliki <ph name="OLD_VERSION" />). Anda ingin mengunduhnya sekarang?</translation>
 <translation id="5770433027661640693">Lanskap 10</translation>

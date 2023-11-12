@@ -38,6 +38,7 @@
     "gn_args": {
       "debuggable_apks": false,
       "is_official_build": true,
+      "symbol_level": 2,
       "target_os": "android",
       "use_remoteexec": true
     }
@@ -87,7 +88,7 @@
   },
   "linux-archive-dbg": {
     "gn_args": {
-      "concurrent_links": 30,
+      "concurrent_links": 50,
       "is_component_build": true,
       "is_debug": true,
       "symbol_level": 1,
@@ -97,7 +98,7 @@
   },
   "linux-archive-rel": {
     "gn_args": {
-      "concurrent_links": 30,
+      "concurrent_links": 50,
       "dcheck_always_on": false,
       "enable_updater": true,
       "is_component_build": false,

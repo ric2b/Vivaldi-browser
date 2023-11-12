@@ -84,18 +84,8 @@ AddressAccessoryControllerImpl::~AddressAccessoryControllerImpl() {
 }
 
 // static
-bool AddressAccessoryController::AllowedForWebContents(
-    content::WebContents* web_contents) {
-  DCHECK(web_contents) << "Need valid WebContents to attach controller to!";
-  return base::FeatureList::IsEnabled(
-      autofill::features::kAutofillKeyboardAccessory);
-}
-
-// static
 AddressAccessoryController* AddressAccessoryController::GetOrCreate(
     content::WebContents* web_contents) {
-  DCHECK(AddressAccessoryController::AllowedForWebContents(web_contents));
-
   AddressAccessoryControllerImpl::CreateForWebContents(web_contents);
   return AddressAccessoryControllerImpl::FromWebContents(web_contents);
 }
@@ -136,6 +126,11 @@ void AddressAccessoryControllerImpl::OnFillingTriggered(
     return;
   driver->browser_events().RendererShouldFillFieldWithValue(
       focused_field_id, selection.display_text());
+}
+
+void AddressAccessoryControllerImpl::OnPasskeySelected(
+    const std::vector<uint8_t>& passkey_id) {
+  NOTIMPLEMENTED() << "Passkey support not available in address controller.";
 }
 
 void AddressAccessoryControllerImpl::OnOptionSelected(

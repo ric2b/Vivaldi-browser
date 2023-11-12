@@ -29,6 +29,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
+#include "components/webapps/browser/install_result_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/widget/any_widget_observer.h"
@@ -61,6 +62,10 @@ enum class Site {
   kStandaloneNotStartUrl,
   kMinimalUi,
   kTabbed,
+  kTabbedWithHomeTab,
+  kTabbedNestedA,
+  kTabbedNestedB,
+  kTabbedNestedC,
   kNotPromotable,
   kWco,
   kFileHandler,
@@ -79,6 +84,7 @@ enum class InstallableSite {
   kStandaloneNotStartUrl,
   kMinimalUi,
   kTabbed,
+  kTabbedWithHomeTab,
   kWco,
   kFileHandler,
   kNoServiceWorker,
@@ -130,7 +136,8 @@ enum class FilesOptions {
 enum class UpdateDialogResponse {
   kAcceptUpdate,
   kCancelDialogAndUninstall,
-  kSkipUpdate
+  kCancelUninstallAndAcceptUpdate,
+  kSkipDialog
 };
 
 enum class SubAppInstallDialogOptions {
@@ -264,6 +271,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void DisableRunOnOsLoginFromAppHome(Site site);
   void EnableRunOnOsLoginFromAppSettings(Site site);
   void EnableRunOnOsLoginFromAppHome(Site site);
+  void EnterFullScreenApp();
+  void ExitFullScreenApp();
   void DisableFileHandling(Site site);
   void EnableFileHandling(Site site);
   void DisableWindowControlsOverlay(Site site);
@@ -276,6 +285,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
                         ShortcutOptions shortcut,
                         WindowOptions window,
                         InstallMode mode);
+  // TODO(b/240449120): Standardize behavior to install preinstalled apps when
+  // CUJs for that are added.
+  void InstallPreinstalledApp(Site site);
   void InstallSubApp(Site parentapp,
                      Site subapp,
                      SubAppInstallDialogOptions option);
@@ -306,6 +318,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void NavigateBrowser(Site site);
   void NavigatePwa(Site app, Site to);
   void NavigateNotfoundUrl();
+  void NewAppTab(Site site);
   void ManifestUpdateIcon(Site site, UpdateDialogResponse response);
   void ManifestUpdateTitle(Site site,
                            Title title,
@@ -340,6 +353,8 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void CheckAppInListTabbed(Site site);
   void CheckAppNavigation(Site site);
   void CheckAppNavigationIsStartUrl();
+  void CheckAppTabIsSite(Site site, Number number);
+  void CheckAppTabCreated();
   void CheckBrowserNavigation(Site site);
   void CheckBrowserNavigationIsAppSettings(Site site);
   void CheckBrowserNotAtAppHome();
@@ -376,6 +391,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   void CheckWindowNotCreated();
   void CheckWindowControlsOverlay(Site site, IsOn is_on);
   void CheckWindowControlsOverlayToggle(Site site, IsShown is_shown);
+  void CheckWindowControlsOverlayToggleIcon(IsShown is_shown);
   void CheckWindowDisplayBrowser();
   void CheckWindowDisplayMinimal();
   void CheckWindowDisplayTabbed();
@@ -387,8 +403,10 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
  protected:
   // WebAppInstallManagerObserver:
-  void OnWebAppManifestUpdated(const AppId& app_id,
-                               base::StringPiece old_name) override;
+  void OnWebAppManifestUpdated(const AppId& app_id) override;
+  void OnWebAppUninstalled(
+      const AppId& app_id,
+      webapps::WebappUninstallSource uninstall_source) override;
 
  private:
   // Must be called at the beginning of every state change action function.
@@ -466,6 +484,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
   std::vector<base::FilePath> GetTestFilePaths(FilesOptions file_options);
 
+  void SyncAndInstallPreinstalledAppConfig(const GURL& install_url,
+                                           base::StringPiece app_config_string);
+
   Browser* browser();
   Profile* profile();
   std::vector<Profile*> GetAllProfiles();
@@ -505,9 +526,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   // can often call another action).
   int executing_action_level_ = 0;
 
-  raw_ptr<Profile, DanglingUntriaged> active_profile_ = nullptr;
+  raw_ptr<Profile, AcrossTasksDanglingUntriaged> active_profile_ = nullptr;
   AppId active_app_id_;
-  raw_ptr<Browser, DanglingUntriaged> app_browser_ = nullptr;
+  raw_ptr<Browser, AcrossTasksDanglingUntriaged> app_browser_ = nullptr;
 
   bool in_tear_down_ = false;
   bool is_performing_manifest_update_ = false;

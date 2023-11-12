@@ -3,30 +3,44 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
+#include <codecvt>
 #include <memory>
 
 #include "ash/public/cpp/keyboard/keyboard_switches.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/gtest_prod_util.h"
 #include "base/immediate_crash.h"
 #include "base/memory/raw_ptr.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "build/config/coverage/buildflags.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task_policy_impl.h"
 #include "chrome/browser/ash/file_manager/file_manager_browsertest_base.h"
+#include "chrome/browser/ash/file_manager/io_task.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
+#include "chrome/browser/ash/policy/dlp/dialogs/files_policy_error_dialog.h"
+#include "chrome/browser/ash/policy/dlp/dialogs/files_policy_warn_dialog.h"
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
+#include "chrome/browser/ash/policy/dlp/files_policy_notification_manager.h"
+#include "chrome/browser/ash/policy/dlp/files_policy_notification_manager_factory.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_files_utils.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_policy_constants.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
-#include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/test/mock_dlp_rules_manager.h"
 #include "chrome/browser/enterprise/connectors/analysis/mock_file_transfer_analysis_delegate.h"
 #include "chrome/browser/enterprise/connectors/reporting/realtime_reporting_client_factory.h"
 #include "chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h"
@@ -34,15 +48,20 @@
 #include "chrome/browser/enterprise/connectors/test/fake_files_request_handler.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
+#include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/fake_gaia_mixin.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
 #include "chromeos/dbus/dlp/dlp_service.pb.h"
 #include "components/account_id/account_id.h"
+#include "components/download/public/common/download_item.h"
 #include "components/file_access/test/mock_scoped_file_access_delegate.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/prefs/pref_service.h"
@@ -52,13 +71,40 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_manager_base.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/download_test_observer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace file_manager {
 namespace {
 constexpr char kOwnerEmail[] = "owner@example.com";
+
+// Compares DLP AddFilesRequests ignoring the order of repeated fields.
+MATCHER_P(EqualsAddFilesRequestsProto, add_files, "") {
+  ::dlp::AddFilesRequest reference(add_files);
+  ::dlp::AddFilesRequest actual(arg);
+
+  auto CompareAddFileRequest = [](const ::dlp::AddFileRequest& add1,
+                                  const ::dlp::AddFileRequest& add2) {
+    return std::make_tuple(add1.file_path(), add1.source_url(),
+                           add1.referrer_url()) <
+           std::make_tuple(add2.file_path(), add2.source_url(),
+                           add2.referrer_url());
+  };
+
+  std::sort(reference.mutable_add_file_requests()->begin(),
+            reference.mutable_add_file_requests()->end(),
+            CompareAddFileRequest);
+  std::sort(actual.mutable_add_file_requests()->begin(),
+            actual.mutable_add_file_requests()->end(), CompareAddFileRequest);
+
+  std::string expected_serialized, actual_serialized;
+  reference.SerializeToString(&expected_serialized);
+  actual.SerializeToString(&actual_serialized);
+  return expected_serialized == actual_serialized;
 }
+}  // namespace
 
 // FilesAppBrowserTest parameters.
 struct TestCase {
@@ -128,6 +174,11 @@ struct TestCase {
     return *this;
   }
 
+  TestCase& FakeFileSystemProvider() {
+    options.fake_file_system_provider = true;
+    return *this;
+  }
+
   TestCase& DontMountVolumes() {
     options.mount_volumes = false;
     return *this;
@@ -156,6 +207,11 @@ struct TestCase {
 
   TestCase& EnableDlp() {
     options.enable_dlp_files_restriction = true;
+    return *this;
+  }
+
+  TestCase& EnableFilesPolicyNewUX() {
+    options.enable_files_policy_new_ux = true;
     return *this;
   }
 
@@ -195,6 +251,11 @@ struct TestCase {
     return *this;
   }
 
+  TestCase& EnableFileTransferConnectorNewUX() {
+    options.enable_file_transfer_connector_new_ux = true;
+    return *this;
+  }
+
   TestCase& FileTransferConnectorReportOnlyMode() {
     options.file_transfer_connector_report_only = true;
     return *this;
@@ -202,6 +263,11 @@ struct TestCase {
 
   TestCase& EnableSearchV2() {
     options.enable_search_v2 = true;
+    return *this;
+  }
+
+  TestCase& EnableFSPsInRecents() {
+    options.enable_fsps_in_recents = true;
     return *this;
   }
 
@@ -240,8 +306,14 @@ struct TestCase {
     return *this;
   }
 
-  TestCase& EnableJellybean() {
+  TestCase& EnableCrosComponents() {
+    options.enable_cros_components = true;
     options.enable_jellybean = true;
+    return *this;
+  }
+
+  TestCase& EnableImageContentSearch() {
+    options.enable_image_content_search = true;
     return *this;
   }
 
@@ -258,6 +330,10 @@ struct TestCase {
 
     if (options.tablet_mode) {
       full_name += "_TabletMode";
+    }
+
+    if (options.offline) {
+      full_name += "_Offline";
     }
 
     if (options.files_experimental) {
@@ -304,6 +380,10 @@ struct TestCase {
       full_name += "_SearchV2";
     }
 
+    if (options.enable_fsps_in_recents) {
+      full_name += "_FSPsInRecents";
+    }
+
     if (options.enable_os_feedback) {
       full_name += "_OsFeedback";
     }
@@ -320,8 +400,8 @@ struct TestCase {
       full_name += "_DriveShortcuts";
     }
 
-    if (options.enable_jellybean) {
-      full_name += "_Jellybean";
+    if (options.enable_cros_components) {
+      full_name += "_CrosComponents";
     }
 
     switch (options.device_mode) {
@@ -348,6 +428,9 @@ struct TestCase {
         break;
       case kNonManagedNonOwner:
         full_name += "_AccountTypeNonManagedNonOwner";
+        break;
+      case kGoogler:
+        full_name += "_AccountTypeGoogler";
         break;
     }
 
@@ -430,6 +513,7 @@ class LoggedInUserFilesAppBrowserTest : public FilesAppBrowserTest {
         case kEnterprise:
         case kChild:
         case kNonManaged:
+        case kGoogler:
           owner_email = logged_in_user_mixin_->GetAccountId().GetUserEmail();
           break;
         case kNonManagedNonOwner:
@@ -535,9 +619,7 @@ class DlpFilesAppBrowserTest : public FilesAppBrowserTest {
       ::dlp::GetFilesSourcesResponse response;
       for (unsigned long i = 0; i < file_names->size(); i++) {
         auto* metadata = response.add_files_metadata();
-        auto inode = GetInodeValue(result.Append((*file_names)[i].GetString()));
-        EXPECT_TRUE(inode.has_value());
-        metadata->set_inode(inode.value());
+        metadata->set_path(result.Append((*file_names)[i].GetString()).value());
         metadata->set_source_url((*source_urls)[i].GetString());
       }
 
@@ -639,7 +721,74 @@ class DlpFilesAppBrowserTest : public FilesAppBrowserTest {
                            callback) {
             std::move(callback).Run(file_access::ScopedFileAccess::Allowed());
           });
+      return true;
+    }
+    if (name == "expectFilesAdditionToDaemon") {
+      base::FilePath download_path =
+          file_manager::util::GetDownloadsFolderForProfile(profile());
+      const base::Value::List* file_names = value.FindList("fileNames");
+      auto* source_urls = value.FindList("sourceUrls");
+      EXPECT_TRUE(file_names);
+      EXPECT_TRUE(source_urls);
+      EXPECT_EQ(file_names->size(), source_urls->size());
+      ::dlp::AddFilesRequest expected_request;
+      for (unsigned long i = 0; i < file_names->size(); i++) {
+        ::dlp::AddFileRequest* file_request =
+            expected_request.add_add_file_requests();
+        file_request->set_file_path(download_path.value() + "/" +
+                                    (*file_names)[i].GetString());
+        file_request->set_source_url((*source_urls)[i].GetString());
+      }
+      EXPECT_CALL(add_files_cb,
+                  Run(EqualsAddFilesRequestsProto(expected_request),
+                      base::test::IsNotNullCallback()));
+      chromeos::DlpClient::Get()->GetTestInterface()->SetIsAlive(true);
+      chromeos::DlpClient::Get()->GetTestInterface()->SetAddFilesMock(
+          add_files_cb.Get());
+      return true;
+    }
+    if (name == "setCheckFilesTransferMockToPause") {
+      base::FilePath download_path =
+          file_manager::util::GetDownloadsFolderForProfile(profile());
+      absl::optional<int> task_id = value.FindInt("taskId");
+      EXPECT_TRUE(task_id.has_value() && task_id.value() > 0);
+      const base::Value::List* file_names = value.FindList("fileNames");
+      EXPECT_TRUE(file_names);
+      std::vector<base::FilePath> warning_files;
+      for (const auto& file_name : *file_names) {
+        warning_files.emplace_back(download_path.value() + "/" +
+                                   file_name.GetString());
+      }
+      const std::string* action_str = value.FindString("action");
+      EXPECT_TRUE(action_str);
+      EXPECT_TRUE(*action_str == "copy" || *action_str == "move");
+      policy::dlp::FileAction action = *action_str == "copy"
+                                           ? policy::dlp::FileAction::kCopy
+                                           : policy::dlp::FileAction::kMove;
+      // FPNM is created lazily, so call it here to make sure it's created and
+      // starts tracking the tasks.
+      policy::FilesPolicyNotificationManager* fpnm =
+          policy::FilesPolicyNotificationManagerFactory::GetForBrowserContext(
+              profile());
+      EXPECT_TRUE(fpnm);
 
+      auto cb = base::BindLambdaForTesting(
+          [this, task_id, warning_files, action](
+              const dlp::CheckFilesTransferRequest,
+              chromeos::DlpClient::CheckFilesTransferCallback) {
+            policy::FilesPolicyNotificationManager* fpnm =
+                policy::FilesPolicyNotificationManagerFactory::
+                    GetForBrowserContext(profile());
+            ASSERT_TRUE(fpnm);
+            ASSERT_TRUE(fpnm->HasIOTask(task_id.value()));
+            // Call FPNM to show the warning, which pauses the task.
+            fpnm->ShowDlpWarning(base::DoNothing(), task_id,
+                                 std::move(warning_files),
+                                 policy::DlpFileDestination(), action);
+          });
+      chromeos::DlpClient::Get()->GetTestInterface()->SetIsAlive(true);
+      chromeos::DlpClient::Get()->GetTestInterface()->SetCheckFilesTransferMock(
+          cb);
       return true;
     }
     return false;
@@ -647,11 +796,17 @@ class DlpFilesAppBrowserTest : public FilesAppBrowserTest {
 
   // MockDlpRulesManager is owned by KeyedService and is guaranteed to outlive
   // this class.
-  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> mock_rules_manager_ =
-      nullptr;
+  raw_ptr<policy::MockDlpRulesManager, DanglingUntriaged | ExperimentalAsh>
+      mock_rules_manager_ = nullptr;
 
   std::unique_ptr<file_access::MockScopedFileAccessDelegate>
       scoped_file_access_delegate_;
+
+  // The callback needs to survive the setup method.
+  base::MockRepeatingCallback<void(
+      const ::dlp::AddFilesRequest request,
+      chromeos::DlpClient::AddFilesCallback callback)>
+      add_files_cb;
 
  private:
   std::unique_ptr<KeyedService> SetDlpRulesManager(
@@ -688,15 +843,6 @@ class DlpFilesAppBrowserTest : public FilesAppBrowserTest {
       return data_controls::Component::kDrive;
     }
     return data_controls::Component::kUnknownComponent;
-  }
-
-  // Returns the inode value for |path|, if found.
-  absl::optional<ino64_t> GetInodeValue(const base::FilePath& path) {
-    struct stat file_stats;
-    if (stat(path.value().c_str(), &file_stats) != 0) {
-      return absl::nullopt;
-    }
-    return file_stats.st_ino;
   }
 
   // Invokes `callback` with the previously constructed `response`. Note that
@@ -802,6 +948,10 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
     return GetOptions().file_transfer_connector_report_only;
   }
 
+  bool UsesNewFileTransferConnectorUI() {
+    return GetOptions().enable_file_transfer_connector_new_ux;
+  }
+
   void ScanningHasCompletedCallback() {
     DCHECK(run_loop_)
         << "run loop not configured, missing call to `setupScanningRunLoop`";
@@ -824,7 +974,7 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
       enterprise_connectors::MockFileTransferAnalysisDelegate* delegate) {
     // Expect one call to UploadData.
     EXPECT_CALL(*delegate, UploadData(::testing::_))
-        .WillOnce(testing::Invoke([this, delegate](base::OnceClosure callback) {
+        .WillOnce([this, delegate](base::OnceClosure callback) {
           // When scanning is started, start the normal scan.
           // We modify the callback such that in addition to the normal callback
           // we also call `ScanningHasCompletedCallback()` to notify the test
@@ -841,14 +991,19 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
               base::BindOnce(&FileTransferConnectorFilesAppBrowserTest::
                                  ScanningHasCompletedCallback,
                              base::Unretained(this))));
-        }));
+        });
+
+    // Call GetWarnedFiles from the base class.
+    EXPECT_CALL(*delegate, GetWarnedFiles()).WillRepeatedly([delegate]() {
+      return delegate->FileTransferAnalysisDelegate::GetWarnedFiles();
+    });
 
     // Call GetAnalysisResultAfterScan from the base class.
     EXPECT_CALL(*delegate, GetAnalysisResultAfterScan(::testing::_))
-        .WillRepeatedly(testing::Invoke([delegate](storage::FileSystemURL url) {
+        .WillRepeatedly([delegate](storage::FileSystemURL url) {
           return delegate
               ->FileTransferAnalysisDelegate::GetAnalysisResultAfterScan(url);
-        }));
+        });
   }
 
   bool HandleEnterpriseConnectorCommands(const std::string& name,
@@ -917,6 +1072,18 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
       *output = IsReportOnlyMode() ? "true" : "false";
       return true;
     }
+    if (name == "usesNewFileTransferConnectorUI") {
+      *output = UsesNewFileTransferConnectorUI() ? "true" : "false";
+      return true;
+    }
+    if (name == "getExpectedNumberOfBlockedFilesByConnectors") {
+      *output = base::NumberToString(expected_blocked_files_.size());
+      return true;
+    }
+    if (name == "getExpectedNumberOfWarnedFilesByConnectors") {
+      *output = base::NumberToString(expected_warned_files_.size());
+      return true;
+    }
     if (name == "setupScanningRunLoop") {
       // Set the number of expected `FileTransferAnalysisDelegate`s. This is
       // done to correctly notify when scanning has completed.
@@ -925,6 +1092,18 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
       expected_number_of_file_transfer_analysis_delegates_ = maybe_int.value();
       DCHECK(!run_loop_);
       run_loop_ = std::make_unique<base::RunLoop>();
+      return true;
+    }
+    if (name == "verifyFileTransferErrorDialogAndDismiss") {
+      const std::string* app_id = value.FindString("app_id");
+      CHECK_NE(app_id, nullptr);
+      VerifyFileTransferErrorDialogAndDismiss(*app_id);
+      return true;
+    }
+    if (name == "verifyFileTransferWarningDialogAndProceed") {
+      const std::string* app_id = value.FindString("app_id");
+      CHECK_NE(app_id, nullptr);
+      VerifyFileTransferWarningDialogAndProceed(*app_id);
       return true;
     }
     if (name == "waitForFileTransferScanningToComplete") {
@@ -943,6 +1122,10 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
       CHECK(destination_volume_name);
       const base::Value::List* entry_paths = value.FindList("entry_paths");
       CHECK(entry_paths);
+      absl::optional<bool> expect_proceed_warning_reports_optional =
+          value.FindBool("expect_proceed_warning_reports");
+      bool expect_proceed_warning_reports =
+          expect_proceed_warning_reports_optional.value_or(false);
 
       std::vector<std::string> file_names;
       std::vector<std::string> shas;
@@ -951,12 +1134,26 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
       std::vector<std::string> expected_results;
       std::vector<std::string> expected_scan_ids;
 
-      for (const auto& path : *entry_paths) {
-        const std::string* path_str = path.GetIfString();
+      for (const auto& path_value : *entry_paths) {
+        const std::string* path_str = path_value.GetIfString();
         CHECK(path_str);
-        auto file_name = base::FilePath(*path_str).BaseName().AsUTF8Unsafe();
-        if (!base::Contains(file_name, "blocked")) {
-          // If a file name does not contain blocked, expect no report.
+        base::FilePath path(*path_str);
+
+        auto file_name = path.BaseName().AsUTF8Unsafe();
+
+        bool should_block = base::Contains(file_name, "blocked");
+        bool should_warn = base::Contains(file_name, "warned");
+        CHECK(!(should_block && should_warn))
+            << "A file shouldn't be both blocked and warned.";
+        if (!should_block && !should_warn) {
+          // If a file name contains neither blocked nor warned, expect no
+          // report.
+          continue;
+        }
+
+        if (expect_proceed_warning_reports && !should_warn) {
+          // If we are expecting proceed warning reports, then we can ignore
+          // blocked files.
           continue;
         }
 
@@ -968,13 +1165,25 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
 
         // Get the expected verdict from the ConnectorStatusCallback.
         expected_dlp_verdicts.push_back(
-            ConnectorStatusCallback(base::FilePath(*path_str)).results()[0]);
+            ConnectorStatusCallback(path).results()[0]);
+
+        if (!expect_proceed_warning_reports) {
+          if (should_block) {
+            expected_blocked_files_.push_back(file_name);
+          } else if (should_warn) {
+            expected_warned_files_.push_back(file_name);
+          }
+        }
 
         // For report-only mode, the transfer is always allowed. It's blocked,
         // otherwise.
         expected_results.push_back(safe_browsing::EventResultToString(
-            IsReportOnlyMode() ? safe_browsing::EventResult::ALLOWED
-                               : safe_browsing::EventResult::BLOCKED));
+            IsReportOnlyMode()
+                ? safe_browsing::EventResult::ALLOWED
+                : (should_warn ? (expect_proceed_warning_reports
+                                      ? safe_browsing::EventResult::BYPASSED
+                                      : safe_browsing::EventResult::WARNED)
+                               : safe_browsing::EventResult::BLOCKED)));
         expected_scan_ids.push_back(GetScanIDForFileName(file_name));
       }
 
@@ -1054,6 +1263,88 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
     saved_responses_.clear();
   }
 
+  void VerifyFileTransferErrorDialogAndDismiss(const std::string& app_id) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    content::WebContents* web_contents = GetWebContentsForId(app_id);
+    CHECK_NE(web_contents, nullptr);
+    gfx::NativeWindow native_window = web_contents->GetTopLevelNativeWindow();
+
+    std::set<views::Widget*> owned_widgets;
+    views::Widget::GetAllOwnedWidgets(native_window, &owned_widgets);
+
+    // Verify that the FilesPolicyErrorDialog widget is displayed.
+    ASSERT_EQ(owned_widgets.size(), 1ul);
+    auto* widget = *owned_widgets.begin();
+    ASSERT_EQ(widget->GetName(), "FilesPolicyErrorDialog");
+
+    auto* view = widget->GetRootView()->GetViewByID(
+        policy::PolicyDialogBase::kScrollViewId);
+    ASSERT_TRUE(view);
+
+    // Verify the displayed blocked files shown in the dialog.
+    std::vector<std::string> displayed_files;
+    std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+    for (const auto* row_view : view->children()) {
+      const views::Label* label =
+          static_cast<const views::Label*>(row_view->GetViewByID(
+              policy::PolicyDialogBase::kConfidentialRowTitleViewId));
+      if (label) {
+        displayed_files.push_back(converter.to_bytes(label->GetText()));
+      }
+    }
+    EXPECT_THAT(displayed_files,
+                ::testing::UnorderedElementsAreArray(expected_blocked_files_));
+
+    // Close the dialog.
+    auto* dialog = static_cast<policy::FilesPolicyErrorDialog*>(
+        widget->widget_delegate()->AsDialogDelegate());
+    dialog->AcceptDialog();
+
+    // Verify that the dialog is closed.
+    EXPECT_TRUE(widget->IsClosed());
+  }
+
+  void VerifyFileTransferWarningDialogAndProceed(const std::string& app_id) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    content::WebContents* web_contents = GetWebContentsForId(app_id);
+    CHECK_NE(web_contents, nullptr);
+    gfx::NativeWindow native_window = web_contents->GetTopLevelNativeWindow();
+
+    std::set<views::Widget*> owned_widgets;
+    views::Widget::GetAllOwnedWidgets(native_window, &owned_widgets);
+
+    // Verify that the FilesPolicyWarnDialog widget is displayed.
+    ASSERT_EQ(owned_widgets.size(), 1ul);
+    auto* widget = *owned_widgets.begin();
+    ASSERT_EQ(widget->GetName(), "FilesPolicyWarnDialog");
+
+    auto* view = widget->GetRootView()->GetViewByID(
+        policy::PolicyDialogBase::kScrollViewId);
+    ASSERT_TRUE(view);
+
+    // Verify the displayed blocked files shown in the dialog.
+    std::vector<std::string> displayed_files;
+    std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+    for (const auto* row_view : view->children()) {
+      const views::Label* label =
+          static_cast<const views::Label*>(row_view->GetViewByID(
+              policy::PolicyDialogBase::kConfidentialRowTitleViewId));
+      if (label) {
+        displayed_files.push_back(converter.to_bytes(label->GetText()));
+      }
+    }
+    EXPECT_THAT(displayed_files,
+                ::testing::UnorderedElementsAreArray(expected_warned_files_));
+
+    // Close the dialog.
+    auto* dialog = static_cast<policy::FilesPolicyWarnDialog*>(
+        widget->widget_delegate()->AsDialogDelegate());
+    dialog->AcceptDialog();
+
+    // Verify that the dialog is closed.
+    EXPECT_TRUE(widget->IsClosed());
+  }
+
   enterprise_connectors::ContentAnalysisResponse ConnectorStatusCallback(
       const base::FilePath& path) {
     enterprise_connectors::ContentAnalysisResponse response;
@@ -1063,6 +1354,11 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
           FakeContentAnalysisDelegate::DlpResponse(
               enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS,
               "rule", enterprise_connectors::TriggeredRule::BLOCK);
+    } else if (base::Contains(path.BaseName().value(), "warned")) {
+      response = enterprise_connectors::test::FakeContentAnalysisDelegate::
+          FakeContentAnalysisDelegate::DlpResponse(
+              enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS,
+              "rule", enterprise_connectors::TriggeredRule::WARN);
     } else {
       response = enterprise_connectors::test::FakeContentAnalysisDelegate::
           SuccessfulResponse({"dlp"});
@@ -1092,14 +1388,143 @@ class FileTransferConnectorFilesAppBrowserTest : public FilesAppBrowserTest {
   size_t finished_file_transfer_analysis_delegates_ = 0;
   size_t expected_number_of_file_transfer_analysis_delegates_ = 0;
 
+  std::vector<std::string> expected_blocked_files_;
+  std::vector<std::string> expected_warned_files_;
+
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 
-// TODO(crbug.com/1425820): Re-enable this test
-IN_PROC_BROWSER_TEST_P(FileTransferConnectorFilesAppBrowserTest,
-                       DISABLED_Test) {
+IN_PROC_BROWSER_TEST_P(FileTransferConnectorFilesAppBrowserTest, Test) {
   StartTest();
 }
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+class QuickOfficeBrowserTestBase : public InProcessBrowserTest {
+ public:
+  QuickOfficeBrowserTestBase() = default;
+  ~QuickOfficeBrowserTestBase() override = default;
+
+  QuickOfficeBrowserTestBase(const QuickOfficeBrowserTestBase&) = delete;
+  QuickOfficeBrowserTestBase& operator=(const QuickOfficeBrowserTestBase&) =
+      delete;
+
+ protected:
+  // extensions::ExtensionApiTest:
+  void SetUpOnMainThread() override {
+    extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+    extensions::ExtensionService* service =
+        extensions::ExtensionSystem::Get(browser()->profile())
+            ->extension_service();
+    service->component_loader()->AddDefaultComponentExtensions(false);
+
+    embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
+    embedded_test_server()->Start();
+
+    InProcessBrowserTest::SetUpOnMainThread();
+  }
+
+  base::FilePath GetTestDataDirectory() {
+    base::FilePath test_file_directory;
+    base::PathService::Get(chrome::DIR_TEST_DATA, &test_file_directory);
+    return test_file_directory;
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class QuickOfficeForceFileDownloadEnabledBrowserTest
+    : public QuickOfficeBrowserTestBase {
+ public:
+  QuickOfficeForceFileDownloadEnabledBrowserTest() {
+    feature_list_.InitAndEnableFeature(features::kQuickOfficeForceFileDownload);
+  }
+  ~QuickOfficeForceFileDownloadEnabledBrowserTest() override = default;
+
+  QuickOfficeForceFileDownloadEnabledBrowserTest(
+      const QuickOfficeForceFileDownloadEnabledBrowserTest&) = delete;
+  QuickOfficeForceFileDownloadEnabledBrowserTest& operator=(
+      const QuickOfficeForceFileDownloadEnabledBrowserTest&) = delete;
+};
+
+class QuickOfficeForceFileDownloadDisabledBrowserTest
+    : public QuickOfficeBrowserTestBase {
+ public:
+  QuickOfficeForceFileDownloadDisabledBrowserTest() {
+    feature_list_.InitAndDisableFeature(
+        features::kQuickOfficeForceFileDownload);
+  }
+  ~QuickOfficeForceFileDownloadDisabledBrowserTest() override = default;
+
+  QuickOfficeForceFileDownloadDisabledBrowserTest(
+      const QuickOfficeForceFileDownloadDisabledBrowserTest&) = delete;
+  QuickOfficeForceFileDownloadDisabledBrowserTest& operator=(
+      const QuickOfficeForceFileDownloadDisabledBrowserTest&) = delete;
+};
+
+IN_PROC_BROWSER_TEST_F(QuickOfficeForceFileDownloadEnabledBrowserTest,
+                       OfficeDocumentsAreDownloaded) {
+  using download::DownloadItem;
+
+  GURL download_url =
+      embedded_test_server()->GetURL("/chromeos/file_manager/text.docx");
+
+  content::DownloadManager* download_manager =
+      browser()->profile()->GetDownloadManager();
+  std::unique_ptr<content::DownloadTestObserver> download_observer(
+      new content::DownloadTestObserverTerminal(
+          download_manager, /*num_downloads=*/1,
+          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
+
+  // This call will not wait for the download to finish.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), download_url, WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // Wait for the download itself to complete.
+  download_observer->WaitForFinished();
+  EXPECT_EQ(1u,
+            download_observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
+
+  std::vector<DownloadItem*> downloads;
+  download_manager->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+
+  DownloadItem* download = downloads[0];
+
+  download->Cancel(true);
+}
+
+IN_PROC_BROWSER_TEST_F(QuickOfficeForceFileDownloadDisabledBrowserTest,
+                       OfficeDocumentsAreNotDownloaded) {
+  using download::DownloadItem;
+
+  GURL download_url =
+      embedded_test_server()->GetURL("/chromeos/file_manager/text.docx");
+
+  content::DownloadManager* download_manager =
+      browser()->profile()->GetDownloadManager();
+  std::unique_ptr<content::DownloadTestObserver> download_observer(
+      new content::DownloadTestObserverTerminal(
+          download_manager, /*num_downloads=*/1,
+          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
+
+  // This call will block until the condition X, but will not wait for the
+  // download to finish.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), download_url, WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  EXPECT_EQ(0u, download_observer->NumDownloadsSeenInState(
+                    DownloadItem::IN_PROGRESS));
+  EXPECT_EQ(0u,
+            download_observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
+
+  std::vector<DownloadItem*> downloads;
+  download_manager->GetAllDownloads(&downloads);
+  ASSERT_EQ(0u, downloads.size());
+}
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 // INSTANTIATE_TEST_SUITE_P expands to code that stringizes the arguments. Thus
 // macro parameters such as |prefix| and |test_class| won't be expanded by the
@@ -1200,10 +1625,14 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("textOpenDrive")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
-    OpenHostedFiles, /* open_hosted_files.js */
+    OpenFilesInWebDrive, /* open_files_in_web_drive.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("hostedOpenDrive"),
-                      TestCase("encryptedHostedOpenDrive")));
+    ::testing::Values(TestCase("hostedHasDefaultTask"),
+                      TestCase("encryptedHasDefaultTask"),
+                      TestCase("hostedOpenDrive"),
+                      TestCase("encryptedHostedOpenDrive"),
+                      TestCase("encryptedNonHostedOpenDrive").Offline(),
+                      TestCase("encryptedNonHostedOpenDrive")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ZipFiles, /* zip_files.js */
@@ -1219,6 +1648,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("zipCreateFileDrive"),
         TestCase("zipCreateFileDriveOffice"),
         TestCase("zipCreateFileUsb"),
+        TestCase("zipDoesntCreateFileEncrypted"),
         TestCase("zipExtractA11y")
             .FeatureIds({"screenplay-af443ca0-6d9f-4cb3-af8f-0939c37833db"}),
         TestCase("zipExtractCheckContent"),
@@ -1342,7 +1772,15 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("checkGoToFileLocationEnabledInRecents"),
         TestCase("checkGoToFileLocationDisabledInMultipleSelection"),
         TestCase("checkDefaultTask"),
-        TestCase("checkPolicyAssignedDefaultHasManagedIcon")));
+        TestCase("checkPolicyAssignedDefaultHasManagedIcon"),
+        TestCase("checkEncryptedCopyDisabled"),
+        TestCase("checkEncryptedCrossVolumeMoveDisabled"),
+        TestCase("checkEncryptedMoveEnabled")));
+
+WRAPPED_INSTANTIATE_TEST_SUITE_P(
+    Share, /* share.js */
+    FilesAppBrowserTest,
+    ::testing::Values(TestCase("checkEncryptedSharesheetOptions")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Toolbar, /* toolbar.js */
@@ -1382,6 +1820,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("toolbarCloudIconShouldShowOnStartupEvenIfSyncing")
             .EnableBulkPinning(),
         TestCase("toolbarCloudIconShouldShowWhenPausedState")
+            .EnableBulkPinning(),
+        TestCase("toolbarCloudIconShouldShowWhenOnMeteredNetwork")
             .EnableBulkPinning()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
@@ -1475,20 +1915,32 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesAppBrowserTest,
     ::testing::Values(
         TestCase("directoryTreeActiveDirectory"),
+        TestCase("directoryTreeActiveDirectory").FilesExperimental(),
         TestCase("directoryTreeSelectedDirectory"),
-        // TODO(b/189173190): Enable
-        // TestCase("directoryTreeRecentsSubtypeScroll"),
+        TestCase("directoryTreeSelectedDirectory").FilesExperimental(),
         TestCase("directoryTreeHorizontalScroll"),
+        TestCase("directoryTreeHorizontalScroll").FilesExperimental(),
         TestCase("directoryTreeExpandHorizontalScroll"),
+        TestCase("directoryTreeExpandHorizontalScroll").FilesExperimental(),
         TestCase("directoryTreeExpandHorizontalScrollRTL"),
+        TestCase("directoryTreeExpandHorizontalScrollRTL").FilesExperimental(),
         TestCase("directoryTreeVerticalScroll"),
+        TestCase("directoryTreeVerticalScroll").FilesExperimental(),
         TestCase("directoryTreeExpandFolder"),
         TestCase("directoryTreeExpandFolder").FilesExperimental(),
         TestCase(
             "directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOff"),
+        TestCase("directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOff")
+            .FilesExperimental(),
         TestCase("directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOn"),
+        TestCase("directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOn")
+            .FilesExperimental(),
         TestCase("directoryTreeExpandFolderOnNonDelayExpansionVolume"),
-        TestCase("directoryTreeExpandFolderOnDelayExpansionVolume")));
+        TestCase("directoryTreeExpandFolderOnNonDelayExpansionVolume")
+            .FilesExperimental(),
+        TestCase("directoryTreeExpandFolderOnDelayExpansionVolume"),
+        TestCase("directoryTreeExpandFolderOnDelayExpansionVolume")
+            .FilesExperimental()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     DirectoryTreeContextMenu, /* directory_tree_context_menu.js */
@@ -1568,15 +2020,15 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("driveAutoCompleteQuery"),
         TestCase("drivePinMultiple"),
         TestCase("drivePinHosted"),
-        // TODO(b/189173190): Enable
+        // TODO(b/296960734): Enable
         // TestCase("drivePinFileMobileNetwork"),
         TestCase("drivePinToggleUpdatesInFakeEntries"),
-        TestCase("drivePinToggleUpdatesInFakeEntries").EnableJellybean(),
+        TestCase("drivePinToggleUpdatesInFakeEntries").EnableCrosComponents(),
         TestCase("drivePinToggleIsDisabledAndHiddenWhenBulkPinningEnabled")
             .EnableBulkPinning(),
         TestCase("drivePinToggleIsDisabledAndHiddenWhenBulkPinningEnabled")
             .EnableBulkPinning()
-            .EnableJellybean(),
+            .EnableCrosComponents(),
         TestCase("driveClickFirstSearchResult"),
         TestCase("drivePressEnterToSearch"),
         TestCase("drivePressClearSearch"),
@@ -1585,12 +2037,13 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("driveAvailableOfflineGearMenu"),
         TestCase("driveAvailableOfflineDirectoryGearMenu"),
         TestCase("driveAvailableOfflineActionBar"),
-        TestCase("driveAvailableOfflineActionBar").EnableJellybean(),
+        TestCase("driveAvailableOfflineActionBar").EnableCrosComponents(),
         TestCase("driveLinkToDirectory"),
         TestCase("driveLinkToDirectory").EnableDriveShortcuts(),
         TestCase("driveLinkOpenFileThroughLinkedDirectory"),
         TestCase("driveLinkOpenFileThroughTransitiveLink"),
         TestCase("driveWelcomeBanner"),
+        TestCase("driveWelcomeBanner").EnableCrosComponents(),
         TestCase("driveOfflineInfoBanner"),
         TestCase("driveEncryptionBadge"),
         TestCase("driveDeleteDialogDoesntMentionPermanentDelete"),
@@ -1600,18 +2053,29 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
             .EnableInlineSyncStatusProgressEvents(),
         TestCase("driveInlineSyncStatusParentFolderProgressEvents")
             .EnableInlineSyncStatusProgressEvents(),
-        TestCase("driveFolderShouldShowOfflineTickWhenBulkPinningEnabled")
-            .EnableBulkPinning()
-            .EnableInlineSyncStatus(),
         TestCase("driveFoldersRetainPinnedPropertyWhenBulkPinningEnabled")
             .EnableBulkPinning(),
         TestCase("drivePinToggleIsEnabledInSharedWithMeWhenBulkPinningEnabled")
             .EnableBulkPinning(),
         TestCase("drivePinToggleIsEnabledInSharedWithMeWhenBulkPinningEnabled")
             .EnableBulkPinning()
-            .EnableJellybean(),
+            .EnableCrosComponents(),
         TestCase("driveCantPinItemsShouldHaveClassNameAndGetUpdatedWhenCanPin")
+            .EnableBulkPinning(),
+        TestCase("driveItemsOutOfViewportShouldUpdateTheirSyncStatus")
             .EnableBulkPinning()
+            .EnableInlineSyncStatusProgressEvents(),
+        TestCase("driveAllItemsShouldBeQueuedIfTrackedByPinManager")
+            .EnableBulkPinning()
+            .EnableInlineSyncStatusProgressEvents(),
+        TestCase("driveDirtyItemsShouldBeDisplayedAsQueued")
+            .EnableInlineSyncStatusProgressEvents(),
+        TestCase("openDriveDocWhenOffline")
+            .EnableBulkPinning()
+            .EnableInlineSyncStatusProgressEvents(),
+        TestCase("completedSyncStatusDismissesAfter300Ms")
+            .EnableInlineSyncStatusProgressEvents(),
+        TestCase("driveOutOfOrganizationSpaceBanner")
         // TODO(b/189173190): Enable
         // TestCase("driveEnableDocsOfflineDialog"),
         // TODO(b/189173190): Enable
@@ -1627,6 +2091,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesAppBrowserTest,
     ::testing::Values(
         TestCase("holdingSpaceWelcomeBanner"),
+        TestCase("holdingSpaceWelcomeBanner").EnableCrosComponents(),
         TestCase("holdingSpaceWelcomeBannerWillShowForModalDialogs")
             .WithBrowser(),
         TestCase("holdingSpaceWelcomeBannerOnTabletModeChanged")));
@@ -1732,9 +2197,18 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("saveAsNonDlpRestricted").EnableDlp(),
         TestCase("saveAsDlpRestrictedRedirectsToMyFiles").EnableDlp(),
         TestCase("openDlpRestrictedFile").EnableDlp(),
+// TODO(b/290329625): Enable this once we identify a way to collect coverage
+// when windows are closed before the test finishes.
+#if !BUILDFLAG(USE_JAVASCRIPT_COVERAGE)
         TestCase("openFolderDlpRestricted").EnableDlp(),
+#endif
         TestCase("fileTasksDlpRestricted").EnableDlp(),
-        TestCase("zipExtractRestrictedArchiveCheckContent").EnableDlp()));
+        TestCase("zipExtractRestrictedArchiveCheckContent").EnableDlp(),
+        TestCase("blockShowsPanelItem").EnableDlp().EnableFilesPolicyNewUX(),
+        TestCase("warnShowsPanelItem").EnableDlp().EnableFilesPolicyNewUX(),
+        TestCase("mixedSummaryDisplayPanel")
+            .EnableDlp()
+            .EnableFilesPolicyNewUX()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     DriveSpecific, /* drive_specific.js */
@@ -1755,6 +2229,11 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
             .SetDeviceMode(DeviceMode::kConsumerOwned)
             .SetTestAccountType(TestAccountType::kNonManaged)
             .EnableGoogleOneOfferFilesBanner(),
+        TestCase("driveGoogleOneOfferBannerDismiss")
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManaged)
+            .EnableGoogleOneOfferFilesBanner()
+            .EnableCrosComponents(),
         TestCase("driveGoogleOneOfferBannerDisabled")
             .EnableGoogleOneOfferFilesBanner()
             .SetDeviceMode(DeviceMode::kConsumerOwned)
@@ -1773,10 +2252,87 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("driveGoogleOneOfferBannerDisabled")
             .EnableGoogleOneOfferFilesBanner()
             .SetDeviceMode(kConsumerOwned)
-            .SetTestAccountType(kNonManagedNonOwner)));
+            .SetTestAccountType(kNonManagedNonOwner),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kEnterprise),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kChild),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kChild),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kEnterprise),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kEnterprise)
+            .EnableCrosComponents(),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kChild)
+            .EnableCrosComponents(),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kChild)
+            .EnableCrosComponents(),
+        TestCase("driveBulkPinningBannerDisabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kEnterprise)
+            .EnableCrosComponents(),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManaged)
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"}),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManagedNonOwner)
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"}),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kGoogler)
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"}),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManaged)
+            .EnableCrosComponents()
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"}),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kConsumerOwned)
+            .SetTestAccountType(TestAccountType::kNonManagedNonOwner)
+            .EnableCrosComponents()
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"}),
+        TestCase("driveBulkPinningBannerEnabled")
+            .EnableBulkPinning()
+            .SetDeviceMode(DeviceMode::kEnrolled)
+            .SetTestAccountType(TestAccountType::kGoogler)
+            .EnableCrosComponents()
+            .FeatureIds({"screenplay-e9165a4d-39d6-406c-9027-f2ad39bb4aeb"})));
 
 #define FILE_TRANSFER_TEST_CASE(name) \
   TestCase(name).EnableFileTransferConnector()
+
+// Enable both new policy UX and file transfer connector new UX, as the latter
+// requires the former.
+#define FILE_TRANSFER_TEST_CASE_NEW_UX(name) \
+  TestCase(name)                             \
+      .EnableFileTransferConnector()         \
+      .EnableFilesPolicyNewUX()              \
+      .EnableFileTransferConnectorNewUX()
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FileTransferConnector, /* file_transfer_connector.js */
@@ -1807,9 +2363,26 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         FILE_TRANSFER_TEST_CASE("transferConnectorFromSmbfsToDownloadsDeep"),
         FILE_TRANSFER_TEST_CASE("transferConnectorFromSmbfsToDownloadsFlat"),
         FILE_TRANSFER_TEST_CASE("transferConnectorFromUsbToDownloadsDeep"),
-        FILE_TRANSFER_TEST_CASE("transferConnectorFromUsbToDownloadsFlat")));
+        FILE_TRANSFER_TEST_CASE("transferConnectorFromUsbToDownloadsFlat"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsDeepNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsFlatNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsDeepMoveNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsFlatMoveNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsFlatWarnProceedNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsDeepWarnProceedNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsFlatWarnCancelNewUX"),
+        FILE_TRANSFER_TEST_CASE_NEW_UX(
+            "transferConnectorFromUsbToDownloadsDeepWarnCancelNewUX")));
 
 #undef FILE_TRANSFER_TEST_CASE
+#undef FILE_TRANSFER_TEST_CASE_NEW_UX
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     RestorePrefs, /* restore_prefs.js */
@@ -1890,11 +2463,16 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         TestCase("tabindexSearchBoxFocus"),
         TestCase("tabindexFocus"),
+        TestCase("tabindexFocus").EnableCrosComponents(),
         TestCase("tabindexFocusDownloads"),
+        TestCase("tabindexFocusDownloads").EnableCrosComponents(),
         TestCase("tabindexFocusDownloads").InGuestMode(),
         TestCase("tabindexFocusDirectorySelected"),
-        TestCase("tabindexFocusDirectorySelected").EnableJellybean(),
-        TestCase("tabindexOpenDialogDownloads").WithBrowser()
+        TestCase("tabindexFocusDirectorySelected").EnableCrosComponents(),
+        TestCase("tabindexOpenDialogDownloads").WithBrowser(),
+        TestCase("tabindexOpenDialogDownloads")
+            .WithBrowser()
+            .EnableCrosComponents()
         // TODO(b/189173190): Enable
         // TestCase("tabindexOpenDialogDownloads").WithBrowser(),
         // TODO(b/189173190): Enable
@@ -2185,7 +2763,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("recentImagesDownloadsAndDriveAndPlayFiles").EnableArc(),
         TestCase("recentVideosDownloads"),
         TestCase("recentVideosDownloadsAndDrive"),
-        TestCase("recentVideosDownloadsAndDriveAndPlayFiles").EnableArc()));
+        TestCase("recentVideosDownloadsAndDriveAndPlayFiles").EnableArc(),
+        TestCase("recentFileSystemProviderFiles")
+            .FakeFileSystemProvider()
+            .EnableFSPsInRecents()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Metadata, /* metadata.js */
@@ -2244,7 +2825,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("searchDocumentsProviderWithRecencyOptions")
             .EnableGenericDocumentsProvider()
             .EnableSearchV2(),
-        TestCase("searchFileSystemProvider").EnableSearchV2()
+        TestCase("searchFileSystemProvider").EnableSearchV2(),
+        TestCase("searchImageByContent")
+            .EnableImageContentSearch()
+            .EnableSearchV2()
         // TODO(b/189173190): Enable
         // TestCase("searchQueryLaunchParam")
         ));
@@ -2305,6 +2889,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
             .FeatureIds({"screenplay-a06f961a-17f5-4fbd-8285-49abb000dee1"}),
         TestCase("trashPermanentlyDelete"),
         TestCase("trashRestoreFromToast"),
+// TODO(crbug.com/1425820): Re-enable this test on ChromiumOS MSAN.
+#if !defined(MEMORY_SANITIZER)
+        TestCase("trashRestoreFromToast").EnableCrosComponents(),
+#endif
         TestCase("trashRestoreFromTrash"),
         TestCase("trashRestoreFromTrashShortcut"),
         TestCase("trashEmptyTrash")
@@ -2330,6 +2918,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("trashEnsureOldEntriesArePeriodicallyRemoved"),
         TestCase("trashDragDropOutOfTrashPerformsRestoration"),
         TestCase("trashRestorationDialogInProgressDoesntShowUndo"),
+        TestCase("trashRestorationDialogInProgressDoesntShowUndo")
+            .EnableCrosComponents(),
         TestCase("trashTogglingTrashEnabledNavigatesAwayFromTrashRoot"),
         TestCase("trashTogglingTrashEnabledPrefUpdatesDirectoryTree"),
         TestCase("trashCantRestoreWhenParentDoesntExist"),
@@ -2346,7 +2936,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     AndroidPhotos, /* android_photos.js */
     FilesAppBrowserTest,
     ::testing::Values(
-        TestCase("androidPhotosBanner").EnablePhotosDocumentsProvider()));
+        TestCase("androidPhotosBanner").EnablePhotosDocumentsProvider(),
+        TestCase("androidPhotosBanner")
+            .EnablePhotosDocumentsProvider()
+            .EnableCrosComponents()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Office, /* office.js */

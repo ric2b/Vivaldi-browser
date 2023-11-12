@@ -382,4 +382,8 @@ function onDocumentLoad() {
   onDocumentLoadOrUpdate();
 }
 
+function launchVivaldiGame() {
+  errorPageController.openVivaldia();
+}
+
 document.addEventListener('DOMContentLoaded', onDocumentLoad);

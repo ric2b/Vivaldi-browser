@@ -61,6 +61,14 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   void NotifyUserActivation(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>&);
 
+  void NotifyWebAuthnAssertionRequestSucceeded(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&);
+
+  jboolean IsCloseWatcherActive(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&) const;
+
   jboolean SignalCloseWatcherIfActive(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&) const;

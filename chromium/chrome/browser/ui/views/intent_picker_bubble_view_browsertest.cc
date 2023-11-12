@@ -142,8 +142,6 @@ IN_PROC_BROWSER_TEST_P(IntentPickerIconBrowserTest,
   EXPECT_EQ(nullptr, intent_picker_bubble());
 }
 
-// TODO(crbug.com/1252812): Enable the following test on Lacros.
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Tests that clicking a link from a tabbed browser to within the scope of an
 // installed app shows the intent picker icon in Omnibox.
 // TODO(crbug.com/1427908): Flaky on Mac.
@@ -173,8 +171,6 @@ IN_PROC_BROWSER_TEST_P(IntentPickerIconBrowserTest,
   views::Button* intent_picker_icon = GetIntentPickerIcon();
   EXPECT_TRUE(intent_picker_icon->GetVisible());
 }
-
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // TODO(crbug.com/1395393): This test is flaky on Mac.
 #if BUILDFLAG(IS_MAC)
@@ -297,7 +293,14 @@ IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
 }
 
 // Test that error pages do not show the intent picker icon.
-IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest, DoNotShowIconOnErrorPages) {
+#if BUILDFLAG(IS_MAC)
+// TODO(https://crbug.com/1478654): Fix the test.
+#define MAYBE_DoNotShowIconOnErrorPages Disabled_DoNotShowIconOnErrorPages
+#else
+#define MAYBE_DoNotShowIconOnErrorPages DoNotShowIconOnErrorPages
+#endif  // BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_F(IntentPickerIconBrowserTest,
+                       MAYBE_DoNotShowIconOnErrorPages) {
   InstallTestWebApp();
   InstallTestWebApp("www.google.com", "/");
 
@@ -396,7 +399,7 @@ class IntentPickerIconPrerenderingBrowserTest
       const IntentPickerIconPrerenderingBrowserTest&) = delete;
 
   void SetUp() override {
-    prerender_helper_.SetUp(embedded_test_server());
+    prerender_helper_.RegisterServerRequestMonitor(embedded_test_server());
     IntentPickerIconBrowserTest::SetUp();
   }
 

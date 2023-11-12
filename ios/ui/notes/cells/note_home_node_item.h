@@ -17,6 +17,8 @@ class NoteNode;
 @property(nonatomic, readwrite, assign)
     const vivaldi::NoteNode* noteNode;
 
+@property(nonatomic, assign) BOOL shouldShowTrashIcon;
+
 - (instancetype)initWithType:(NSInteger)type
                 noteNode:(const vivaldi::NoteNode*)node
     NS_DESIGNATED_INITIALIZER;

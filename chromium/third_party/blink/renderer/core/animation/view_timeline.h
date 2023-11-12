@@ -58,8 +58,9 @@ class CORE_EXPORT ViewTimeline : public ScrollTimeline {
  private:
   double ToFractionalOffset(const TimelineOffset& timeline_offset) const;
 
-  absl::optional<LayoutSize> SubjectSize() const;
+  absl::optional<gfx::SizeF> SubjectSize() const;
   absl::optional<gfx::PointF> SubjectPosition(Node* resolved_source) const;
+
   void ApplyStickyAdjustments(ScrollOffsets& scroll_offsets,
                               ViewOffsets& view_offsets,
                               double viewport_size,
@@ -68,6 +69,7 @@ class CORE_EXPORT ViewTimeline : public ScrollTimeline {
                               ScrollOrientation orientation,
                               Node* resolved_source) const;
 
+  TimelineInset inset_;
   // If either of the following elements are non-null, we need to update
   // |inset_| on a style change.
   Member<const CSSValue> style_dependant_start_inset_;

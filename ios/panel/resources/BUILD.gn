@@ -23,34 +23,6 @@ imageset("vivaldi_history_empty") {
   ]
 }
 
-imageset("bookmark_panel") {
-  sources = [
-    "bookmark_panel.imageset/Contents.json",
-    "bookmark_panel.imageset/bookmark_panel.pdf"
-  ]
-}
-
-imageset("history_panel") {
-  sources = [
-    "history_panel.imageset/Contents.json",
-    "history_panel.imageset/history_panel.pdf"
-  ]
-}
-
-imageset("notes_panel") {
-  sources = [
-    "notes_panel.imageset/Contents.json",
-    "notes_panel.imageset/notes_panel.pdf"
-  ]
-}
-
-imageset("readinglist_panel") {
-  sources = [
-    "readinglist_panel.imageset/Contents.json",
-    "readinglist_panel.imageset/readinglist_panel.pdf"
-  ]
-}
-
 imageset("bookmark_panel_active") {
   sources = [
     "bookmark_panel_active.imageset/Contents.json",

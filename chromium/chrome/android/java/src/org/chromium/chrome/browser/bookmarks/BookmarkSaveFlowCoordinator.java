@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayP
 import org.chromium.chrome.browser.commerce.PriceTrackingUtils;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -41,7 +42,7 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 /** Coordinates the bottom-sheet saveflow. */
 public class BookmarkSaveFlowCoordinator {
-    private static final int AUTODISMISS_TIME_MS = 6000;
+    private static final int AUTO_DISMISS_TIME_MS = 10000;
 
     private final Context mContext;
     private final PropertyModel mPropertyModel;
@@ -97,7 +98,8 @@ public class BookmarkSaveFlowCoordinator {
                 new LargeIconBridge(mProfile),
                 BookmarkUtils.getRoundedIconGenerator(mContext, BookmarkRowDisplayPref.VISUAL),
                 res.getDimensionPixelSize(R.dimen.improved_bookmark_save_flow_image_size),
-                BookmarkUtils.getFaviconDisplaySize(res, BookmarkRowDisplayPref.VISUAL));
+                BookmarkUtils.getFaviconDisplaySize(res, BookmarkRowDisplayPref.VISUAL),
+                SyncServiceFactory.getForProfile(profile));
 
         mMediator = new BookmarkSaveFlowMediator(mBookmarkModel, mPropertyModel, mContext,
                 this::close, shoppingService, bookmarkImageFetcher, mProfile);
@@ -187,7 +189,7 @@ public class BookmarkSaveFlowCoordinator {
     }
 
     private void setupAutodismiss() {
-        PostTask.postDelayedTask(TaskTraits.UI_USER_VISIBLE, this::close, AUTODISMISS_TIME_MS);
+        PostTask.postDelayedTask(TaskTraits.UI_USER_VISIBLE, this::close, AUTO_DISMISS_TIME_MS);
     }
 
     private void destroy() {
@@ -281,7 +283,6 @@ public class BookmarkSaveFlowCoordinator {
         }
     }
 
-    @VisibleForTesting
     View getViewForTesting() {
         return mBookmarkSaveFlowView;
     }

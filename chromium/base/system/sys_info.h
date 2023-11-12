@@ -14,6 +14,7 @@
 #include "base/base_export.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -134,9 +135,10 @@ class BASE_EXPORT SysInfo {
 
   // Retrieves detailed numeric values for the OS version.
   // DON'T USE THIS ON THE MAC OR WINDOWS to determine the current OS release
-  // for OS version-specific feature checks and workarounds. If you must use
-  // an OS version check instead of a feature check, use the base::mac::IsOS*
-  // family from base/mac/mac_util.h, or base::win::GetVersion from
+  // for OS version-specific feature checks and workarounds. If you must use an
+  // OS version check instead of a feature check, use
+  // base::mac::MacOSVersion()/MacOSMajorVersion() family from
+  // base/mac/mac_util.h, or base::win::GetVersion() from
   // base/win/windows_version.h.
   static void OperatingSystemVersionNumbers(int32_t* major_version,
                                             int32_t* minor_version,
@@ -204,7 +206,8 @@ class BASE_EXPORT SysInfo {
   static std::string KernelVersion();
 
   // Crashes if running on Chrome OS non-test image. Use only for really
-  // sensitive and risky use cases.
+  // sensitive and risky use cases. Only works while running in verified mode,
+  // this check an easily be bypassed in dev mode.
   static void CrashIfChromeOSNonTestImage();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -250,6 +253,8 @@ class BASE_EXPORT SysInfo {
   //   true when the physical memory of the device is 4gb or 6gb and
   //             the feature: kPartialLowEndModeOnMidEndDevices() is enabled.
   static bool IsLowEndDeviceOrPartialLowEndModeEnabled();
+  static bool IsLowEndDeviceOrPartialLowEndModeEnabled(
+      const FeatureParam<bool>& param_for_exclusion);
 
 #if BUILDFLAG(IS_MAC)
   // Indicates that CPU security mitigations are enabled for the current

@@ -9,6 +9,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
@@ -160,7 +161,8 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       return;
     }
 
-    std::string* image_url = theme_object_.GetDict().FindString(kBackgroundImageKey);
+    std::string* image_url =
+        theme_object_.GetDict().FindString(kBackgroundImageKey);
     bool has_background_image = image_url && !image_url->empty();
     if (has_background_image) {
       ExportImage(theme_object_, kBackgroundImageKey, image_url, "background");
@@ -204,13 +206,12 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     if (image_url) {
       VivaldiImageStore::UrlKind url_kind;
       std::string url_id;
-      if (VivaldiImageStore::ParseDataUrl(*image_url, url_kind,
-                                          url_id)) {
+      if (VivaldiImageStore::ParseDataUrl(*image_url, url_kind, url_id)) {
         processed_images_counter++;
         data_source_api_->GetDataForId(
             url_kind, url_id,
             base::BindOnce(&Exporter::SaveImage, this, &object, image_key,
-                url_id, base_name));
+                           url_id, base_name));
         return;
       }
       std::string resource;
@@ -220,11 +221,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
           error_ = reader.GetError();
           return;
         }
-        WriteImage(object,
-                   image_key,
-                   resource,
-                   base_name,
-                   reader.data(),
+        WriteImage(object, image_key, resource, base_name, reader.data(),
                    reader.size());
       }
     }
@@ -232,7 +229,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     SaveJSON();
   }
 
-  void SaveImage(base::Value *object,
+  void SaveImage(base::Value* object,
                  std::string image_key,
                  std::string name,
                  std::string base_name,
@@ -241,15 +238,10 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       error_ = "Failed to read the background image";
       return;
     }
-    WriteImage(*object,
-               image_key,
-               name,
-               base_name,
-               data->data(),
-               data->size());
+    WriteImage(*object, image_key, name, base_name, data->data(), data->size());
   }
 
-  void WriteImage(base::Value &object,
+  void WriteImage(base::Value& object,
                   std::string image_key,
                   base::StringPiece name,
                   std::string base_name,
@@ -473,7 +465,8 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     if (error_)
       return;
 
-    std::string* image_url = theme_object_.GetDict().FindString(kBackgroundImageKey);
+    std::string* image_url =
+        theme_object_.GetDict().FindString(kBackgroundImageKey);
     bool has_background_image = image_url && !image_url->empty();
     if (has_background_image) {
       ImportImage(theme_object_, kBackgroundImageKey, image_url);
@@ -509,13 +502,12 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
   void ImportImage(base::Value& object,
                    std::string image_key,
                    std::string* image) {
-    base::FilePath relative_path =
-        base::FilePath::FromUTF8Unsafe(*image);
+    base::FilePath relative_path = base::FilePath::FromUTF8Unsafe(*image);
     if (!net::IsSafePortableRelativePath(relative_path)) {
-      AddError(ImportError::kBadSettings,
-              base::StringPrintf(
-                  "The value of %s propert '%s' is not a valid file",
-                  image_key.c_str(), image->c_str()));
+      AddError(
+          ImportError::kBadSettings,
+          base::StringPrintf("The value of %s propert '%s' is not a valid file",
+                             image_key.c_str(), image->c_str()));
       return;
     }
 
@@ -526,7 +518,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
         VivaldiImageStore::FindFormatForPath(relative_path);
     if (!image_format) {
       AddError(ImportError::kBadSettings,
-              base::StringPrintf("Unsupported image format in '%s' - %s",
+               base::StringPrintf("Unsupported image format in '%s' - %s",
                                   image_key.c_str(),
                                   relative_path.AsUTF8Unsafe().c_str()));
       return;
@@ -536,27 +528,28 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
             temp_dir_.GetPath().Append(relative_path), &image_data,
             kMaxImageSize)) {
       AddError(ImportError::kIO,
-              base::StringPrintf("Failed to read %s or the file is too big",
+               base::StringPrintf("Failed to read %s or the file is too big",
                                   image->c_str()));
       return;
     }
     processed_images_counter++;
     scoped_refptr<base::RefCountedMemory> image_buf(
-      new base::RefCountedString(image_data));
+        new base::RefCountedString(image_data));
     data_source_api_->StoreImageData(
         *image_format, std::move(image_buf),
         base::BindOnce(&Importer::OnImageStored, this, &object, image_key));
     return;
   }
 
-  void OnImageStored(base::Value *object,
+  void OnImageStored(base::Value* object,
                      std::string image_key,
                      std::string image_url) {
     DCHECK(work_sequence_->RunsTasksInCurrentSequence());
     DCHECK(!error_);
     if (image_url.empty()) {
       AddError(ImportError::kIO,
-               base::StringPrintf("Failed to store image %s locally", image_key.c_str()));
+               base::StringPrintf("Failed to store image %s locally",
+                                  image_key.c_str()));
       return;
     }
     object->GetDict().Set(image_key, image_url);
@@ -569,7 +562,8 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
   void StoreTheme(std::string image_url) {
     DCHECK(work_sequence_->RunsTasksInCurrentSequence());
     ui_thread_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&Importer::StoreThemeOnUIThread, this, image_url));
+        FROM_HERE,
+        base::BindOnce(&Importer::StoreThemeOnUIThread, this, image_url));
   }
 
   void StoreThemeOnUIThread(std::string image_url) {
@@ -738,7 +732,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
         : object_(object), error_(error), flags_(flags) {}
 
     void DoCheck() {
-      if (!object_.is_dict()) {
+      if (!object_->is_dict()) {
         AddError("The theme is not a JSON object.");
         return;
       }
@@ -760,7 +754,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     void operator()(const BoolInfo&) {
       base::Value* value = FindValue();
       if (!value) {
-        object_.GetDict().Set(key_, false);
+        object_->GetDict().Set(key_, false);
         return;
       }
       if (!value->is_bool()) {
@@ -777,7 +771,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
               (!info.max_value || 0.0 <= *info.max_value)));
       base::Value* value = FindValue();
       if (!value) {
-        object_.GetDict().Set(key_, 0);
+        object_->GetDict().Set(key_, 0);
         return;
       }
       if (!value->is_double() && !value->is_int()) {
@@ -805,7 +799,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       base::Value* value = FindValue();
       if (!value) {
         if (info.can_be_empty) {
-          object_.GetDict().Set(key_, std::string());
+          object_->GetDict().Set(key_, std::string());
         }
         return;
       }
@@ -834,7 +828,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
         if (named_id) {
           if (flags_.for_export) {
             value->GetString() =
-              base::Uuid::GenerateRandomV4().AsLowercaseString();
+                base::Uuid::GenerateRandomV4().AsLowercaseString();
           }
         } else if (!base::Uuid::ParseLowercase(value->GetString()).is_valid()) {
           AddError(base::StringPrintf(
@@ -849,7 +843,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       base::Value* value = FindValue();
       if (!value) {
         // Set to the first enum case by default.
-        object_.GetDict().Set(key_, info.enum_cases[0]);
+        object_->GetDict().Set(key_, info.enum_cases[0]);
         return;
       }
       if (!value->is_string()) {
@@ -870,9 +864,9 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
 
    private:
     void AddError(std::string error_message) {
-      if (!error_.empty())
+      if (!error_->empty())
         return;
-      error_ = std::move(error_message);
+      *error_ = std::move(error_message);
     }
 
     std::string KeyText() const {
@@ -880,7 +874,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     }
 
     base::Value* FindValue() {
-      base::Value* value = object_.GetDict().Find(key_);
+      base::Value* value = object_->GetDict().Find(key_);
       if (value) {
         return value;
       }
@@ -890,8 +884,8 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       return nullptr;
     }
 
-    base::Value& object_;
-    std::string& error_;
+    const raw_ref<base::Value> object_;
+    const raw_ref<std::string> error_;
     const VerifyAndNormalizeFlags flags_;
     base::StringPiece key_;
     Presence presence_ = kOptional;
@@ -929,7 +923,8 @@ void EnumerateUserThemeUrls(
       if (!value.is_dict()) {
         continue;
       }
-      const std::string* image_url = value.GetDict().FindString(kBackgroundImageKey);
+      const std::string* image_url =
+          value.GetDict().FindString(kBackgroundImageKey);
       if (image_url) {
         callback.Run(*image_url);
       }

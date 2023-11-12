@@ -34,8 +34,9 @@ namespace web_app {
 class PreinstalledWebAppsBrowserTest : public WebAppControllerBrowserTest,
                                        public WithCrosapiParam {
  public:
-  PreinstalledWebAppsBrowserTest() {
-    PreinstalledWebAppManager::SkipStartupForTesting();
+  PreinstalledWebAppsBrowserTest()
+      : skip_preinstalled_web_app_startup_(
+            PreinstalledWebAppManager::SkipStartupForTesting()) {
     // Ignore any default app configs on disk.
     SetPreinstalledWebAppConfigDirForTesting(&empty_path_);
     WebAppProvider::SetOsIntegrationManagerFactoryForTesting(
@@ -67,10 +68,12 @@ class PreinstalledWebAppsBrowserTest : public WebAppControllerBrowserTest,
       SelectFirstBrowser();
     }
     WebAppControllerBrowserTest::SetUpOnMainThread();
+    VerifyLacrosStatus();
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   base::FilePath empty_path_;
+  base::AutoReset<bool> skip_preinstalled_web_app_startup_;
 };
 
 IN_PROC_BROWSER_TEST_P(PreinstalledWebAppsBrowserTest, CheckInstalledFields) {

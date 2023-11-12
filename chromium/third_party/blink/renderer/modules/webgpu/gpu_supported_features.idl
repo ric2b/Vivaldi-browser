@@ -21,10 +21,13 @@ enum GPUFeatureName {
     "pipeline-statistics-query",
     "timestamp-query-inside-passes",
     "chromium-experimental-dp4a",
+    "chromium-experimental-read-write-storage-texture",
+    "chromium-experimental-subgroups",
+    "chromium-experimental-subgroup-uniform-control-flow",
 };
 
 [
-    Exposed(Window WebGPU, DedicatedWorker WebGPU),
+    Exposed=(Window, DedicatedWorker),
     SecureContext
 ] interface GPUSupportedFeatures {
     readonly setlike<DOMString>;

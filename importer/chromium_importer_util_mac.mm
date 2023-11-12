@@ -4,9 +4,9 @@
 #include <stack>
 #include <string>
 
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_nsautorelease_pool.h"
 #include "base/files/file_util.h"
-#include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/path_service.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/common/importer/importer_data_types.h"

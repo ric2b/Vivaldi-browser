@@ -110,6 +110,8 @@ void CrasAudioHandler::AudioObserver::OnNoiseCancellationStateChanged() {}
 
 void CrasAudioHandler::AudioObserver::OnForceRespectUiGainsStateChanged() {}
 
+void CrasAudioHandler::AudioObserver::OnHfpMicSrStateChanged() {}
+
 void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
     uint64_t /* tv_sec */,
     uint64_t /* tv_nsec */) {}
@@ -434,6 +436,10 @@ bool CrasAudioHandler::IsInputMuted() {
   return input_mute_on_;
 }
 
+bool CrasAudioHandler::IsInputMutedBySecurityCurtain() {
+  return input_mute_forced_by_security_curtain_;
+}
+
 bool CrasAudioHandler::IsInputMutedForDevice(uint64_t device_id) {
   const AudioDevice* device = GetDeviceFromId(device_id);
   if (!device)
@@ -610,11 +616,80 @@ void CrasAudioHandler::RefreshForceRespectUiGainsState() {
 }
 
 void CrasAudioHandler::SetForceRespectUiGainsState(bool state) {
+  base::UmaHistogramBoolean(CrasAudioHandler::kForceRespectUiGainsHistogramName,
+                            state);
   CrasAudioClient::Get()->SetForceRespectUiGains(state);
   audio_pref_handler_->SetForceRespectUiGainsState(state);
 
   for (auto& observer : observers_) {
     observer.OnForceRespectUiGainsStateChanged();
+  }
+}
+
+bool CrasAudioHandler::IsHfpMicSrSupportedForDevice(uint64_t device_id) {
+  if (!hfp_mic_sr_supported()) {
+    return false;
+  }
+
+  const AudioDevice* device = GetDeviceFromId(device_id);
+  if (!device || device->type != AudioDeviceType::kBluetoothNbMic) {
+    return false;
+  }
+
+  return device->audio_effect & cras::EFFECT_TYPE_HFP_MIC_SR;
+}
+
+void CrasAudioHandler::RequestHfpMicSrSupported(
+    OnHfpMicSrSupportedCallback callback) {
+  CrasAudioClient::Get()->GetHfpMicSrSupported(
+      base::BindOnce(&CrasAudioHandler::HandleGetHfpMicSrSupported,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void CrasAudioHandler::SetHfpMicSrSupportedForTesting(bool supported) {
+  hfp_mic_sr_supported_ = supported;
+}
+
+void CrasAudioHandler::HandleGetHfpMicSrSupported(
+    OnHfpMicSrSupportedCallback callback,
+    absl::optional<bool> hfp_mic_sr_supported) {
+  if (!hfp_mic_sr_supported.has_value()) {
+    LOG(ERROR) << "cras_audio_handler: Failed to retrieve hfp_mic_sr support";
+  } else {
+    hfp_mic_sr_supported_ = hfp_mic_sr_supported.value();
+  }
+
+  std::move(callback).Run();
+}
+
+bool CrasAudioHandler::GetHfpMicSrState() const {
+  return audio_pref_handler_->GetHfpMicSrState();
+}
+
+void CrasAudioHandler::RefreshHfpMicSrState() {
+  if (!hfp_mic_sr_supported()) {
+    return;
+  }
+
+  const AudioDevice* device = GetDeviceByType(AudioDeviceType::kBluetoothNbMic);
+  if (!device) {
+    return;
+  }
+
+  // Refresh should only update the state in CRAS and leave the preference
+  // as-is.
+  CrasAudioClient::Get()->SetHfpMicSrEnabled(
+      GetHfpMicSrState() &&
+      (device->audio_effect & cras::EFFECT_TYPE_HFP_MIC_SR));
+}
+
+void CrasAudioHandler::SetHfpMicSrState(bool hfp_mic_sr_on,
+                                        AudioSettingsChangeSource source) {
+  CrasAudioClient::Get()->SetHfpMicSrEnabled(hfp_mic_sr_on);
+  audio_pref_handler_->SetHfpMicSrState(hfp_mic_sr_on);
+
+  for (auto& observer : observers_) {
+    observer.OnHfpMicSrStateChanged();
   }
 }
 
@@ -633,6 +708,7 @@ void CrasAudioHandler::SetKeyboardMicActive(bool active) {
 
 void CrasAudioHandler::SetSpeakOnMuteDetection(bool som_on) {
   CrasAudioClient::Get()->SetSpeakOnMuteDetection(som_on);
+  speak_on_mute_detection_on_ = som_on;
 }
 
 void CrasAudioHandler::AddActiveNode(uint64_t node_id, bool notify) {
@@ -904,29 +980,21 @@ void CrasAudioHandler::SetOutputMuteLockedBySecurityCurtain(bool mute_on) {
     return;
 
   output_mute_forced_by_security_curtain_ = mute_on;
-  UpdateAudioMute();
+  UpdateAudioOutputMute();
 }
 
 void CrasAudioHandler::AdjustOutputVolumeToAudibleLevel() {
-  if (features::IsAudioPeripheralVolumeGranularityEnabled()) {
-    if (output_volume_ <= kMuteThresholdPercent) {
-      for (const auto& item : audio_devices_) {
-        int unmute_volume = kDefaultUnmuteVolumePercent;
-        const AudioDevice& device = item.second;
-        if (!device.is_input && device.active) {
-          if (device.type == AudioDeviceType::kUsb) {
-            int32_t number_of_volume_steps = device.number_of_volume_steps;
-            DCHECK(number_of_volume_steps > 0);
-            unmute_volume = 100 / number_of_volume_steps;
-          }
-          SetOutputNodeVolumePercent(device.id, unmute_volume);
+  if (output_volume_ <= kMuteThresholdPercent) {
+    for (const auto& item : audio_devices_) {
+      int unmute_volume = kDefaultUnmuteVolumePercent;
+      const AudioDevice& device = item.second;
+      if (!device.is_input && device.active) {
+        if (device.type == AudioDeviceType::kUsb) {
+          int32_t number_of_volume_steps = device.number_of_volume_steps;
+          DCHECK(number_of_volume_steps > 0);
+          unmute_volume = 100 / number_of_volume_steps;
         }
-      }
-    } else {
-      if (output_volume_ <= kMuteThresholdPercent) {
-        // Avoid the situation when sound has been unmuted, but the volume
-        // is set to a very low value, so user still can't hear any sound.
-        SetOutputVolumePercent(kDefaultUnmuteVolumePercent);
+        SetOutputNodeVolumePercent(device.id, unmute_volume);
       }
     }
   }
@@ -950,6 +1018,15 @@ void CrasAudioHandler::SetInputMute(
   SetInputMute(mute_on, method);
   base::UmaHistogramEnumeration(
       CrasAudioHandler::kInputGainMuteSourceHistogramName, source);
+}
+
+void CrasAudioHandler::SetInputMuteLockedBySecurityCurtain(bool mute_on) {
+  if (input_mute_forced_by_security_curtain_ == mute_on) {
+    return;
+  }
+
+  input_mute_forced_by_security_curtain_ = mute_on;
+  SetInputMute(mute_on, InputMuteChangeMethod::kOther);
 }
 
 void CrasAudioHandler::SetActiveDevice(const AudioDevice& active_device,
@@ -1430,6 +1507,8 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   GetSystemAgcSupported();
   RequestNoiseCancellationSupported(base::BindOnce(
       &CrasAudioHandler::GetNodes, weak_ptr_factory_.GetWeakPtr()));
+  RequestHfpMicSrSupported(base::BindOnce(&CrasAudioHandler::GetNodes,
+                                          weak_ptr_factory_.GetWeakPtr()));
   GetNumberOfOutputStreams();
   GetNumberOfNonChromeOutputStreams();
   GetNumberOfInputStreamsWithPermissionInternal();
@@ -1453,6 +1532,14 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   input_muted_by_microphone_mute_switch_ = IsMicrophoneMuteSwitchOn();
   if (input_muted_by_microphone_mute_switch_)
     SetInputMute(true, InputMuteChangeMethod::kPhysicalShutter);
+
+  // Sets speak-on-mute detection enabled based on local variable, it re-applies
+  // the previous state if CRAS restarts.
+  CrasAudioClient::Get()->SetSpeakOnMuteDetection(speak_on_mute_detection_on_);
+
+  // Sets force respect ui gains enabled based on audio pref, it re-applies the
+  // previous state if CRAS restarts.
+  CrasAudioClient::Get()->SetForceRespectUiGains(GetForceRespectUiGainsState());
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
@@ -1462,12 +1549,12 @@ void CrasAudioHandler::ApplyAudioPolicy() {
     return;
 
   output_mute_forced_by_policy_ = mute_on;
-  UpdateAudioMute();
+  UpdateAudioOutputMute();
   // Policy for audio input is handled by kAudioCaptureAllowed in the Chrome
   // media system.
 }
 
-void CrasAudioHandler::UpdateAudioMute() {
+void CrasAudioHandler::UpdateAudioOutputMute() {
   if (output_mute_forced_by_policy_ ||
       output_mute_forced_by_security_curtain_) {
     // Mute the device, but do not update the preference.
@@ -1538,8 +1625,13 @@ void CrasAudioHandler::SetInputMuteInternal(bool mute_on) {
   // The switch disables internal microphone, and cras audio handler is expected
   // to keep system wide cras mute on while the switch is toggled (which should
   // ensure non-internal audio input devices are kept muted).
-  if (!mute_on && input_muted_by_microphone_mute_switch_)
+  //
+  // Also do not allow unmuting the device if the security curtain is showing,
+  // to prevent a remote admin from spying on the user
+  if (!mute_on && (input_muted_by_microphone_mute_switch_ ||
+                   input_mute_forced_by_security_curtain_)) {
     return;
+  }
 
   input_mute_on_ = mute_on;
   CrasAudioClient::Get()->SetInputMute(mute_on);
@@ -2120,6 +2212,9 @@ void CrasAudioHandler::HandleGetNodes(absl::optional<AudioNodeList> node_list) {
   // Always set the input noise cancellation state on NodesChange event.
   RefreshNoiseCancellationState();
 
+  // Always set the hfp_mic_sr state on NodesChange event.
+  RefreshHfpMicSrState();
+
   for (auto& observer : observers_)
     observer.OnAudioNodesChanged();
 }
@@ -2407,6 +2502,10 @@ bool CrasAudioHandler::noise_cancellation_supported() const {
   return noise_cancellation_supported_;
 }
 
+bool CrasAudioHandler::hfp_mic_sr_supported() const {
+  return hfp_mic_sr_supported_;
+}
+
 bool CrasAudioHandler::system_aec_supported() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   return system_aec_supported_;
@@ -2548,6 +2647,14 @@ ScopedCrasAudioHandlerForTesting::~ScopedCrasAudioHandlerForTesting() {
 
 CrasAudioHandler& ScopedCrasAudioHandlerForTesting::Get() {
   return *CrasAudioHandler::Get();
+}
+
+int32_t CrasAudioHandler::NumberOfNonChromeOutputStreams() const {
+  return num_active_nonchrome_output_streams_;
+}
+
+int32_t CrasAudioHandler::NumberOfChromeOutputStreams() const {
+  return num_active_output_streams_;
 }
 
 }  // namespace ash

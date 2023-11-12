@@ -13,10 +13,6 @@
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/mac/icloud_keychain_internals.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 // This function is needed by the interfaces below, but interfaces must be
@@ -44,26 +40,27 @@ API_AVAILABLE(macos(13.3))
 }
 @end
 
+@interface ASAuthorizationPlatformPublicKeyCredentialAssertionRequest (Extras)
+@property(nonatomic) BOOL shouldShowHybridTransport;
+@end
+
 // ICloudKeychainDelegate receives callbacks when an `ASAuthorizationController`
 // operation completes (successfully or otherwise) and bridges to a
 // `OnceCallback`.
 API_AVAILABLE(macos(13.3))
 @interface ICloudKeychainDelegate : NSObject <ASAuthorizationControllerDelegate>
 - (void)setCallback:
-    (base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>)
-        callback;
+    (base::OnceCallback<void(ASAuthorization*, NSError*)>)callback;
 - (void)setCleanupCallback:(base::OnceClosure)callback;
 @end
 
 @implementation ICloudKeychainDelegate {
-  base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-      _callback;
+  base::OnceCallback<void(ASAuthorization*, NSError*)> _callback;
   base::OnceClosure _cleanupCallback;
 }
 
 - (void)setCallback:
-    (base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>)
-        callback {
+    (base::OnceCallback<void(ASAuthorization*, NSError*)>)callback {
   _callback = std::move(callback);
 }
 
@@ -189,12 +186,12 @@ ASAuthorizationWebBrowserPublicKeyCredentialManager* GetManager() {
 }
 
 bool ProcessHasEntitlement() {
-  base::ScopedCFTypeRef<SecTaskRef> task(SecTaskCreateFromSelf(nullptr));
+  base::apple::ScopedCFTypeRef<SecTaskRef> task(SecTaskCreateFromSelf(nullptr));
   if (!task) {
     return false;
   }
 
-  base::ScopedCFTypeRef<CFTypeRef> entitlement_value_cftype(
+  base::apple::ScopedCFTypeRef<CFTypeRef> entitlement_value_cftype(
       SecTaskCopyValueForEntitlement(
           task, CFSTR("com.apple.developer.web-browser.public-key-credential"),
           nullptr));
@@ -257,8 +254,7 @@ class API_AVAILABLE(macos(13.3)) NativeSystemInterface
   void MakeCredential(
       NSWindow* window,
       CtapMakeCredentialRequest request,
-      base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-          callback) override {
+      base::OnceCallback<void(ASAuthorization*, NSError*)> callback) override {
     DCHECK(!create_controller_);
     DCHECK(!get_controller_);
     DCHECK(!delegate_);
@@ -303,8 +299,7 @@ class API_AVAILABLE(macos(13.3)) NativeSystemInterface
   void GetAssertion(
       NSWindow* window,
       CtapGetAssertionRequest request,
-      base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-          callback) override {
+      base::OnceCallback<void(ASAuthorization*, NSError*)> callback) override {
     DCHECK(!create_controller_);
     DCHECK(!get_controller_);
     DCHECK(!delegate_);
@@ -327,6 +322,7 @@ class API_AVAILABLE(macos(13.3)) NativeSystemInterface
                         alloc] initWithCredentialID:ToNSData(cred.id)]];
     }
     get_request.allowedCredentials = allowedCredentials;
+    [get_request setShouldShowHybridTransport:false];
     get_request.userVerificationPreference = Convert(request.user_verification);
     get_controller_ = [[ICloudKeychainGetController alloc]
         initWithAuthorizationRequests:@[ get_request ]];
@@ -341,6 +337,17 @@ class API_AVAILABLE(macos(13.3)) NativeSystemInterface
     get_controller_.presentationContextProvider = presentation_delegate_;
 
     [get_controller_ performRequests];
+  }
+
+  void Cancel() override {
+    // Sending `cancel` will cause the controller to resolve the delegate with
+    // an error. That will end up calling `Cleanup` to drop these references.
+    if (create_controller_) {
+      [create_controller_ cancel];
+    }
+    if (get_controller_) {
+      [get_controller_ cancel];
+    }
   }
 
  protected:

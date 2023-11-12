@@ -3,14 +3,17 @@
 // found in the LICENSE file.
 
 #include "content/browser/renderer_host/input/web_input_event_builders_mac.h"
+#include "base/check.h"
 
 #include <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 #include <stddef.h>
 
 #include "base/apple/owned_objc.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
+#include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversion_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "ui/events/cocoa/cocoa_event_utils.h"
 #include "ui/events/event.h"
@@ -18,10 +21,6 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using blink::WebKeyboardEvent;
 using blink::WebInputEvent;
@@ -56,10 +55,10 @@ const ModifierKey kModifierKeys[] = {
 };
 
 NSEvent* BuildFakeKeyEvent(NSUInteger key_code,
-                           unichar character,
+                           base::StringPiece16 character,
                            NSUInteger modifier_flags,
                            NSEventType event_type) {
-  NSString* string = [NSString stringWithCharacters:&character length:1];
+  NSString* string = base::SysUTF16ToNSString(character);
   return [NSEvent keyEventWithType:event_type
                           location:NSZeroPoint
                      modifierFlags:modifier_flags
@@ -72,6 +71,14 @@ NSEvent* BuildFakeKeyEvent(NSUInteger key_code,
                            keyCode:key_code];
 }
 
+NSEvent* BuildFakeKeyEvent(NSUInteger key_code,
+                           char16_t code_point,
+                           NSUInteger modifier_flags,
+                           NSEventType event_type) {
+  return BuildFakeKeyEvent(key_code, base::StringPiece16(&code_point, 1),
+                           modifier_flags, event_type);
+}
+
 NSEvent* BuildFakeMouseEvent(CGEventType mouse_type,
                              CGPoint location,
                              CGMouseButton button,
@@ -82,7 +89,7 @@ NSEvent* BuildFakeMouseEvent(CGEventType mouse_type,
                              float tilt_y = 0.0,
                              float tangential_pressure = 0.0,
                              NSUInteger button_number = 0) {
-  base::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateMouseEvent(
+  base::apple::ScopedCFTypeRef<CGEventRef> cg_event(CGEventCreateMouseEvent(
       /*source=*/nullptr, mouse_type, location, button));
   CGEventSetIntegerValueField(cg_event, kCGMouseEventSubtype, subtype);
   CGEventSetDoubleValueField(cg_event, kCGTabletEventRotation, rotation);
@@ -648,11 +655,35 @@ TEST(WebInputEventBuilderMacTest, ContextMenuKey) {
   const int kVK_ContextMenu = 0x6E;
 
   const NSEventType kEventTypeToTest[] = {NSEventTypeKeyDown, NSEventTypeKeyUp};
-  for (auto flags : kEventTypeToTest) {
-    NSEvent* mac_event = BuildFakeKeyEvent(kVK_ContextMenu, 0, 0, flags);
+  for (auto type : kEventTypeToTest) {
+    NSEvent* mac_event = BuildFakeKeyEvent(kVK_ContextMenu, 0, 0, type);
     WebKeyboardEvent web_event = WebKeyboardEventBuilder::Build(mac_event);
     EXPECT_EQ(ui::DomKey::CONTEXT_MENU, web_event.dom_key);
     EXPECT_EQ(ui::VKEY_APPS, web_event.windows_key_code);
+  }
+}
+
+TEST(WebInputEventBuilderMacTest, EmojiKey) {
+  const NSEventType kEventTypeToTest[] = {NSEventTypeKeyDown, NSEventTypeKeyUp};
+  for (auto type : kEventTypeToTest) {
+    // The 💩 emoji bound to F1.
+    NSEvent* mac_event = BuildFakeKeyEvent(kVK_F1, u"\U0001F4A9", 0, type);
+    WebKeyboardEvent web_event = WebKeyboardEventBuilder::Build(mac_event);
+    EXPECT_EQ(ui::DomKey::FromCharacter(U'\U0001F4A9'), web_event.dom_key);
+    EXPECT_EQ(ui::VKEY_F1, web_event.windows_key_code);
+  }
+}
+
+TEST(WebInputEventBuilderMacTest, InvalidSurrogateKey) {
+  const NSEventType kEventTypeToTest[] = {NSEventTypeKeyDown, NSEventTypeKeyUp};
+  for (auto type : kEventTypeToTest) {
+    for (auto code_point : {char16_t(0xD800), char16_t(0xDFFF)}) {
+      // A surrogate bound to F1.
+      NSEvent* mac_event = BuildFakeKeyEvent(kVK_F1, code_point, 0, type);
+      WebKeyboardEvent web_event = WebKeyboardEventBuilder::Build(mac_event);
+      EXPECT_EQ(ui::DomKey::F1, web_event.dom_key);
+      EXPECT_EQ(ui::VKEY_F1, web_event.windows_key_code);
+    }
   }
 }
 

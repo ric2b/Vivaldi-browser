@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/gl_repack_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_gl_utils.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "third_party/skia/include/gpu/GrContextThreadSafeProxy.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
@@ -15,6 +16,7 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/progress_reporter.h"
 #include "ui/gl/scoped_binders.h"
+#include "ui/gl/scoped_restore_texture.h"
 
 namespace gpu {
 namespace {
@@ -64,7 +66,8 @@ viz::SharedImageFormat GLTextureHolder::GetPlaneFormat(
   if (format == viz::MultiPlaneFormat::kNV12) {
     return plane_index == 0 ? viz::SinglePlaneFormat::kR_8
                             : viz::SinglePlaneFormat::kRG_88;
-  } else if (format == viz::MultiPlaneFormat::kYV12) {
+  } else if (format == viz::MultiPlaneFormat::kYV12 ||
+             format == viz::MultiPlaneFormat::kI420) {
     return viz::SinglePlaneFormat::kR_8;
   }
 
@@ -135,10 +138,9 @@ void GLTextureHolder::Initialize(
   format_desc_.image_internal_format = format_info.image_internal_format;
   format_desc_.storage_internal_format = format_info.storage_internal_format;
 
-  GLTextureImageBackingHelper::MakeTextureAndSetParameters(
-      format_desc_.target, framebuffer_attachment_angle,
-      is_passthrough_ ? &passthrough_texture_ : nullptr,
-      is_passthrough_ ? nullptr : &texture_);
+  MakeTextureAndSetParameters(format_desc_.target, framebuffer_attachment_angle,
+                              is_passthrough_ ? &passthrough_texture_ : nullptr,
+                              is_passthrough_ ? nullptr : &texture_);
 
   if (is_passthrough_) {
     passthrough_texture_->SetEstimatedSize(format_.EstimatedSizeInBytes(size_));
@@ -154,9 +156,14 @@ void GLTextureHolder::Initialize(
     texture_->SetImmutable(true, format_info.supports_storage);
   }
 
+  // NOTE: We pass `restore_prev_even_if_invalid=true` to maintain behavior
+  // from when this class was using a duplicate-but-not-identical utility.
+  // TODO(crbug.com/1367187): Eliminate this behavior with a Finch
+  // killswitch.
   gl::GLApi* api = gl::g_current_gl_context;
-  GLTextureImageBackingHelper::ScopedRestoreTexture scoped_restore(
-      api, format_desc_.target, GetServiceId());
+  gl::ScopedRestoreTexture scoped_restore(api, format_desc_.target,
+                                          /*restore_prev_even_if_invalid=*/true,
+                                          GetServiceId());
 
   // Initialize the texture storage/image parameters and upload initial pixels
   // if available.
@@ -209,7 +216,8 @@ void GLTextureHolder::Initialize(
     texture_->SetCompatibilitySwizzle(format_info.swizzle);
   }
 
-  if (!debug_label.empty()) {
+  // If the extension does not exist, do not pass debug label to avoid crashes.
+  if (!debug_label.empty() && gl::g_current_gl_driver->ext.b_GL_KHR_debug) {
     api->glObjectLabelFn(GL_TEXTURE, GetServiceId(), -1, debug_label.c_str());
   }
 }

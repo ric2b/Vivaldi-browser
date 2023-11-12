@@ -57,6 +57,8 @@ namespace policy {
 //     }
 //   ],
 //   "attachEncryptionSettings": true,  // optional field
+//   "attachConfigurationFile": true, // optional field
+//   "source": "SomeString", // optional field - used only by tast tests
 //   "requestId": "SomeString",
 //   "device": {
 //     "client_id": "abcdef1234",
@@ -129,6 +131,7 @@ class POLICY_EXPORT EncryptedReportingJobConfiguration
 
  private:
   std::set<std::string> GetTopLevelKeyAllowList();
+  const bool is_device_managed_;
 
   // Parameters populated from the payload_.
   ::reporting::Priority priority_;

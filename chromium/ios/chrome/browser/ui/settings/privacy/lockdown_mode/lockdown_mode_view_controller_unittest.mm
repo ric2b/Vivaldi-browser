@@ -4,15 +4,11 @@
 
 #import "ios/chrome/browser/ui/settings/privacy/lockdown_mode/lockdown_mode_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "testing/gtest_mac.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 class LockdownModeViewControllerTest : public ChromeTableViewControllerTest {
  protected:
@@ -28,7 +24,7 @@ TEST_F(LockdownModeViewControllerTest, TestItems) {
   CheckController();
   CheckTitle(l10n_util::GetNSString(IDS_IOS_LOCKDOWN_MODE_TITLE));
 
-  ASSERT_EQ(2, NumberOfSections());
+  ASSERT_EQ(1, NumberOfSections());
   ASSERT_EQ(1, NumberOfItemsInSection(0));
 
   CheckSwitchCellStateAndTextWithId(NO, IDS_IOS_LOCKDOWN_MODE_TITLE, 0, 0);
@@ -58,7 +54,8 @@ TEST_F(LockdownModeViewControllerTest, TestSwitchItemAtLoad) {
 TEST_F(LockdownModeViewControllerTest, TestCheckmark) {
   ChromeTableViewController* chrome_controller = controller();
   LockdownModeViewController* controller =
-      base::mac::ObjCCastStrict<LockdownModeViewController>(chrome_controller);
+      base::apple::ObjCCastStrict<LockdownModeViewController>(
+          chrome_controller);
 
   [controller setBrowserLockdownModeEnabled:YES];
   CheckSwitchCellStateAndTextWithId(YES, IDS_IOS_LOCKDOWN_MODE_TITLE, 0, 0);

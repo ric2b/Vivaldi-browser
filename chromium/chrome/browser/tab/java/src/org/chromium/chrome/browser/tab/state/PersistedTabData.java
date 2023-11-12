@@ -13,6 +13,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -28,7 +29,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-
 /**
  * PersistedTabData is Tab data persisted across restarts
  * A constructor of taking a Tab, a PersistedTabDataStorage and
@@ -413,6 +413,7 @@ public abstract class PersistedTabData implements UserData {
         if (shoppingPersistedTabData != null) {
             shoppingPersistedTabData.disableSaving();
         }
+        PersistedTabDataJni.get().onTabClose(tab);
     }
 
     /**
@@ -451,15 +452,23 @@ public abstract class PersistedTabData implements UserData {
      * Signal to {@link PersistedTabData} that deferred startup is complete.
      */
     public static void onDeferredStartup() {
-        PersistedTabDataConfiguration.getFilePersistedTabDataStorage().onDeferredStartup();
+        PersistedTabDataJni.get().onDeferredStartup();
     }
 
     /**
      * Signal to {@link PersistedTabData} that the system is shutting down and to finish
      * any pending saves.
+     * TODO(b/298057345) deprecate PersistedTabData.onShutdown()
      */
     public static void onShutdown() {
         PersistedTabDataConfiguration.getFilePersistedTabDataStorage().onShutdown();
         PersistedTabDataConfiguration.getEncryptedFilePersistedTabDataStorage().onShutdown();
+    }
+
+    @VisibleForTesting
+    @NativeMethods
+    public interface Natives {
+        void onTabClose(Tab tab);
+        void onDeferredStartup();
     }
 }

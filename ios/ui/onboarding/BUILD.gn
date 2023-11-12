@@ -18,8 +18,6 @@ source_set("vivaldi_onboarding") {
     "AVFoundation.framework",
     "CoreAudio.framework"
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 swift_source_set("vivaldi_onboarding_swift") {
@@ -27,6 +25,7 @@ swift_source_set("vivaldi_onboarding_swift") {
   sources = [
     "vivaldi_onboarding_view_provider.swift",
     "vivaldi_onboarding_view.swift",
+    "vivaldi_onboarding_promo_view.swift",
     "vivaldi_onboarding_start_view.swift",
     "vivaldi_onboarding_default_browser_view.swift",
     "vivaldi_onboarding_features_view.swift",

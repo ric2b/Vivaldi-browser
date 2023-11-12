@@ -16,7 +16,7 @@
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
-#include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/test/mock_dlp_rules_manager.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sharesheet/sharesheet_metrics.h"
@@ -98,7 +98,8 @@ class SharesheetBubbleViewBrowserTest
   }
 
  protected:
-  raw_ptr<views::Widget, ExperimentalAsh> sharesheet_widget_;
+  raw_ptr<views::Widget, DanglingUntriaged | ExperimentalAsh>
+      sharesheet_widget_;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -214,8 +215,8 @@ class SharesheetBubbleViewPolicyBrowserTest
   }
 
   apps::AppServiceTest app_service_test_;
-  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> rules_manager_ =
-      nullptr;
+  raw_ptr<policy::MockDlpRulesManager, DanglingUntriaged | ExperimentalAsh>
+      rules_manager_ = nullptr;
   std::unique_ptr<MockFilesController> mock_files_controller_ = nullptr;
 };
 

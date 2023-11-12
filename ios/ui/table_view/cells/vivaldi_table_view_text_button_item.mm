@@ -2,7 +2,7 @@
 
 #import "ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
@@ -28,12 +28,13 @@ const CGFloat kDisabledButtonAlpha = 0.5;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   TableViewTextButtonCell* cell =
-      base::mac::ObjCCastStrict<TableViewTextButtonCell>(tableCell);
+      base::apple::ObjCCastStrict<TableViewTextButtonCell>(tableCell);
 
   [cell.button setTitleColor:[[UIColor colorNamed:kBlueColor]
       colorWithAlphaComponent:kDisabledButtonAlpha]
                     forState:UIControlStateDisabled];
-  cell.button.backgroundColor = [UIColor clearColor];
+  cell.button.backgroundColor =
+      [UIColor colorNamed:kBackgroundColor];
 }
 
 @end

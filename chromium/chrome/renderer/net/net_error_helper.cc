@@ -357,6 +357,10 @@ void NetErrorHelper::SetIsShowingDownloadButton(bool show) {
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 }
 
+void NetErrorHelper::OpenVivaldia() {
+  GetRemoteNetErrorPageSupport()->OpenVivaldia();
+}
+
 void NetErrorHelper::OfflineContentAvailable(
     bool list_visible_by_prefs,
     const std::string& offline_content_json) {

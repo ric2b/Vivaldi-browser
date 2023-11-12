@@ -12,12 +12,14 @@
 #include "net/cert/pki/cert_errors.h"
 #include "net/cert/pki/common_cert_errors.h"
 #include "net/cert/pki/general_names.h"
+#include "net/cert/pki/ip_util.h"
 #include "net/cert/pki/string_util.h"
 #include "net/cert/pki/verify_name_match.h"
 #include "net/der/input.h"
 #include "net/der/parser.h"
 #include "net/der/tag.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
 
 namespace net {
 
@@ -115,7 +117,7 @@ bool DNSNameMatches(std::string_view name,
 [[nodiscard]] bool ParseGeneralSubtrees(const der::Input& value,
                                         GeneralNames* subtrees,
                                         CertErrors* errors) {
-  DCHECK(errors);
+  BSSL_CHECK(errors);
 
   // GeneralSubtrees ::= SEQUENCE SIZE (1..MAX) OF GeneralSubtree
   //
@@ -273,7 +275,7 @@ std::unique_ptr<NameConstraints> NameConstraints::Create(
     const der::Input& extension_value,
     bool is_critical,
     CertErrors* errors) {
-  DCHECK(errors);
+  BSSL_CHECK(errors);
 
   auto name_constraints = std::make_unique<NameConstraints>();
   if (!name_constraints->Parse(extension_value, is_critical, errors))
@@ -284,7 +286,7 @@ std::unique_ptr<NameConstraints> NameConstraints::Create(
 bool NameConstraints::Parse(const der::Input& extension_value,
                             bool is_critical,
                             CertErrors* errors) {
-  DCHECK(errors);
+  BSSL_CHECK(errors);
 
   der::Parser extension_parser(extension_value);
   der::Parser sequence_parser;
@@ -652,20 +654,25 @@ bool NameConstraints::IsPermittedDirectoryName(
   return false;
 }
 
-bool NameConstraints::IsPermittedIP(const IPAddress& ip) const {
+bool NameConstraints::IsPermittedIP(const der::Input& ip) const {
   for (const auto& excluded_ip : excluded_subtrees_.ip_address_ranges) {
-    if (IPAddressMatchesPrefix(ip, excluded_ip.first, excluded_ip.second))
+    if (IPAddressMatchesWithNetmask(ip, excluded_ip.first,
+                                    excluded_ip.second)) {
       return false;
+    }
   }
 
   // If permitted subtrees are not constrained, any name that is not excluded is
   // allowed.
-  if (!(permitted_subtrees_.present_name_types & GENERAL_NAME_IP_ADDRESS))
+  if (!(permitted_subtrees_.present_name_types & GENERAL_NAME_IP_ADDRESS)) {
     return true;
+  }
 
   for (const auto& permitted_ip : permitted_subtrees_.ip_address_ranges) {
-    if (IPAddressMatchesPrefix(ip, permitted_ip.first, permitted_ip.second))
+    if (IPAddressMatchesWithNetmask(ip, permitted_ip.first,
+                                    permitted_ip.second)) {
       return true;
+    }
   }
 
   return false;

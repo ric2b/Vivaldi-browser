@@ -35,7 +35,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.chromium.base.Callback;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -98,7 +97,7 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
     @Mock
     BookmarkOpener mBookmarkOpener;
     @Mock
-    Callback<BookmarkId> mOpenFolderCallback;
+    Runnable mNavigateBackRunnable;
 
     private Activity mActivity;
     private WindowAndroid mWindowAndroid;
@@ -133,25 +132,23 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
                     .thenReturn(Collections.singletonList(BOOKMARK_ID_ROOT));
 
             BookmarkItem rootBookmarkItem = new BookmarkItem(
-                    BOOKMARK_ID_ROOT, "root", null, false, null, false, false, 0, false);
+                    BOOKMARK_ID_ROOT, "root", null, false, null, false, false, 0, false, 0);
             when(mBookmarkModel.getBookmarkById(BOOKMARK_ID_ROOT)).thenReturn(rootBookmarkItem);
 
             mockBookmarkItem(BOOKMARK_ID_FOLDER, "folder", null, true, BOOKMARK_ID_ROOT, true);
-            mockBookmarkItem(
-                    BOOKMARK_ID_ONE, "one", JUnitTestGURLs.URL_1, false, BOOKMARK_ID_FOLDER, true);
-            mockBookmarkItem(
-                    BOOKMARK_ID_TWO, "two", JUnitTestGURLs.URL_2, false, BOOKMARK_ID_FOLDER, true);
-            mockBookmarkItem(BOOKMARK_ID_PARTNER, "partner", JUnitTestGURLs.RED_1, false,
-                    BOOKMARK_ID_FOLDER, false);
-            mockBookmarkItem(BOOKMARK_ID_READING_LIST, "reading list", JUnitTestGURLs.BLUE_1, false,
+            mockBookmarkItem(BOOKMARK_ID_ONE, "one", JUnitTestGURLs.URL_1.getSpec(), false,
                     BOOKMARK_ID_FOLDER, true);
+            mockBookmarkItem(BOOKMARK_ID_TWO, "two", JUnitTestGURLs.URL_2.getSpec(), false,
+                    BOOKMARK_ID_FOLDER, true);
+            mockBookmarkItem(BOOKMARK_ID_PARTNER, "partner", JUnitTestGURLs.RED_1.getSpec(), false,
+                    BOOKMARK_ID_FOLDER, false);
+            mockBookmarkItem(BOOKMARK_ID_READING_LIST, "reading list",
+                    JUnitTestGURLs.BLUE_1.getSpec(), false, BOOKMARK_ID_FOLDER, true);
         });
     }
 
     @After
     public void tearDown() {
-        IncognitoUtils.setEnabledForTesting(null);
-
         // Since these monitors block the creation of activities, it is crucial that they're removed
         // so that when batching tests the subsequent cases actually see their activities.
         for (ActivityMonitor activityMonitor : mActivityMonitorList) {
@@ -167,18 +164,19 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
                 R.id.selection_mode_menu_group, false);
         mBookmarkToolbar.initializeSearchView(
                 mSearchDelegate, R.string.bookmark_toolbar_search, R.id.search_menu_id);
+        mBookmarkToolbar.setSortMenuIds(BookmarkToolbarMediator.SORT_MENU_IDS);
         mBookmarkToolbar.setBookmarkModel(mBookmarkModel);
         mBookmarkToolbar.setBookmarkOpener(mBookmarkOpener);
         mBookmarkToolbar.setSelectionDelegate(mSelectionDelegate);
         mBookmarkToolbar.setBookmarkUiMode(BookmarkUiMode.FOLDER);
         mBookmarkToolbar.setIsDialogUi(true);
-        mBookmarkToolbar.setOpenFolderCallback(mOpenFolderCallback);
+        mBookmarkToolbar.setNavigateBackRunnable(mNavigateBackRunnable);
     }
 
     private void mockBookmarkItem(BookmarkId bookmarkId, String title, String url, boolean isFolder,
             BookmarkId parent, boolean isEditable) {
         BookmarkItem bookmarkItem = new BookmarkItem(
-                bookmarkId, title, new GURL(url), isFolder, parent, isEditable, false, 0, false);
+                bookmarkId, title, new GURL(url), isFolder, parent, isEditable, false, 0, false, 0);
         when(mBookmarkModel.getBookmarkById(bookmarkId)).thenReturn(bookmarkItem);
     }
 
@@ -208,6 +206,16 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         }
     }
 
+    private void verifyMenuEnabled(List<Integer> applicableMenuIds, List<Integer> disabledIds) {
+        for (int menuId : applicableMenuIds) {
+            boolean isEnabled = !disabledIds.contains(menuId);
+            MenuItem menuItem = mBookmarkToolbar.getMenu().findItem(menuId);
+            assertNotNull(menuId);
+            assertEquals("Mismatched enabled state for menu item " + menuItem, isEnabled,
+                    menuItem.isEnabled());
+        }
+    }
+
     @Test
     @SmallTest
     @UiThreadTest
@@ -215,7 +223,7 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         initializeNormal();
         mBookmarkToolbar.setCurrentFolder(BOOKMARK_ID_FOLDER);
         mBookmarkToolbar.onNavigationBack();
-        Mockito.verify(mOpenFolderCallback).onResult(BOOKMARK_ID_ROOT);
+        Mockito.verify(mNavigateBackRunnable).run();
     }
 
     @Test
@@ -407,5 +415,27 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         initializeNormal();
         mBookmarkToolbar.setBookmarkUiMode(BookmarkUiMode.SEARCHING);
         assertFalse(mBookmarkToolbar.isSearching());
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    @EnableFeatures(ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS)
+    public void testSortButtonsDisabled_throughSelection() {
+        initializeNormal();
+        mBookmarkToolbar.setSortMenuIdsEnabled(false);
+        verifyMenuEnabled(
+                BookmarkToolbarMediator.SORT_MENU_IDS, BookmarkToolbarMediator.SORT_MENU_IDS);
+
+        when(mSelectionDelegate.isSelectionEnabled()).thenReturn(true);
+        mBookmarkToolbar.onSelectionStateChange(Collections.singletonList(BOOKMARK_ID_ONE));
+        verifySelectionMenuVisibility();
+
+        when(mSelectionDelegate.isSelectionEnabled()).thenReturn(false);
+        mBookmarkToolbar.onSelectionStateChange(Collections.emptyList());
+
+        // The filter button visibility should be carried over through a selection event.
+        verifyMenuEnabled(
+                BookmarkToolbarMediator.SORT_MENU_IDS, BookmarkToolbarMediator.SORT_MENU_IDS);
     }
 }

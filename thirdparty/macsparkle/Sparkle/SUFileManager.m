@@ -21,10 +21,6 @@ extern int renamex_np(const char *, const char *, unsigned int) __attribute__((w
 
 static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 
-#pragma clang diagnostic push
-// Use direct access because it's easier, clearer, and faster
-#pragma clang diagnostic ignored "-Wdirect-ivar-access"
-
 @implementation SUFileManager
 {
     NSFileManager *_fileManager;
@@ -42,6 +38,9 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 // -[NSFileManager attributesOfItemAtPath:error:] won't follow symbolic links
 
 - (BOOL)_itemExistsAtURL:(NSURL *)fileURL
+#ifndef BUILDING_SPARKLE_TESTS
+SPU_OBJC_DIRECT
+#endif
 {
     NSString *path = fileURL.path;
     if (path == nil) {
@@ -51,6 +50,9 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 }
 
 - (BOOL)_itemExistsAtURL:(NSURL *)fileURL isDirectory:(BOOL *)isDirectory
+#ifndef BUILDING_SPARKLE_TESTS
+SPU_OBJC_DIRECT
+#endif
 {
     NSString *path = fileURL.path;
     if (path == nil) {
@@ -70,7 +72,7 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 }
 
 // Wrapper around getxattr()
-- (ssize_t)_getXAttr:(const char *)name fromFile:(NSString *)file options:(int)options
+- (ssize_t)_getXAttr:(const char *)name fromFile:(NSString *)file options:(int)options SPU_OBJC_DIRECT
 {
     char path[PATH_MAX] = {0};
     if (![file getFileSystemRepresentation:path maxLength:sizeof(path)]) {
@@ -82,7 +84,7 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 }
 
 // Wrapper around removexattr()
-- (int)_removeXAttr:(const char *)attr fromFile:(NSString *)file options:(int)options
+- (int)_removeXAttr:(const char *)attr fromFile:(NSString *)file options:(int)options SPU_OBJC_DIRECT
 {
     char path[PATH_MAX] = {0};
     if (![file getFileSystemRepresentation:path maxLength:sizeof(path)]) {
@@ -166,10 +168,25 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
     return [_fileManager copyItemAtURL:sourceURL toURL:destinationURL error:error];
 }
 
-- (BOOL)_getVolumeID:(out id _Nullable __autoreleasing * _Nonnull)outVolumeIdentifier ofItemAtURL:(NSURL *)url
+- (BOOL)_getVolumeID:(out id _Nullable __autoreleasing * _Nonnull)outVolumeIdentifier ofItemAtURL:(NSURL *)url SPU_OBJC_DIRECT
 {
     NSError *error = nil;
     return [url getResourceValue:outVolumeIdentifier forKey:NSURLVolumeIdentifierKey error:&error];
+}
+
+- (BOOL)itemAtURL:(NSURL *)url1 isOnSameVolumeItemAsURL:(NSURL *)url2
+{
+    id volumeIdentifier1 = nil;
+    BOOL foundVolume1 = [self _getVolumeID:&volumeIdentifier1 ofItemAtURL:url1];
+
+    id volumeIdentifier2 = nil;
+    BOOL foundVolume2 = [self _getVolumeID:&volumeIdentifier2 ofItemAtURL:url2];
+
+    if (foundVolume1 && foundVolume2 && ![(NSObject *)volumeIdentifier1 isEqual:volumeIdentifier2]) {
+        return NO;
+    } else {
+        return YES;
+    }
 }
 
 - (BOOL)moveItemAtURL:(NSURL *)sourceURL toURL:(NSURL *)destinationURL error:(NSError *__autoreleasing *)error
@@ -200,14 +217,8 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
     // from my experience a move may fail when moving particular files from
     // one network mount to another one. This is possibly related to the fact that
     // moving a file will try to preserve ownership but copying won't
-
-    id sourceVolumeIdentifier = nil;
-    BOOL foundSourceVolume = [self _getVolumeID:&sourceVolumeIdentifier ofItemAtURL:sourceURL];
-
-    id destinationVolumeIdentifier = nil;
-    BOOL foundDestinationVolume = [self _getVolumeID:&destinationVolumeIdentifier ofItemAtURL:destinationURLParent];
-
-    if (foundSourceVolume && foundDestinationVolume && ![(NSObject *)sourceVolumeIdentifier isEqual:destinationVolumeIdentifier]) {
+    
+    if (![self itemAtURL:sourceURL isOnSameVolumeItemAsURL:destinationURLParent]) {
         return ([self copyItemAtURL:sourceURL toURL:destinationURL error:error] && [self removeItemAtURL:sourceURL error:error]);
     }
 
@@ -369,7 +380,7 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
     return YES;
 }
 
-- (BOOL)_updateItemAtURL:(NSURL *)targetURL withAccessTime:(struct timeval)accessTime error:(NSError * __autoreleasing *)error
+- (BOOL)_updateItemAtURL:(NSURL *)targetURL withAccessTime:(struct timeval)accessTime error:(NSError * __autoreleasing *)error SPU_OBJC_DIRECT
 {
     char path[PATH_MAX] = {0};
 
@@ -570,5 +581,3 @@ static char SUAppleQuarantineIdentifier[] = "com.apple.quarantine";
 }
 
 @end
-
-#pragma clang diagnostic pop

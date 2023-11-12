@@ -6,13 +6,9 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/mac/foundation_util.h"
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/no_destructor.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace device::fido::mac {
 
@@ -42,23 +38,25 @@ void Keychain::ClearInstanceOverride() {
 Keychain::Keychain() = default;
 Keychain::~Keychain() = default;
 
-base::ScopedCFTypeRef<SecKeyRef> Keychain::KeyCreateRandomKey(
+base::apple::ScopedCFTypeRef<SecKeyRef> Keychain::KeyCreateRandomKey(
     CFDictionaryRef params,
     CFErrorRef* error) {
-  return base::ScopedCFTypeRef<SecKeyRef>(SecKeyCreateRandomKey(params, error));
+  return base::apple::ScopedCFTypeRef<SecKeyRef>(
+      SecKeyCreateRandomKey(params, error));
 }
 
-base::ScopedCFTypeRef<CFDataRef> Keychain::KeyCreateSignature(
+base::apple::ScopedCFTypeRef<CFDataRef> Keychain::KeyCreateSignature(
     SecKeyRef key,
     SecKeyAlgorithm algorithm,
     CFDataRef data,
     CFErrorRef* error) {
-  return base::ScopedCFTypeRef<CFDataRef>(
+  return base::apple::ScopedCFTypeRef<CFDataRef>(
       SecKeyCreateSignature(key, algorithm, data, error));
 }
 
-base::ScopedCFTypeRef<SecKeyRef> Keychain::KeyCopyPublicKey(SecKeyRef key) {
-  return base::ScopedCFTypeRef<SecKeyRef>(SecKeyCopyPublicKey(key));
+base::apple::ScopedCFTypeRef<SecKeyRef> Keychain::KeyCopyPublicKey(
+    SecKeyRef key) {
+  return base::apple::ScopedCFTypeRef<SecKeyRef>(SecKeyCopyPublicKey(key));
 }
 
 OSStatus Keychain::ItemCopyMatching(CFDictionaryRef query, CFTypeRef* result) {
@@ -71,7 +69,7 @@ OSStatus Keychain::ItemDelete(CFDictionaryRef query) {
 
 OSStatus Keychain::ItemUpdate(
     CFDictionaryRef query,
-    base::ScopedCFTypeRef<CFMutableDictionaryRef> keychain_data) {
+    base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> keychain_data) {
   return SecItemUpdate(query, keychain_data);
 }
 

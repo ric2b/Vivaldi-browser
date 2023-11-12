@@ -2,10 +2,10 @@
 
 #import "ios/ui/settings/sync/vivaldi_sync_mediator.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/base64.h"
 #import "base/containers/flat_map.h"
 #import "base/files/file_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/thread_pool.h"
 #import "base/threading/scoped_blocking_call.h"
@@ -25,9 +25,14 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_simplified_state.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+#import "ios/ui/settings/sync/manager/vivaldi_sync_simplified_state.h"
 #import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h"
@@ -53,10 +58,6 @@ using vivaldi::VivaldiSyncUIHelper;
 using base::SysUTF8ToNSString;
 using base::SysNSStringToUTF8;
 
-namespace {
-  const std::string ERROR_ACCOUNT_NOT_ACTIVATED = "17006";
-}
-
 struct PendingRegistration {
 std::string username;
 int age;
@@ -64,28 +65,14 @@ std::string recoveryEmailAddress;
 std::string password;
 };
 
-@protocol AccountManagerObserver
-// Called by VivaldiAccountManagerObserverBridge
--(void)onVivaldiAccountUpdated;
--(void)onTokenFetchSucceeded;
--(void)onTokenFetchFailed;
-
-@end
-
-@protocol VivaldiSyncServiceObserver
-// Called by VivaldiSyncServiceObserverBridge
--(void)onSyncStateChanged;
--(void)onSyncCycleCompleted;
-@end
-
-@interface VivaldiSyncMediator () <VivaldiSyncServiceObserver,
-                                   AccountManagerObserver> {
+@interface VivaldiSyncMediator () <VivaldiAccountSyncManagerConsumer> {
 PendingRegistration pendingRegistration;
 }
 
 @property(nonatomic, assign) VivaldiSyncServiceImpl* syncService;
 @property(nonatomic, assign) VivaldiAccountManager* vivaldiAccountManager;
 @property(nonatomic, assign) PrefService* prefService;
+@property(nonatomic, strong) VivaldiAccountSyncManager* syncManager;
 
 // Model
 @property(nonatomic, strong) NSArray* segmentedControlLabels;
@@ -103,79 +90,6 @@ PendingRegistration pendingRegistration;
 @property(nonatomic, copy) NSURLSessionDataTask* task;
 
 @end
-
-class VivaldiAccountManagerObserverBridge :
-    public VivaldiAccountManager::Observer {
-  public:
-    VivaldiAccountManagerObserverBridge(
-        VivaldiSyncMediator* consumer,
-        VivaldiAccountManager* account_manager
-    ) : account_manager_(account_manager),
-        consumer_(consumer) {
-      DCHECK(account_manager);
-      DCHECK(consumer);
-      account_manager_->AddObserver(this);
-    }
-
-    ~VivaldiAccountManagerObserverBridge() override {
-      account_manager_->RemoveObserver(this);
-    }
-
-    // VivaldiAccountManager::Observer implementation
-    void OnVivaldiAccountUpdated() override {
-      [consumer_ onVivaldiAccountUpdated];
-    }
-
-    void OnTokenFetchSucceeded() override {
-      [consumer_ onTokenFetchSucceeded];
-    }
-
-    void OnTokenFetchFailed() override {
-      [consumer_ onTokenFetchFailed];
-    }
-
-    void OnVivaldiAccountShutdown() override {
-      account_manager_->RemoveObserver(this);
-    }
-
- private:
-    VivaldiAccountManager* account_manager_;
-    __weak VivaldiSyncMediator* const consumer_; // Weak, owns us
-};
-
-
-class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
-  public:
-    VivaldiSyncServiceObserverBridge(
-        VivaldiSyncMediator* consumer,
-        VivaldiSyncServiceImpl* sync_service
-    ) : sync_service_(sync_service),
-        consumer_(consumer) {
-      DCHECK(sync_service);
-      DCHECK(consumer);
-      sync_service_->AddObserver(this);
-    }
-
-    ~VivaldiSyncServiceObserverBridge() override {
-      sync_service_->RemoveObserver(this);
-    }
-
-    // syncer::SyncServiceObserver implementation.
-    void OnStateChanged(SyncService* sync) override {
-      [consumer_ onSyncStateChanged];
-    }
-    void OnSyncCycleCompleted(SyncService* sync) override {
-      [consumer_ onSyncCycleCompleted];
-    }
-
-    void OnSyncShutdown(SyncService* sync) override {
-      sync_service_->RemoveObserver(this);
-    }
-
- private:
-    VivaldiSyncServiceImpl* sync_service_;
-    __weak VivaldiSyncMediator* const consumer_; // Weak, owns us
-};
 
 @interface VivaldiSyncMediator () {
   EngineData engineData;
@@ -199,11 +113,13 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     _prefService = prefService;
     loggingOut = false;
 
-    _accountManagerObserver =
-      std::make_unique<VivaldiAccountManagerObserverBridge>(
-        self, _vivaldiAccountManager);
-    _syncObserver = std::make_unique<VivaldiSyncServiceObserverBridge>(
-        self, _syncService);
+    VivaldiAccountSyncManager* syncManager =
+        [[VivaldiAccountSyncManager alloc]
+            initWithAccountManager:_vivaldiAccountManager
+                       syncService:_syncService];
+    _syncManager = syncManager;
+    _syncManager.consumer = self;
+    [_syncManager start];
 
     self.formatter = [[NSDateFormatter alloc] init];
     [self.formatter setDateFormat:@"dd/MM/yyyy HH:mm:ss"];
@@ -220,8 +136,10 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 - (void)dealloc {
   DCHECK(!self.commandHandler);
   DCHECK(!self.settingsConsumer);
-  _accountManagerObserver.reset();
-  _syncObserver.reset();
+  if (_syncManager) {
+    [_syncManager stop];
+    _syncManager = nil;
+  }
 }
 
 - (void)startMediating {
@@ -229,7 +147,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   switch ([self getSimplifiedAccountState]) {
     case LOGGING_IN:
     case LOGGED_IN: {
-      [self onSyncStateChanged];
+      [self onVivaldiSyncStateChanged];
       break;
     }
     case LOGGED_OUT: {
@@ -298,8 +216,10 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 - (void)disconnect {
-  _accountManagerObserver.reset();
-  _syncObserver.reset();
+  if (_syncManager) {
+    [_syncManager stop];
+    _syncManager = nil;
+  }
   self.commandHandler = nil;
   self.settingsConsumer = nil;
 }
@@ -382,9 +302,9 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   }];
 }
 
-#pragma mark - SyncObserverModelBridge
+#pragma mark - VivaldiAccountSyncManagerConsumer
 
-- (void)onSyncStateChanged {
+- (void)onVivaldiSyncStateChanged {
   if (loggingOut) {
     return;
   }
@@ -404,6 +324,11 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     [self handleNotActivated];
     return;
   }
+
+  // TODO: (tomas@vivaldi.com) or (prio@vivaldi.com):
+  // Refactor this by replacing the engineData and cycleData calls with getters
+  // from VivaldiAccountSyncManager. That will help avoid duplication of sync
+  // and account state management in different places.
 
   switch(engineData.engine_state) {
     case EngineState::STOPPED:
@@ -443,15 +368,13 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   }
 }
 
--(void)onSyncCycleCompleted {
-  [self onSyncStateChanged];
+-(void)onVivaldiSyncCycleCompleted {
+  [self onVivaldiSyncStateChanged];
 }
-
-#pragma mark - AccountManagerObserver
 
 -(void)onVivaldiAccountUpdated {
   if (!loggingOut) {
-    [self onSyncStateChanged];
+    [self onVivaldiSyncStateChanged];
   }
   if (loggingOut && [self getSimplifiedAccountState] == LOGGED_OUT) {
     loggingOut = false;
@@ -459,7 +382,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 -(void)onTokenFetchSucceeded {
-  [self onSyncStateChanged];
+  [self onVivaldiSyncStateChanged];
 }
 
 -(void)onTokenFetchFailed {
@@ -468,7 +391,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
         IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED)];
     return;
   }
-  [self onSyncStateChanged];
+  [self onVivaldiSyncStateChanged];
 }
 
 #pragma mark - VivaldiSyncSettingsViewControllerServiceDelegate
@@ -515,15 +438,9 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 - (void)startSyncingAllButtonPressed {
-  UserSelectableTypeSet selectedTypes;
-  selectedTypes.Put(UserSelectableType::kBookmarks);
-  selectedTypes.Put(UserSelectableType::kPasswords);
-  selectedTypes.Put(UserSelectableType::kPreferences);
-  selectedTypes.Put(UserSelectableType::kAutofill);
-  selectedTypes.Put(UserSelectableType::kHistory);
-  selectedTypes.Put(UserSelectableType::kTabs);
-
-  [self setChosenTypes:selectedTypes syncAll:YES];
+  if (!_syncManager)
+    return;
+  [_syncManager enableAllSync];
 }
 
 - (void)syncAllOptionChanged:(BOOL)syncAll {
@@ -557,21 +474,9 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 - (void)updateChosenTypes:(UserSelectableType)type isOn:(BOOL)isOn {
-  UserSelectableTypeSet selectedTypes = engineData.data_types;
-  if (isOn && !engineData.data_types.Has(type)) {
-    selectedTypes.Put(type);
-  } else if (!isOn && engineData.data_types.Has(type)) {
-    selectedTypes.Remove(type);
-  }
-
-  if (selectedTypes.Has(UserSelectableType::kHistory)) {
-    selectedTypes.Put(UserSelectableType::kTabs);
-  } else if (!selectedTypes.Has(UserSelectableType::kHistory) &&
-              selectedTypes.Has(UserSelectableType::kTabs)) {
-    selectedTypes.Remove(UserSelectableType::kTabs);
-  }
-
-  [self setChosenTypes:selectedTypes syncAll:NO];
+  if (!_syncManager)
+    return;
+  [_syncManager updateSettingsType:type isOn:isOn];
 }
 
 #pragma mark - VivaldiSyncSettingsViewControllerModelDelegate
@@ -597,6 +502,11 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   NSString* statusText;
   int color = 0;
   NSDate* lastSyncDate = nil;
+
+  // TODO: (tomas@vivaldi.com) or (prio@vivaldi.com):
+  // Refactor this by replacing the engineData and cycleData calls with getters
+  // from VivaldiAccountSyncManager. That will help avoid duplication of sync
+  // and account state management in different places.
 
   if (engineData.engine_state == EngineState::FAILED) {
     statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_FAILED);
@@ -837,7 +747,8 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
       l10n_util::GetNSString(IDS_VIVALDI_START_SYNCING);
   self.startSyncingButton.textAlignment = NSTextAlignmentNatural;
   self.startSyncingButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
-  self.startSyncingButton.buttonBackgroundColor = [UIColor clearColor];
+  self.startSyncingButton.buttonBackgroundColor =
+      [UIColor colorNamed:kBackgroundColor];
   self.startSyncingButton.disableButtonIntrinsicWidth = YES;
   self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
 
@@ -931,7 +842,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     return;
   }
   ChromeTableViewController* tableViewController =
-      base::mac::ObjCCast<ChromeTableViewController>(self.settingsConsumer);
+      base::apple::ObjCCast<ChromeTableViewController>(self.settingsConsumer);
   [tableViewController removeFromModelItemAtIndexPaths:indexPaths];
   [self.settingsConsumer.tableView deleteRowsAtIndexPaths:indexPaths
                       withRowAnimation:UITableViewRowAnimationAutomatic];
@@ -962,6 +873,9 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 - (void)initSyncItemArrays {
+  if (!_syncManager)
+    return;
+
   TableViewTextItem* syncAllInfoTextbox =
       [[TableViewTextItem alloc] initWithType:ItemTypeSyncAllInfoTextbox];
   syncAllInfoTextbox.textAlignment = NSTextAlignmentLeft;
@@ -974,8 +888,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   switchItemBookmarks.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_BOOKMARKS);
   switchItemBookmarks.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_BOOKMARKS_SUBTITLE);
-  switchItemBookmarks.on = engineData.data_types.Has(
-      UserSelectableType::kBookmarks);
+  switchItemBookmarks.on = [_syncManager isSyncBookmarksEnabled];
   switchItemBookmarks.iconImage = [UIImage imageNamed:@"sync_bookmarks"];
 
   TableViewSwitchItem* switchItemSettings =
@@ -983,8 +896,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   switchItemSettings.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_PREFERENCES);
   switchItemSettings.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_PREFERENCES_SUBTITLE);
-  switchItemSettings.on = engineData.data_types.Has(
-      UserSelectableType::kPreferences);
+  switchItemSettings.on = [_syncManager isSyncSettingsEnabled];
   switchItemSettings.iconImage = [UIImage imageNamed:@"sync_settings"];
 
   TableViewSwitchItem* switchItemPasswords =
@@ -992,8 +904,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   switchItemPasswords.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_PASSWORDS);
   switchItemPasswords.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_PASSWORDS_SUBTITLE);
-  switchItemPasswords.on = engineData.data_types.Has(
-      UserSelectableType::kPasswords);
+  switchItemPasswords.on = [_syncManager isSyncPasswordsEnabled];
   switchItemPasswords.iconImage = [UIImage imageNamed:@"sync_passwords"];
 
   TableViewSwitchItem* switchItemAutofill =
@@ -1001,45 +912,83 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   switchItemAutofill.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOFILL);
   switchItemAutofill.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOFILL_SUBTITLE);
-  switchItemAutofill.on = engineData.data_types.Has(
-      UserSelectableType::kAutofill);
+  switchItemAutofill.on = [_syncManager isSyncAutofillEnabled];
   switchItemAutofill.iconImage = [UIImage imageNamed:@"sync_autofill"];
+
+  TableViewSwitchItem* switchItemTabs =
+    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncTabsSwitch];
+  switchItemTabs.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_TABS);
+  switchItemTabs.detailText =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_TABS_SUBTITLE);
+  switchItemTabs.on = [_syncManager isSyncTabsEnabled];
+  switchItemTabs.iconImage = [UIImage imageNamed:@"sync_tabs"];
 
   TableViewSwitchItem* switchItemHistory =
     [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncHistorySwitch];
   switchItemHistory.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_TYPED_URLS);
   switchItemHistory.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_TYPED_URLS_SUBTITLE);
-  switchItemHistory.on = engineData.data_types.Has(
-      UserSelectableType::kHistory);
+  switchItemHistory.on = [_syncManager isSyncHistoryEnabled];
   switchItemHistory.iconImage = [UIImage imageNamed:@"sync_history"];
+
+  TableViewSwitchItem* switchItemReadingList =
+    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncReadingListSwitch];
+  switchItemReadingList.text =
+      l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_READING_LIST);
+  switchItemReadingList.detailText =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_READING_LIST_SUBTITLE);
+  switchItemReadingList.on = [_syncManager isSyncReadingListEnabled];
+  switchItemReadingList.iconImage = [UIImage imageNamed:@"sync_notes"];
+
+  TableViewSwitchItem* switchItemNotes =
+    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncNotesSwitch];
+  switchItemNotes.text = l10n_util::GetNSString(IDS_VIVALDI_TOOLS_MENU_NOTES);
+  switchItemNotes.detailText =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_NOTES_LIST_SUBTITLE);
+  switchItemNotes.on = [_syncManager isSyncNotesEnabled];
+  switchItemNotes.iconImage = [UIImage imageNamed:@"sync_readinglist"];
 
   _syncSelectedItems = @[
     switchItemBookmarks,
     switchItemSettings,
     switchItemPasswords,
     switchItemAutofill,
+    switchItemTabs,
     switchItemHistory,
+    switchItemReadingList,
+    switchItemNotes,
   ];
 }
 
 - (void)refreshSyncSelectedItems {
+  if (!_syncManager)
+    return;
+
   for (TableViewSwitchItem* item in _syncSelectedItems) {
     switch (item.type) {
       case ItemTypeSyncBookmarksSwitch:
-        item.on = engineData.data_types.Has(UserSelectableType::kBookmarks);
+        item.on = [_syncManager isSyncBookmarksEnabled];
         break;
       case ItemTypeSyncSettingsSwitch:
-        item.on = engineData.data_types.Has(UserSelectableType::kPreferences);
+        item.on = [_syncManager isSyncSettingsEnabled];
         break;
       case ItemTypeSyncPasswordsSwitch:
-        item.on = engineData.data_types.Has(UserSelectableType::kPasswords);
+        item.on = [_syncManager isSyncPasswordsEnabled];
         break;
       case ItemTypeSyncAutofillSwitch:
-        item.on = engineData.data_types.Has(UserSelectableType::kAutofill);
+        item.on = [_syncManager isSyncAutofillEnabled];
+        break;
+      case ItemTypeSyncTabsSwitch:
+        item.on = [_syncManager isSyncTabsEnabled];
         break;
       case ItemTypeSyncHistorySwitch:
-        item.on = engineData.data_types.Has(UserSelectableType::kHistory);
+        item.on = [_syncManager isSyncHistoryEnabled];
+        break;
+      case ItemTypeSyncReadingListSwitch:
+        item.on = [_syncManager isSyncReadingListEnabled];
+        break;
+      case ItemTypeSyncNotesSwitch:
+        item.on = [_syncManager isSyncNotesEnabled];
         break;
       default:
         break;
@@ -1048,33 +997,10 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 }
 
 -(NSInteger)getSimplifiedAccountState {
-  if (_vivaldiAccountManager->has_refresh_token()) {
-    return LOGGED_IN;
-  } else if (_vivaldiAccountManager->last_token_fetch_error().
-      server_message.find(ERROR_ACCOUNT_NOT_ACTIVATED) != std::string::npos) {
-    return NOT_ACTIVATED;
-  } else if (_vivaldiAccountManager->last_token_fetch_error().type ==
-      VivaldiAccountManager::FetchErrorType::INVALID_CREDENTIALS) {
-    return LOGIN_FAILED;
-  } else if (!_vivaldiAccountManager->GetTokenRequestTime().is_null()) {
-    return LOGGING_IN;
-  } else if (!_vivaldiAccountManager->account_info().account_id.empty()) {
-    return CREDENTIALS_MISSING;
-  } else {
+  if (!_syncManager)
     return LOGGED_OUT;
-  }
-}
 
-- (void)setChosenTypes:(UserSelectableTypeSet)types syncAll:(BOOL)syncAll {
-  if (!_syncSetupInProgressHandle.get()) {
-    _syncSetupInProgressHandle = _syncService->GetSetupInProgressHandle();
-  }
-
-  _syncService->GetUserSettings()->SetSelectedTypes(syncAll, types);
-  _syncService->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
-        syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
-
-  _syncSetupInProgressHandle.reset();
+  return [_syncManager getCurrentAccountState];
 }
 
 #pragma mark Private - Create Account Server Request Handling

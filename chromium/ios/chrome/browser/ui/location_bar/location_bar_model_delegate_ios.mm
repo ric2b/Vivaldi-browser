@@ -10,7 +10,7 @@
 #import "components/omnibox/browser/autocomplete_match.h"
 #import "components/prefs/pref_service.h"
 #import "components/security_state/ios/security_state_utils.h"
-#import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
+#import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -23,10 +23,6 @@
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/security/ssl_status.h"
 #import "ios/web/public/web_state.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 LocationBarModelDelegateIOS::LocationBarModelDelegateIOS(
     WebStateList* web_state_list,

@@ -4,15 +4,21 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 
+#import <vector>
+
+#import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/feed/core/v2/public/ios/pref_names.h"
 #import "components/ntp_tiles/most_visited_sites.h"
+#import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/password_manager/core/browser/ui/password_check_referrer.h"
 #import "components/prefs/pref_service.h"
+#import "components/segmentation_platform/public/features.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
@@ -24,9 +30,13 @@
 #import "ios/chrome/browser/ntp/set_up_list_item_type.h"
 #import "ios/chrome/browser/ntp/set_up_list_prefs.h"
 #import "ios/chrome/browser/ntp_tiles/ios_most_visited_sites_factory.h"
+#import "ios/chrome/browser/passwords/password_checkup_utils.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/safety_check/ios_chrome_safety_check_manager.h"
+#import "ios/chrome/browser/safety_check/ios_chrome_safety_check_manager_factory.h"
+#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
@@ -46,7 +56,10 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
@@ -57,6 +70,9 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
+#import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/safety_check/types.h"
+#import "ios/chrome/browser/ui/content_suggestions/safety_check/utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_default_browser_promo_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_default_browser_promo_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_show_more_view_controller.h"
@@ -79,10 +95,7 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util_mac.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#import "url/gurl.h"
 
 namespace {
 // Kill-switch for quick fix of crbug.com/1204507
@@ -95,6 +108,7 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
 @interface ContentSuggestionsCoordinator () <
     ContentSuggestionsMenuProvider,
     ContentSuggestionsViewControllerAudience,
+    SafetyCheckViewDelegate,
     SetUpListDefaultBrowserPromoCoordinatorDelegate,
     SetUpListViewDelegate>
 
@@ -173,6 +187,9 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
       [[ContentSuggestionsMetricsRecorder alloc]
           initWithLocalState:GetApplicationContext()->GetLocalState()];
 
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
+
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState());
@@ -188,6 +205,7 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
                    readingListModel:readingListModel
                         prefService:prefs
       isGoogleDefaultSearchProvider:isGoogleDefaultSearchProvider
+                        syncService:syncService
               authenticationService:authenticationService
                     identityManager:identityManager
                             browser:self.browser];
@@ -195,6 +213,12 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
   self.contentSuggestionsMediator.promosManager = promosManager;
   self.contentSuggestionsMediator.contentSuggestionsMetricsRecorder =
       self.contentSuggestionsMetricsRecorder;
+  if (base::FeatureList::IsEnabled(segmentation_platform::features::
+                                       kSegmentationPlatformIosModuleRanker)) {
+    self.contentSuggestionsMediator.segmentationService =
+        segmentation_platform::SegmentationPlatformServiceFactory::
+            GetForBrowserState(self.browser->GetBrowserState());
+  }
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
   self.contentSuggestionsMediator.dispatcher =
@@ -234,6 +258,7 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
   self.contentSuggestionsMediator = nil;
   [self.contentSuggestionsMetricsRecorder disconnect];
   self.contentSuggestionsMetricsRecorder = nil;
+  self.contentSuggestionsViewController.audience = nil;
   self.contentSuggestionsViewController = nil;
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
@@ -281,6 +306,14 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
 
 - (void)neverShowModuleType:(ContentSuggestionsModuleType)type {
   switch (type) {
+    case ContentSuggestionsModuleType::kTabResumption:
+      [self.contentSuggestionsMediator disableTabResumption];
+      break;
+    case ContentSuggestionsModuleType::kSafetyCheck:
+    case ContentSuggestionsModuleType::kSafetyCheckMultiRow:
+    case ContentSuggestionsModuleType::kSafetyCheckMultiRowOverflow:
+      [self.contentSuggestionsMediator disableSafetyCheck:type];
+      break;
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
@@ -296,10 +329,6 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
 
 - (UIView*)view {
   return self.contentSuggestionsViewController.view;
-}
-
-- (void)reload {
-  [self.contentSuggestionsMediator reloadAllData];
 }
 
 #pragma mark - ContentSuggestionsMenuProvider
@@ -384,6 +413,58 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
       [UIContextMenuConfiguration configurationWithIdentifier:nil
                                               previewProvider:nil
                                                actionProvider:actionProvider];
+}
+
+#pragma mark - SafetyCheckViewDelegate
+
+- (void)didSelectSafetyCheckItem:(SafetyCheckItemType)type {
+  CHECK(IsSafetyCheckMagicStackEnabled());
+
+  [self.contentSuggestionsMetricsRecorder
+      recordMagicStackModuleEngagementForType:ContentSuggestionsModuleType::
+                                                  kSafetyCheck];
+
+  IOSChromeSafetyCheckManager* safetyCheckManager =
+      IOSChromeSafetyCheckManagerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+
+  switch (type) {
+    case SafetyCheckItemType::kUpdateChrome: {
+      const GURL& chrome_upgrade_url =
+          safetyCheckManager->GetChromeAppUpgradeUrl();
+
+      HandleSafetyCheckUpdateChromeTap(
+          chrome_upgrade_url,
+          HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                             ApplicationCommands));
+
+      break;
+    }
+    case SafetyCheckItemType::kPassword: {
+      std::vector<password_manager::CredentialUIEntry> credentials =
+          safetyCheckManager->GetInsecureCredentials();
+
+      HandleSafetyCheckPasswordTap(
+          credentials, HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                                          ApplicationCommands));
+
+      break;
+    }
+    case SafetyCheckItemType::kSafeBrowsing:
+      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                          ApplicationSettingsCommands)
+          showSafeBrowsingSettings];
+
+      break;
+    case SafetyCheckItemType::kAllSafe:
+    case SafetyCheckItemType::kRunning:
+    case SafetyCheckItemType::kDefault:
+      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                          ApplicationCommands)
+          showAndStartSafetyCheckInHalfSheet:YES];
+
+      break;
+  }
 }
 
 #pragma mark - SetUpListViewDelegate
@@ -481,7 +562,7 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
 // Shows the SigninSync UI with the SetUpList access point.
 - (void)showSignIn {
   ShowSigninCommandCompletionCallback callback =
-      ^(SigninCoordinatorResult result) {
+      ^(SigninCoordinatorResult result, SigninCompletionInfo* completionInfo) {
         if (result == SigninCoordinatorResultSuccess ||
             result == SigninCoordinatorResultCanceledByUser) {
           PrefService* localState = GetApplicationContext()->GetLocalState();
@@ -489,8 +570,20 @@ BASE_FEATURE(kNoRecentTabIfNullWebState,
                                               SetUpListItemType::kSignInSync);
         }
       };
+  AuthenticationOperation operation =
+      AuthenticationOperation::kSigninAndSyncWithTwoScreens;
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    // If there are 0 identities, kInstantSignin requires less taps.
+    ChromeBrowserState* browserState = self.browser->GetBrowserState();
+    operation =
+        ChromeAccountManagerServiceFactory::GetForBrowserState(browserState)
+                ->HasIdentities()
+            ? AuthenticationOperation::kSigninOnly
+            : AuthenticationOperation::kInstantSignin;
+  }
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
-      initWithOperation:AuthenticationOperationSigninAndSyncWithTwoScreens
+      initWithOperation:operation
                identity:nil
             accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST
             promoAction:signin_metrics::PromoAction::

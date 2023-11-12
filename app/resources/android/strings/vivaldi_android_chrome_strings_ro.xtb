@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
 <translation id="1397811292916898096">Caută cu <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Atingeți pentru a căuta este o funcție disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Trimite cuvântul selectat și pagina curentă ca context la Căutarea Google. Îl puteți dezactiva în <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Comută filele normal/privat</translation>
 <translation id="1644574205037202324">Istoric</translation>
 <translation id="17513872634828108">File deschise</translation>
@@ -53,7 +54,6 @@ Atingeți pentru a căuta este o funcție care este disponibilă numai atunci c�
 Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru a rafina căutarea, glisați panoul până la capăt și atingeți caseta de căutare.</translation>
 <translation id="572328651809341494">File recente</translation>
 <translation id="6150320133806434356">Semnul de carte a fost salvat</translation>
-<translation id="6301525844455696527">Aducere la zi a listei de lectură</translation>
 <translation id="6336451774241870485">Filă privată nouă</translation>
 <translation id="6404511346730675251">Editare semn de carte</translation>
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind seviciul de traducere Vivaldi</translation>

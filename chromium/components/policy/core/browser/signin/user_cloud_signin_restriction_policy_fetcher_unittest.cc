@@ -10,10 +10,9 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
-#include "components/policy/core/common/features.h"
+#include "components/policy/core/browser/signin/profile_separation_policies.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -33,9 +32,7 @@ namespace policy {
 class UserCloudSigninRestrictionPolicyFetcherTest : public ::testing::Test {
  public:
   UserCloudSigninRestrictionPolicyFetcherTest()
-      : feature_list_(std::make_unique<base::test::ScopedFeatureList>(
-            policy::features::kEnableUserCloudSigninRestrictionPolicyFetcher)),
-        policy_fetcher_(
+      : policy_fetcher_(
             std::make_unique<UserCloudSigninRestrictionPolicyFetcher>(
                 nullptr,
                 nullptr)) {}
@@ -54,8 +51,6 @@ class UserCloudSigninRestrictionPolicyFetcherTest : public ::testing::Test {
 
   void ResetPolicyFetcher() { policy_fetcher_.reset(); }
 
-  std::unique_ptr<base::test::ScopedFeatureList> feature_list_;
-
  private:
   base::test::TaskEnvironment task_env_;
   network::TestURLLoaderFactory url_loader_factory_;
@@ -63,11 +58,8 @@ class UserCloudSigninRestrictionPolicyFetcherTest : public ::testing::Test {
   signin::IdentityTestEnvironment identity_test_env_;
 };
 
-// Regression test for https://crbug.com/1337676
-TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, NoUseAfterFreeCrash) {
-  feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-  feature_list_->InitAndDisableFeature(
-      policy::features::kEnableUserCloudSigninRestrictionPolicyFetcher);
+TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
+       ReturnsLegacyValueFromBody) {
   base::Value::Dict expected_response;
   expected_response.Set("policyValue", "primary_account");
   std::string response;
@@ -81,38 +73,90 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, NoUseAfterFreeCrash) {
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
 
-  policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
-  policy_fetcher()->GetManagedAccountsSigninRestriction(
-      identity_test_env()->identity_manager(), account_info.account_id,
-      base::BindLambdaForTesting([](const std::string&) { NOTREACHED(); }));
-  ResetPolicyFetcher();
-  base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, ReturnsValueFromBody) {
-  base::Value::Dict expected_response;
-  expected_response.Set("policyValue", "primary_account");
-  std::string response;
-  JSONStringValueSerializer serializer(&response);
-  ASSERT_TRUE(serializer.Serialize(expected_response));
-  url_loader_factory()->AddResponse(
-      kSecureConnectApiGetManagedAccountsSigninRestrictionsUrl,
-      std::move(response));
-
-  identity_test_env()->SetAutomaticIssueOfAccessTokens(true);
-  AccountInfo account_info =
-      identity_test_env()->MakeAccountAvailable("alice@example.com");
-
-  std::string result;
+  policy::ProfileSeparationPolicies policies;
   policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
   policy_fetcher()->GetManagedAccountsSigninRestriction(
       identity_test_env()->identity_manager(), account_info.account_id,
       base::BindLambdaForTesting(
-          [&result](const std::string& res) { result = res; }));
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ("primary_account", result);
+  EXPECT_TRUE(policies.Valid());
+  EXPECT_FALSE(policies.Empty());
+  EXPECT_FALSE(policies.profile_separation_settings());
+  EXPECT_FALSE(policies.profile_separation_data_migration_settings());
+  EXPECT_EQ("primary_account", policies.managed_accounts_signin_restrictions());
+}
+
+TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, ReturnsNewValueFromBody) {
+  base::Value::Dict expected_response;
+  expected_response.Set("profileSeparationSettings", 1);
+  expected_response.Set("profileSeparationDataMigrationSettings", 2);
+  std::string response;
+  JSONStringValueSerializer serializer(&response);
+  ASSERT_TRUE(serializer.Serialize(expected_response));
+  url_loader_factory()->AddResponse(
+      kSecureConnectApiGetManagedAccountsSigninRestrictionsUrl,
+      std::move(response));
+
+  identity_test_env()->SetAutomaticIssueOfAccessTokens(true);
+  AccountInfo account_info =
+      identity_test_env()->MakeAccountAvailable("alice@example.com");
+
+  policy::ProfileSeparationPolicies policies;
+  policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
+  policy_fetcher()->GetManagedAccountsSigninRestriction(
+      identity_test_env()->identity_manager(), account_info.account_id,
+      base::BindLambdaForTesting(
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(policies.Valid());
+  EXPECT_FALSE(policies.Empty());
+  EXPECT_EQ(1, policies.profile_separation_settings());
+  EXPECT_EQ(2, policies.profile_separation_data_migration_settings());
+  EXPECT_FALSE(policies.managed_accounts_signin_restrictions());
+}
+
+TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
+       ReturnsNewValueWhenLegacyAvailableFromBody) {
+  base::Value::Dict expected_response;
+  expected_response.Set("policyValue", "primary_account");
+  expected_response.Set("profileSeparationSettings", 1);
+  expected_response.Set("profileSeparationDataMigrationSettings", 2);
+  std::string response;
+  JSONStringValueSerializer serializer(&response);
+  ASSERT_TRUE(serializer.Serialize(expected_response));
+  url_loader_factory()->AddResponse(
+      kSecureConnectApiGetManagedAccountsSigninRestrictionsUrl,
+      std::move(response));
+
+  identity_test_env()->SetAutomaticIssueOfAccessTokens(true);
+  AccountInfo account_info =
+      identity_test_env()->MakeAccountAvailable("alice@example.com");
+
+  policy::ProfileSeparationPolicies policies;
+  policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
+  policy_fetcher()->GetManagedAccountsSigninRestriction(
+      identity_test_env()->identity_manager(), account_info.account_id,
+      base::BindLambdaForTesting(
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(policies.Valid());
+  EXPECT_FALSE(policies.Empty());
+  EXPECT_EQ(1, policies.profile_separation_settings());
+  EXPECT_EQ(2, policies.profile_separation_data_migration_settings());
+  EXPECT_FALSE(policies.managed_accounts_signin_restrictions());
 }
 
 TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
@@ -131,16 +175,19 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
 
-  std::string result;
+  policy::ProfileSeparationPolicies policies;
   policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
   policy_fetcher()->GetManagedAccountsSigninRestriction(
       identity_test_env()->identity_manager(), account_info.account_id,
       base::BindLambdaForTesting(
-          [&result](const std::string& res) { result = res; }));
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(std::string(), result);
+  EXPECT_TRUE(policies.Empty());
+  EXPECT_TRUE(policies.Valid());
 }
 
 TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
@@ -153,16 +200,19 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
 
-  std::string result;
+  policy::ProfileSeparationPolicies policies;
   policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
   policy_fetcher()->GetManagedAccountsSigninRestriction(
       identity_test_env()->identity_manager(), account_info.account_id,
       base::BindLambdaForTesting(
-          [&result](const std::string& res) { result = res; }));
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(std::string(), result);
+  EXPECT_TRUE(policies.Empty());
+  EXPECT_TRUE(policies.Valid());
 }
 
 TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
@@ -174,16 +224,19 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest,
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("alice@example.com");
 
-  std::string result;
+  policy::ProfileSeparationPolicies policies;
   policy_fetcher()->SetURLLoaderFactoryForTesting(url_loader_factory());
   policy_fetcher()->GetManagedAccountsSigninRestriction(
       identity_test_env()->identity_manager(), account_info.account_id,
       base::BindLambdaForTesting(
-          [&result](const std::string& res) { result = res; }));
+          [&policies](const policy::ProfileSeparationPolicies& res) {
+            policies = res;
+          }));
 
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(std::string(), result);
+  EXPECT_TRUE(policies.Empty());
+  EXPECT_TRUE(policies.Valid());
 }
 
 }  // namespace policy

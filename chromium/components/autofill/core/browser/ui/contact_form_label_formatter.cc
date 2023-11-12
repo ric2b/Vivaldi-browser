@@ -14,7 +14,7 @@ ContactFormLabelFormatter::ContactFormLabelFormatter(
     const std::string& app_locale,
     ServerFieldType focused_field_type,
     uint32_t groups,
-    const std::vector<ServerFieldType>& field_types)
+    const ServerFieldTypeSet& field_types)
     : LabelFormatter(profiles,
                      app_locale,
                      focused_field_type,
@@ -37,7 +37,7 @@ std::u16string ContactFormLabelFormatter::GetLabelForProfile(
         &label_parts);
   }
 
-  if (focused_group != FieldTypeGroup::kPhoneHome) {
+  if (focused_group != FieldTypeGroup::kPhone) {
     AddLabelPartIfNotEmpty(MaybeGetPhone(profile), &label_parts);
   }
 

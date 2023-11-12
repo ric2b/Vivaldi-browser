@@ -601,8 +601,10 @@ class RightPaneView : public NonAccessibleView {
   raw_ptr<views::View, ExperimentalAsh> keyboard_title_ = nullptr;
   raw_ptr<views::StyledLabel, ExperimentalAsh> learn_more_label_ = nullptr;
 
-  raw_ptr<PublicAccountMenuView, ExperimentalAsh> language_menu_view_ = nullptr;
-  raw_ptr<PublicAccountMenuView, ExperimentalAsh> keyboard_menu_view_ = nullptr;
+  raw_ptr<PublicAccountMenuView, DanglingUntriaged | ExperimentalAsh>
+      language_menu_view_ = nullptr;
+  raw_ptr<PublicAccountMenuView, DanglingUntriaged | ExperimentalAsh>
+      keyboard_menu_view_ = nullptr;
 
   std::string selected_language_item_value_;
   std::string selected_keyboard_item_value_;
@@ -752,9 +754,9 @@ LoginExpandedPublicAccountView::LoginExpandedPublicAccountView(
   SetPreferredSize(GetPreferredSizeLandscape());
   layout_ = SetLayoutManager(std::make_unique<views::BoxLayout>());
 
-  user_view_ = new LoginUserView(
-      LoginDisplayStyle::kExtraSmall, false /*show_dropdown*/,
-      base::DoNothing(), base::RepeatingClosure(), base::RepeatingClosure());
+  user_view_ =
+      new LoginUserView(LoginDisplayStyle::kExtraSmall, false /*show_dropdown*/,
+                        base::DoNothing(), base::RepeatingClosure());
   user_view_->SetForceOpaque(true);
   user_view_->SetTapEnabled(false);
 

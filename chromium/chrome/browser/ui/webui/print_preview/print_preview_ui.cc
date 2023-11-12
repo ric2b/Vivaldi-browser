@@ -11,6 +11,7 @@
 #include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/id_map.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
@@ -24,8 +25,8 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/pdf/pdf_extension_util.h"
-#include "chrome/browser/policy/management_utils.h"
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/pdf_nup_converter_client.h"
 #include "chrome/browser/printing/print_job_manager.h"
@@ -51,6 +52,7 @@
 #include "chrome/grit/pdf_resources_map.h"
 #include "chrome/grit/print_preview_resources.h"
 #include "chrome/grit/print_preview_resources_map.h"
+#include "components/policy/core/common/management/management_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
@@ -73,11 +75,14 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler_chromeos.h"
+#include "chrome/common/chrome_features.h"
 #endif
 
 #if !BUILDFLAG(OPTIMIZE_WEBUI)
@@ -103,8 +108,8 @@ const char16_t kBasicPrintShortcut[] = u"(Ctrl+Shift+P)";
 
 constexpr char kInvalidArgsForDidStartPreview[] =
     "Invalid arguments for DidStartPreview";
-constexpr char kInvalidPageNumberForDidPreviewPage[] =
-    "Invalid page number for DidPreviewPage";
+constexpr char kInvalidPageIndexForDidPreviewPage[] =
+    "Invalid page index for DidPreviewPage";
 constexpr char kInvalidPageCountForMetafileReadyForPrinting[] =
     "Invalid page count for MetafileReadyForPrinting";
 
@@ -120,8 +125,8 @@ void StopWorker(int document_cookie) {
       queue->PopPrinterQuery(document_cookie);
 }
 
-bool IsValidPageNumber(uint32_t page_number, uint32_t page_count) {
-  return page_number < page_count;
+bool IsValidPageIndex(uint32_t page_index, uint32_t page_count) {
+  return page_index < page_count;
 }
 
 bool ShouldUseCompositor(PrintPreviewUI* print_preview_ui) {
@@ -155,6 +160,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
      IDS_PRINT_PREVIEW_ADVANCED_SETTINGS_DIALOG_TITLE},
     {"advancedSettingsSearchBoxPlaceholder",
      IDS_PRINT_PREVIEW_ADVANCED_SETTINGS_SEARCH_BOX_PLACEHOLDER},
+    {"borderlessLabel", IDS_PRINT_PREVIEW_BORDERLESS_LABEL},
     {"bottom", IDS_PRINT_PREVIEW_BOTTOM_MARGIN_LABEL},
     {"cancel", IDS_CANCEL},
     {"clearSearch", IDS_CLEAR_SEARCH},
@@ -176,9 +182,13 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"left", IDS_PRINT_PREVIEW_LEFT_MARGIN_LABEL},
     {"loading", IDS_PRINT_PREVIEW_LOADING},
     {"manage", IDS_PRINT_PREVIEW_MANAGE},
+#if BUILDFLAG(IS_CHROMEOS)
+    {"managePrintersLabel", IDS_PRINT_PREVIEW_MANAGE_PRINTERS_LABEL},
+#endif
     {"managedSettings", IDS_PRINT_PREVIEW_MANAGED_SETTINGS_TEXT},
     {"marginsLabel", IDS_PRINT_PREVIEW_MARGINS_LABEL},
     {"mediaSizeLabel", IDS_PRINT_PREVIEW_MEDIA_SIZE_LABEL},
+    {"mediaTypeLabel", IDS_PRINT_PREVIEW_MEDIA_TYPE_LABEL},
     {"minimumMargins", IDS_PRINT_PREVIEW_MINIMUM_MARGINS},
     {"moreOptionsLabel", IDS_MORE_OPTIONS_LABEL},
     {"newShowAdvancedOptions", IDS_PRINT_PREVIEW_NEW_SHOW_ADVANCED_OPTIONS},
@@ -223,6 +233,14 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"printDestinationsTitle", IDS_PRINT_PREVIEW_PRINT_DESTINATIONS_TITLE},
     {"printPagesLabel", IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL},
 #if BUILDFLAG(IS_CHROMEOS)
+    {"printerSetupInfoMessageDetailNoPrintersText",
+     IDS_PRINT_PREVIEW_PRINTER_SETUP_INFO_MESSAGE_DETAIL_NO_PRINTERS_TEXT},
+    {"printerSetupInfoMessageDetailPrinterOfflineText",
+     IDS_PRINT_PREVIEW_PRINTER_SETUP_INFO_MESSAGE_DETAIL_PRINTER_OFFLINE_TEXT},
+    {"printerSetupInfoMessageHeadingNoPrintersText",
+     IDS_PRINT_PREVIEW_PRINTER_SETUP_INFO_MESSAGE_HEADING_NO_PRINTERS_TEXT},
+    {"printerSetupInfoMessageHeadingPrinterOfflineText",
+     IDS_PRINT_PREVIEW_PRINTER_SETUP_INFO_MESSAGE_HEADING_PRINTER_OFFLINE_TEXT},
     {"printToGoogleDrive", IDS_PRINT_PREVIEW_PRINT_TO_GOOGLE_DRIVE},
 #endif
     {"printToPDF", IDS_PRINT_PREVIEW_PRINT_TO_PDF},
@@ -303,14 +321,26 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
 void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS)
   source->AddBoolean("useSystemDefaultPrinter", false);
+  source->AddBoolean(
+      "isPrintPreviewSetupAssistanceEnabled",
+      base::FeatureList::IsEnabled(::features::kPrintPreviewSetupAssistance));
 #else
   bool system_default_printer = profile->GetPrefs()->GetBoolean(
       prefs::kPrintPreviewUseSystemDefaultPrinter);
   source->AddBoolean("useSystemDefaultPrinter", system_default_printer);
 #endif
 
-  source->AddBoolean("isEnterpriseManaged",
-                     policy::IsDeviceEnterpriseManaged());
+  source->AddBoolean(
+      "isEnterpriseManaged",
+      policy::ManagementServiceFactory::GetForPlatform()->IsManaged());
+
+#if BUILDFLAG(IS_CHROMEOS)
+  source->AddBoolean(
+      "isBorderlessPrintingEnabled",
+      base::FeatureList::IsEnabled(features::kEnableBorderlessPrinting));
+#else
+  source->AddBoolean("isBorderlessPrintingEnabled", false);
+#endif
 }
 
 void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
@@ -458,7 +488,7 @@ void PrintPreviewUI::ClearAllPreviewData() {
 }
 
 void PrintPreviewUI::NotifyUIPreviewPageReady(
-    uint32_t page_number,
+    uint32_t page_index,
     int request_id,
     scoped_refptr<base::RefCountedMemory> data_bytes) {
   if (!data_bytes || !data_bytes->size())
@@ -468,13 +498,13 @@ void PrintPreviewUI::NotifyUIPreviewPageReady(
   if (ShouldCancelRequest(id_, request_id))
     return;
 
-  DCHECK_NE(page_number, kInvalidPageIndex);
-  SetPrintPreviewDataForIndex(base::checked_cast<int>(page_number),
+  DCHECK_NE(page_index, kInvalidPageIndex);
+  SetPrintPreviewDataForIndex(base::checked_cast<int>(page_index),
                               std::move(data_bytes));
 
   if (g_test_delegate)
     g_test_delegate->DidRenderPreviewPage(web_ui()->GetWebContents());
-  handler_->SendPagePreviewReady(base::checked_cast<int>(page_number), *id_,
+  handler_->SendPagePreviewReady(base::checked_cast<int>(page_index), *id_,
                                  request_id);
 }
 
@@ -504,7 +534,7 @@ void PrintPreviewUI::NotifyUIPreviewDocumentReady(
 }
 
 void PrintPreviewUI::OnCompositePdfPageDone(
-    uint32_t page_number,
+    uint32_t page_index,
     int document_cookie,
     int32_t request_id,
     mojom::PrintCompositor::Status status,
@@ -522,19 +552,19 @@ void PrintPreviewUI::OnCompositePdfPageDone(
 
   if (pages_per_sheet_ == 1) {
     NotifyUIPreviewPageReady(
-        page_number, request_id,
+        page_index, request_id,
         base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
   } else {
     AddPdfPageForNupConversion(std::move(region));
-    uint32_t current_page_index = GetPageToNupConvertIndex(page_number);
+    uint32_t current_page_index = GetPageToNupConvertIndex(page_index);
     if (current_page_index == kInvalidPageIndex)
       return;
 
     if (((current_page_index + 1) % pages_per_sheet_) == 0 ||
-        LastPageComposited(page_number)) {
-      uint32_t new_page_number =
+        LastPageComposited(page_index)) {
+      uint32_t new_page_index =
           base::checked_cast<uint32_t>(current_page_index / pages_per_sheet_);
-      DCHECK_NE(new_page_number, kInvalidPageIndex);
+      DCHECK_NE(new_page_index, kInvalidPageIndex);
       std::vector<base::ReadOnlySharedMemoryRegion> pdf_page_regions =
           TakePagesForNupConvert();
 
@@ -554,7 +584,7 @@ void PrintPreviewUI::OnCompositePdfPageDone(
           std::move(pdf_page_regions),
           mojo::WrapCallbackWithDefaultInvokeIfNotRun(
               base::BindOnce(&PrintPreviewUI::OnNupPdfConvertDone,
-                             weak_ptr_factory_.GetWeakPtr(), new_page_number,
+                             weak_ptr_factory_.GetWeakPtr(), new_page_index,
                              request_id),
               mojom::PdfNupConverter::Status::CONVERSION_FAILURE,
               base::ReadOnlySharedMemoryRegion()));
@@ -563,7 +593,7 @@ void PrintPreviewUI::OnCompositePdfPageDone(
 }
 
 void PrintPreviewUI::OnNupPdfConvertDone(
-    uint32_t page_number,
+    uint32_t page_index,
     int32_t request_id,
     mojom::PdfNupConverter::Status status,
     base::ReadOnlySharedMemoryRegion region) {
@@ -575,7 +605,7 @@ void PrintPreviewUI::OnNupPdfConvertDone(
   }
 
   NotifyUIPreviewPageReady(
-      page_number, request_id,
+      page_index, request_id,
       base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
@@ -654,17 +684,18 @@ void PrintPreviewUI::SetInitiatorTitle(const std::u16string& job_title) {
   initiator_title_ = job_title;
 }
 
-bool PrintPreviewUI::LastPageComposited(uint32_t page_number) const {
+bool PrintPreviewUI::LastPageComposited(uint32_t page_index) const {
   if (pages_to_render_.empty())
     return false;
 
-  return page_number == pages_to_render_.back();
+  return page_index == pages_to_render_.back();
 }
 
-uint32_t PrintPreviewUI::GetPageToNupConvertIndex(uint32_t page_number) const {
-  for (size_t index = 0; index < pages_to_render_.size(); ++index) {
-    if (page_number == pages_to_render_[index])
+uint32_t PrintPreviewUI::GetPageToNupConvertIndex(uint32_t page_index) const {
+  for (uint32_t index : pages_to_render_) {
+    if (page_index == index) {
       return index;
+    }
   }
   return kInvalidPageIndex;
 }
@@ -761,8 +792,8 @@ void PrintPreviewUI::DidStartPreview(mojom::DidStartPreviewParamsPtr params,
     return;
   }
 
-  for (uint32_t page_number : params->pages_to_render) {
-    if (!IsValidPageNumber(page_number, params->page_count)) {
+  for (uint32_t page_index : params->pages_to_render) {
+    if (!IsValidPageIndex(page_index, params->page_count)) {
       receiver_.ReportBadMessage(kInvalidArgsForDidStartPreview);
       return;
     }
@@ -781,7 +812,7 @@ void PrintPreviewUI::DidStartPreview(mojom::DidStartPreviewParamsPtr params,
   pages_to_render_ = params->pages_to_render;
   pages_to_render_index_ = 0;
   pages_per_sheet_ = params->pages_per_sheet;
-  page_size_ = params->page_size;
+  page_size_ = ToFlooredSize(params->page_size);
   ClearAllPreviewData();
 
   if (g_test_delegate)
@@ -792,7 +823,7 @@ void PrintPreviewUI::DidStartPreview(mojom::DidStartPreviewParamsPtr params,
 
 void PrintPreviewUI::DidGetDefaultPageLayout(
     mojom::PageSizeMarginsPtr page_layout_in_points,
-    const gfx::Rect& printable_area_in_points,
+    const gfx::RectF& printable_area_in_points,
     bool all_pages_have_custom_size,
     bool all_pages_have_custom_orientation,
     int32_t request_id) {
@@ -802,7 +833,7 @@ void PrintPreviewUI::DidGetDefaultPageLayout(
     return;
   }
   // Save printable_area_in_points information for N-up conversion.
-  printable_area_ = printable_area_in_points;
+  printable_area_ = ToEnclosedRect(printable_area_in_points);
 
   if (page_layout_in_points->margin_top < 0 ||
       page_layout_in_points->margin_left < 0 ||
@@ -829,11 +860,11 @@ void PrintPreviewUI::DidGetDefaultPageLayout(
                                 all_pages_have_custom_orientation, request_id);
 }
 
-bool PrintPreviewUI::OnPendingPreviewPage(uint32_t page_number) {
+bool PrintPreviewUI::OnPendingPreviewPage(uint32_t page_index) {
   if (pages_to_render_index_ >= pages_to_render_.size())
     return false;
 
-  bool matched = page_number == pages_to_render_[pages_to_render_index_];
+  bool matched = page_index == pages_to_render_[pages_to_render_index_];
   ++pages_to_render_index_;
   return matched;
 }
@@ -925,15 +956,15 @@ void PrintPreviewUI::DidPrepareDocumentForPreview(int32_t document_cookie,
 
 void PrintPreviewUI::DidPreviewPage(mojom::DidPreviewPageParamsPtr params,
                                     int32_t request_id) {
-  uint32_t page_number = params->page_number;
+  uint32_t page_index = params->page_index;
   const mojom::DidPrintContentParams& content = *params->content;
-  if (page_number == kInvalidPageIndex ||
+  if (page_index == kInvalidPageIndex ||
       !content.metafile_data_region.IsValid()) {
     return;
   }
 
-  if (!OnPendingPreviewPage(page_number)) {
-    receiver_.ReportBadMessage(kInvalidPageNumberForDidPreviewPage);
+  if (!OnPendingPreviewPage(page_index)) {
+    receiver_.ReportBadMessage(kInvalidPageIndexForDidPreviewPage);
     return;
   }
 
@@ -961,13 +992,13 @@ void PrintPreviewUI::DidPreviewPage(mojom::DidPreviewPageParamsPtr params,
         params->document_cookie, render_frame_host, content,
         mojo::WrapCallbackWithDefaultInvokeIfNotRun(
             base::BindOnce(&PrintPreviewUI::OnCompositePdfPageDone,
-                           weak_ptr_factory_.GetWeakPtr(), page_number,
+                           weak_ptr_factory_.GetWeakPtr(), page_index,
                            params->document_cookie, request_id),
             mojom::PrintCompositor::Status::kCompositingFailure,
             base::ReadOnlySharedMemoryRegion()));
   } else {
     NotifyUIPreviewPageReady(
-        page_number, request_id,
+        page_index, request_id,
         base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(
             content.metafile_data_region));
   }

@@ -25,7 +25,7 @@
 
 @implementation SUInstallerLauncher
 
-- (BOOL)submitProgressToolAtPath:(NSString *)progressToolPath withHostBundle:(NSBundle *)hostBundle inSystemDomainForInstaller:(BOOL)inSystemDomainForInstaller
+- (BOOL)submitProgressToolAtPath:(NSString *)progressToolPath withHostBundle:(NSBundle *)hostBundle inSystemDomainForInstaller:(BOOL)inSystemDomainForInstaller SPU_OBJC_DIRECT
 {
     SUFileManager *fileManager = [[SUFileManager alloc] init];
     
@@ -106,7 +106,7 @@
     return (submittedJob == true);
 }
 
-- (SUInstallerLauncherStatus)submitInstallerAtPath:(NSString *)installerPath withHostBundle:(NSBundle *)hostBundle updaterIdentifier:(NSString *)updaterIdentifier userName:(NSString *)userName homeDirectory:(NSString *)homeDirectory authorizationPrompt:(NSString *)authorizationPrompt inSystemDomain:(BOOL)systemDomain rootUser:(BOOL)rootUser
+- (SUInstallerLauncherStatus)submitInstallerAtPath:(NSString *)installerPath withHostBundle:(NSBundle *)hostBundle updaterIdentifier:(NSString *)updaterIdentifier userName:(NSString *)userName homeDirectory:(NSString *)homeDirectory authorizationPrompt:(NSString *)authorizationPrompt inSystemDomain:(BOOL)systemDomain rootUser:(BOOL)rootUser SPU_OBJC_DIRECT
 {
     SUFileManager *fileManager = [[SUFileManager alloc] init];
     
@@ -211,12 +211,13 @@
                             if (@available(macOS 11, *)) {
                                 CFStringRef uti = (__bridge CFStringRef)[UTTypePNG identifier];
                                 imageDestination = CGImageDestinationCreateWithURL((CFURLRef)tempIconDestinationURL, uti, 1, NULL);
-                            } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                                imageDestination = CGImageDestinationCreateWithURL((CFURLRef)tempIconDestinationURL, kUTTypePNG, 1, NULL);
-#pragma clang diagnostic pop
                             }
+#if MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_11_0
+                            else
+                            {
+                                imageDestination = CGImageDestinationCreateWithURL((CFURLRef)tempIconDestinationURL, kUTTypePNG, 1, NULL);
+                            }
+#endif
                             if (imageDestination != NULL) {
                                 CGImageDestinationAddImageFromSource(imageDestination, imageSource, imageIndex, (CFDictionaryRef)@{});
                                 if (CGImageDestinationFinalize(imageDestination)) {
@@ -310,7 +311,7 @@
     return status;
 }
 
-- (NSString *)pathForBundledTool:(NSString *)toolName extension:(NSString *)extension fromBundle:(NSBundle *)bundle
+- (NSString *)pathForBundledTool:(NSString *)toolName extension:(NSString *)extension fromBundle:(NSBundle *)bundle SPU_OBJC_DIRECT
 {
     // If the path extension is empty, we don't want to add a "." at the end
     NSString *nameWithExtension = (extension.length > 0) ? [toolName stringByAppendingPathExtension:extension] : toolName;
@@ -325,10 +326,17 @@
     } else {
         auxiliaryToolURL = [bundle URLForAuxiliaryExecutable:nameWithExtension];
     }
-    assert(auxiliaryToolURL != nil);
+    
+    if (auxiliaryToolURL == nil) {
+        SULog(SULogLevelError, @"Error: Cannot retrieve path for auxiliary tool: %@", nameWithExtension);
+        return nil;
+    }
     
     NSURL *resolvedAuxiliaryToolURL = [auxiliaryToolURL URLByResolvingSymlinksInPath];
-    assert(resolvedAuxiliaryToolURL != nil);
+    if (resolvedAuxiliaryToolURL == nil) {
+        SULog(SULogLevelError, @"Error: Cannot retrieve resolved path for auxiliary tool path: %@", auxiliaryToolURL.path);
+        return nil;
+    }
     
     return resolvedAuxiliaryToolURL.path;
 }
@@ -370,14 +378,21 @@ BOOL SPUSystemNeedsAuthorizationAccessForBundlePath(NSString *bundlePath)
     return needsAuthorization;
 }
 
-static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, NSString *installationType, BOOL rootUser)
+static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, BOOL rootUser
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
+                                             , NSString *installationType
+#endif
+)
 {
     if (!rootUser) {
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
         if ([installationType isEqualToString:SPUInstallationTypeGuidedPackage]) {
             return YES;
         } else if ([installationType isEqualToString:SPUInstallationTypeInteractivePackage]) {
             return NO;
-        } else {
+        } else
+#endif
+        {
             return SPUSystemNeedsAuthorizationAccessForBundlePath(path);
         }
     } else {
@@ -396,7 +411,11 @@ static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, NSString *installat
         // and that is not necessarily related to a preflight test. It's more related to being ran under a root / different user from the active GUI session
         BOOL rootUser = (geteuid() == 0);
         
-        BOOL inSystemDomain = SPUUsesSystemDomainForBundlePath(hostBundlePath, installationType, rootUser);
+        BOOL inSystemDomain = SPUUsesSystemDomainForBundlePath(hostBundlePath, rootUser
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
+                                                               , installationType
+#endif
+                                                               );
         
         NSBundle *hostBundle = [NSBundle bundleWithPath:hostBundlePath];
         if (hostBundle == nil) {
@@ -437,26 +456,10 @@ static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, NSString *installat
             return;
         }
         
-        // It may be tempting here to validate/match the signature of the installer and progress tool, however this is not very reliable
-        // We can't compare the signature of this framework/XPC service (depending how it's run) to the host bundle because
-        // they could be different (eg: take a look at sparkle-cli). We also can't easily tell if the signature of the service/framework is the same as the bundle it's inside.
-        // The service/framework also need not even be signed in the first place. We'll just assume for now the original bundle hasn't been tampered with
-        
-        NSString *rootLauncherCachePath = [[SPULocalCacheDirectory cachePathForBundleIdentifier:hostBundleIdentifier] stringByAppendingPathComponent:@"Launcher"];
-        
-        [SPULocalCacheDirectory removeOldItemsInDirectory:rootLauncherCachePath];
-        
-        NSString *launcherCachePath = [SPULocalCacheDirectory createUniqueDirectoryInDirectory:rootLauncherCachePath];
-        if (launcherCachePath == nil) {
-            SULog(SULogLevelError, @"Failed to create cache directory for progress tool in %@", rootLauncherCachePath);
-            completionHandler(SUInstallerLauncherFailure, inSystemDomain);
-            return;
-        }
-        
-        SUFileManager *fileManager = [[SUFileManager alloc] init];
-        
         NSString *userName;
         NSString *homeDirectory;
+        uid_t uid = 0;
+        gid_t gid = 0;
         if (!rootUser) {
             // Normal path
             homeDirectory = NSHomeDirectory();
@@ -467,9 +470,6 @@ static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, NSString *installat
         } else {
             // As the root user we need to obtain the user name and home directory reflecting
             // the user's console session.
-            
-            uid_t uid = 0;
-            gid_t gid = 0;
             CFStringRef userNameRef = SCDynamicStoreCopyConsoleUser(NULL, &uid, &gid);
             if (userNameRef == NULL) {
                 SULog(SULogLevelError, @"Failed to retrieve user name from the console user");
@@ -485,7 +485,35 @@ static BOOL SPUUsesSystemDomainForBundlePath(NSString *path, NSString *installat
                 completionHandler(SUInstallerLauncherFailure, inSystemDomain);
                 return;
             }
-            
+        }
+        
+        // It may be tempting here to validate/match the signature of the installer and progress tool, however this is not very reliable
+        // We can't compare the signature of this framework/XPC service (depending how it's run) to the host bundle because
+        // they could be different (eg: take a look at sparkle-cli). We also can't easily tell if the signature of the service/framework is the same as the bundle it's inside.
+        // The service/framework also need not even be signed in the first place. We'll just assume for now the original bundle hasn't been tampered with
+        NSString *cachePath = rootUser ?
+            [SPULocalCacheDirectory cachePathForBundleIdentifier:hostBundleIdentifier userName:userName] :
+            [SPULocalCacheDirectory cachePathForBundleIdentifier:hostBundleIdentifier];
+        
+        NSString *rootLauncherCachePath = [cachePath stringByAppendingPathComponent:@"Launcher"];
+        
+        [SPULocalCacheDirectory removeOldItemsInDirectory:rootLauncherCachePath];
+        
+        NSDictionary<NSFileAttributeKey, id> *fileAttributes = rootUser ?
+            @{NSFileOwnerAccountID: @(uid), NSFileGroupOwnerAccountID: @(gid)} :
+            nil;
+        
+        NSString *launcherCachePath = [SPULocalCacheDirectory createUniqueDirectoryInDirectory:rootLauncherCachePath intermediateDirectoryFileAttributes:fileAttributes];
+        
+        if (launcherCachePath == nil) {
+            SULog(SULogLevelError, @"Failed to create cache directory for progress tool in %@", rootLauncherCachePath);
+            completionHandler(SUInstallerLauncherFailure, inSystemDomain);
+            return;
+        }
+        
+        SUFileManager *fileManager = [[SUFileManager alloc] init];
+        
+        if (rootUser) {
             // Ensure the console user has ownership of the launcher cache directory
             // Otherwise the updater may not launch and not be able to clean up itself
             NSError *changeOwnerAndGroupError = nil;

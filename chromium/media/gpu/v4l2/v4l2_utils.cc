@@ -14,6 +14,7 @@
 #endif
 
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "media/base/video_codecs.h"
@@ -23,26 +24,25 @@
 #include "media/gpu/macros.h"
 #include "ui/gfx/geometry/size.h"
 
-// TODO(b/255770680): Remove this once V4L2 header is updated.
-// https://patchwork.linuxtv.org/project/linux-media/patch/20210810220552.298140-2-daniel.almeida@collabora.com/
+// This has not been accepted upstream.
 #ifndef V4L2_PIX_FMT_AV1
 #define V4L2_PIX_FMT_AV1 v4l2_fourcc('A', 'V', '0', '1') /* AV1 */
 #endif
+// This has been upstreamed and backported for ChromeOS, but has not been
+// picked up by the Chromium sysroots.
 #ifndef V4L2_PIX_FMT_AV1_FRAME
 #define V4L2_PIX_FMT_AV1_FRAME v4l2_fourcc('A', 'V', '1', 'F')
 #endif
 
-// TODO(b/278157861): Remove this once ChromeOS V4L2 header is updated
-// Add it directly instead of including hevc-ctrls-upstream.h
-#ifndef V4L2_PIX_FMT_HEVC_SLICE
-#define V4L2_PIX_FMT_HEVC_SLICE \
-  v4l2_fourcc('S', '2', '6', '5') /* HEVC parsed slices */
-#endif
+#define MAKE_V4L2_CODEC_PAIR(codec, suffix) \
+  std::make_pair(codec##_##suffix, codec)
 
 namespace media {
 
-// Numerical value of ioctl() OK return value;
-constexpr int kIoctlOk = 0;
+void RecordMediaIoctlUMA(MediaIoctlRequests function) {
+  base::UmaHistogramEnumeration("Media.V4l2VideoDecoder.MediaIoctlError",
+                                function);
+}
 
 const char* V4L2MemoryToString(const v4l2_memory memory) {
   switch (memory) {
@@ -159,7 +159,8 @@ VideoCodecProfile V4L2ProfileToVideoCodecProfile(uint32_t v4l2_codec,
         case V4L2_MPEG_VIDEO_VP9_PROFILE_0:
           return VP9PROFILE_PROFILE0;
         case V4L2_MPEG_VIDEO_VP9_PROFILE_2:
-          return VP9PROFILE_PROFILE2;
+          // TODO(b/250698011): Support Profile 2 when launched
+          return VIDEO_CODEC_PROFILE_UNKNOWN;
       }
       break;
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
@@ -331,6 +332,26 @@ static const std::map<v4l2_enum_type, std::vector<VideoCodecProfile>>
         {V4L2_CID_MPEG_VIDEO_AV1_PROFILE, {AV1PROFILE_PROFILE_MAIN}},
 #endif
 };
+
+// Correspondence from a VideoCodecProfiles to V4L2 codec described
+// as a pixel format.
+static const std::map<VideoCodecProfile,
+                      std::pair<v4l2_enum_type, v4l2_enum_type>>
+    kVideoCodecProfileToV4L2CodecPixFmt = {
+        {H264PROFILE_BASELINE, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_H264, SLICE)},
+        {H264PROFILE_MAIN, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_H264, SLICE)},
+        {H264PROFILE_HIGH, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_H264, SLICE)},
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+        {HEVCPROFILE_MAIN, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_HEVC, SLICE)},
+#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+        {VP8PROFILE_ANY, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_VP8, FRAME)},
+        {VP9PROFILE_PROFILE0, MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_VP9, FRAME)},
+#if BUILDFLAG(IS_CHROMEOS)
+        {AV1PROFILE_PROFILE_MAIN,
+         MAKE_V4L2_CODEC_PAIR(V4L2_PIX_FMT_AV1, FRAME)},
+#endif
+};
+
 }  // namespace
 
 std::vector<VideoCodecProfile> EnumerateSupportedProfilesForV4L2Codec(
@@ -430,6 +451,26 @@ void GetSupportedResolution(const IoctlAsCallback& ioctl_cb,
   } else {
     DLOGF(INFO) << "VIDIOC_ENUM_FRAMESIZES failed, using default values";
   }
+}
+
+uint32_t VideoCodecProfileToV4L2PixFmt(VideoCodecProfile profile,
+                                       bool slice_based) {
+  CHECK(base::Contains(kVideoCodecProfileToV4L2CodecPixFmt, profile))
+      << "Unsupported profile: " << GetProfileName(profile);
+
+  const auto& v4l2_pix_fmt = kVideoCodecProfileToV4L2CodecPixFmt.at(profile);
+  return slice_based ? v4l2_pix_fmt.first : v4l2_pix_fmt.second;
+}
+
+base::TimeDelta TimeValToTimeDelta(const struct timeval& timeval) {
+  struct timespec ts;
+  const struct timeval temp_timeval = timeval;
+  TIMEVAL_TO_TIMESPEC(&temp_timeval, &ts);
+  return base::TimeDelta::FromTimeSpec(ts);
+}
+
+struct timeval TimeDeltaToTimeVal(base::TimeDelta time_delta) {
+  return base::Time::FromTimeSpec(time_delta.ToTimeSpec()).ToTimeVal();
 }
 
 }  // namespace media

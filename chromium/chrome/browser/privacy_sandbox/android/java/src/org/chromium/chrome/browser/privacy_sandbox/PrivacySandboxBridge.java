@@ -15,22 +15,27 @@ import java.util.List;
 /** Bridge, providing access to the native-side Privacy Sandbox configuration. */
 public class PrivacySandboxBridge {
     public static boolean isPrivacySandboxEnabled() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isPrivacySandboxEnabled();
     }
 
     public static boolean isPrivacySandboxManaged() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isPrivacySandboxManaged();
     }
 
     public static boolean isPrivacySandboxRestricted() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isPrivacySandboxRestricted();
     }
 
     public static boolean isRestrictedNoticeEnabled() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isRestrictedNoticeEnabled();
     }
 
     public static void setPrivacySandboxEnabled(boolean enabled) {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return;
         PrivacySandboxBridgeJni.get().setPrivacySandboxEnabled(enabled);
     }
 

@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
@@ -19,10 +19,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface FormInputAccessoryViewController () <
     FormSuggestionViewDelegate,
@@ -118,7 +114,7 @@
 
 // The custom view that should be shown in the input accessory view.
 - (FormInputAccessoryView*)formInputAccessoryView {
-  return base::mac::ObjCCastStrict<FormInputAccessoryView>(self.view);
+  return base::apple::ObjCCastStrict<FormInputAccessoryView>(self.view);
 }
 
 #pragma mark - Public

@@ -111,6 +111,8 @@ class NetErrorHelperCore {
     // Returns the render frame associated with NetErrorHelper.
     virtual content::RenderFrame* GetRenderFrame() = 0;
 
+    virtual void OpenVivaldia() {}
+
 #if BUILDFLAG(IS_ANDROID)
     // Called after an attempt to automatically schedule a background fetch for
     // a page with a network error.

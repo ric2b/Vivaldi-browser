@@ -17,9 +17,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
-#include "chrome/browser/ui/user_education/user_education_service.h"
-#include "chrome/browser/ui/user_education/user_education_service_factory.h"
-#include "chrome/browser/ui/views/user_education/browser_user_education_service.h"
+#include "chrome/browser/user_education/user_education_service.h"
+#include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -27,11 +26,12 @@
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/safe_browsing_policy_handler.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/search/ntp_features.h"
+#include "components/safe_browsing/core/common/safebrowsing_referral_methods.h"
 #include "components/user_education/common/tutorial_identifier.h"
 #include "components/user_education/common/tutorial_service.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
 
@@ -109,8 +109,7 @@ void BrowserCommandHandler::CanExecuteCommand(
                     DefaultSearchProviderIsGoogle();
       break;
     case Command::kStartPasswordManagerTutorial:
-      can_execute =
-          !!GetTutorialService() && BrowserSupportsNewPasswordManager();
+      can_execute = !!GetTutorialService();
       break;
   }
   std::move(callback).Run(can_execute);
@@ -150,9 +149,7 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
           base::UserMetricsAction("NewTabPage_Promos_SafetyCheck"));
       break;
     case Command::kOpenSafeBrowsingEnhancedProtectionSettings:
-      NavigateToURL(GURL(chrome::GetSettingsUrl(
-                        chrome::kSafeBrowsingEnhancedProtectionSubPage)),
-                    disposition);
+      NavigateToEnhancedProtectionSetting();
       base::RecordAction(
           base::UserMetricsAction("NewTabPage_Promos_EnhancedProtection"));
       break;
@@ -191,7 +188,7 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
 }
 
 user_education::TutorialService* BrowserCommandHandler::GetTutorialService() {
-  auto* service = UserEducationServiceFactory::GetForProfile(profile_);
+  auto* service = UserEducationServiceFactory::GetForBrowserContext(profile_);
   return service ? &service->tutorial_service() : nullptr;
 }
 
@@ -204,11 +201,6 @@ ui::ElementContext BrowserCommandHandler::GetUiElementContext() {
 bool BrowserCommandHandler::BrowserSupportsTabGroups() {
   Browser* browser = chrome::FindBrowserWithProfile(profile_);
   return browser->tab_strip_model()->SupportsTabGroups();
-}
-
-bool BrowserCommandHandler::BrowserHasTabGroups() {
-  Browser* browser = chrome::FindBrowserWithProfile(profile_);
-  return !browser->tab_strip_model()->group_model()->ListTabGroups().empty();
 }
 
 void BrowserCommandHandler::StartTabGroupTutorial() {
@@ -227,13 +219,17 @@ void BrowserCommandHandler::StartTabGroupTutorial() {
     return;
   }
 
-  user_education::TutorialIdentifier tutorial_id =
-      BrowserHasTabGroups() ? kTabGroupWithExistingGroupTutorialId
-                            : kTabGroupTutorialId;
+  user_education::TutorialIdentifier tutorial_id = kTabGroupTutorialId;
 
   tutorial_service->StartTutorial(tutorial_id, context);
   tutorial_service->LogStartedFromWhatsNewPage(
       tutorial_id, tutorial_service->IsRunningTutorial());
+}
+
+void BrowserCommandHandler::NavigateToEnhancedProtectionSetting() {
+  chrome::ShowSafeBrowsingEnhancedProtectionWithIph(
+      chrome::FindBrowserWithProfile(profile_),
+      safe_browsing::SafeBrowsingSettingReferralMethod::kPromoSlingerReferral);
 }
 
 void BrowserCommandHandler::OpenPasswordManager() {
@@ -241,7 +237,7 @@ void BrowserCommandHandler::OpenPasswordManager() {
 }
 
 bool BrowserCommandHandler::BrowserSupportsCustomizeChromeSidePanel() {
-  return base::FeatureList::IsEnabled(ntp_features::kCustomizeChromeSidePanel);
+  return base::FeatureList::IsEnabled(features::kCustomizeChromeSidePanel);
 }
 
 bool BrowserCommandHandler::DefaultSearchProviderIsGoogle() {
@@ -281,11 +277,6 @@ void BrowserCommandHandler::OpenNTPAndStartCustomizeChromeTutorial(
   NavigateToURL(GURL(chrome::kChromeUINewTabPageURL), disposition);
 }
 
-bool BrowserCommandHandler::BrowserSupportsNewPasswordManager() {
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kPasswordManagerRedesign);
-}
-
 void BrowserCommandHandler::StartPasswordManagerTutorial() {
   user_education::TutorialService* tutorial_service = GetTutorialService();
 
@@ -297,10 +288,6 @@ void BrowserCommandHandler::StartPasswordManagerTutorial() {
 
   const ui::ElementContext context = GetUiElementContext();
   if (!context) {
-    return;
-  }
-
-  if (!BrowserSupportsNewPasswordManager()) {
     return;
   }
 

@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/functional/callback_forward.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/threading/sequence_bound.h"
@@ -17,13 +16,16 @@
 #include "media/mojo/mojom/audio_stream_factory.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
+namespace capture_mode {
+class AudioCapturer;
+}  // namespace capture_mode
+
 namespace media {
 class AudioBus;
 }  // namespace media
 
 namespace recording {
 
-class AudioCapturer;
 class AudioStream;
 
 // Defines a type for the callback that the mixer uses to provide the mixed
@@ -101,8 +103,10 @@ class AudioStreamMixer {
 
   // Attempts to mix the available audio frames from all managed audio streams,
   // and if successful, a new audio bus containing the mixed output will be
-  // provided to the client.
-  void MaybeMixAndOutput();
+  // provided to the client. If `flush` is true, all the available frames in all
+  // streams will be mixed together and provided to the client regardless of the
+  // overlap.
+  void MaybeMixAndOutput(bool flush);
 
   // Creates and returns an audio bus that is big enough to contain all the
   // mixable audio frames from all the managed audio streams.
@@ -111,7 +115,11 @@ class AudioStreamMixer {
   // earliest audio frame that's being mixed).
   // If nothing can be mixed at the moment (e.g. not all streams have frames),
   // `nullptr` will be returned.
+  // If `flush` is true, it returns an audio bus that spans from the beginning
+  // of the earliest frame in all streams, to the end of the latest frame in all
+  // streams, so that it can be used to mix all frames available in all streams.
   std::unique_ptr<media::AudioBus> CreateMixerBus(
+      bool flush,
       base::TimeTicks& out_bus_timestamp) const;
 
   SEQUENCE_CHECKER(sequence_checker_);
@@ -122,7 +130,7 @@ class AudioStreamMixer {
 
   // A list of audio capturers and their corresponding audio streams.
   std::vector<std::unique_ptr<AudioStream>> streams_;
-  std::vector<std::unique_ptr<AudioCapturer>> audio_capturers_;
+  std::vector<std::unique_ptr<capture_mode::AudioCapturer>> audio_capturers_;
 
   base::WeakPtrFactory<AudioStreamMixer> weak_ptr_factory_{this};
 };

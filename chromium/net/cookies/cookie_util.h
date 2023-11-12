@@ -43,9 +43,18 @@ enum class StorageAccessResult {
   ACCESS_BLOCKED = 0,
   ACCESS_ALLOWED = 1,
   ACCESS_ALLOWED_STORAGE_ACCESS_GRANT = 2,
-  ACCESS_ALLOWED_FORCED = 3,
+  OBSOLETE_ACCESS_ALLOWED_FORCED = 3 /*(DEPRECATED)*/,
   ACCESS_ALLOWED_TOP_LEVEL_STORAGE_ACCESS_GRANT = 4,
-  kMaxValue = ACCESS_ALLOWED_TOP_LEVEL_STORAGE_ACCESS_GRANT,
+  ACCESS_ALLOWED_3PCD = 5,
+  ACCESS_ALLOWED_3PCD_METADATA_GRANT = 6,
+  kMaxValue = ACCESS_ALLOWED_3PCD_METADATA_GRANT,
+};
+// This enum must match the numbering for BreakageIndicatorType in
+// histograms/enums.xml. Do not reorder or remove items, only add new items
+// at the end.
+enum class BreakageIndicatorType {
+  USER_RELOAD = 0,
+  kMaxValue = USER_RELOAD,
 };
 // Helper to fire telemetry indicating if a given request for storage was
 // allowed or not by the provided |result|.
@@ -274,11 +283,8 @@ NET_EXPORT bool IsSchemeBoundCookiesEnabled();
 // Returns whether the respective feature is enabled.
 NET_EXPORT bool IsSchemefulSameSiteEnabled();
 
-// Computes the First-Party Sets metadata, determining which of the cookies for
-// `request_site` can be accessed. `isolation_info` must be fully populated.  If
-// `force_ignore_top_frame_party` is true, the top frame from `isolation_info`
-// will be assumed to be same-party with `request_site`, regardless of what it
-// is.
+// Computes the First-Party Sets metadata. `isolation_info` must be fully
+// populated.
 //
 // The result may be returned synchronously, or `callback` may be invoked
 // asynchronously with the result. The callback will be invoked iff the return
@@ -289,21 +295,12 @@ ComputeFirstPartySetMetadataMaybeAsync(
     const SchemefulSite& request_site,
     const IsolationInfo& isolation_info,
     const CookieAccessDelegate* cookie_access_delegate,
-    bool force_ignore_top_frame_party,
     base::OnceCallback<void(FirstPartySetMetadata)> callback);
 
 // Converts a string representing the http request method to its enum
 // representation.
 NET_EXPORT CookieOptions::SameSiteCookieContext::ContextMetadata::HttpMethod
 HttpMethodStringToEnum(const std::string& in);
-
-// Get the SameParty inclusion status. If the cookie is not SameParty, returns
-// kNoSamePartyEnforcement; if the cookie is SameParty but does not have a
-// valid context, returns kEnforceSamePartyExclude.
-NET_EXPORT CookieSamePartyStatus
-GetSamePartyStatus(const CanonicalCookie& cookie,
-                   const CookieOptions& options,
-                   bool same_party_attribute_enabled);
 
 // Takes a CookieAccessResult and returns a bool, returning true if the
 // CookieInclusionStatus in CookieAccessResult was set to "include", else

@@ -126,6 +126,9 @@ extern const char kLocalPasswordsMigrationWarningShownTimestamp[];
 
 // Whether the local password migration warning was already shown at startup.
 extern const char kLocalPasswordMigrationWarningShownAtStartup[];
+
+// The version of the password migration warning prefs.
+extern const char kLocalPasswordMigrationWarningPrefsVersion[];
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -232,11 +235,6 @@ extern const char kBiometricAuthenticationBeforeFilling[];
 // device.
 extern const char kHadBiometricsAvailable[];
 #endif
-
-// Boolean which indicates whether grouping info was requested from the
-// affiliation service.
-// TODO(crbug.com/1420597): Remove this after Passwords Grouping launch.
-extern const char kPasswordsGroupingInfoRequested[];
 
 #if BUILDFLAG(IS_IOS)
 // Boolean pref indicating if the one-time notice for account storage was shown.

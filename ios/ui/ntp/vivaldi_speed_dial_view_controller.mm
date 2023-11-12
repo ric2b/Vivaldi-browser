@@ -4,7 +4,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -239,7 +239,6 @@
     // Pass it to delegate to open the URL.
     if (self.delegate)
       [self.delegate didSelectItem:item parent:parent];
-    [self.navigationController popToRootViewControllerAnimated:NO];
   }
 }
 

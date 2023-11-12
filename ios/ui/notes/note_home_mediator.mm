@@ -2,8 +2,8 @@
 
 #import "ios/ui/notes/note_home_mediator.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
@@ -186,6 +186,7 @@ class NoteModelBridge;
   NoteHomeNodeItem* trashItem =
       [[NoteHomeNodeItem alloc] initWithType:NoteHomeItemTypeNote
                                     noteNode:trashNode];
+  trashItem.shouldShowTrashIcon = YES;
   [self.sharedState.tableViewModel
                       addItem:trashItem
       toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
@@ -344,7 +345,7 @@ class NoteModelBridge;
   for (TableViewItem* item in items) {
     if (item.type == NoteHomeItemTypeNote) {
       NoteHomeNodeItem* nodeItem =
-          base::mac::ObjCCastStrict<NoteHomeNodeItem>(item);
+          base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
       if (nodeItem.noteNode == noteNode) {
         return nodeItem;
       }

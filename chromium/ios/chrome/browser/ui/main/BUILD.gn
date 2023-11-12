@@ -5,7 +5,6 @@
 import("//ios/build/chrome_build.gni")
 
 source_set("default_browser_scene_agent") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "default_browser_promo_scene_agent.h",
     "default_browser_promo_scene_agent.mm",
@@ -25,12 +24,12 @@ source_set("default_browser_scene_agent") {
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui/default_promo",
     "//ios/chrome/browser/ui/default_promo/post_restore:features",
+    "//ios/chrome/browser/ui/promos_manager:promos_manager_scene_agent",
   ]
   frameworks = [ "UIKit.framework" ]
 }
 
 source_set("incognito_blocker_scene_agent") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "incognito_blocker_scene_agent.h",
     "incognito_blocker_scene_agent.mm",
@@ -43,7 +42,6 @@ source_set("incognito_blocker_scene_agent") {
 }
 
 source_set("scene") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "ui_blocker_scene_agent.h",
     "ui_blocker_scene_agent.mm",
@@ -63,7 +61,6 @@ source_set("scene") {
 }
 
 source_set("main") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "browser_view_wrangler.h",
     "browser_view_wrangler.mm",
@@ -79,7 +76,7 @@ source_set("main") {
     "//ios/chrome/app/application_delegate:app_state_header",
     "//ios/chrome/app/resources:base_scene_storyboard",
     "//ios/chrome/app/resources:launchscreen_xib",
-    "//ios/chrome/browser/app_launcher",
+    "//ios/chrome/browser/app_launcher/model",
     "//ios/chrome/browser/autofill:autofill_internal",
     "//ios/chrome/browser/browsing_data",
     "//ios/chrome/browser/crash_report:crash_report_internal",
@@ -108,7 +105,6 @@ source_set("main") {
     "//ios/chrome/browser/ui/browser_container",
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/browser/ui/download",
-    "//ios/chrome/browser/ui/gestures",
     "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_scene_agent",
     "//ios/chrome/browser/ui/page_info:coordinator",
     "//ios/chrome/browser/ui/print",
@@ -118,14 +114,12 @@ source_set("main") {
     "//ios/chrome/browser/ui/settings/sync",
     "//ios/chrome/browser/ui/snackbar",
     "//ios/chrome/browser/ui/tabs:constants",
-    "//ios/chrome/browser/ui/thumb_strip",
-    "//ios/chrome/browser/ui/thumb_strip:feature_flags",
-    "//ios/chrome/browser/ui/thumb_strip:public",
     "//ios/chrome/browser/url_loading:url_loading_params_header",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/web:tab_helper_delegates",
     "//ios/chrome/browser/web:web_internal",
     "//ios/chrome/common/ui/colors",
+    "//ios/web/common:features",
     "//net",
   ]
 
@@ -139,7 +133,6 @@ source_set("main") {
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "browser_view_wrangler_unittest.mm",
@@ -160,7 +153,7 @@ source_set("unit_tests") {
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/app/application_delegate:test_support",
     "//ios/chrome/app/startup",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/default_browser:test_support",
     "//ios/chrome/browser/default_browser:utils",
     "//ios/chrome/browser/favicon",
@@ -172,10 +165,10 @@ source_set("unit_tests") {
     "//ios/chrome/browser/promos_manager:test_support",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/sessions:restoration_agent",
-    "//ios/chrome/browser/sessions:scene_util_test_support",
     "//ios/chrome/browser/sessions:test_support",
     "//ios/chrome/browser/shared/coordinator/scene",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_browser_agent",
+    "//ios/chrome/browser/shared/coordinator/scene:scene_util_test_support",
     "//ios/chrome/browser/shared/coordinator/scene/test",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
@@ -184,6 +177,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/signin:fake_system_identity",
     "//ios/chrome/browser/signin:fake_system_identity_manager",
@@ -193,9 +187,11 @@ source_set("unit_tests") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/tabs/inactive_tabs:features",
     "//ios/chrome/browser/ui/browser_view",
+    "//ios/chrome/browser/ui/default_promo/post_restore:features",
     "//ios/chrome/test:block_cleanup_test",
     "//ios/chrome/test:test_support",
     "//ios/testing:block_swizzler",
+    "//ios/web/common:features",
     "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",

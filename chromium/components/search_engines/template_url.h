@@ -11,6 +11,10 @@
 #include <utility>
 #include <vector>
 
+// Vivaldi
+#include <bitset>
+// End vivaldi
+
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
@@ -289,6 +293,8 @@ class TemplateURLRef {
 
     // The target locale used for image translations.
     std::string image_translate_target_locale;
+
+    absl::optional<std::bitset<3>> vivaldi_ad_blocking_state;
   };
 
   TemplateURLRef(const TemplateURL* owner, Type type);
@@ -455,6 +461,8 @@ class TemplateURLRef {
     YANDEX_REFERRAL_ID,
     IMAGE_TRANSLATE_SOURCE_LOCALE,
     IMAGE_TRANSLATE_TARGET_LOCALE,
+
+    VIVALDI_BING_PTAG,
   };
 
   // Used to identify an element of the raw url that can be replaced.

@@ -93,6 +93,15 @@ enum AppMenuAction {
   MENU_ACTION_OPEN_GUEST_PROFILE = 71,
   MENU_ACTION_ADD_NEW_PROFILE = 72,
   MENU_ACTION_MANAGE_CHROME_PROFILES = 73,
+  MENU_ACTION_RECENT_TABS_LOGIN_FOR_DEVICE_TABS = 74,
+  MENU_ACTION_READING_LIST_ADD_TAB = 75,
+  MENU_ACTION_READING_LIST_SHOW_UI = 76,
+  MENU_ACTION_SHOW_PASSWORD_MANAGER = 77,
+  MENU_ACTION_SHOW_PAYMENT_METHODS = 78,
+  MENU_ACTION_SHOW_ADDRESSES = 79,
+  MENU_ACTION_SWITCH_TO_ANOTHER_PROFILE = 80,
+  MENU_ACTION_SHOW_SEARCH_COMPANION = 81,
+  MENU_ACTION_SHOW_BOOKMARK_SIDE_PANEL = 82,
 
   LIMIT_MENU_ACTION
 };
@@ -154,6 +163,7 @@ class AppMenuModel : public ui::SimpleMenuModel,
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kExtensionsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMoreToolsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kIncognitoMenuItem);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPasswordAndAutofillMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPasswordManagerMenuItem);
 
   // Number of menus within the app menu with an arbitrarily high (variable)
@@ -215,19 +225,22 @@ class AppMenuModel : public ui::SimpleMenuModel,
   // Appends a clipboard menu (without separators).
   void CreateCutCopyPasteMenu();
 
+  // Appends a Find and edit sub-menu (without separators)
+  void CreateFindAndEditSubMenu();
+
   // Appends a zoom menu (without separators).
   void CreateZoomMenu();
+
+  // Called when a command is selected.
+  // Logs UMA metrics about which command was chosen and how long the user
+  // took to select the command.
+  void LogMenuMetrics(int command_id);
 
  private:
   // Adds actionable global error menu items to the menu.
   // Examples: Extension permissions and sign in errors.
   // Returns a boolean indicating whether any menu items were added.
   bool AddGlobalErrorMenuItems();
-
-  // Called when a command is selected.
-  // Logs UMA metrics about which command was chosen and how long the user
-  // took to select the command.
-  void LogMenuMetrics(int command_id);
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Disables/Enables the settings item based on kSystemFeaturesDisableList

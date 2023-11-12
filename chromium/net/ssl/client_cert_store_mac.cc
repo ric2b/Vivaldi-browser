@@ -16,12 +16,12 @@
 #include <utility>
 #include <vector>
 
+#include "base/apple/osstatus_logging.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
-#include "base/mac/mac_logging.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -34,7 +34,7 @@
 #include "net/ssl/client_cert_identity_mac.h"
 #include "net/ssl/ssl_platform_key_util.h"
 
-using base::ScopedCFTypeRef;
+using base::apple::ScopedCFTypeRef;
 
 namespace net {
 
@@ -47,8 +47,9 @@ using ClientCertIdentityMacList =
 // including the intermediate and finally root certificates (if any).
 // This function calls SecTrust but doesn't actually pay attention to the trust
 // result: it shouldn't be used to determine trust, just to traverse the chain.
-OSStatus CopyCertChain(SecCertificateRef cert_handle,
-                       base::ScopedCFTypeRef<CFArrayRef>* out_cert_chain) {
+OSStatus CopyCertChain(
+    SecCertificateRef cert_handle,
+    base::apple::ScopedCFTypeRef<CFArrayRef>* out_cert_chain) {
   DCHECK(cert_handle);
   DCHECK(out_cert_chain);
 
@@ -76,17 +77,10 @@ OSStatus CopyCertChain(SecCertificateRef cert_handle,
   // Evaluate trust, which creates the cert chain.
   {
     base::AutoLock lock(crypto::GetMacSecurityServicesLock());
-    if (__builtin_available(macOS 10.14, *)) {
-      // The return value is intentionally ignored since we only care about
-      // building a cert chain, not whether it is trusted (the server is the
-      // only one that can decide that.)
-      std::ignore = SecTrustEvaluateWithError(trust, nullptr);
-    } else {
-      SecTrustResultType status;
-      result = SecTrustEvaluate(trust, &status);
-      if (result)
-        return result;
-    }
+    // The return value is intentionally ignored since we only care about
+    // building a cert chain, not whether it is trusted (the server is the
+    // only one that can decide that.)
+    std::ignore = SecTrustEvaluateWithError(trust, nullptr);
     *out_cert_chain = x509_util::CertificateChainFromSecTrust(trust);
   }
   return result;
@@ -105,7 +99,7 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
                                        os_cert.InitializeInto());
   if (err != noErr)
     return false;
-  base::ScopedCFTypeRef<CFArrayRef> cert_chain;
+  base::apple::ScopedCFTypeRef<CFArrayRef> cert_chain;
   OSStatus result = CopyCertChain(os_cert.get(), &cert_chain);
   if (result) {
     OSSTATUS_LOG(ERROR, result) << "CopyCertChain error";
@@ -115,7 +109,7 @@ bool IsIssuedByInKeychain(const std::vector<std::string>& valid_issuers,
   if (!cert_chain)
     return false;
 
-  std::vector<base::ScopedCFTypeRef<SecCertificateRef>> intermediates;
+  std::vector<base::apple::ScopedCFTypeRef<SecCertificateRef>> intermediates;
   for (CFIndex i = 1, chain_count = CFArrayGetCount(cert_chain);
        i < chain_count; ++i) {
     SecCertificateRef sec_cert = reinterpret_cast<SecCertificateRef>(

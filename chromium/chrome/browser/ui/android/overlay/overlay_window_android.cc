@@ -131,6 +131,9 @@ void OverlayWindowAndroid::OnAttachCompositor() {
 void OverlayWindowAndroid::OnDetachCompositor() {
   window_android_->GetCompositor()->RemoveChildFrameSink(
       surface_layer_->surface_id().frame_sink_id());
+  // After this callback, `WindowAndroid` clears all the observers.  We don't
+  // really have any guarantee on its lifetime after this.
+  window_android_ = nullptr;
 }
 
 void OverlayWindowAndroid::OnActivityStopped() {
@@ -139,6 +142,10 @@ void OverlayWindowAndroid::OnActivityStopped() {
 
 void OverlayWindowAndroid::Destroy(JNIEnv* env) {
   java_ref_.reset();
+
+  // Stop the timer for completeness, though resetting `java_ref_` will make it
+  // a no-op.
+  update_action_timer_->Stop();
 
   if (window_android_) {
     window_android_->RemoveObserver(this);
@@ -228,11 +235,18 @@ void OverlayWindowAndroid::CloseInternal() {
   if (java_ref_.is_uninitialized())
     return;
 
-  DCHECK(window_android_);
-  window_android_->RemoveObserver(this);
-  window_android_ = nullptr;
+  if (window_android_) {
+    window_android_->RemoveObserver(this);
+    window_android_ = nullptr;
+  }
+
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_PictureInPictureActivity_close(env, java_ref_.get(env));
+
+  // Stop any in-flight action button updates.  We won't find out if the Android
+  // window is destroyed since that comes from `WindowAndroidObserver` but we
+  // just unregistered from that.
+  update_action_timer_->Stop();
 }
 
 bool OverlayWindowAndroid::IsActive() const {

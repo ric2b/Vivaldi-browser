@@ -4,7 +4,7 @@
 
 #include "media/capture/video/apple/video_capture_device_apple.h"
 
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/scoped_cftyperef.h"
 #import "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
@@ -15,10 +15,6 @@
 #include "media/capture/video/apple/video_capture_device_frame_receiver.h"
 #include "media/capture/video/mock_video_capture_device_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace media {
 

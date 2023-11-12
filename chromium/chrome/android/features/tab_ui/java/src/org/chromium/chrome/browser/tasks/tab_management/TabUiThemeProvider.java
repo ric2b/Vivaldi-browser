@@ -19,18 +19,13 @@ import com.google.android.material.color.MaterialColors;
 import com.google.android.material.elevation.ElevationOverlayProvider;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
-import org.chromium.ui.util.ColorUtils;
 
 /**
  * Utility class that provides theme related attributes for Tab UI.
  */
 public class TabUiThemeProvider {
     private static final String TAG = "TabUiThemeProvider";
-    private static final int ALPHA_20 = 0x33;
-    private static final int ALPHA_25 = 0x40;
-    private static final int ALPHA_40 = 0x66;
 
     /**
      * Returns the color to use for the tab grid card view background based on incognito mode.
@@ -44,17 +39,12 @@ public class TabUiThemeProvider {
             Context context, boolean isIncognito, boolean isSelected) {
         if (isIncognito) {
             // Incognito does not use dynamic colors, so it can use colors from resources.
-            int incognitoTabBgColorRes = ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()
-                    ? R.color.default_bg_color_dark_elev_4_gm3_baseline
-                    : R.color.incognito_tab_bg_color;
             @ColorRes
-            int colorRes =
-                    isSelected ? R.color.incognito_tab_bg_selected_color : incognitoTabBgColorRes;
+            int colorRes = isSelected ? R.color.incognito_tab_bg_selected_color
+                                      : R.color.incognito_tab_bg_color;
             return ContextCompat.getColor(context, colorRes);
         } else {
-            float tabElevation = ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()
-                    ? context.getResources().getDimension(R.dimen.default_elevation_5)
-                    : context.getResources().getDimension(R.dimen.tab_bg_elevation);
+            float tabElevation = context.getResources().getDimension(R.dimen.tab_bg_elevation);
             @ColorInt
             int colorInt = isSelected
                     ? MaterialColors.getColor(context, org.chromium.chrome.R.attr.colorPrimary, TAG)
@@ -173,37 +163,6 @@ public class TabUiThemeProvider {
     }
 
     /**
-     * Returns the color to use for the thumbnail placeholder icon based on the state of the card.
-     *
-     * @param context {@link Context} to access resources.
-     * @param isIncognito Whether the color is used for incognito mode.
-     * @param isSelected Whether the tab is currently selected.
-     * @return The color to tint the globe icon drawable.
-     */
-    public static @ColorInt int getThumbnailPlaceholderIconColor(
-            Context context, boolean isIncognito, boolean isSelected) {
-        if (isIncognito) {
-            final @ColorRes int colorRes = isSelected
-                    ? R.color.incognito_placeholder_icon_selected_color
-                    : R.color.incognito_placeholder_icon_color;
-            final @ColorInt int color = context.getColor(colorRes);
-            return isSelected ? ColorUtils.setAlphaComponent(color, ALPHA_40)
-                              : ColorUtils.setAlphaComponent(color, ALPHA_25);
-        } else if (ColorUtils.inNightMode(context)) {
-            final @ColorInt int color = isSelected
-                    ? SemanticColorUtils.getDefaultTextColorOnAccent1(context)
-                    : SemanticColorUtils.getDefaultIconColor(context);
-            return isSelected ? ColorUtils.setAlphaComponent(color, ALPHA_40)
-                              : ColorUtils.setAlphaComponent(color, ALPHA_25);
-        } else {
-            final @ColorInt int color = isSelected
-                    ? SemanticColorUtils.getDefaultIconColorAccent1(context)
-                    : SemanticColorUtils.getDefaultIconColor(context);
-            return isSelected ? color : ColorUtils.setAlphaComponent(color, ALPHA_20);
-        }
-    }
-
-    /**
      * Returns the mini-thumbnail placeholder color for the multi-thumbnail tab grid card based on
      * the incognito mode.
      *
@@ -296,13 +255,9 @@ public class TabUiThemeProvider {
     public static ColorStateList getHoveredCardBackgroundTintList(
             Context context, boolean isIncognito, boolean isSelected) {
         if (isIncognito) {
-            int incognitoTabGroupHoveredBgColorRes =
-                    ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()
-                    ? R.color.default_bg_color_dark_elev_1_gm3_baseline
-                    : R.color.incognito_tab_group_hovered_bg_color;
             @ColorRes
             int colorRes = isSelected ? R.color.incognito_tab_group_hovered_bg_selected_color
-                                      : incognitoTabGroupHoveredBgColorRes;
+                                      : R.color.incognito_tab_group_hovered_bg_color;
             return AppCompatResources.getColorStateList(context, colorRes);
         } else {
             if (isSelected) {

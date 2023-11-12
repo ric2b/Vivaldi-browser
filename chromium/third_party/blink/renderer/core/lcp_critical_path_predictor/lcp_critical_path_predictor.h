@@ -6,9 +6,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LCP_CRITICAL_PATH_PREDICTOR_LCP_CRITICAL_PATH_PREDICTOR_H_
 
 #include "base/task/single_thread_task_runner.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/element_locator.pb.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_script_observer.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
@@ -31,8 +33,33 @@ class CORE_EXPORT LCPCriticalPathPredictor final
   LCPCriticalPathPredictor(const LCPCriticalPathPredictor&) = delete;
   LCPCriticalPathPredictor& operator=(const LCPCriticalPathPredictor&) = delete;
 
-  void OnLargestContentfulPaintUpdated(Element* lcp_element);
+  // Member functions invoked in LCPP hint consumption path (read path):
 
+  // Checks if `this` has some hint data available for the page load.
+  // Meant to be used as preconditions on metrics.
+  bool HasAnyHintData() const;
+
+  void set_lcp_element_locators(Vector<ElementLocator> locators);
+
+  const Vector<ElementLocator>& lcp_element_locators() {
+    return lcp_element_locators_;
+  }
+
+  void set_lcp_influencer_scripts(HashSet<KURL> scripts);
+
+  const HashSet<KURL>& lcp_influencer_scripts() {
+    return lcp_influencer_scripts_;
+  }
+
+  void Reset() {
+    lcp_element_locators_.clear();
+    lcp_influencer_scripts_.clear();
+  }
+
+  // Member functions invoked in LCPP hint production path (write path):
+
+  void OnLargestContentfulPaintUpdated(Element* lcp_element);
+  LCPScriptObserver* lcp_script_observer() { return lcp_script_observer_; }
   void Trace(Visitor*) const;
 
  private:
@@ -42,6 +69,12 @@ class CORE_EXPORT LCPCriticalPathPredictor final
   Member<LocalFrame> frame_;
   HeapMojoRemote<mojom::blink::LCPCriticalPathPredictorHost> host_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  Member<LCPScriptObserver> lcp_script_observer_;
+
+  // LCPP hints for consumption (read path):
+
+  Vector<ElementLocator> lcp_element_locators_;
+  HashSet<KURL> lcp_influencer_scripts_;
 };
 
 }  // namespace blink

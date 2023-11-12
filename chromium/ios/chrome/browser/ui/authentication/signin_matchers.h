@@ -35,9 +35,13 @@ id<GREYMatcher> GoogleSyncSettingsButton();
 // Matcher for the upgrade sign-in promo.
 id<GREYMatcher> UpgradeSigninPromoMatcher();
 
-// Matcher for the Settings row which, upon tap, leads the user to sign-in and
+// Matcher for the Settings row which, upon tap, leads the user to sign-in. If
+// kReplaceSyncPromosWithSignInPromos is disabled, it also leads the user to
 // enable sync. The row is only shown to signed-out users.
 id<GREYMatcher> SettingsSignInRowMatcher();
+
+// Matcher for the primary button ("Yes, I'm In") in the history opt-in screen.
+id<GREYMatcher> HistoryOptInPrimaryButtonMatcher();
 
 }  // namespace chrome_test_util
 

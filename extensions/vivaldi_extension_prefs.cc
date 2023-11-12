@@ -4,6 +4,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "extensions/browser/extension_pref_value_map.h"
+#include "extensions/common/api/types.h"
 
 namespace extensions {
 
@@ -13,13 +14,13 @@ void ExtensionPrefs::RegisterAndLoadExtPrefsForVivaldi() {
 
   // Set regular extension controlled prefs.
   LoadExtensionControlledPrefs(vivaldi::kVivaldiAppId,
-                               kExtensionPrefsScopeRegular);
+                               ChromeSettingScope::kRegular);
   // Set incognito extension controlled prefs.
   LoadExtensionControlledPrefs(vivaldi::kVivaldiAppId,
-                               kExtensionPrefsScopeIncognitoPersistent);
+                               ChromeSettingScope::kIncognitoPersistent);
   // Set regular-only extension controlled prefs.
   LoadExtensionControlledPrefs(vivaldi::kVivaldiAppId,
-                               kExtensionPrefsScopeRegularOnly);
+                               ChromeSettingScope::kRegularOnly);
 }
 
 }  // namespace extensions

@@ -71,19 +71,22 @@ export class PowerBookmarksContextMenuElement extends PolymerElement {
 
   showAt(
       event: MouseEvent, bookmarks: chrome.bookmarks.BookmarkTreeNode[],
-      priceTracked: boolean, priceTrackingEligible: boolean) {
+      priceTracked: boolean, priceTrackingEligible: boolean,
+      onShown: Function = () => {}) {
     this.bookmarks_ = bookmarks;
     this.priceTracked_ = priceTracked;
     this.priceTrackingEligible_ = priceTrackingEligible;
     const target = event.target as HTMLElement;
     afterNextRender(this, () => {
       this.$.menu.showAt(target);
+      onShown();
     });
   }
 
   showAtPosition(
       event: MouseEvent, bookmarks: chrome.bookmarks.BookmarkTreeNode[],
-      priceTracked: boolean, priceTrackingEligible: boolean) {
+      priceTracked: boolean, priceTrackingEligible: boolean,
+      onShown: Function = () => {}) {
     this.bookmarks_ = bookmarks;
     this.priceTracked_ = priceTracked;
     this.priceTrackingEligible_ = priceTrackingEligible;
@@ -98,6 +101,7 @@ export class PowerBookmarksContextMenuElement extends PolymerElement {
         minX: minX,
         maxX: maxX,
       });
+      onShown();
     });
   }
 
@@ -134,7 +138,8 @@ export class PowerBookmarksContextMenuElement extends PolymerElement {
       },
     ];
 
-    if (!loadTimeData.getBoolean('incognitoMode')) {
+    if (!loadTimeData.getBoolean('incognitoMode') &&
+        loadTimeData.getBoolean('isIncognitoModeAvailable')) {
       menuItems.push({
         id: MenuItemId.OPEN_INCOGNITO,
         label: bookmarkCount < 2 ?

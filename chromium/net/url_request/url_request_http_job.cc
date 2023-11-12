@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/adapters.h"
+#include "base/feature_list.h"
 #include "base/file_version_info.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -25,6 +26,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
@@ -59,8 +61,8 @@
 #include "net/filter/gzip_source_stream.h"
 #include "net/filter/source_stream.h"
 #include "net/filter/zstd_source_stream.h"
+#include "net/first_party_sets/first_party_set_entry.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
-#include "net/first_party_sets/same_party_context.h"
 #include "net/http/http_content_disposition.h"
 #include "net/http/http_log_util.h"
 #include "net/http/http_network_session.h"
@@ -83,6 +85,7 @@
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "net/url_request/clear_site_data.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -101,6 +104,24 @@
 #endif
 
 namespace {
+
+base::Value::Dict FirstPartySetMetadataNetLogParams(
+    const net::FirstPartySetMetadata& first_party_set_metadata,
+    const int64_t* const fps_cache_filter) {
+  base::Value::Dict dict;
+  auto entry_or_empty =
+      [](const absl::optional<net::FirstPartySetEntry>& entry) -> std::string {
+    return entry.has_value() ? entry->GetDebugString() : "none";
+  };
+
+  dict.Set("cache_filter",
+           fps_cache_filter ? base::NumberToString(*fps_cache_filter) : "none");
+  dict.Set("frame_entry",
+           entry_or_empty(first_party_set_metadata.frame_entry()));
+  dict.Set("top_frame_primary",
+           entry_or_empty(first_party_set_metadata.top_frame_entry()));
+  return dict;
+}
 
 base::Value::Dict CookieInclusionStatusNetLogParams(
     const std::string& operation,
@@ -144,22 +165,11 @@ void LogTrustAnchor(const net::HashValueVector& spki_hashes) {
 }
 
 net::CookieOptions CreateCookieOptions(
-    net::CookieOptions::SameSiteCookieContext same_site_context,
-    const net::SamePartyContext& same_party_context,
-    const net::IsolationInfo& isolation_info,
-    bool is_in_nontrivial_first_party_set) {
+    net::CookieOptions::SameSiteCookieContext same_site_context) {
   net::CookieOptions options;
   options.set_return_excluded_cookies();
   options.set_include_httponly();
   options.set_same_site_cookie_context(same_site_context);
-  options.set_same_party_context(same_party_context);
-  if (isolation_info.party_context().has_value()) {
-    // Count the top-frame site since it's not in the party_context.
-    options.set_full_party_context_size(isolation_info.party_context()->size() +
-                                        1);
-  }
-  options.set_is_in_nontrivial_first_party_set(
-      is_in_nontrivial_first_party_set);
   return options;
 }
 
@@ -186,6 +196,17 @@ GURL UpgradeSchemeToCryptographic(const GURL& insecure_url) {
 
   return secure_url;
 }
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class ContentEncodingType {
+  kUnknown = 0,
+  kBrotli = 1,
+  kGZip = 2,
+  kDeflate = 3,
+  kZstd = 4,
+  kMaxValue = kZstd,
+};
 
 }  // namespace
 
@@ -262,6 +283,7 @@ void URLRequestHttpJob::Start() {
       request_->isolation_info().network_anonymization_key();
   request_info_.possibly_top_frame_origin =
       request_->isolation_info().top_frame_origin();
+  request_info_.frame_origin = request_->isolation_info().frame_origin();
   request_info_.is_subframe_document_resource =
       request_->isolation_info().request_type() ==
       net::IsolationInfo::RequestType::kSubFrame;
@@ -272,9 +294,6 @@ void URLRequestHttpJob::Start() {
       net::MutableNetworkTrafficAnnotationTag(request_->traffic_annotation());
   request_info_.socket_tag = request_->socket_tag();
   request_info_.idempotency = request_->GetIdempotency();
-  request_info_.pervasive_payloads_index_for_logging =
-      request_->pervasive_payloads_index_for_logging();
-  request_info_.checksum = request_->expected_response_checksum();
 #if BUILDFLAG(ENABLE_REPORTING)
   request_info_.reporting_upload_depth = request_->reporting_upload_depth();
 #endif
@@ -292,15 +311,17 @@ void URLRequestHttpJob::Start() {
   UMA_HISTOGRAM_BOOLEAN("Net.HttpJob.CanIncludeCookies",
                         should_add_cookie_header);
 
+  request_->net_log().BeginEvent(NetLogEventType::FIRST_PARTY_SETS_METADATA);
+
   if (!should_add_cookie_header) {
     OnGotFirstPartySetMetadata(FirstPartySetMetadata());
     return;
   }
+
   absl::optional<FirstPartySetMetadata> metadata =
       cookie_util::ComputeFirstPartySetMetadataMaybeAsync(
           SchemefulSite(request()->url()), request()->isolation_info(),
           request()->context()->cookie_store()->cookie_access_delegate(),
-          request()->force_ignore_top_frame_party_for_cookies(),
           base::BindOnce(&URLRequestHttpJob::OnGotFirstPartySetMetadata,
                          weak_factory_.GetWeakPtr()));
 
@@ -334,6 +355,13 @@ void URLRequestHttpJob::OnGotFirstPartySetCacheFilterMatchInfo(
     FirstPartySetsCacheFilter::MatchInfo match_info) {
   request_info_.fps_cache_filter = match_info.clear_at_run_id;
   request_info_.browser_run_id = match_info.browser_run_id;
+
+  request_->net_log().EndEvent(
+      NetLogEventType::FIRST_PARTY_SETS_METADATA, [&]() {
+        return FirstPartySetMetadataNetLogParams(
+            first_party_set_metadata_,
+            base::OptionalToPtr(request_info_.fps_cache_filter));
+      });
 
   // Privacy mode could still be disabled in SetCookieHeaderAndStart if we are
   // going to send previously saved cookies.
@@ -586,6 +614,10 @@ void URLRequestHttpJob::StartTransactionInternal() {
       transaction_->SetEarlyResponseHeadersCallback(
           early_response_headers_callback_);
       transaction_->SetResponseHeadersCallback(response_headers_callback_);
+      if (is_shared_dictionary_read_allowed_callback_) {
+        transaction_->SetIsSharedDictionaryReadAllowedCallback(
+            is_shared_dictionary_read_allowed_callback_);
+      }
 
       if (!throttling_entry_.get() ||
           !throttling_entry_->ShouldRejectRequest(*request_)) {
@@ -615,7 +647,8 @@ void URLRequestHttpJob::StartTransactionInternal() {
 void URLRequestHttpJob::AddExtraHeaders() {
   request_info_.extra_headers.SetAcceptEncodingIfMissing(
       request()->url(), request()->accepted_stream_types(),
-      request()->context()->enable_brotli());
+      request()->context()->enable_brotli(),
+      request()->context()->enable_zstd());
 
   if (http_user_agent_settings_) {
     // Only add default Accept-Language if the request didn't have it
@@ -651,11 +684,7 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
           request_->site_for_cookies(), request_->initiator(),
           is_main_frame_navigation, force_ignore_site_for_cookies);
 
-  bool is_in_nontrivial_first_party_set =
-      first_party_set_metadata_.frame_entry().has_value();
-  CookieOptions options = CreateCookieOptions(
-      same_site_context, first_party_set_metadata_.context(),
-      request_->isolation_info(), is_in_nontrivial_first_party_set);
+  CookieOptions options = CreateCookieOptions(same_site_context);
 
   cookie_store->GetCookieListWithOptionsAsync(
       request_->url(), options,
@@ -701,14 +730,23 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
           CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
     }
   }
+  // TODO(https://crbug.com/1469135): Consolidate the following `if` blocks so
+  // that all the cookies should be passed into
+  // `AnnotateAndMoveUserBlockedCookies` to be associated with the correct
+  // inclusion status.
   if (ShouldBlockUnpartitionedCookiesOnly(request_info_.privacy_mode)) {
     auto partition_it = base::ranges::stable_partition(
         maybe_included_cookies, [](const CookieWithAccessResult& el) {
           return el.cookie.IsPartitioned();
         });
     for (auto it = partition_it; it < maybe_included_cookies.end(); ++it) {
-      it->access_result.status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      if (!cookie_util::IsForceThirdPartyCookieBlockingEnabled()) {
+        it->access_result.status.AddExclusionReason(
+            CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      } else {
+        it->access_result.status.AddExclusionReason(
+            CookieInclusionStatus::EXCLUDE_THIRD_PARTY_PHASEOUT);
+      }
       if (first_party_set_metadata_.AreSitesInSameFirstPartySet()) {
         it->access_result.status.AddExclusionReason(
             CookieInclusionStatus::
@@ -730,6 +768,10 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
                                             cookie_line);
 
       size_t n_partitioned_cookies = 0;
+      bool may_set_sec_cookie_deprecation_header =
+          base::FeatureList::IsEnabled(
+              net::features::kCookieDeprecationFacilitatedTestingLabels) &&
+          request_->context()->cookie_deprecation_label().has_value();
 
       // TODO(crbug.com/1031664): Reduce the number of times the cookie list
       // is iterated over. Get metrics for every cookie which is included.
@@ -762,6 +804,15 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
                                   cookie_request_schemes);
         if (c.cookie.IsPartitioned()) {
           ++n_partitioned_cookies;
+
+          if (may_set_sec_cookie_deprecation_header &&
+              c.cookie.Name() == "receive-cookie-deprecation" &&
+              c.cookie.IsHttpOnly() && c.cookie.IsSecure()) {
+            request_info_.extra_headers.SetHeader(
+                "Sec-Cookie-Deprecation",
+                *request_->context()->cookie_deprecation_label());
+            may_set_sec_cookie_deprecation_header = false;
+          }
         }
       }
 
@@ -847,6 +898,23 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
     return;
   }
 
+  HttpResponseHeaders* headers = GetResponseHeaders();
+
+  // If we're clearing the cookies as part of a clear-site-data header we must
+  // not also write new ones in the same response.
+  bool clear_site_data_prevents_cookies_from_being_stored = false;
+  std::string clear_site_data_header;
+  headers->GetNormalizedHeader(kClearSiteDataHeader, &clear_site_data_header);
+  std::vector<std::string> clear_site_data_types =
+      ClearSiteDataHeaderContents(clear_site_data_header);
+  std::set<std::string> clear_site_data_set(clear_site_data_types.begin(),
+                                            clear_site_data_types.end());
+  if (clear_site_data_set.find(kDatatypeCookies) != clear_site_data_set.end() ||
+      clear_site_data_set.find(kDatatypeWildcard) !=
+          clear_site_data_set.end()) {
+    clear_site_data_prevents_cookies_from_being_stored = true;
+  }
+
   base::Time response_date;
   absl::optional<base::Time> server_time = absl::nullopt;
   if (GetResponseHeaders()->GetDateValue(&response_date))
@@ -869,18 +937,13 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
           request_->initiator(), is_main_frame_navigation,
           force_ignore_site_for_cookies);
 
-  bool is_in_nontrivial_first_party_set =
-      first_party_set_metadata_.frame_entry().has_value();
-  CookieOptions options = CreateCookieOptions(
-      same_site_context, first_party_set_metadata_.context(),
-      request_->isolation_info(), is_in_nontrivial_first_party_set);
+  CookieOptions options = CreateCookieOptions(same_site_context);
 
   // Set all cookies, without waiting for them to be set. Any subsequent
   // read will see the combined result of all cookie operation.
   const base::StringPiece name("Set-Cookie");
   std::string cookie_string;
   size_t iter = 0;
-  HttpResponseHeaders* headers = GetResponseHeaders();
 
   // NotifyHeadersComplete needs to be called once and only once after the
   // list has been fully processed, and it can either be called in the
@@ -896,9 +959,18 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
 
     num_cookie_lines_left_++;
 
+    // For the block_truncated parameter, the value shouldn't matter here
+    // because HTTP requests containing NULLs causes an error before this code
+    // can be reached and unpaired carriage returns and line feed characters
+    // cause truncation during HTTP header processing before reaching this
+    // point, so DCHECK this assumption and just pass true for this parameter.
+    DCHECK(cookie_string.find('\0') == std::string::npos);
+    DCHECK(cookie_string.find('\r') == std::string::npos);
+    DCHECK(cookie_string.find('\n') == std::string::npos);
     std::unique_ptr<CanonicalCookie> cookie = net::CanonicalCookie::Create(
         request_->url(), cookie_string, base::Time::Now(), server_time,
-        cookie_partition_key_.value(), &returned_status);
+        cookie_partition_key_.value(), /*block_truncated=*/true,
+        &returned_status);
 
     absl::optional<CanonicalCookie> cookie_to_return = absl::nullopt;
     if (returned_status.IsInclude()) {
@@ -906,9 +978,20 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
       // Make a copy of the cookie if we successfully made one.
       cookie_to_return = *cookie;
     }
-    if (cookie && !CanSetCookie(*cookie, &options)) {
+
+    // Check cookie accessibility with cookie_settings.
+    if (cookie && !CanSetCookie(*cookie, &options, &returned_status)) {
+      // Cookie allowed by cookie_settings checks could be blocked explicitly,
+      // e.g. via Android Webview APIs, we need to manually add exclusion reason
+      // in this case.
+      if (returned_status.IsInclude()) {
+        returned_status.AddExclusionReason(
+            net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      }
+    }
+    if (clear_site_data_prevents_cookies_from_being_stored) {
       returned_status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+          CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
     }
     if (!returned_status.IsInclude()) {
       OnSetCookieResult(options, cookie_to_return, std::move(cookie_string),
@@ -1276,18 +1359,25 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
     }
   }
 
+  ContentEncodingType content_encoding_type = ContentEncodingType::kUnknown;
+
   for (const auto& type : base::Reversed(types)) {
     std::unique_ptr<FilterSourceStream> downstream;
     switch (type) {
       case SourceStream::TYPE_BROTLI:
         downstream = CreateBrotliSourceStream(std::move(upstream));
+        content_encoding_type = ContentEncodingType::kBrotli;
         break;
       case SourceStream::TYPE_GZIP:
       case SourceStream::TYPE_DEFLATE:
         downstream = GzipSourceStream::Create(std::move(upstream), type);
+        content_encoding_type = type == SourceStream::TYPE_GZIP
+                                    ? ContentEncodingType::kGZip
+                                    : ContentEncodingType::kDeflate;
         break;
       case SourceStream::TYPE_ZSTD:
         downstream = CreateZstdSourceStream(std::move(upstream));
+        content_encoding_type = ContentEncodingType::kZstd;
         break;
       case SourceStream::TYPE_NONE:
       case SourceStream::TYPE_UNKNOWN:
@@ -1298,6 +1388,10 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
       return nullptr;
     upstream = std::move(downstream);
   }
+
+  // Note: If multiple encoding types were specified, this only records the last
+  // encoding type.
+  UMA_HISTOGRAM_ENUMERATION("Net.ContentEncodingType", content_encoding_type);
 
   return upstream;
 }
@@ -1591,6 +1685,13 @@ void URLRequestHttpJob::SetEarlyResponseHeadersCallback(
   early_response_headers_callback_ = std::move(callback);
 }
 
+void URLRequestHttpJob::SetIsSharedDictionaryReadAllowedCallback(
+    base::RepeatingCallback<bool()> callback) {
+  DCHECK(!transaction_);
+  DCHECK(!is_shared_dictionary_read_allowed_callback_);
+  is_shared_dictionary_read_allowed_callback_ = std::move(callback);
+}
+
 void URLRequestHttpJob::SetResponseHeadersCallback(
     ResponseHeadersCallback callback) {
   DCHECK(!transaction_);
@@ -1649,6 +1750,17 @@ void URLRequestHttpJob::RecordCompletionHistograms(CompletionCause reason) {
                                   prefilter_bytes_read(), 1, 50000000, 50);
     } else {
       UMA_HISTOGRAM_TIMES("Net.HttpJob.TotalTimeNotCached", total_time);
+      if (response_info_->was_ip_protected) {
+        UMA_HISTOGRAM_TIMES("Net.HttpJob.IpProtection.TotalTimeNotCached",
+                            total_time);
+
+        UMA_HISTOGRAM_CUSTOM_COUNTS("Net.HttpJob.IpProtection.BytesSent",
+                                    GetTotalSentBytes(), 1, 50000000, 50);
+
+        UMA_HISTOGRAM_CUSTOM_COUNTS(
+            "Net.HttpJob.IpProtection.PrefilterBytesRead.Net",
+            prefilter_bytes_read(), 1, 50000000, 50);
+      }
       UMA_HISTOGRAM_CUSTOM_COUNTS("Net.HttpJob.PrefilterBytesRead.Net",
                                   prefilter_bytes_read(), 1, 50000000, 50);
 

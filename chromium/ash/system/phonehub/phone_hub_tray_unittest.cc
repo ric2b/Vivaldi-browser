@@ -67,7 +67,7 @@ class PhoneHubTrayTest : public AshTestBase {
         /*enabled_features=*/{features::kPhoneHub,
                               features::kPhoneHubCameraRoll,
                               features::kEcheLauncher, features::kEcheSWA,
-                              features::kPhoneHubNudge,
+                              features::kPhoneHubOnboardingNotifierRevamp,
                               features::kEcheNetworkConnectionState,
                               features::kSystemNudgeV2},
         /*disabled_features=*/{});
@@ -79,6 +79,9 @@ class PhoneHubTrayTest : public AshTestBase {
 
     phone_hub_tray_ =
         StatusAreaWidgetTestHelper::GetStatusAreaWidget()->phone_hub_tray();
+    // Disable pulse animation so the tests will not hang.
+    ui::ScopedAnimationDurationScaleMode duration_mode(
+        ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
 
     GetFeatureStatusProvider()->SetStatus(
         phonehub::FeatureStatus::kEnabledAndConnected);
@@ -195,10 +198,12 @@ class PhoneHubTrayTest : public AshTestBase {
   }
 
  protected:
-  raw_ptr<PhoneHubTray, ExperimentalAsh> phone_hub_tray_ = nullptr;
+  raw_ptr<PhoneHubTray, DanglingUntriaged | ExperimentalAsh> phone_hub_tray_ =
+      nullptr;
   phonehub::FakePhoneHubManager phone_hub_manager_;
   base::test::ScopedFeatureList feature_list_;
-  raw_ptr<MockNewWindowDelegate, ExperimentalAsh> new_window_delegate_;
+  raw_ptr<MockNewWindowDelegate, DanglingUntriaged | ExperimentalAsh>
+      new_window_delegate_;
   std::unique_ptr<TestNewWindowDelegateProvider> delegate_provider_;
 };
 
@@ -782,19 +787,45 @@ TEST_F(PhoneHubTrayTest, MultiDisplay) {
   EXPECT_TRUE(secondary_phone_hub_tray->GetVisible());
 }
 
-TEST_F(PhoneHubTrayTest, ShowNudge) {
-  // Simulate kOnboardingWithoutPhone state.
+TEST_F(PhoneHubTrayTest,
+       PhoneHubNotShownOnMoreThanFiveMinutesAfterSessionStartTime) {
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kNotEligibleForFeature);
+
+  // Set time to fifteen minutes after session start time.
+  task_environment()->AdvanceClock(base::TimeDelta(base::Minutes(15)));
   GetFeatureStatusProvider()->SetStatus(
       phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
   GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
+  EXPECT_FALSE(phone_hub_tray_->GetVisible());
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOCKED);
+  EXPECT_FALSE(phone_hub_tray_->GetVisible());
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  EXPECT_TRUE(phone_hub_tray_->GetVisible());
+}
+
+TEST_F(PhoneHubTrayTest, ShowPhoneHubOnlyUpToFiveMinutesAfterSessionStartTime) {
+  // Reset session start time.
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kNotEligibleForFeature);
   GetSessionControllerClient()->SetSessionState(
       session_manager::SessionState::ACTIVE);
 
-  EXPECT_TRUE(
-      Shell::Get()->anchored_nudge_manager()->IsNudgeShown(kPhoneHubNudgeId));
+  // Set time to three minutes after session start time.
+  task_environment()->AdvanceClock(base::TimeDelta(base::Minutes(3)));
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
+  GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
+  EXPECT_TRUE(phone_hub_tray_->GetVisible());
 }
 
-TEST_F(PhoneHubTrayTest, HideNudge) {
+TEST_F(PhoneHubTrayTest, ShowAndHideNudge) {
   GetFeatureStatusProvider()->SetStatus(
       phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
   GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
@@ -805,6 +836,18 @@ TEST_F(PhoneHubTrayTest, HideNudge) {
       Shell::Get()->anchored_nudge_manager()->IsNudgeShown(kPhoneHubNudgeId));
 
   ClickTrayButton();
+  EXPECT_TRUE(phone_hub_tray_->is_active());
+  EXPECT_EQ(PhoneHubViewID::kOnboardingView, content_view()->GetID());
+  // It should display the onboarding main view.
+  EXPECT_TRUE(onboarding_main_view());
+  EXPECT_TRUE(onboarding_main_view()->GetVisible());
+  EXPECT_EQ(0u, GetOnboardingUiTracker()->handle_get_started_call_count());
+
+  // Simulate a click on the "Get started" button.
+  LeftClickOn(onboarding_get_started_button());
+  // It should invoke the |HandleGetStarted| call.
+  EXPECT_EQ(1u, GetOnboardingUiTracker()->handle_get_started_call_count());
+  EXPECT_TRUE(GetOnboardingUiTracker()->is_icon_clicked_when_nudge_visible());
   EXPECT_FALSE(
       Shell::Get()->anchored_nudge_manager()->IsNudgeShown(kPhoneHubNudgeId));
 }

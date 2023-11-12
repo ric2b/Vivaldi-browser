@@ -24,6 +24,7 @@
 #include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 #include "chromeos/ash/components/dbus/cros_disks/fake_cros_disks_client.h"
 #include "chromeos/ash/components/drivefs/drivefs_util.h"
+#include "chromeos/ash/components/drivefs/mojom/drivefs.mojom-shared.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/components/drivefs/mojom/drivefs_native_messaging.mojom.h"
 #include "components/drive/file_errors.h"
@@ -356,6 +357,7 @@ void FakeDriveFs::SetMetadata(const FakeMetadata& metadata) {
   stored_metadata.folder_feature = metadata.folder_feature;
   stored_metadata.doc_id = metadata.doc_id;
   stored_metadata.pinned = metadata.pinned;
+  stored_metadata.dirty = metadata.dirty;
   stored_metadata.available_offline = metadata.available_offline;
   stored_metadata.shared = metadata.shared;
   if (metadata.shortcut) {
@@ -383,6 +385,15 @@ absl::optional<bool> FakeDriveFs::IsItemPinned(const std::string& path) {
   for (const auto& metadata : metadata_) {
     if (metadata.first.value() == path) {
       return metadata.second.pinned;
+    }
+  }
+  return absl::nullopt;
+}
+
+absl::optional<bool> FakeDriveFs::IsItemDirty(const std::string& path) {
+  for (const auto& metadata : metadata_) {
+    if (metadata.first.value() == path) {
+      return metadata.second.dirty;
     }
   }
   return absl::nullopt;
@@ -441,7 +452,9 @@ void FakeDriveFs::GetMetadata(const base::FilePath& path,
   }
 
   const auto& stored_metadata = metadata_[path];
+  metadata->item_id = stored_metadata.doc_id;
   metadata->pinned = stored_metadata.pinned;
+  metadata->dirty = stored_metadata.dirty;
   metadata->available_offline =
       stored_metadata.pinned || stored_metadata.available_offline;
   metadata->shared = stored_metadata.shared;
@@ -633,15 +646,24 @@ void FakeDriveFs::GetQuotaUsage(
                           mojom::QuotaUsage::New());
 }
 
+void FakeDriveFs::SetPooledStorageQuotaUsage(int64_t used_user_bytes,
+                                             int64_t total_user_bytes,
+                                             bool organization_limit_exceeded) {
+  pooled_quota_usage_.used_user_bytes = used_user_bytes;
+  pooled_quota_usage_.total_user_bytes = total_user_bytes;
+  pooled_quota_usage_.organization_limit_exceeded = organization_limit_exceeded;
+}
+
 void FakeDriveFs::GetPooledQuotaUsage(
     drivefs::mojom::DriveFs::GetPooledQuotaUsageCallback callback) {
   auto usage = mojom::PooledQuotaUsage::New();
 
-  usage->user_type = mojom::UserType::kUnmanaged;
-  usage->used_user_bytes = 1 * 1024 * 1024;
-  usage->total_user_bytes = 2 * 1024 * 1024;
-  usage->organization_limit_exceeded = false;
-  usage->organization_name = "Test Organization";
+  usage->user_type = pooled_quota_usage_.user_type;
+  usage->used_user_bytes = pooled_quota_usage_.used_user_bytes;
+  usage->total_user_bytes = pooled_quota_usage_.total_user_bytes;
+  usage->organization_limit_exceeded =
+      pooled_quota_usage_.organization_limit_exceeded;
+  usage->organization_name = "Test organization";
 
   std::move(callback).Run(drive::FileError::FILE_ERROR_OK, std::move(usage));
 }
@@ -681,16 +703,13 @@ void FakeDriveFs::ToggleSyncForPath(
 
 void FakeDriveFs::PollHostedFilePinStates() {}
 
-void FakeDriveFs::CancelUploadByPath(const base::FilePath& path) {}
+void FakeDriveFs::CancelUploadByPath(
+    const base::FilePath& path,
+    drivefs::mojom::DriveFs::CancelUploadMode cancel_mode) {}
 
 void FakeDriveFs::SetDocsOfflineEnabled(
     bool enabled,
     drivefs::mojom::DriveFs::SetDocsOfflineEnabledCallback callback) {
-  std::move(callback).Run(drive::FILE_ERROR_OK);
-}
-
-void FakeDriveFs::ClearOfflineFiles(
-    drivefs::mojom::DriveFs::ClearOfflineFilesCallback callback) {
   std::move(callback).Run(drive::FILE_ERROR_OK);
 }
 

@@ -4,11 +4,8 @@
 
 package org.chromium.chrome.browser.feed;
 
-import android.content.Context;
-
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.base.CommandLine;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.feed.componentinterfaces.SurfaceCoordinator.StreamTabId;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -17,7 +14,6 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.concurrent.TimeUnit;
 
@@ -58,10 +54,10 @@ public final class FeedFeatures {
     }
 
     public static boolean shouldUseWebFeedAwarenessIPH() {
-        return ChromeFeatureList
-                .getFieldTrialParamByFeature(
-                        ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style")
-                .equals("IPH");
+        String awarenessStyleParam = ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style");
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)
+                && (awarenessStyleParam.equals("IPH") || awarenessStyleParam.isEmpty());
     }
 
     public static boolean shouldUseNewIndicator() {
@@ -108,11 +104,6 @@ public final class FeedFeatures {
         getPrefService().setBoolean(Pref.HAS_SEEN_WEB_FEED, true);
     }
 
-    public static boolean isMultiColumnFeedEnabled(Context context) {
-        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_MULTI_COLUMN);
-    }
-
     /**
      * @return Whether the feed should automatically scroll down when it first loads so that the
      *         first card is at the top of the screen. This is for use with screenshot utilities.
@@ -130,9 +121,9 @@ public final class FeedFeatures {
         return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
-    @VisibleForTesting
     public static void setFakePrefsForTest(PrefService fakePref) {
         sFakePrefServiceForTest = fakePref;
+        ResettersForTesting.register(() -> sFakePrefServiceForTest = null);
     }
 
     /**
@@ -176,7 +167,6 @@ public final class FeedFeatures {
         return getPrefService().getInteger(Pref.LAST_SEEN_FEED_TYPE);
     }
 
-    @VisibleForTesting
     static void resetInternalStateForTesting() {
         sIsFirstFeedTabStickinessCheckSinceLaunch = true;
     }

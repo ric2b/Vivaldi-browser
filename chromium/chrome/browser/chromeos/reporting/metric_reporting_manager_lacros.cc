@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,8 @@
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/policy/policy_constants.h"
+#include "components/reporting/proto/synced/record.pb.h"
+#include "components/version_info/version_info.h"
 
 namespace reporting::metrics {
 namespace {
@@ -134,7 +136,8 @@ MetricReportingManagerLacros::MetricReportingManagerLacros(
       delegate_(std::move(delegate)),
       device_reporting_settings_(delegate_->CreateDeviceReportingSettings()),
       is_device_deprovisioned_(false) {
-  if (!delegate_->IsAffiliated(profile_)) {
+  CHECK_NE(profile, nullptr);
+  if (!delegate_->IsUserAffiliated(*profile_)) {
     // We only report data for affiliated users on managed devices as of today.
     return;
   }
@@ -154,13 +157,18 @@ MetricReportingManagerLacros::MetricReportingManagerLacros(
           return;
         }
 
+        SourceInfo source_info;
+        source_info.set_source(SourceInfo::LACROS);
+        source_info.set_source_version(
+            std::string(::version_info::GetVersionNumber()));
         instance->telemetry_report_queue_ =
             instance->delegate_->CreatePeriodicUploadReportQueue(
                 EventType::kUser, Destination::TELEMETRY_METRIC,
                 Priority::MANUAL_BATCH_LACROS,
                 instance->device_reporting_settings_.get(),
                 ::policy::key::kReportUploadFrequency,
-                GetDefaultReportUploadFrequency());
+                GetDefaultReportUploadFrequency(),
+                /*rate_unit_to_ms=*/1, std::move(source_info));
 
         instance->delegate_->RegisterObserverWithCrosApiClient(instance.get());
         instance->delayed_init_timer_.Start(

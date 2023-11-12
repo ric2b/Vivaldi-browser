@@ -8,9 +8,9 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './strings.m.js';
 
 import {assert} from 'chrome://resources/ash/common/assert.js';
-import {I18nBehavior} from 'chrome://resources/ash/common/i18n_behavior.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/ash/common/i18n_behavior.js';
 import {isRTL} from 'chrome://resources/ash/common/util.js';
-import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 /** @enum {string} */
 const ButtonTypes = {
@@ -18,82 +18,84 @@ const ButtonTypes = {
   BACK: 'back',
 };
 
-Polymer({
-  is: 'edu-coexistence-button',
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {I18nBehaviorInterface}
+ */
+const EduCoexistenceButtonBase = mixinBehaviors([I18nBehavior], PolymerElement);
 
-  _template: html`{__html_template__}`,
+/**
+ * @polymer
+ */
+class EduCoexistenceButton extends EduCoexistenceButtonBase {
+  static get is() {
+    return 'edu-coexistence-button';
+  }
 
-  behaviors: [I18nBehavior],
+  static get template() {
+    return html`{__html_template__}`;
+  }
 
-  properties: {
-    /**
-     * Set button type.
-     * @type {!ButtonTypes}
-     */
-    buttonType: {
-      type: String,
-      value: ButtonTypes.ACTION,
-    },
+  static get properties() {
+    return {
+      /**
+       * Set button type.
+       */
+      buttonType: {
+        type: String,
+        value: ButtonTypes.ACTION,
+      },
 
-    /**
-     * Button class list string.
-     * @type {!ButtonTypes}
-     */
-    buttonClasses: {
-      type: String,
-      computed: 'getClass_(buttonType, newOobeStyleEnabled)',
-    },
+      /**
+       * Button class list string.
+       */
+      buttonClasses: {
+        type: String,
+        computed: 'getClass_(buttonType)',
+      },
 
-    /**
-     * 'disabled' button attribute.
-     * @type {Boolean}
-     */
-    disabled: {
-      type: Boolean,
-      value: false,
-    },
+      /**
+       * 'disabled' button attribute.
+       */
+      disabled: {
+        type: Boolean,
+        value: false,
+      },
 
-    /**
-     * Whether to use new OOBE style for the button.
-     * @type {Boolean}
-     */
-    newOobeStyleEnabled: {
-      type: Boolean,
-      value: false,
-    },
-  },
+      /**
+       * Whether to use new OOBE style for the button.
+       */
+      newOobeStyleEnabled: {
+        type: Boolean,
+        value: false,
+      },
+    };
+  }
 
   /** @override */
   ready() {
+    super.ready();
     this.assertButtonType_(this.buttonType);
-  },
+  }
 
   /**
-   * @param {!ButtonTypes} buttonType
+   * @param {string} buttonType
    * @private
    */
   assertButtonType_(buttonType) {
     assert(Object.values(ButtonTypes).includes(buttonType));
-  },
+  }
 
   /**
    * @param {!ButtonTypes} buttonType
-   * @param {boolean} newOobeStyleEnabled
    * @return {string} CSS class names
    * @private
    */
-  getClass_(buttonType, newOobeStyleEnabled) {
+  getClass_(buttonType) {
     this.assertButtonType_(buttonType);
-
-    // Disable the border if necessary.
-    const cssClassses = newOobeStyleEnabled ? 'no-border button-radius' : '';
-
-    if (buttonType === ButtonTypes.BACK) {
-      return cssClassses;
-    }
-
-    return 'action-button ' + cssClassses;
-  },
+    return buttonType === ButtonTypes.ACTION ? 'action-button' : '';
+  }
 
   /**
    * @param {!ButtonTypes} buttonType
@@ -103,7 +105,7 @@ Polymer({
   hasIconBeforeText_(buttonType) {
     this.assertButtonType_(buttonType);
     return buttonType === ButtonTypes.BACK;
-  },
+  }
 
   /**
    * @param {!ButtonTypes} buttonType
@@ -113,7 +115,7 @@ Polymer({
   hasIconAfterText_(buttonType) {
     this.assertButtonType_(buttonType);
     return false;
-  },
+  }
 
   /**
    * @param {!ButtonTypes} buttonType
@@ -126,7 +128,7 @@ Polymer({
       return isRTL() ? 'cr:chevron-right' : 'cr:chevron-left';
     }
     return '';
-  },
+  }
 
   /**
    * @param {!ButtonTypes} buttonType
@@ -143,25 +145,32 @@ Polymer({
       return this.i18n('nextButton');
     }
     return '';  // unreached
-  },
+  }
 
   /**
    * @param {!Event} e
    * @private
    */
-  onTap_(e) {
+  onClick_(e) {
     if (this.disabled) {
       e.stopPropagation();
       return;
     }
     if (this.buttonType === ButtonTypes.BACK) {
-      this.fire('go-back');
+      this.dispatchEvent(new CustomEvent('go-back', {
+        bubbles: true,
+        composed: true,
+      }));
       return;
     }
     if (this.buttonType === ButtonTypes.ACTION) {
-      this.fire('go-action');
+      this.dispatchEvent(new CustomEvent('go-action', {
+        bubbles: true,
+        composed: true,
+      }));
       return;
     }
-  },
+  }
+}
 
-});
+customElements.define(EduCoexistenceButton.is, EduCoexistenceButton);

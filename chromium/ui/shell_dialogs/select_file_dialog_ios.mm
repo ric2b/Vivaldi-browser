@@ -8,16 +8,12 @@
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ui/shell_dialogs/select_file_policy.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface NativeFileDialog : NSObject <UIDocumentPickerDelegate> {
  @private
@@ -95,7 +91,7 @@
       continue;
     }
     NSString* path = url.path;
-    paths.push_back(base::mac::NSStringToFilePath(path));
+    paths.push_back(base::apple::NSStringToFilePath(path));
   }
   _dialog->FileWasSelected(_params, _allowMultipleFiles, false, paths, 0);
 }

@@ -8,10 +8,12 @@ import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
+import org.chromium.components.power_bookmarks.PowerBookmarkType;
 import org.chromium.components.sync.SyncService;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Simple implementation of {@link BookmarkQueryHandler} for the old experience. */
 public class LegacyBookmarkQueryHandler implements BookmarkQueryHandler {
@@ -44,17 +46,19 @@ public class LegacyBookmarkQueryHandler implements BookmarkQueryHandler {
     }
 
     @Override
-    public List<BookmarkListEntry> buildBookmarkListForParent(BookmarkId parentId) {
+    public List<BookmarkListEntry> buildBookmarkListForParent(
+            BookmarkId parentId, Set<PowerBookmarkType> powerFilter) {
         if (parentId.equals(mBookmarkModel.getRootFolderId())) {
             return buildBookmarkListForRootView();
         } else {
-            return mBasicBookmarkQueryHandler.buildBookmarkListForParent(parentId);
+            return mBasicBookmarkQueryHandler.buildBookmarkListForParent(parentId, powerFilter);
         }
     }
 
     @Override
-    public List<BookmarkListEntry> buildBookmarkListForSearch(String query) {
-        return mBasicBookmarkQueryHandler.buildBookmarkListForSearch(query);
+    public List<BookmarkListEntry> buildBookmarkListForSearch(
+            String query, Set<PowerBookmarkType> powerFilter) {
+        return mBasicBookmarkQueryHandler.buildBookmarkListForSearch(query, powerFilter);
     }
 
     private List<BookmarkListEntry> buildBookmarkListForRootView() {

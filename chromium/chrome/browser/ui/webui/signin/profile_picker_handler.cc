@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/signin/profile_picker_handler.h"
 
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -40,8 +41,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "chrome/browser/ui/profile_picker.h"
-#include "chrome/browser/ui/signin/profile_colors_util.h"
+#include "chrome/browser/ui/profiles/profile_colors_util.h"
+#include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
@@ -59,6 +60,8 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/themes.mojom.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
@@ -66,11 +69,11 @@
 #include "ui/gfx/image/image.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "chrome/browser/lacros/account_manager/account_manager_util.h"
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
 #include "chrome/browser/lacros/identity_manager_lacros.h"
 #include "chrome/browser/lacros/lacros_url_handling.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chromeos/crosapi/mojom/login.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/account_manager_core/account.h"
@@ -416,10 +419,6 @@ void ProfilePickerHandler::RegisterMessages() {
       base::BindRepeating(&ProfilePickerHandler::HandleGetAvailableIcons,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "createProfile",
-      base::BindRepeating(&ProfilePickerHandler::HandleCreateProfile,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
       "createProfileAndOpenCustomizationDialog",
       base::BindRepeating(
           &ProfilePickerHandler::HandleCreateProfileAndOpenCustomizationDialog,
@@ -445,6 +444,10 @@ void ProfilePickerHandler::RegisterMessages() {
       base::BindRepeating(
           &ProfilePickerHandler::HandleRecordSignInPromoImpression,
           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "updateProfileOrder",
+      base::BindRepeating(&ProfilePickerHandler::HandleUpdateProfileOrder,
+                          base::Unretained(this)));
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   web_ui()->RegisterMessageCallback(
       "getAvailableAccounts",
@@ -684,35 +687,9 @@ void ProfilePickerHandler::HandleGetAvailableIcons(
                             profiles::GetCustomProfileAvatarIconsAndLabels());
 }
 
-void ProfilePickerHandler::HandleCreateProfile(const base::Value::List& args) {
-  CHECK_EQ(4U, args.size());
-  std::u16string profile_name = base::UTF8ToUTF16(args[0].GetString());
-  // profileColor is undefined for the default theme.
-  absl::optional<SkColor> profile_color;
-  if (args[1].is_int())
-    profile_color = args[1].GetInt();
-  size_t avatar_index = args[2].GetInt();
-  bool create_shortcut = args[3].GetBool();
-  base::TrimWhitespace(profile_name, base::TRIM_ALL, &profile_name);
-  CHECK(!profile_name.empty());
-
-#ifndef NDEBUG
-  DCHECK(profiles::IsDefaultAvatarIconIndex(avatar_index));
-#endif
-
-  ProfileMetrics::LogProfileAddNewUser(
-      ProfileMetrics::ADD_NEW_PROFILE_PICKER_LOCAL);
-  ProfileManager::CreateMultiProfileAsync(
-      profile_name, avatar_index, /*is_hidden=*/false,
-      base::BindOnce(&ProfilePickerHandler::OnProfileInitialized,
-                     weak_factory_.GetWeakPtr(), profile_color,
-                     create_shortcut));
-}
-
 void ProfilePickerHandler::HandleCreateProfileAndOpenCustomizationDialog(
     const base::Value::List& args) {
   CHECK_EQ(1U, args.size());
-  DCHECK(base::FeatureList::IsEnabled(kSyncPromoAfterSigninIntercept));
 
   // profileColor is undefined for the default theme.
   absl::optional<SkColor> profile_color;
@@ -773,51 +750,6 @@ void ProfilePickerHandler::HandleCancelProfileSwitch(
   ProfilePicker::CancelSignedInFlow();
 }
 
-void ProfilePickerHandler::OnProfileInitialized(
-    absl::optional<SkColor> profile_color,
-    bool create_shortcut,
-    Profile* profile) {
-  if (!profile) {
-    NOTREACHED() << "Local fail in creating new profile";
-    FireWebUIListener("create-profile-finished", base::Value());
-    return;
-  }
-  DCHECK(!signin_util::IsForceSigninEnabled());
-
-  // Apply a new color to the profile or use the default theme.
-  auto* theme_service = ThemeServiceFactory::GetForProfile(profile);
-  if (profile_color.has_value())
-    theme_service->BuildAutogeneratedThemeFromColor(*profile_color);
-  else
-    theme_service->UseDefaultTheme();
-
-  // Create shortcut if needed.
-  if (create_shortcut) {
-    DCHECK(ProfileShortcutManager::IsFeatureEnabled());
-    ProfileShortcutManager* shortcut_manager =
-        g_browser_process->profile_manager()->profile_shortcut_manager();
-    DCHECK(shortcut_manager);
-    if (shortcut_manager)
-      shortcut_manager->CreateProfileShortcut(profile->GetPath());
-  }
-
-  // Skip the FRE for this profile as sign-in was offered as part of the flow.
-  profile->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage, true);
-
-  // Launch profile and close the picker.
-  profiles::OpenBrowserWindowForProfile(
-      base::BindOnce(&ProfilePickerHandler::OnSwitchToProfileComplete,
-                     weak_factory_.GetWeakPtr(), true, false),
-      false,  // Don't create a window if one already exists.
-      true,   // Create a first run window.
-      false,  // There is no need to unblock all extensions because we only open
-              // browser window if the Profile is not locked. Hence there is no
-              // extension blocked.
-      profile);
-
-  FireWebUIListener("create-profile-finished", base::Value());
-}
-
 void ProfilePickerHandler::OnLocalProfileInitialized(
     absl::optional<SkColor> profile_color,
     Profile* profile) {
@@ -830,10 +762,16 @@ void ProfilePickerHandler::OnLocalProfileInitialized(
 
   // Apply a new color to the profile or use the default theme.
   auto* theme_service = ThemeServiceFactory::GetForProfile(profile);
-  if (profile_color.has_value())
-    theme_service->BuildAutogeneratedThemeFromColor(*profile_color);
-  else
+  if (profile_color.has_value()) {
+    if (features::IsChromeWebuiRefresh2023()) {
+      theme_service->SetUserColorAndBrowserColorVariant(
+          *profile_color, ui::mojom::BrowserColorVariant::kTonalSpot);
+    } else {
+      theme_service->BuildAutogeneratedThemeFromColor(*profile_color);
+    }
+  } else {
     theme_service->UseDefaultTheme();
+  }
 
   // TODO(https://crbug.com/1282157): Add shortcut creation.
 
@@ -905,6 +843,21 @@ void ProfilePickerHandler::HandleRemoveProfile(const base::Value::List& args) {
 
   DCHECK(profile_statistics_keep_alive_);
   profile_statistics_keep_alive_.reset();
+}
+
+void ProfilePickerHandler::HandleUpdateProfileOrder(
+    const base::Value::List& args) {
+  CHECK_EQ(2U, args.size());
+  CHECK(args[0].is_int());
+  CHECK(args[1].is_int());
+
+  int from_index = args[0].GetInt();
+  int to_index = args[1].GetInt();
+  CHECK(from_index >= 0 && to_index >= 0);
+
+  g_browser_process->profile_manager()
+      ->GetProfileAttributesStorage()
+      .UpdateProfilesOrderPref(from_index, to_index);
 }
 
 void ProfilePickerHandler::HandleCloseProfileStatistics(
@@ -1113,7 +1066,7 @@ ProfilePickerHandler::GetProfileAttributes() {
   std::vector<ProfileAttributesEntry*> ordered_entries =
       g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
-          .GetAllProfilesAttributesSortedByLocalProfileName();
+          .GetAllProfilesAttributesSortedByLocalProfileNameWithCheck();
   base::EraseIf(ordered_entries, [](const ProfileAttributesEntry* entry) {
     return entry->IsOmitted();
   });
@@ -1210,8 +1163,9 @@ void ProfilePickerHandler::OnProfileIsOmittedChanged(
           .GetProfileAttributesWithPath(profile_path);
   CHECK(entry);
   if (entry->IsOmitted()) {
-    if (RemoveProfileFromList(profile_path))
-      PushProfilesList();
+    if (RemoveProfileFromList(profile_path)) {
+      FireWebUIListener("profile-removed", base::FilePathToValue(profile_path));
+    }
   } else {
     AddProfileToList(profile_path);
     PushProfilesList();
@@ -1244,7 +1198,7 @@ void ProfilePickerHandler::DidFirstVisuallyNonEmptyPaint() {
   auto now = base::TimeTicks::Now();
   base::UmaHistogramTimes("ProfilePicker.StartupTime.FirstPaint",
                           now - creation_time_on_startup_);
-  startup_metric_utils::RecordExternalStartupMetric(
+  startup_metric_utils::GetBrowser().RecordExternalStartupMetric(
       "ProfilePicker.StartupTime.FirstPaint.FromApplicationStart", now,
       /*set_non_browser_ui_displayed=*/true);
   // Stop observing so that the histogram is only recorded once.

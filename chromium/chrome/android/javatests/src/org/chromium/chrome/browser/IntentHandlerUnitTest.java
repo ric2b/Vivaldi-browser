@@ -17,7 +17,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.provider.Browser;
 
 import androidx.browser.customtabs.CustomTabsService;
@@ -55,12 +54,14 @@ import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.AsyncTabCreationParams;
-import org.chromium.chrome.browser.translate.TranslateIntentHandler;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestHelper;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -212,7 +213,7 @@ public class IntentHandlerUnitTest {
 
     @Test
     @SmallTest
-    @Features.EnableFeatures(ChromeFeatureList.OPAQUE_ORIGIN_FOR_INCOMING_INTENTS)
+    @EnableFeatures(ChromeFeatureList.OPAQUE_ORIGIN_FOR_INCOMING_INTENTS)
     public void testNewIntentInitiator() throws Exception {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(GOOGLE_URL));
@@ -233,7 +234,7 @@ public class IntentHandlerUnitTest {
 
     @Test
     @SmallTest
-    @Features.DisableFeatures(ChromeFeatureList.OPAQUE_ORIGIN_FOR_INCOMING_INTENTS)
+    @DisableFeatures(ChromeFeatureList.OPAQUE_ORIGIN_FOR_INCOMING_INTENTS)
     public void testNewIntentInitiatorFromRenderer() throws Exception {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         intent.setData(Uri.parse(GOOGLE_URL));
@@ -275,8 +276,9 @@ public class IntentHandlerUnitTest {
     public void testAcceptedGoogleChromeSchemeNavigateUrls() {
         String[] expectedAccepts = new String[VALID_HTTP_AND_HTTPS_URLS.length];
         for (int i = 0; i < VALID_HTTP_AND_HTTPS_URLS.length; ++i) {
-            expectedAccepts[i] =
-                    IntentHandler.GOOGLECHROME_NAVIGATE_PREFIX + VALID_HTTP_AND_HTTPS_URLS[i];
+            expectedAccepts[i] = IntentHandler.GOOGLECHROME_SCHEME
+                    + ExternalNavigationHandler.SELF_SCHEME_NAVIGATE_PREFIX
+                    + VALID_HTTP_AND_HTTPS_URLS[i];
         }
         processUrls(expectedAccepts, true);
     }
@@ -288,8 +290,9 @@ public class IntentHandlerUnitTest {
         // Test all of the rejected URLs after prepending googlechrome://navigate?url.
         String[] expectedRejections = new String[REJECTED_INTENT_URLS.length];
         for (int i = 0; i < REJECTED_INTENT_URLS.length; ++i) {
-            expectedRejections[i] =
-                    IntentHandler.GOOGLECHROME_NAVIGATE_PREFIX + REJECTED_INTENT_URLS[i];
+            expectedRejections[i] = IntentHandler.GOOGLECHROME_SCHEME
+                    + ExternalNavigationHandler.SELF_SCHEME_NAVIGATE_PREFIX
+                    + REJECTED_INTENT_URLS[i];
         }
         processUrls(expectedRejections, false);
     }
@@ -319,7 +322,7 @@ public class IntentHandlerUnitTest {
         WebappLauncherActivity.LaunchData launchData = new WebappLauncherActivity.LaunchData("id",
                 GOOGLE_URL, null /* webApkPackageName */, false /* isSplashProvidedByWebApk */);
         mIntent = WebappLauncherActivity.createIntentToLaunchForWebapp(
-                webappLauncherActivityIntent, launchData, 0);
+                webappLauncherActivityIntent, launchData);
         Assert.assertEquals(GOOGLE_URL, IntentHandler.getUrlFromIntent(mIntent));
     }
 
@@ -522,23 +525,6 @@ public class IntentHandlerUnitTest {
     @Test
     @SmallTest
     @Feature({"Android-AppBase"})
-    public void testAddTimestampToIntent() {
-        Intent intent = new Intent();
-        Assert.assertEquals(-1, IntentHandler.getTimestampFromIntent(intent));
-        // Check both before and after to make sure that the returned value is
-        // really from {@link SystemClock#elapsedRealtime()}.
-        long before = SystemClock.elapsedRealtime();
-        IntentHandler.addTimestampToIntent(intent);
-        long after = SystemClock.elapsedRealtime();
-        Assert.assertTrue("Time should be increasing",
-                before <= IntentHandler.getTimestampFromIntent(intent));
-        Assert.assertTrue(
-                "Time should be increasing", IntentHandler.getTimestampFromIntent(intent) <= after);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Android-AppBase"})
     public void testGeneratedReferrer() {
         Context context = ApplicationProvider.getApplicationContext();
         String packageName = context.getPackageName();
@@ -663,22 +649,9 @@ public class IntentHandlerUnitTest {
         WebappLauncherActivity.LaunchData launchData = new WebappLauncherActivity.LaunchData("id",
                 GOOGLE_URL, null /* webApkPackageName */, false /* isSplashProvidedByWebApk */);
         Intent intent = WebappLauncherActivity.createIntentToLaunchForWebapp(
-                webappLauncherActivityIntent, launchData, 0);
+                webappLauncherActivityIntent, launchData);
 
-        assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
-    }
-
-    /**
-     * Test that IntentHandler#shouldIgnoreIntent() returns true for Translate intents that cause
-     * the Activity to start.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Android-AppBase"})
-    public void testShouldIgnoreIntentTranslateStartsActivity() {
-        Intent intent = new Intent(TranslateIntentHandler.ACTION_TRANSLATE_TAB);
-        assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/false));
-        assertTrue(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+        assertFalse(mIntentHandler.shouldIgnoreIntent(intent));
     }
 
     /**
@@ -691,7 +664,7 @@ public class IntentHandlerUnitTest {
     public void testShouldIgnoreIncognitoIntent() {
         Intent intent = new Intent(GOOGLE_URL);
         intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
-        assertTrue(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+        assertTrue(mIntentHandler.shouldIgnoreIntent(intent));
     }
 
     /**
@@ -704,7 +677,7 @@ public class IntentHandlerUnitTest {
     public void testShouldIgnoreIncognitoIntent_trusted() {
         Context context = ApplicationProvider.getApplicationContext();
         Intent intent = IntentHandler.createTrustedOpenNewTabIntent(context, true);
-        assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*startedActivity=*/true));
+        assertFalse(mIntentHandler.shouldIgnoreIntent(intent));
     }
 
     /**
@@ -716,8 +689,7 @@ public class IntentHandlerUnitTest {
     public void testShouldIgnoreIncognitoIntent_customTab() {
         Intent intent = new Intent(GOOGLE_URL);
         intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
-        assertFalse(mIntentHandler.shouldIgnoreIntent(
-                intent, /*startedActivity=*/true, /*isCustomTab=*/true));
+        assertFalse(mIntentHandler.shouldIgnoreIntent(intent, /*isCustomTab=*/true));
     }
 
     @Test

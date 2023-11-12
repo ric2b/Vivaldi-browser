@@ -10,7 +10,6 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
 import("//media/media_options.gni")
-import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/blink/public/public_features.gni")
@@ -147,9 +146,9 @@ group("make_platform_generated") {
     ":character_data",
     ":color_data",
     ":font_family_names",
-    ":fontations_buildflags",
     ":runtime_enabled_features",
     ":runtime_feature_state_override_context",
+    "//third_party/blink/public/common:buildflags",
     "//third_party/blink/renderer/platform/network:make_generated",
   ]
 }
@@ -238,12 +237,6 @@ config("blink_platform_implementation") {
   visibility = [ "./*" ]
 
   defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
-}
-
-buildflag_header("fontations_buildflags") {
-  header = "fontations_buildflags.h"
-  header_dir = "third_party/blink/renderer/platform/fonts/"
-  flags = [ "USE_FONTATIONS_BACKEND=$use_typeface_fontations" ]
 }
 
 config("blink_platform_pch") {
@@ -405,6 +398,9 @@ component("platform") {
     "bindings/active_script_wrappable_base.h",
     "bindings/active_script_wrappable_manager.cc",
     "bindings/active_script_wrappable_manager.h",
+    "bindings/async_iterator_base.cc",
+    "bindings/async_iterator_base.h",
+    "bindings/bigint.cc",
     "bindings/bigint.h",
     "bindings/binding_security_for_platform.cc",
     "bindings/binding_security_for_platform.h",
@@ -469,8 +465,6 @@ component("platform") {
     "bindings/to_blink_string.h",
     "bindings/to_v8.h",
     "bindings/trace_wrapper_v8_reference.h",
-    "bindings/trace_wrapper_v8_string.cc",
-    "bindings/trace_wrapper_v8_string.h",
     "bindings/union_base.cc",
     "bindings/union_base.h",
     "bindings/v8_binding.cc",
@@ -521,6 +515,7 @@ component("platform") {
     "data_resource_helper.h",
     "disk_data_allocator.cc",
     "disk_data_allocator.h",
+    "disk_data_metadata.cc",
     "disk_data_metadata.h",
     "exported/file_path_conversion.cc",
     "exported/interface_registry.cc",
@@ -665,6 +660,8 @@ component("platform") {
     "fonts/opentype/font_format_check.h",
     "fonts/opentype/font_settings.cc",
     "fonts/opentype/font_settings.h",
+    "fonts/opentype/open_type_baseline_metrics.cc",
+    "fonts/opentype/open_type_baseline_metrics.h",
     "fonts/opentype/open_type_caps_support.cc",
     "fonts/opentype/open_type_caps_support.h",
     "fonts/opentype/open_type_caps_support_mpl.cc",
@@ -695,6 +692,8 @@ component("platform") {
     "fonts/shaping/caching_word_shaper.h",
     "fonts/shaping/case_mapping_harfbuzz_buffer_filler.cc",
     "fonts/shaping/case_mapping_harfbuzz_buffer_filler.h",
+    "fonts/shaping/east_asian_spacing.cc",
+    "fonts/shaping/east_asian_spacing.h",
     "fonts/shaping/font_features.cc",
     "fonts/shaping/font_features.h",
     "fonts/shaping/glyph_bounds_accumulator.h",
@@ -771,6 +770,7 @@ component("platform") {
     "geometry/float_rounded_rect.h",
     "geometry/geometry_as_json.h",
     "geometry/geometry_hash_traits.h",
+    "geometry/infinite_int_rect.h",
     "geometry/layout_point.cc",
     "geometry/layout_point.h",
     "geometry/layout_rect.cc",
@@ -818,7 +818,6 @@ component("platform") {
     "graphics/canvas_resource_provider.h",
     "graphics/color.cc",
     "graphics/color.h",
-    "graphics/color_behavior.cc",
     "graphics/color_behavior.h",
     "graphics/color_space_gamut.cc",
     "graphics/color_space_gamut.h",
@@ -1123,8 +1122,6 @@ component("platform") {
     "graphics/replaying_canvas.cc",
     "graphics/replaying_canvas.h",
     "graphics/resource_id_traits.h",
-    "graphics/rw_buffer.cc",
-    "graphics/rw_buffer.h",
     "graphics/scoped_interpolation_quality.h",
     "graphics/scrollbar_theme_settings.cc",
     "graphics/scrollbar_theme_settings.h",
@@ -1188,6 +1185,8 @@ component("platform") {
     "image-decoders/png/png_image_decoder.h",
     "image-decoders/png/png_image_reader.cc",
     "image-decoders/png/png_image_reader.h",
+    "image-decoders/rw_buffer.cc",
+    "image-decoders/rw_buffer.h",
     "image-decoders/segment_reader.cc",
     "image-decoders/segment_reader.h",
     "image-decoders/segment_stream.cc",
@@ -1380,6 +1379,7 @@ component("platform") {
     "region_capture_crop_id.cc",
     "region_capture_crop_id.h",
     "resolution_units.h",
+    "restriction_target_id.h",
     "search_engine_utils.cc",
     "search_engine_utils.h",
     "storage/blink_storage_key.cc",
@@ -1595,18 +1595,12 @@ component("platform") {
     ]
   }
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-
   if (is_mac) {
     sources += [
       "audio/mac/fft_frame_mac.cc",
       "audio/mac/vector_math_mac.h",
       "fonts/mac/attributed_string_type_converter.h",
       "fonts/mac/attributed_string_type_converter.mm",
-      "fonts/mac/core_text_font_format_support.cc",
-      "fonts/mac/core_text_font_format_support.h",
       "fonts/mac/font_cache_mac.mm",
       "fonts/mac/font_matcher_mac.h",
       "fonts/mac/font_matcher_mac.mm",
@@ -1712,6 +1706,7 @@ component("platform") {
     "//media",
     "//media/capture:capture_switches",
     "//media/capture/mojom:video_capture",
+    "//media/mojo/clients:clients",
     "//media/webrtc:webrtc",
     "//mojo/public/cpp/bindings:wtf_support",
     "//services/metrics/public/cpp:ukm_builders",
@@ -1822,7 +1817,10 @@ component("platform") {
       "image-decoders/avif/avif_image_decoder.h",
     ]
 
-    deps += [ "//third_party/libavif" ]
+    deps += [
+      "//third_party/libavif",
+      "//third_party/libavifinfo",
+    ]
   }
 
   if (current_cpu == "x86" || current_cpu == "x64") {
@@ -1993,10 +1991,6 @@ test("blink_platform_unittests") {
       "//build/config/fuchsia/test/test_fonts.shard.test-cml",
       "//build/config/fuchsia/test/mark_vmo_executable.shard.test-cml",
     ]
-
-    # Oilpan reuses V8's v8::PageAllocator which generally requires JIT
-    # permissions.
-    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
   }
 
   if (is_android) {
@@ -2040,6 +2034,7 @@ source_set("blink_platform_unittests_sources") {
     "exported/web_vector_test.cc",
     "fonts/bitmap_glyphs_block_list_test.cc",
     "fonts/cursor_position_test.cc",
+    "fonts/fallback_list_composite_key_test.cc",
     "fonts/font_cache_test.cc",
     "fonts/font_description_test.cc",
     "fonts/font_family_test.cc",
@@ -2053,6 +2048,7 @@ source_set("blink_platform_unittests_sources") {
     "fonts/generic_font_family_settings_test.cc",
     "fonts/opentype/font_format_check_test.cc",
     "fonts/opentype/font_settings_test.cc",
+    "fonts/opentype/open_type_baseline_metrics_test.cc",
     "fonts/opentype/open_type_cpal_lookup_test.cc",
     "fonts/opentype/open_type_math_support_test.cc",
     "fonts/opentype/open_type_vertical_data_test.cc",
@@ -2127,7 +2123,6 @@ source_set("blink_platform_unittests_sources") {
     "graphics/path_test.cc",
     "graphics/placeholder_image_test.cc",
     "graphics/raster_dark_mode_filter_impl_test.cc",
-    "graphics/rw_buffer_test.cc",
     "graphics/video_frame_image_util_test.cc",
     "graphics/video_frame_sink_bundle_test.cc",
     "graphics/video_frame_submitter_test.cc",
@@ -2144,6 +2139,7 @@ source_set("blink_platform_unittests_sources") {
     "image-decoders/image_frame_test.cc",
     "image-decoders/jpeg/jpeg_image_decoder_test.cc",
     "image-decoders/png/png_image_decoder_test.cc",
+    "image-decoders/rw_buffer_test.cc",
     "image-decoders/segment_reader_test.cc",
     "image-decoders/segment_stream_test.cc",
     "image-decoders/webp/webp_image_decoder_test.cc",
@@ -2244,10 +2240,6 @@ source_set("blink_platform_unittests_sources") {
     "widget/input/scroll_predictor_unittest.cc",
   ]
 
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-
   if (is_android) {
     sources += [ "fonts/android/font_cache_android_test.cc" ]
   } else if (is_win) {
@@ -2287,6 +2279,7 @@ source_set("blink_platform_unittests_sources") {
     "//gin:gin",
     "//media:test_support",
     "//media/capture/mojom:video_capture",
+    "//media/mojo:test_support",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings/tests:for_blink_tests",
     "//mojo/public/cpp/test_support:test_utils",
@@ -2329,10 +2322,7 @@ source_set("blink_platform_unittests_sources") {
 
   data_deps = [ ":blink_platform_unittests_data" ]
 
-  defines = [
-    "INSIDE_BLINK",
-    "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS",
-  ]
+  defines = [ "INSIDE_BLINK" ]
   if (use_minikin_hyphenation) {
     defines += [ "USE_MINIKIN_HYPHENATION" ]
   }
@@ -2420,7 +2410,6 @@ test("blink_platform_perftests") {
     "//third_party/blink/renderer/platform/wtf:wtf_config",
     "//third_party/blink/renderer:config",
   ]
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 
   deps = [
     ":platform",
@@ -2493,7 +2482,6 @@ test("blink_fuzzer_unittests") {
   }
 
   if (is_fuchsia) {
-    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
     additional_manifest_fragments = [
       "//build/config/fuchsia/test/test_fonts.shard.test-cml",
       "//build/config/fuchsia/test/mark_vmo_executable.shard.test-cml",
@@ -2560,7 +2548,6 @@ fuzzer_test("open_type_math_support_fuzzer") {
     "//third_party/blink/web_tests/external/wpt/fonts/math",
     "//testing/libfuzzer/fuzzers/woff2_corpus",
   ]
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 }
 
 # Fuzzer for blink::StretchyOperatorShaper
@@ -2574,7 +2561,6 @@ fuzzer_test("stretchy_operator_shaper_fuzzer") {
     "//third_party/blink/web_tests/external/wpt/fonts/math",
     "//testing/libfuzzer/fuzzers/woff2_corpus",
   ]
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 }
 
 # Fuzzer for blink::MHTMLParser.
@@ -2666,7 +2652,6 @@ fuzzer_test("blink_http_parsers_fuzzer") {
     ":platform",
   ]
   dict = "network/HTTPParsersFuzzer.dict"
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 }
 
 fuzzer_test("blink_storage_key_fuzzer") {

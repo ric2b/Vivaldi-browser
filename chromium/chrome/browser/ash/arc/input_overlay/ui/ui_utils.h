@@ -11,12 +11,23 @@
 
 namespace arc::input_overlay {
 
-// Get text of |code| displayed on input mappings.
+// Get text of `code` displayed on input mappings.
 std::u16string GetDisplayText(const ui::DomCode code);
 
-// Get the accessible name for displayed |text| showing on input mappings.
-// Sometimes, |text| is a symbol.
+// Get the accessible name for displayed `text` showing on input mappings.
+// Sometimes, `text` is a symbol.
 std::u16string GetDisplayTextAccessibleName(const std::u16string& text);
+
+// Returns the index of `action_name` within `action_names`, and returns the
+// length of the array on failure.
+int GetIndexOfActionName(const std::vector<std::u16string>& action_names,
+                         const std::u16string& action_name);
+
+// Returns the action name at the `index` of `action_names`, and "Unassigned" on
+// failure.
+std::u16string GetActionNameAtIndex(
+    const std::vector<std::u16string>& action_names,
+    int index);
 
 }  // namespace arc::input_overlay
 

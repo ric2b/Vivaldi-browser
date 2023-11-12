@@ -14,7 +14,6 @@ All changes to this list should go through Blink's feature review process: http:
     -webkit-box-pack
     -webkit-box-reflect
     -webkit-font-smoothing
-    -webkit-highlight
     -webkit-line-break
     -webkit-line-clamp
     -webkit-locale
@@ -200,6 +199,7 @@ All changes to this list should go through Blink's feature review process: http:
     font-variant-east-asian
     font-variant-ligatures
     font-variant-numeric
+    font-variant-position
     font-variation-settings
     font-weight
     forced-color-adjust
@@ -282,6 +282,7 @@ All changes to this list should go through Blink's feature review process: http:
     overflow-wrap
     overflow-x
     overflow-y
+    overlay
     overscroll-behavior-block
     overscroll-behavior-inline
     overscroll-behavior-x
@@ -381,6 +382,7 @@ All changes to this list should go through Blink's feature review process: http:
     transform-box
     transform-origin
     transform-style
+    transition-behavior
     transition-delay
     transition-duration
     transition-property
@@ -614,6 +616,7 @@ All changes to this list should go through Blink's feature review process: http:
         font-variant-east-asian
         font-variant-ligatures
         font-variant-numeric
+        font-variant-position
         font-variation-settings
         font-weight
         line-height
@@ -627,6 +630,7 @@ All changes to this list should go through Blink's feature review process: http:
         font-variant-east-asian
         font-variant-ligatures
         font-variant-numeric
+        font-variant-position
     gap
         column-gap
         row-gap
@@ -765,12 +769,14 @@ All changes to this list should go through Blink's feature review process: http:
         text-emphasis-color
         text-emphasis-style
     transition
+        transition-behavior
         transition-delay
         transition-duration
         transition-property
         transition-timing-function
     view-timeline
         view-timeline-axis
+        view-timeline-inset
         view-timeline-name
     white-space
         text-wrap

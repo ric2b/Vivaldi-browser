@@ -25,14 +25,14 @@ WestonTestInputEmulate::PendingEvent::PendingEvent(
     gfx::AcceleratedWidget target_widget,
     WestonTestInputEmulate* emulate)
     : type(event_type), widget(target_widget) {
-  DCHECK(type == ui::EventType::ET_MOUSE_MOVED ||
-         type == ui::EventType::ET_MOUSE_PRESSED ||
-         type == ui::EventType::ET_MOUSE_RELEASED ||
-         type == ui::EventType::ET_KEY_PRESSED ||
-         type == ui::EventType::ET_KEY_RELEASED ||
-         type == ui::EventType::ET_TOUCH_PRESSED ||
-         type == ui::EventType::ET_TOUCH_MOVED ||
-         type == ui::EventType::ET_TOUCH_RELEASED);
+  CHECK(type == ui::EventType::ET_MOUSE_MOVED ||
+        type == ui::EventType::ET_MOUSE_PRESSED ||
+        type == ui::EventType::ET_MOUSE_RELEASED ||
+        type == ui::EventType::ET_KEY_PRESSED ||
+        type == ui::EventType::ET_KEY_RELEASED ||
+        type == ui::EventType::ET_TOUCH_PRESSED ||
+        type == ui::EventType::ET_TOUCH_MOVED ||
+        type == ui::EventType::ET_TOUCH_RELEASED);
   auto it = emulate->windows_.find(widget);
   if (it != emulate->windows_.end()) {
     test_window = it->second->weak_factory.GetWeakPtr();
@@ -61,7 +61,6 @@ WestonTestInputEmulate::TestWindow::~TestWindow() = default;
 
 WestonTestInputEmulate::WestonTestInputEmulate() {
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-  DCHECK(wayland_proxy);
 
   wayland_proxy->SetDelegate(this);
 
@@ -70,10 +69,9 @@ WestonTestInputEmulate::WestonTestInputEmulate() {
     LOG(FATAL) << "Failed to get Wayland registry";
   }
 
-  static const wl_registry_listener registry_listener = {
-      &WestonTestInputEmulate::Global};
-
-  wl_registry_add_listener(registry_, &registry_listener, this);
+  static constexpr wl_registry_listener kRegistryListener = {
+      .global = &OnGlobal, .global_remove = nullptr};
+  wl_registry_add_listener(registry_, &kRegistryListener, this);
 
   // Roundtrip one time to get the weston-test global.
   wayland_proxy->RoundTripQueue();
@@ -81,20 +79,18 @@ WestonTestInputEmulate::WestonTestInputEmulate() {
     LOG(FATAL) << "weston-test is not available.";
   }
 
-  static const struct weston_test_listener test_listener = {
-      &WestonTestInputEmulate::HandlePointerPosition,
-      &WestonTestInputEmulate::HandlePointerButton,
-      &WestonTestInputEmulate::HandleKeyboardKey,
-      nullptr,  // capture_screenshot_done
-      &WestonTestInputEmulate::HandleTouchReceived,
+  static constexpr weston_test_listener kWestonTestListener = {
+      .pointer_position = &OnPointerPosition,
+      .pointer_button = &OnPointerButton,
+      .keyboard_key = &OnKeyboardKey,
+      .touch_received = &OnTouchReceived,
   };
-  weston_test_add_listener(weston_test_, &test_listener, this);
+  weston_test_add_listener(weston_test_, &kWestonTestListener, this);
 }
 
 WestonTestInputEmulate::~WestonTestInputEmulate() {
-  DCHECK(observers_.empty());
+  CHECK(observers_.empty());
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-  DCHECK(wayland_proxy);
   wayland_proxy->SetDelegate(nullptr);
 
   weston_test_destroy(weston_test_);
@@ -125,12 +121,11 @@ void WestonTestInputEmulate::Reset() {
 #endif
 
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-  DCHECK(wayland_proxy);
   wayland_proxy->FlushForTesting();  // IN-TEST
   wayland_proxy->RoundTripQueue();
 
-  DCHECK(windows_.empty());
-  DCHECK(pending_events_.empty());
+  CHECK(windows_.empty());
+  CHECK(pending_events_.empty());
 }
 
 void WestonTestInputEmulate::AddObserver(Observer* obs) {
@@ -164,7 +159,6 @@ void WestonTestInputEmulate::EmulatePointerMotion(
   }
 
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-  DCHECK(wayland_proxy);
 
   wl_surface* target_surface = nullptr;
   gfx::Point target_location = mouse_screen_loc;
@@ -189,8 +183,8 @@ void WestonTestInputEmulate::EmulatePointerMotion(
 void WestonTestInputEmulate::EmulatePointerButton(gfx::AcceleratedWidget widget,
                                                   ui::EventType event_type,
                                                   uint32_t changed_button) {
-  DCHECK(event_type == ui::EventType::ET_MOUSE_PRESSED ||
-         event_type == ui::EventType::ET_MOUSE_RELEASED);
+  CHECK(event_type == ui::EventType::ET_MOUSE_PRESSED ||
+        event_type == ui::EventType::ET_MOUSE_RELEASED);
 
   if (AnyWindowWaitingForBufferCommit()) {
     auto pending_event =
@@ -200,7 +194,7 @@ void WestonTestInputEmulate::EmulatePointerButton(gfx::AcceleratedWidget widget,
     return;
   }
 
-  DCHECK_NE(0u, changed_button);
+  CHECK_NE(0u, changed_button);
   timespec ts = (base::TimeTicks::Now() - base::TimeTicks()).ToTimeSpec();
   weston_test_send_button(weston_test_, static_cast<uint64_t>(ts.tv_sec) >> 32,
                           ts.tv_sec & 0xffffffff, ts.tv_nsec, changed_button,
@@ -214,8 +208,8 @@ void WestonTestInputEmulate::EmulatePointerButton(gfx::AcceleratedWidget widget,
 void WestonTestInputEmulate::EmulateKeyboardKey(gfx::AcceleratedWidget widget,
                                                 ui::EventType event_type,
                                                 ui::DomCode dom_code) {
-  DCHECK(event_type == ui::EventType::ET_KEY_PRESSED ||
-         event_type == ui::EventType::ET_KEY_RELEASED);
+  CHECK(event_type == ui::EventType::ET_KEY_PRESSED ||
+        event_type == ui::EventType::ET_KEY_RELEASED);
 
   if (AnyWindowWaitingForBufferCommit()) {
     auto pending_event =
@@ -262,7 +256,7 @@ void WestonTestInputEmulate::EmulateTouch(gfx::AcceleratedWidget widget,
 void WestonTestInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
                                                 bool is_configured) {
   auto it = windows_.find(widget);
-  DCHECK(it != windows_.end());
+  CHECK(it != windows_.end());
 
   auto* test_surface = it->second.get();
   // The buffer is no longer attached as the window lost its role. Wait until
@@ -278,7 +272,6 @@ void WestonTestInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
     // ... and the buffer.
     if (test_surface->buffer) {
       auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-      DCHECK(wayland_proxy);
       wayland_proxy->DestroyShmForWlBuffer(test_surface->buffer);
       wayland_proxy->FlushForTesting();
       test_surface->buffer = nullptr;
@@ -293,7 +286,6 @@ void WestonTestInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
 
   test_surface->waiting_for_buffer_commit = true;
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-  DCHECK(wayland_proxy);
 
   // Once window is configured aka xdg_toplevel/popup role is assigned, a buffer
   // with correct size must be attached. Otherwise, actual size of the surface
@@ -314,12 +306,11 @@ void WestonTestInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
   wl_surface_attach(wlsurface, test_surface->buffer, 0, 0);
   wl_surface_damage(wlsurface, 0, 0, buffer_size.width(), buffer_size.height());
 
-  static const struct wl_callback_listener kFrameCallbackListener = {
-      &WestonTestInputEmulate::FrameCallbackHandler};
-
   // Setup frame callback to know when the surface is finally ready to get
   // events. Otherwise, the width & height might not have been correctly set
   // before the mouse events are sent.
+  static constexpr wl_callback_listener kFrameCallbackListener = {
+      .done = &OnFrameDone};
   test_surface->frame_callback = wl_surface_frame(wlsurface);
   wl_callback_add_listener(test_surface->frame_callback,
                            &kFrameCallbackListener, this);
@@ -332,7 +323,7 @@ void WestonTestInputEmulate::OnWindowConfigured(gfx::AcceleratedWidget widget,
 void WestonTestInputEmulate::OnWindowRoleAssigned(
     gfx::AcceleratedWidget widget) {
   auto it = windows_.find(widget);
-  DCHECK(it != windows_.end());
+  CHECK(it != windows_.end());
 
   // If a window has been assigned a popup role, then we must wait for a buffer
   // to be committed before any events can be processed.
@@ -342,7 +333,7 @@ void WestonTestInputEmulate::OnWindowRoleAssigned(
 
 void WestonTestInputEmulate::OnWindowRemoved(gfx::AcceleratedWidget widget) {
   auto it = windows_.find(widget);
-  DCHECK(it != windows_.end());
+  CHECK(it != windows_.end());
 
   // Destroy the frame callback.
   if (it->second->frame_callback) {
@@ -353,7 +344,6 @@ void WestonTestInputEmulate::OnWindowRemoved(gfx::AcceleratedWidget widget) {
   // Destroy the attached buffer.
   if (it->second->buffer) {
     auto* wayland_proxy = wl::WaylandProxy::GetInstance();
-    DCHECK(wayland_proxy);
     wayland_proxy->DestroyShmForWlBuffer(it->second->buffer);
     wayland_proxy->FlushForTesting();
   }
@@ -366,82 +356,79 @@ void WestonTestInputEmulate::OnWindowAdded(gfx::AcceleratedWidget widget) {
 }
 
 // static
-void WestonTestInputEmulate::HandlePointerPosition(
-    void* data,
-    struct weston_test* weston_test,
-    wl_fixed_t x,
-    wl_fixed_t y) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
+void WestonTestInputEmulate::OnPointerPosition(void* data,
+                                               weston_test* weston_test,
+                                               wl_fixed_t x,
+                                               wl_fixed_t y) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
   gfx::Point mouse_position_on_screen_px(wl_fixed_to_int(x),
                                          wl_fixed_to_int(y));
-  for (WestonTestInputEmulate::Observer& observer : emulate->observers_) {
+  for (WestonTestInputEmulate::Observer& observer : self->observers_) {
     observer.OnPointerMotionGlobal(mouse_position_on_screen_px);
   }
 }
 
 // static
-void WestonTestInputEmulate::HandlePointerButton(
-    void* data,
-    struct weston_test* weston_test,
-    int32_t button,
-    uint32_t state) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
-  for (WestonTestInputEmulate::Observer& observer : emulate->observers_) {
+void WestonTestInputEmulate::OnPointerButton(void* data,
+                                             weston_test* weston_test,
+                                             int32_t button,
+                                             uint32_t state) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
+  for (WestonTestInputEmulate::Observer& observer : self->observers_) {
     observer.OnPointerButtonGlobal(button,
                                    state == WL_POINTER_BUTTON_STATE_PRESSED);
   }
 }
 
 // static
-void WestonTestInputEmulate::HandleKeyboardKey(void* data,
-                                               struct weston_test* weston_test,
-                                               uint32_t key,
-                                               uint32_t state) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
-  for (WestonTestInputEmulate::Observer& observer : emulate->observers_) {
+void WestonTestInputEmulate::OnKeyboardKey(void* data,
+                                           weston_test* weston_test,
+                                           uint32_t key,
+                                           uint32_t state) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
+  for (WestonTestInputEmulate::Observer& observer : self->observers_) {
     observer.OnKeyboardKey(key, state == WL_KEYBOARD_KEY_STATE_PRESSED);
   }
 }
 
 // static
-void WestonTestInputEmulate::HandleTouchReceived(
-    void* data,
-    struct weston_test* weston_test,
-    wl_fixed_t x,
-    wl_fixed_t y) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
+void WestonTestInputEmulate::OnTouchReceived(void* data,
+                                             weston_test* weston_test,
+                                             wl_fixed_t x,
+                                             wl_fixed_t y) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
   auto touch_position_on_screen_px =
       gfx::Point(wl_fixed_to_int(x), wl_fixed_to_int(y));
-  for (WestonTestInputEmulate::Observer& observer : emulate->observers_) {
+  for (WestonTestInputEmulate::Observer& observer : self->observers_) {
     observer.OnTouchReceived(touch_position_on_screen_px);
   }
 }
 
 // static
-void WestonTestInputEmulate::Global(void* data,
-                                    wl_registry* registry,
-                                    uint32_t name,
-                                    const char* interface,
-                                    uint32_t version) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
+void WestonTestInputEmulate::OnGlobal(void* data,
+                                      wl_registry* registry,
+                                      uint32_t name,
+                                      const char* interface,
+                                      uint32_t version) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
   if (strcmp(interface, "weston_test") == 0) {
     const auto* wayland_interface =
-        static_cast<const struct wl_interface*>(&weston_test_interface);
-    emulate->weston_test_ = static_cast<struct weston_test*>(
+        static_cast<const wl_interface*>(&weston_test_interface);
+    self->weston_test_ = static_cast<weston_test*>(
         wl_registry_bind(registry, name, wayland_interface, version));
   }
 }
 
 // static
-void WestonTestInputEmulate::FrameCallbackHandler(void* data,
-                                                  struct wl_callback* callback,
-                                                  uint32_t time) {
-  auto* emulate = static_cast<WestonTestInputEmulate*>(data);
-  CHECK(emulate)
+void WestonTestInputEmulate::OnFrameDone(void* data,
+                                         wl_callback* callback,
+                                         uint32_t time) {
+  auto* self = static_cast<WestonTestInputEmulate*>(data);
+  CHECK(self)
       << "WaylandInputEmulate was destroyed before a frame callback arrived";
 
   WestonTestInputEmulate::TestWindow* window = nullptr;
-  for (const auto& window_item : emulate->windows_) {
+  for (const auto& window_item : self->windows_) {
     if (window_item.second->frame_callback == callback) {
       window = window_item.second.get();
       break;
@@ -452,12 +439,12 @@ void WestonTestInputEmulate::FrameCallbackHandler(void* data,
     wl_callback_destroy(window->frame_callback);
     window->frame_callback = nullptr;
 
-    DCHECK(!window->buffer_attached_and_configured);
+    CHECK(!window->buffer_attached_and_configured);
     window->buffer_attached_and_configured = true;
     window->waiting_for_buffer_commit = false;
   }
 
-  emulate->DispatchPendingEvents();
+  self->DispatchPendingEvents();
 }
 
 bool WestonTestInputEmulate::AnyWindowWaitingForBufferCommit() {

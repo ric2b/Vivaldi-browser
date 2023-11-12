@@ -7,6 +7,7 @@
 
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
@@ -29,6 +30,10 @@ namespace updater {
 enum class UpdaterScope;
 }  // namespace updater
 
+namespace wireless_android_enterprise_devicemanagement {
+class OmahaSettingsClientProto;
+}  // namespace wireless_android_enterprise_devicemanagement
+
 namespace updater::test {
 
 enum class AppBundleWebCreateMode {
@@ -36,12 +41,47 @@ enum class AppBundleWebCreateMode {
   kCreateInstalledApp = 1,
 };
 
+struct AppUpdateExpectation {
+  AppUpdateExpectation(const std::string& args,
+                       const std::string& app_id,
+                       const base::Version& from_version,
+                       const base::Version& to_version,
+                       bool is_install,
+                       bool should_update,
+                       bool allow_rollback,
+                       const std::string& target_version_prefix,
+                       const base::FilePath& crx_relative_path,
+                       bool always_serve_crx = false,
+                       const UpdateService::ErrorCategory error_category =
+                           UpdateService::ErrorCategory::kService,
+                       const int error_code = static_cast<int>(
+                           UpdateService::Result::kUpdateCanceled),
+                       const int event_type = /*EVENT_UPDATE_COMPLETE=*/3);
+  AppUpdateExpectation(const AppUpdateExpectation&);
+  ~AppUpdateExpectation();
+
+  const std::string args;
+  const std::string app_id;
+  const base::Version from_version;
+  const base::Version to_version;
+  const bool is_install;
+  const bool should_update;
+  const bool allow_rollback;
+  const std::string target_version_prefix;
+  const base::FilePath crx_relative_path;
+  const bool always_serve_crx;
+  const UpdateService::ErrorCategory error_category;
+  const int error_code;
+  const int event_type;
+};
+
 // Returns the path to the updater installer program (in the build output
 // directory). This is typically the updater setup, or the updater itself for
 // the platforms where a setup program is not provided.
 base::FilePath GetSetupExecutablePath();
 
-// Returns the names for processes which may be running during unit tests.
+// Returns the non-duplicate, unique names for processes which may be running
+// during unit tests.
 std::set<base::FilePath::StringType> GetTestProcessNames();
 
 // Ensures test processes are not running after the function is called.
@@ -75,6 +115,13 @@ void ExitTestMode(UpdaterScope scope);
 
 // Sets the external constants for group policies.
 void SetGroupPolicies(const base::Value::Dict& values);
+
+// Sets platform policies. Platform policy is group policy on Windows, and
+// Managed Preferences on macOS.
+void SetPlatformPolicies(const base::Value::Dict& values);
+
+// Sets whether the machine is in managed state.
+void SetMachineManaged(bool is_managed_device);
 
 // Expects to find no crashes. If there are any crashes, causes the test to
 // fail. Copies any crashes found to the isolate directory.
@@ -133,6 +180,12 @@ void CheckForUpdate(UpdaterScope scope, const std::string& app_id);
 // Invokes the active instance's UpdateService::UpdateAll (via RPC).
 void UpdateAll(UpdaterScope scope);
 
+// Invokes the active instance's UpdateService::Install (via RPC) for an
+// app.
+void InstallAppViaService(UpdaterScope scope,
+                          const std::string& app_id,
+                          const base::Value::Dict& expected_final_values);
+
 void GetAppStates(UpdaterScope updater_scope,
                   const base::Value::Dict& expected_app_states);
 
@@ -143,6 +196,13 @@ void DeleteFile(UpdaterScope scope, const base::FilePath& path);
 // related to service registration. The intent of this command is to replicate
 // a common mode of breaking the updater, so we can test how it recovers.
 void DeleteUpdaterDirectory(UpdaterScope scope);
+
+// DeleteActiveUpdaterExecutable is a more narrowly-targeted tool for simulating
+// a broken updater. Finds the executable for the active updater (including
+// any copy owned by systemd), according to the active version on the global
+// prefs file, and deletes it. Does not clean up service registrations, updater
+// configuration, app registration, etc.
+void DeleteActiveUpdaterExecutable(UpdaterScope scope);
 
 // Runs the command and waits for it to exit or time out.
 void Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code);
@@ -192,7 +252,9 @@ void ExpectAppVersion(UpdaterScope scope,
                       const std::string& app_id,
                       const base::Version& version);
 
-void RegisterApp(UpdaterScope scope, const std::string& app_id);
+void RegisterApp(UpdaterScope scope,
+                 const std::string& app_id,
+                 const base::Version& version);
 
 [[nodiscard]] bool WaitForUpdaterExit(UpdaterScope scope);
 
@@ -231,6 +293,8 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server);
 
 void ExpectUninstallPing(UpdaterScope scope, ScopedServer* test_server);
 
+void ExpectUpdateCheckRequest(UpdaterScope scope, ScopedServer* test_server);
+
 void ExpectUpdateCheckSequence(UpdaterScope scope,
                                ScopedServer* test_server,
                                const std::string& app_id,
@@ -246,6 +310,14 @@ void ExpectUpdateSequence(UpdaterScope scope,
                           const base::Version& from_version,
                           const base::Version& to_version);
 
+void ExpectUpdateSequenceBadHash(UpdaterScope scope,
+                                 ScopedServer* test_server,
+                                 const std::string& app_id,
+                                 const std::string& install_data_index,
+                                 UpdateService::Priority priority,
+                                 const base::Version& from_version,
+                                 const base::Version& to_version);
+
 void ExpectInstallSequence(UpdaterScope scope,
                            ScopedServer* test_server,
                            const std::string& app_id,
@@ -253,6 +325,10 @@ void ExpectInstallSequence(UpdaterScope scope,
                            UpdateService::Priority priority,
                            const base::Version& from_version,
                            const base::Version& to_version);
+
+void ExpectAppsUpdateSequence(UpdaterScope scope,
+                              ScopedServer* test_server,
+                              const std::vector<AppUpdateExpectation>& apps);
 
 void StressUpdateService(UpdaterScope scope);
 
@@ -275,7 +351,9 @@ void ExpectLastChecked(UpdaterScope scope);
 
 void ExpectLastStarted(UpdaterScope scope);
 
-void InstallApp(UpdaterScope scope, const std::string& app_id);
+void InstallApp(UpdaterScope scope,
+                const std::string& app_id,
+                const base::Version& version);
 
 void UninstallApp(UpdaterScope scope, const std::string& app_id);
 
@@ -291,6 +369,18 @@ base::CommandLine MakeElevated(base::CommandLine command_line);
 
 void DMDeregisterDevice(UpdaterScope scope);
 void DMCleanup(UpdaterScope scope);
+
+void ExpectDeviceManagementRegistrationRequest(
+    ScopedServer* test_server,
+    const std::string& enrollment_token,
+    const std::string& dm_token);
+void ExpectDeviceManagementPolicyFetchRequest(
+    ScopedServer* test_server,
+    const std::string& dm_token,
+    const ::wireless_android_enterprise_devicemanagement::
+        OmahaSettingsClientProto& omaha_settings);
+void ExpectDeviceManagementPolicyValidationRequest(ScopedServer* test_server,
+                                                   const std::string& dm_token);
 
 }  // namespace updater::test
 

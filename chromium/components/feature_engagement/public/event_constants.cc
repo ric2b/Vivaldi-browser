@@ -51,6 +51,14 @@ const char kHighEfficiencyDialogShown[] = "high_efficiency_info_shown";
 
 const char kPerformanceMenuItemActivated[] = "performance_activated";
 
+const char kExtensionsMenuOpenedWhileExtensionHasAccess[] =
+    "extensions_menu_opened_while_extension_has_access";
+
+const char kExtensionsRequestAccessButtonClicked[] =
+    "extensions_request_access_button_clicked";
+
+const char kCookieControlsBubbleShown[] = "cookie_controls_bubble_shown";
+
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -69,6 +77,12 @@ const char kOverflowMenuNoHorizontalScrollOrAction[] =
     "overflow_menu_no_horizontal_scroll_or_action";
 const char kPriceNotificationsUsed[] = "price_notifications_used";
 const char kDefaultBrowserPromoShown[] = "default_browser_promo_shown";
+const char kPasswordManagerWidgetPromoTriggered[] =
+    "password_manager_widget_promo_trigger";
+const char kPasswordManagerWidgetPromoUsed[] =
+    "password_manager_widget_promo_used";
+const char kPasswordManagerWidgetPromoClosed[] =
+    "password_manager_widget_promo_closed";
 
 // Default browser blue dot promo.
 const char kBlueDotPromoCriterionMet[] = "blue_dot_promo_criterion_met";

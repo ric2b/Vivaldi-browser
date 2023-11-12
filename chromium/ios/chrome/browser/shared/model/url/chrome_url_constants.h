@@ -11,6 +11,7 @@
 
 // chrome: URLs (including schemes). Should be kept in sync with the
 // URL components below.
+extern const char kChromeDinoGameURL[];
 extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUICookiesSettingsURL[];
 extern const char kChromeUICreditsURL[];
@@ -60,6 +61,7 @@ extern const char kChromeUITermsHost[];
 extern const char kChromeUITranslateInternalsHost[];
 extern const char kChromeUIURLKeyedMetricsHost[];
 extern const char kChromeUIUserActionsHost[];
+extern const char kChromeUIUserDefaultsInternalsHost[];
 extern const char kChromeUIVersionHost[];
 
 // Gets the hosts/domains that are shown in chrome://chrome-urls.
@@ -135,5 +137,9 @@ extern const char kChromeUIAboutNewTabURL[];
 
 // "Learn more" URL for enterprise management information.
 extern const char kManagementLearnMoreURL[];
+
+// "Learn more" URL for the safe browsing setting in the privacy and security
+// section.
+extern const char kEnhancedSafeBrowsingLearnMoreURL[];
 
 #endif  // IOS_CHROME_BROWSER_SHARED_MODEL_URL_CHROME_URL_CONSTANTS_H_

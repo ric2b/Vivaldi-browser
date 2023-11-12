@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-test/mojo_webui_test_support.js';
 import 'chrome://new-tab-page/new_tab_page.js';
 
 import {$$, BrowserProxyImpl, decodeString16, MetricsReporterImpl, mojoString16, RealboxBrowserProxy, RealboxElement, RealboxIconElement, RealboxMatchElement} from 'chrome://new-tab-page/new_tab_page.js';
@@ -1256,76 +1255,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertTrue(args.shiftKey);
-    });
-    assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
-  });
-
-  test('Clicking a match navigates to it', async () => {
-    // Input is expected to have been focused before any navigation.
-    realbox.$.input.dispatchEvent(new Event('focus'));
-
-    realbox.$.input.value = 'hello';
-    realbox.$.input.dispatchEvent(new InputEvent('input'));
-
-    const matches = [createSearchMatch(), createUrlMatch()];
-    testProxy.callbackRouterRemote.autocompleteResultChanged({
-      input: mojoString16(realbox.$.input.value.trimStart()),
-      matches,
-      suggestionGroupsMap: {},
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-    assertTrue(areMatchesShowing());
-
-    const matchEls =
-        realbox.$.matches.shadowRoot!.querySelectorAll('cr-realbox-match');
-    assertEquals(2, matchEls.length);
-
-    // Right clicks are ignored.
-    const rightClick = new MouseEvent('click', {
-      bubbles: true,
-      button: 2,
-      cancelable: true,
-      composed: true,  // So it propagates across shadow DOM boundary.
-    });
-    matchEls[0]!.dispatchEvent(rightClick);
-    assertFalse(rightClick.defaultPrevented);
-    assertEquals(0, testProxy.handler.getCallCount('openAutocompleteMatch'));
-
-    // Middle clicks are accepted.
-    const middleClick = new MouseEvent('click', {
-      bubbles: true,
-      button: 1,
-      cancelable: true,
-      composed: true,  // So it propagates across shadow DOM boundary.
-    });
-    matchEls[0]!.dispatchEvent(middleClick);
-    assertTrue(middleClick.defaultPrevented);
-
-    await testProxy.handler.whenCalled('openAutocompleteMatch').then((args) => {
-      assertEquals(0, args.line);
-      assertEquals(matches[0]!.destinationUrl.url, args.url.url);
-      assertTrue(args.areMatchesShowing);
-      assertEquals(1, args.mouseButton);
-    });
-    assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
-
-    testProxy.handler.reset();
-
-    // Left clicks are accepted.
-    const leftClick = new MouseEvent('click', {
-      bubbles: true,
-      button: 0,
-      cancelable: true,
-      composed: true,  // So it propagates across shadow DOM boundary.
-    });
-    matchEls[0]!.dispatchEvent(leftClick);
-    assertTrue(leftClick.defaultPrevented);
-
-    await testProxy.handler.whenCalled('openAutocompleteMatch').then((args) => {
-      assertEquals(0, args.line);
-      assertEquals(matches[0]!.destinationUrl.url, args.url.url);
-      assertTrue(args.areMatchesShowing);
-      assertEquals(0, args.mouseButton);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
   });
@@ -2611,36 +2540,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(0, args.line);
       assertEquals(
           NavigationPredictor.kUpOrDownArrowButton, args.navigationPredictor);
-    });
-  });
-
-  test('mouse down events are sent to handler', async () => {
-    realbox.$.input.value = 'he';
-    realbox.$.input.dispatchEvent(new InputEvent('input'));
-
-    const matches = [createSearchMatch()];
-    testProxy.callbackRouterRemote.autocompleteResultChanged({
-      input: mojoString16(realbox.$.input.value.trimStart()),
-      matches,
-      suggestionGroupsMap: {},
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-    assertTrue(areMatchesShowing());
-
-    const matchEls =
-        realbox.$.matches.shadowRoot!.querySelectorAll('cr-realbox-match');
-
-    const mouseDown = new MouseEvent('mousedown', {
-      bubbles: true,
-      button: 0,
-      cancelable: true,
-      composed: true,  // So it propagates across shadow DOM boundary.
-    });
-    matchEls[0]!.$.contents.dispatchEvent(mouseDown);
-
-    await testProxy.handler.whenCalled('onNavigationLikely').then((args) => {
-      assertEquals(0, args.line);
-      assertEquals(NavigationPredictor.kMouseDown, args.navigationPredictor);
     });
   });
 });

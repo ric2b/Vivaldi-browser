@@ -158,6 +158,66 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
   EXPECT_EQ(expected_linux, out.str());
 }
 
+TEST(NinjaActionTargetWriter, ActionWithOrderOnlyDeps) {
+  Err err;
+  TestWithScope setup;
+
+  // Some dependencies that the action can depend on. Use actions for these
+  // so they have a nice platform-independent stamp file that can appear in the
+  // output (rather than having to worry about how the current platform names
+  // binaries).
+  Target dep(setup.settings(), Label(SourceDir("//foo/"), "dep"));
+  dep.set_output_type(Target::ACTION);
+  dep.visibility().SetPublic();
+  dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dep.OnResolved(&err));
+
+  Target datadep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
+  datadep.set_output_type(Target::ACTION);
+  datadep.visibility().SetPublic();
+  datadep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(datadep.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::ACTION);
+
+  target.action_values().set_script(SourceFile("//foo/script.py"));
+
+  target.sources().push_back(SourceFile("//foo/source.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
+
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+
+  target.private_deps().push_back(LabelTargetPair(&dep));
+  target.data_deps().push_back(LabelTargetPair(&datadep));
+
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
+
+  std::ostringstream out;
+  NinjaActionTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "rule __foo_bar___rule\n"
+      "  command = /usr/bin/python ../../foo/script.py\n"
+      "  description = ACTION //foo:bar()\n"
+      "  restat = 1\n"
+      "\n"
+      "build foo.out: __foo_bar___rule | ../../foo/script.py "
+      "../../foo/included.txt ../../foo/source.txt obj/foo/dep.stamp || "
+      "obj/foo/datadep.stamp\n"
+      "\n"
+      "build obj/foo/bar.stamp: stamp foo.out\n";
+
+  EXPECT_EQ(expected, out.str());
+}
+
+
 TEST(NinjaActionTargetWriter, ForEach) {
   Err err;
   TestWithScope setup;
@@ -229,15 +289,16 @@ TEST(NinjaActionTargetWriter, ForEach) {
       "../../foo/included.txt obj/foo/dep.stamp\n"
       "\n"
       "build input1.out: __foo_bar___rule ../../foo/input1.txt | "
-      "obj/foo/bar.inputdeps.stamp\n"
+      "obj/foo/bar.inputdeps.stamp || obj/foo/bundle_data_dep.stamp "
+      "obj/foo/datadep.stamp\n"
       "  source_name_part = input1\n"
       "build input2.out: __foo_bar___rule ../../foo/input2.txt | "
-      "obj/foo/bar.inputdeps.stamp\n"
+      "obj/foo/bar.inputdeps.stamp || obj/foo/bundle_data_dep.stamp "
+      "obj/foo/datadep.stamp\n"
       "  source_name_part = input2\n"
       "\n"
       "build obj/foo/bar.stamp: "
-      "stamp input1.out input2.out || obj/foo/bundle_data_dep.stamp "
-      "obj/foo/datadep.stamp\n";
+      "stamp input1.out input2.out\n";
 
   std::string out_str = out.str();
 #if defined(OS_WIN)

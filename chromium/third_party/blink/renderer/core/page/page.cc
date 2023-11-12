@@ -72,6 +72,7 @@
 #include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/core/page/plugins_changed_observer.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
+#include "third_party/blink/renderer/core/page/scoped_browsing_context_group_pauser.h"
 #include "third_party/blink/renderer/core/page/scoped_page_pauser.h"
 #include "third_party/blink/renderer/core/page/scrolling/overscroll_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
@@ -171,8 +172,18 @@ Page* Page::CreateOrdinary(
   }
 
   OrdinaryPages().insert(page);
-  if (ScopedPagePauser::IsActive())
+
+  bool should_pause = false;
+  if (base::FeatureList::IsEnabled(
+          features::kPausePagesPerBrowsingContextGroup)) {
+    should_pause = ScopedBrowsingContextGroupPauser::IsActive(*page);
+  } else {
+    should_pause = ScopedPagePauser::IsActive();
+  }
+  if (should_pause) {
     page->SetPaused(true);
+  }
+
   return page;
 }
 
@@ -220,8 +231,9 @@ Page::Page(base::PassKey<Page>,
       prev_related_page_(this),
       autoplay_flags_(0),
       web_text_autosizer_page_info_({0, 0, 1.f}),
-      v8_compile_hints_(
-          MakeGarbageCollected<V8CrowdsourcedCompileHintsProducer>(this)),
+      v8_compile_hints_producer_(
+          MakeGarbageCollected<
+              v8_compile_hints::V8CrowdsourcedCompileHintsProducer>(this)),
       browsing_context_group_info_(browsing_context_group_info) {
   DCHECK(!AllPages().Contains(this));
   AllPages().insert(this);
@@ -333,12 +345,6 @@ void Page::SetMainFrame(Frame* main_frame) {
   main_frame_ = main_frame;
 
   page_scheduler_->SetIsMainFrameLocal(main_frame->IsLocalFrame());
-}
-
-Frame* Page::TakePreviousMainFrameForLocalSwap() {
-  Frame* frame = previous_main_frame_for_local_swap_;
-  previous_main_frame_for_local_swap_ = nullptr;
-  return frame;
 }
 
 LocalFrame* Page::DeprecatedLocalMainFrame() const {
@@ -961,7 +967,7 @@ void Page::Trace(Visitor* visitor) const {
   visitor->Trace(next_related_page_);
   visitor->Trace(prev_related_page_);
   visitor->Trace(agent_group_scheduler_);
-  visitor->Trace(v8_compile_hints_);
+  visitor->Trace(v8_compile_hints_producer_);
   Supplementable<Page>::Trace(visitor);
 }
 
@@ -1161,7 +1167,24 @@ const base::UnguessableToken& Page::CoopRelatedGroupToken() {
 
 void Page::UpdateBrowsingContextGroup(
     const blink::BrowsingContextGroupInfo& browsing_context_group_info) {
+  if (browsing_context_group_info_ == browsing_context_group_info) {
+    return;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kPausePagesPerBrowsingContextGroup) &&
+      ScopedBrowsingContextGroupPauser::IsActive(*this)) {
+    CHECK(paused_);
+    SetPaused(false);
+  }
+
   browsing_context_group_info_ = browsing_context_group_info;
+
+  if (base::FeatureList::IsEnabled(
+          features::kPausePagesPerBrowsingContextGroup) &&
+      ScopedBrowsingContextGroupPauser::IsActive(*this)) {
+    SetPaused(true);
+  }
 }
 
 template class CORE_TEMPLATE_EXPORT Supplement<Page>;
@@ -1178,9 +1201,9 @@ void Page::PrepareForLeakDetection() {
   for (Page* page : OrdinaryPages()) {
     page->RemoveSupplement<InternalSettingsPageSupplementBase>();
 
-    // V8CompileHintsProducer keeps v8::Script objects alive until the page
-    // becomes interactive. Give it a chance to clean up.
-    page->v8_compile_hints_->ClearData();
+    // V8CrowdsourcedCompileHintsProducer keeps v8::Script objects alive until
+    // the page becomes interactive. Give it a chance to clean up.
+    page->v8_compile_hints_producer_->ClearData();
   }
 }
 

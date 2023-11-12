@@ -14,15 +14,15 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h"
+#import "ios/chrome/common/button_configuration_util.h"
+#import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
+using l10n_util::GetNSString;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 const CGFloat kVerticalMargin = 16.0;
@@ -35,13 +35,13 @@ UIImage* ImageForPage(TabGridPage page) {
   if (IsVivaldiRunning()) {
     switch (page) {
       case TabGridPageIncognitoTabs:
-        return [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
+        return [UIImage imageNamed:vTabGridEmptyStatePrivateTabsImage];
       case TabGridPageRegularTabs:
-        return [UIImage imageNamed:@"tab_grid_regular_tabs_empty"];
+        return [UIImage imageNamed:vTabGridEmptyStateRegularTabsImage];
       case TabGridPageRemoteTabs:
-        return [UIImage imageNamed:@"tab_grid_remote_tabs_empty"];
+        return [UIImage imageNamed:vTabGridEmptyStateSyncedTabsImage];
       case TabGridPageClosedTabs:
-        return [UIImage imageNamed:@"tab_grid_closed_tabs_empty"];
+        return [UIImage imageNamed:vTabGridEmptyStateClosedTabsImage];
     }
   } // End Vivaldi
 
@@ -151,6 +151,69 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
   return nil;
 }
 
+// Vivaldi
+UIButton* VivaldiLoginButton() {
+  UIButton* button = [UIButton new];
+  button.backgroundColor =
+      [UIColor colorNamed:vTabGridEmptyStateLoginButtonBGColor];
+  button.layer.cornerRadius = vRecentTabsEmptyStateLoginButtonCornerRadius;
+  button.titleLabel.font =
+      [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  button.titleLabel.adjustsFontForContentSizeCategory = YES;
+  [button setTitle:GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN)
+          forState:UIControlStateNormal];
+  [button setTitleColor:UIColor.vSystemBlue
+               forState:UIControlStateNormal];
+  return button;
+}
+
+UIButton* VivaldiRegisterButton() {
+  UIButton* button = [UIButton new];
+  button.backgroundColor = UIColor.clearColor;
+  button.titleLabel.font =
+      [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  button.titleLabel.adjustsFontForContentSizeCategory = YES;
+  [button setTitle:GetNSString(IDS_VIVALDI_ACCOUNT_REGISTER)
+          forState:UIControlStateNormal];
+  [button setTitleColor:UIColor.vSystemBlue
+               forState:UIControlStateNormal];
+  return button;
+}
+
+UIButton* VivaldiEnableSyncButton() {
+  UIButton* button = [UIButton new];
+  button.backgroundColor =
+      [UIColor colorNamed:vTabGridEmptyStateLoginButtonBGColor];
+  button.layer.cornerRadius = vRecentTabsEmptyStateLoginButtonCornerRadius;
+  button.titleLabel.font =
+      [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  button.titleLabel.adjustsFontForContentSizeCategory = YES;
+  [button setTitle:GetNSString(IDS_VIVALDI_ACCOUNT_ENABLE_SYNC)
+          forState:UIControlStateNormal];
+  [button setTitleColor:UIColor.vSystemBlue
+               forState:UIControlStateNormal];
+  return button;
+}
+
+UIActivityIndicatorView* VivaldiEnableSyncActivityIndicator() {
+  UIActivityIndicatorView *activityIndicator =
+      [[UIActivityIndicatorView alloc]
+          initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+  activityIndicator.color = UIColor.vSystemBlue;
+  activityIndicator.hidesWhenStopped = YES;
+  return activityIndicator;
+}
+
+const UIEdgeInsets buttonContentsInsets = UIEdgeInsetsMake(0, 20, 0, 20);
+const UIEdgeInsets topLabelPadding =
+    UIEdgeInsetsMake(kVerticalMargin, 12, 0, 12);
+const UIEdgeInsets bottomLabelPadding =
+    UIEdgeInsetsMake(kTabGridEmptyStateVerticalMargin, 12, 0, 12);
+const UIEdgeInsets buttonsContainerPadding =
+    UIEdgeInsetsMake(kVerticalMargin*2, 0, kVerticalMargin, 0);
+
+// End Vivaldi
+
 }  // namespace
 
 @interface TabGridEmptyStateView ()
@@ -160,6 +223,21 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
 @property(nonatomic, weak) UIImageView* imageView;
 @property(nonatomic, weak) UILabel* topLabel;
 @property(nonatomic, weak) UILabel* bottomLabel;
+
+// Vivaldi
+@property(nonatomic, weak) UIView* buttonsContainer;
+@property(nonatomic, weak) UIButton* loginButton;
+@property(nonatomic, weak) UIButton* registerButton;
+@property(nonatomic, weak) UIButton* enableSyncButton;
+@property(nonatomic, weak) UIActivityIndicatorView* activityIndicator;
+
+// Constraint for action buttons container visible state
+@property(nonatomic,strong) NSLayoutConstraint*
+    buttonsContainerVisibleConstraint;
+@property(nonatomic,strong) NSLayoutConstraint*
+    syncButtonSyncingStateWidthConstraint;
+// End Vivaldi
+
 @end
 
 @implementation TabGridEmptyStateView
@@ -279,6 +357,52 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     bottomLabel.textColor =
         [UIColor colorNamed:vTabGridEmptyStateBodyTextColor];
     imageView.contentMode = UIViewContentModeScaleAspectFit;
+
+    // Set up action buttons for recent tabs. These are not visible in any
+    // other tab grid states.
+    UIButton* loginButton = VivaldiLoginButton();
+    _loginButton = loginButton;
+    [loginButton addTarget:self
+                    action:@selector(handleLoginButtonTap)
+          forControlEvents:UIControlEventTouchUpInside];
+    SetContentEdgeInsets(loginButton, buttonContentsInsets);
+
+    UIButton* registerButton = VivaldiRegisterButton();
+    _registerButton = registerButton;
+    [registerButton addTarget:self
+                       action:@selector(handleRegisterButtonTap)
+             forControlEvents:UIControlEventTouchUpInside];
+
+    UIButton* enableSyncButton = VivaldiEnableSyncButton();
+    _enableSyncButton = enableSyncButton;
+    [enableSyncButton addTarget:self
+                     action:@selector(handleEnableSyncButtonTap)
+                    forControlEvents:UIControlEventTouchUpInside];
+    SetContentEdgeInsets(enableSyncButton, buttonContentsInsets);
+
+    UIActivityIndicatorView* activityIndicator =
+        VivaldiEnableSyncActivityIndicator();
+    _activityIndicator = activityIndicator;
+    [enableSyncButton addSubview:activityIndicator];
+    [activityIndicator centerInSuperview];
+
+    UIStackView* buttonStackView =
+      [[UIStackView alloc] initWithArrangedSubviews:@[
+        loginButton, registerButton, enableSyncButton
+      ]];
+
+    buttonStackView.distribution = UIStackViewDistributionFill;
+    buttonStackView.spacing = kVerticalMargin;
+    buttonStackView.axis = UILayoutConstraintAxisHorizontal;
+
+    UIView* buttonsContainer = [[UIView alloc] init];
+    buttonsContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    _buttonsContainer = buttonsContainer;
+
+    [buttonsContainer addSubview:buttonStackView];
+    [buttonStackView fillSuperview];
+
+    [container addSubview:buttonsContainer];
   } // End Vivaldi
 
   [container addSubview:imageView];
@@ -299,6 +423,14 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     [imageView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
   ]];
 
+  if (IsVivaldiRunning()) {
+    [self setUpConstraintsForVivaldi:scrollView
+                           container:container
+                           imageView:imageView
+                            topLabel:topLabel
+                         bottomLabel:bottomLabel
+                    buttonsContainer:_buttonsContainer];
+  } else {
   [NSLayoutConstraint activateConstraints:@[
     [topLabel.topAnchor constraintEqualToAnchor:imageView.bottomAnchor
                                        constant:kVerticalMargin],
@@ -324,6 +456,188 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     [scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
     [scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
   ]];
+  } // End Vivaldi
+
 }
+
+#pragma mark - VIVALDI
+
+- (void)setUpConstraintsForVivaldi:(UIScrollView*)scrollView
+                         container:(UIView*)container
+                         imageView:(UIImageView*)imageView
+                          topLabel:(UILabel*)topLabel
+                       bottomLabel:(UILabel*)bottomLabel
+                  buttonsContainer:(UIView*)buttonsContainer {
+
+  [topLabel anchorTop:imageView.bottomAnchor
+              leading:container.leadingAnchor
+               bottom:nil
+             trailing:container.trailingAnchor
+              padding:topLabelPadding];
+
+  [bottomLabel anchorTop:topLabel.bottomAnchor
+                 leading:container.leadingAnchor
+                  bottom:nil
+                trailing:container.trailingAnchor
+                 padding:bottomLabelPadding];
+
+  [buttonsContainer anchorTop:bottomLabel.bottomAnchor
+                      leading:nil
+                       bottom:container.bottomAnchor
+                     trailing:nil
+                      padding:buttonsContainerPadding
+                         size:CGSizeMake(0, 0)];
+  [buttonsContainer centerXInSuperview];
+  buttonsContainer.hidden = YES;
+
+  _buttonsContainerVisibleConstraint =
+      [buttonsContainer.heightAnchor
+          constraintEqualToConstant:vRecentTabsEmptyStateLoginButtonHeight];
+  _buttonsContainerVisibleConstraint.active = NO;
+
+  _syncButtonSyncingStateWidthConstraint =
+      [_enableSyncButton.widthAnchor
+          constraintEqualToConstant:vRecentTabsEmptyStateLoginButtonHeight];
+  _syncButtonSyncingStateWidthConstraint.active = NO;
+
+  [container anchorTop:scrollView.topAnchor
+               leading:nil
+                bottom:scrollView.bottomAnchor
+              trailing:nil];
+
+  [NSLayoutConstraint activateConstraints:@[
+
+    [buttonsContainer.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:self.leadingAnchor],
+    [buttonsContainer.trailingAnchor
+        constraintLessThanOrEqualToAnchor:self.trailingAnchor],
+
+    [scrollView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+    [scrollView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor],
+    [scrollView.bottomAnchor
+        constraintLessThanOrEqualToAnchor:self.bottomAnchor],
+    [scrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+    [scrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+  ]];
+}
+
+- (void)setAuthButtonsContainerHidden:(BOOL)hidden {
+  _buttonsContainer.hidden = hidden;
+  _buttonsContainerVisibleConstraint.active = !hidden;
+}
+
+- (void)setAuthBottonsHidden:(BOOL)hidden {
+  _loginButton.hidden = hidden;
+  _registerButton.hidden = hidden;
+}
+
+- (void)setEnableSyncButtonHidden:(BOOL)hidden {
+  _enableSyncButton.hidden = hidden;
+}
+
+- (void)setEnableSyncButtonWithSyncingState:(BOOL)isSyncing {
+
+  _syncButtonSyncingStateWidthConstraint.active = isSyncing;
+
+  [UIView animateWithDuration:0.5
+                        delay:0
+       usingSpringWithDamping:0.8
+        initialSpringVelocity:0.3
+                      options:UIViewAnimationOptionCurveEaseInOut
+                   animations:^{
+    self.enableSyncButton.layer.cornerRadius =
+        isSyncing ? vRecentTabsEmptyStateLoginButtonHeight/2 :
+                    vRecentTabsEmptyStateLoginButtonCornerRadius;
+    self.enableSyncButton.titleLabel.alpha = isSyncing ? 0 : 1;
+    if (isSyncing) {
+      [self.activityIndicator startAnimating];
+    } else {
+      [self.activityIndicator stopAnimating];
+    }
+    [self layoutIfNeeded];
+  }
+                   completion:nil];
+}
+
+- (void)updateEmptyViewWithUserState:(SessionsSyncUserState)state {
+  switch (state) {
+  case SessionsSyncUserState::USER_SIGNED_OUT: {
+    [self setAuthButtonsContainerHidden:NO];
+    [self setAuthBottonsHidden:NO];
+    [self setEnableSyncButtonHidden:YES];
+
+    self.topLabel.text =
+        GetNSString(IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_TITLE);
+    self.bottomLabel.text =
+        GetNSString(
+            IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_MESSAGE);
+    break;
+  }
+    case SessionsSyncUserState::USER_SIGNED_IN_SYNC_IN_PROGRESS: {
+      // We will show a button to enable sync in this state.
+      // So, we can hide the register and login button for this state and show
+      // enable sync button but with a loading spinner instead.
+      [self setAuthButtonsContainerHidden:NO];
+      [self setAuthBottonsHidden:YES];
+      [self setEnableSyncButtonHidden:NO];
+      [self setEnableSyncButtonWithSyncingState:YES];
+
+      self.topLabel.text =
+          GetNSString(IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_TITLE);
+      self.bottomLabel.text =
+          GetNSString(
+              IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_SYNC_IN_PROGRESS_MESSAGE);
+
+      break;
+    }
+  case SessionsSyncUserState::USER_SIGNED_IN_SYNC_OFF: {
+    // We will show a button to enable sync in this state.
+    // So, we can hide the register and login button for this state and show
+    // enable sync button.
+    [self setAuthButtonsContainerHidden:NO];
+    [self setAuthBottonsHidden:YES];
+    [self setEnableSyncButtonHidden:NO];
+    [self setEnableSyncButtonWithSyncingState:NO];
+
+    self.topLabel.text =
+        GetNSString(IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_UNAUTH_TITLE);
+    self.bottomLabel.text =
+        GetNSString(IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_ENABLE_SYNC_MESSAGE);
+    break;
+  }
+  case SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS: {
+    [self setAuthButtonsContainerHidden:YES];
+    // No need to show a message here since empty view is not expected to be
+    // visible in this state.
+    break;
+  }
+  case SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_NO_SESSIONS: {
+    [self setAuthButtonsContainerHidden:YES];
+    self.topLabel.text = TitleForPageAndMode(_activePage, _tabGridMode);
+    self.bottomLabel.text = BodyTextForPageAndMode(_activePage, _tabGridMode);
+    break;
+  }
+  default: {
+    break;
+  }
+  }
+}
+
+#pragma mark - ACTIONS
+- (void)handleLoginButtonTap {
+  if (self.delegate)
+    [self.delegate didSelectLoginFromEmptyStateView];
+}
+
+- (void)handleRegisterButtonTap {
+  if (self.delegate)
+    [self.delegate didSelectRegisterFromEmptyStateView];
+}
+
+- (void)handleEnableSyncButtonTap {
+  if (self.delegate)
+    [self.delegate didSelectEnableSyncFromEmptyStateView];
+}
+// End Vivaldi
 
 @end

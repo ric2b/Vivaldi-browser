@@ -142,6 +142,7 @@ public class FloatingPastePopupMenu implements PastePopupMenu {
 
         @Override
         public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+            mCustomMenuItemClickListeners.clear();
             return false;
         }
 
@@ -169,7 +170,6 @@ public class FloatingPastePopupMenu implements PastePopupMenu {
 
         @Override
         public void onDestroyActionMode(ActionMode mode) {
-            mCustomMenuItemClickListeners.clear();
             if (mAdditionalItemProvider != null) {
                 mAdditionalItemProvider.onMenuDestroyed();
             }

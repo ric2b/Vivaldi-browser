@@ -218,7 +218,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                                                atIndex:sender.tag];
   DCHECK(indexPath);
   VivaldiATBSourceSettingItem* switchItem =
-      base::mac::ObjCCastStrict<VivaldiATBSourceSettingItem>(
+      base::apple::ObjCCastStrict<VivaldiATBSourceSettingItem>(
           [model itemAtIndexPath:indexPath]);
 
   BOOL isEnabled = switchItem.source.is_enabled;
@@ -248,7 +248,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                      cellForRowAtIndexPath:indexPath];
   if ([cell isKindOfClass:[TableViewSwitchCell class]]) {
     TableViewSwitchCell* switchCell =
-        base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+        base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
     [switchCell.switchView addTarget:self
                               action:@selector(sourceStateToggled:)
                     forControlEvents:UIControlEventValueChanged];
@@ -270,7 +270,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   TableViewItem* selectedItem = [model itemAtIndexPath:indexPath];
   VivaldiATBSourceSettingItem* selectedSettingItem =
-      base::mac::ObjCCastStrict<VivaldiATBSourceSettingItem>(selectedItem);
+      base::apple::ObjCCastStrict<VivaldiATBSourceSettingItem>(selectedItem);
   BOOL isEnabled = selectedSettingItem.source.is_enabled;
   BOOL isRemoveable = !selectedSettingItem.source.is_default;
 

@@ -16,11 +16,15 @@ class SyncService;
 }  // namespace syncer
 
 namespace vivaldi {
+class VivaldiSyncServiceImpl;
 // Singleton that owns all SyncServices and associates them with
 // ChromeBrowserState.
 class VivaldiSyncServiceFactory : public SyncServiceFactory {
  public:
   static VivaldiSyncServiceFactory* GetInstance();
+
+  static VivaldiSyncServiceImpl* GetForBrowserStateVivaldi(
+      ChromeBrowserState* browser_state);
 
  private:
   friend class base::NoDestructor<VivaldiSyncServiceFactory>;

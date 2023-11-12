@@ -29,6 +29,8 @@ class CONTENT_EXPORT VivaldiTabCheck {
   // neither GuestViewBase nor its outer contents should delete it.
   static bool IsOwnedByTabStripOrDevTools(content::WebContents* web_contents);
 
+  static bool IsOwnedByDevTools(content::WebContents* web_contents);
+
   // Mark contents as managed by DevTools
   static void MarkAsDevToolContents(content::WebContents* web_contents);
 

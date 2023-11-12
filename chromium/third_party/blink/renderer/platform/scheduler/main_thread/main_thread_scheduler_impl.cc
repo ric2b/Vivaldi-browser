@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
@@ -48,9 +49,11 @@
 #include "third_party/blink/renderer/platform/scheduler/common/process_state.h"
 #include "third_party/blink/renderer/platform/scheduler/common/task_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
+#include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/agent_group_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_metrics_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/pending_user_input.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
@@ -299,6 +302,11 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
 
   v8_task_queue_ = NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
       MainThreadTaskQueue::QueueType::kV8));
+  v8_low_priority_task_queue_ = NewTaskQueue(
+      MainThreadTaskQueue::QueueCreationParams(
+          MainThreadTaskQueue::QueueType::kV8LowPriority)
+          .SetPrioritisationType(
+              MainThreadTaskQueue::QueueTraits::PrioritisationType::kLow));
   non_waking_task_queue_ =
       NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
                        MainThreadTaskQueue::QueueType::kNonWaking)
@@ -306,6 +314,8 @@ MainThreadSchedulerImpl::MainThreadSchedulerImpl(
 
   v8_task_runner_ =
       v8_task_queue_->CreateTaskRunner(TaskType::kMainThreadTaskQueueV8);
+  v8_low_priority_task_runner_ = v8_low_priority_task_queue_->CreateTaskRunner(
+      TaskType::kMainThreadTaskQueueV8LowPriority);
   compositor_task_runner_ = compositor_task_queue_->CreateTaskRunner(
       TaskType::kMainThreadTaskQueueCompositor);
   control_task_runner_ = helper_.ControlMainThreadTaskQueue()->CreateTaskRunner(
@@ -530,6 +540,11 @@ MainThreadSchedulerImpl::AnyThread::AnyThread(
           "Scheduler.WaitingForMeaningfulPaint",
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
+      is_any_main_frame_loading(
+          false,
+          "Scheduler.IsAnyMainFrameLoading",
+          &main_thread_scheduler_impl->tracing_controller_,
+          YesNoStateToString),
       have_seen_input_since_navigation(
           false,
           "Scheduler.HaveSeenInputSinceNavigation",
@@ -596,6 +611,15 @@ bool MainThreadSchedulerImpl::
   for (const PageSchedulerImpl* ps : main_thread_only().page_schedulers) {
     if (ps->IsOrdinary() && ps->IsWaitingForMainFrameMeaningfulPaint())
       return true;
+  }
+  return false;
+}
+
+bool MainThreadSchedulerImpl::IsAnyOrdinaryMainFrameLoading() const {
+  for (const PageSchedulerImpl* ps : main_thread_only().page_schedulers) {
+    if (ps->IsOrdinary() && ps->IsMainFrameLoading()) {
+      return true;
+    }
   }
   return false;
 }
@@ -847,13 +871,6 @@ MainThreadSchedulerImpl::NewThrottleableTaskQueueForTest(
                           .SetCanRunWhenVirtualTimePaused(false));
 }
 
-scoped_refptr<base::sequence_manager::TaskQueue>
-MainThreadSchedulerImpl::NewTaskQueueForTest() {
-  return sequence_manager_->CreateTaskQueue(
-      base::sequence_manager::TaskQueue::Spec(
-          base::sequence_manager::QueueName::TEST_TQ));
-}
-
 void MainThreadSchedulerImpl::OnShutdownTaskQueue(
     const scoped_refptr<MainThreadTaskQueue>& task_queue) {
   if (was_shutdown_) {
@@ -1031,12 +1048,6 @@ void MainThreadSchedulerImpl::SetRendererHidden(bool hidden) {
 
 void MainThreadSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
   helper_.CheckOnValidThread();
-
-  // Increasing timer slack helps the OS to coalesce timers efficiently.
-  base::TimerSlack timer_slack = base::TIMER_SLACK_NONE;
-  if (backgrounded)
-    timer_slack = base::TIMER_SLACK_MAXIMUM;
-  helper_.SetTimerSlack(timer_slack);
 
   if (helper_.IsShutdown() ||
       main_thread_only().renderer_backgrounded.get() == backgrounded)
@@ -1726,8 +1737,16 @@ UseCase MainThreadSchedulerImpl::ComputeCurrentUseCase(
     if (any_thread().waiting_for_any_main_frame_contentful_paint)
       return UseCase::kEarlyLoading;
 
-    if (any_thread().waiting_for_any_main_frame_meaningful_paint)
-      return UseCase::kLoading;
+    if (base::FeatureList::IsEnabled(
+            features::kLoadingPhaseBufferTimeAfterFirstMeaningfulPaint)) {
+      if (any_thread().waiting_for_any_main_frame_meaningful_paint) {
+        return UseCase::kLoading;
+      }
+    } else {
+      if (any_thread().is_any_main_frame_loading) {
+        return UseCase::kLoading;
+      }
+    }
   }
   return UseCase::kNone;
 }
@@ -1873,6 +1892,7 @@ void MainThreadSchedulerImpl::WriteIntoTraceLocked(
            any_thread().waiting_for_any_main_frame_contentful_paint);
   dict.Add("waiting_for_any_main_frame_meaningful_paint",
            any_thread().waiting_for_any_main_frame_meaningful_paint);
+  dict.Add("is_any_main_frame_loading", any_thread().is_any_main_frame_loading);
   dict.Add("have_seen_input_since_navigation",
            any_thread().have_seen_input_since_navigation);
   dict.Add(
@@ -2041,6 +2061,7 @@ void MainThreadSchedulerImpl::OnMainFramePaint() {
       IsAnyOrdinaryMainFrameWaitingForFirstContentfulPaint();
   any_thread().waiting_for_any_main_frame_meaningful_paint =
       IsAnyOrdinaryMainFrameWaitingForFirstMeaningfulPaint();
+  any_thread().is_any_main_frame_loading = IsAnyOrdinaryMainFrameLoading();
 
   UpdatePolicyLocked(UpdateType::kMayEarlyOutIfPolicyUnchanged);
 }
@@ -2056,6 +2077,7 @@ void MainThreadSchedulerImpl::ResetForNavigationLocked() {
       IsAnyOrdinaryMainFrameWaitingForFirstContentfulPaint();
   any_thread().waiting_for_any_main_frame_meaningful_paint =
       IsAnyOrdinaryMainFrameWaitingForFirstMeaningfulPaint();
+  any_thread().is_any_main_frame_loading = IsAnyOrdinaryMainFrameLoading();
   any_thread().have_seen_input_since_navigation = false;
   main_thread_only().idle_time_estimator.Clear();
   main_thread_only().have_reported_blocking_intervention_since_navigation =
@@ -2121,6 +2143,11 @@ void MainThreadSchedulerImpl::PostNonNestableIdleTask(
 scoped_refptr<base::SingleThreadTaskRunner>
 MainThreadSchedulerImpl::V8TaskRunner() {
   return v8_task_runner_;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+MainThreadSchedulerImpl::V8LowPriorityTaskRunner() {
+  return v8_low_priority_task_runner_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -2286,8 +2313,10 @@ void MainThreadSchedulerImpl::AddPageScheduler(
   main_thread_only().page_schedulers.insert(page_scheduler);
   DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
   if (page_scheduler->IsOrdinary()) {
-    memory_purge_manager_.OnPageCreated(
-        page_scheduler->GetPageLifecycleState());
+    // MemoryPurgeManager::OnPageCreated() assumes that the page isn't frozen.
+    // Its logic must be modified if this assumption is broken in the future.
+    CHECK(!page_scheduler->IsFrozen());
+    memory_purge_manager_.OnPageCreated();
   }
 
   base::AutoLock lock(any_thread_lock_);
@@ -2295,17 +2324,17 @@ void MainThreadSchedulerImpl::AddPageScheduler(
       IsAnyOrdinaryMainFrameWaitingForFirstContentfulPaint();
   any_thread().waiting_for_any_main_frame_meaningful_paint =
       IsAnyOrdinaryMainFrameWaitingForFirstMeaningfulPaint();
+  any_thread().is_any_main_frame_loading = IsAnyOrdinaryMainFrameLoading();
   UpdatePolicyLocked(UpdateType::kMayEarlyOutIfPolicyUnchanged);
 }
 
 void MainThreadSchedulerImpl::RemovePageScheduler(
     PageSchedulerImpl* page_scheduler) {
-  DCHECK(main_thread_only().page_schedulers.find(page_scheduler) !=
-         main_thread_only().page_schedulers.end());
+  DCHECK(base::Contains(main_thread_only().page_schedulers, page_scheduler));
   main_thread_only().page_schedulers.erase(page_scheduler);
   if (page_scheduler->IsOrdinary()) {
     memory_purge_manager_.OnPageDestroyed(
-        page_scheduler->GetPageLifecycleState());
+        /* frozen=*/page_scheduler->IsFrozen());
   }
 
   if (IsIpcTrackingEnabledForAllPages()) {
@@ -2322,6 +2351,7 @@ void MainThreadSchedulerImpl::RemovePageScheduler(
       IsAnyOrdinaryMainFrameWaitingForFirstContentfulPaint();
   any_thread().waiting_for_any_main_frame_meaningful_paint =
       IsAnyOrdinaryMainFrameWaitingForFirstMeaningfulPaint();
+  any_thread().is_any_main_frame_loading = IsAnyOrdinaryMainFrameLoading();
   UpdatePolicyLocked(UpdateType::kMayEarlyOutIfPolicyUnchanged);
 }
 
@@ -2522,6 +2552,8 @@ TaskPriority MainThreadSchedulerImpl::ComputePriority(
       return TaskPriority::kBestEffortPriority;
     case MainThreadTaskQueue::QueueTraits::PrioritisationType::kRegular:
       return TaskPriority::kNormalPriority;
+    case MainThreadTaskQueue::QueueTraits::PrioritisationType::kLow:
+      return TaskPriority::kLowPriority;
     default:
       NOTREACHED();
       return TaskPriority::kNormalPriority;

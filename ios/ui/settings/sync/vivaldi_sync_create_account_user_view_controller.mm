@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/vivaldi_sync_create_account_user_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -210,7 +210,7 @@ BOOL emailIsValid;
   switch (itemType) {
     case ItemTypeNextButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
-          base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(nextButtonPressed:)
@@ -219,7 +219,7 @@ BOOL emailIsValid;
     }
     case ItemTypeUsername: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.textField addTarget:self
                      action:@selector(usernameChanged:)
            forControlEvents:UIControlEventEditingChanged];
@@ -227,7 +227,7 @@ BOOL emailIsValid;
     }
     case ItemTypeRecoveryEmail: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.textField addTarget:self
                      action:@selector(recoveryEmailChanged:)
            forControlEvents:UIControlEventEditingChanged];
@@ -235,13 +235,13 @@ BOOL emailIsValid;
     }
     case ItemTypeConfirmRecoveryEmail: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       editCell.textField.delegate = self;
       break;
     }
     case ItemTypeTitle: {
       VivaldiTableViewIllustratedCell* titleCell =
-          base::mac::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
       titleCell.subtitleLabel.delegate = self;
       break;
     }

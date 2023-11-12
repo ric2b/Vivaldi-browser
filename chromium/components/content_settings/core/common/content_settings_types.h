@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// A particular type of content to care about.  We give the user various types
+// A particular type of content to care about. We give the user various types
 // of controls over each of these.
 // When adding/removing values from this enum, be sure to update the
 // kHistogramValue array in content_settings.cc as well.
@@ -18,6 +18,10 @@ enum class ContentSettingsType : int32_t {
   // "DEFAULT" is only used as an argument to the Content Settings Window
   // opener; there it means "whatever was last shown".
   DEFAULT = -1,
+  // This setting governs whether cookies are enabled by the user in the
+  // provided context. However, it may be overridden by other settings. This
+  // enum should NOT be read directly to determine whether cookies are enabled;
+  // the client should instead rely on the CookieSettings API.
   COOKIES = 0,
   IMAGES,
   JAVASCRIPT,
@@ -37,7 +41,12 @@ enum class ContentSettingsType : int32_t {
   PROTOCOL_HANDLERS,
   DEPRECATED_PPAPI_BROKER,
   AUTOMATIC_DOWNLOADS,
+
+  // Advanced device-specific functions on MIDI devices. MIDI-SysEx
+  // communications can be used for changing the MIDI device's persistent state
+  // such as firmware.
   MIDI_SYSEX,
+
   SSL_CERT_DECISIONS,
   PROTECTED_MEDIA_IDENTIFIER,
   APP_BANNER,
@@ -55,8 +64,9 @@ enum class ContentSettingsType : int32_t {
   // decisions for whether or not to show the UI.
   ADS_DATA,
 
-  // This is special-cased in the permissions layer to always allow, and as
-  // such doesn't have associated prefs data.
+  // MIDI stands for Musical Instrument Digital Interface. It is a standard that
+  // allows electronic musical instruments, computers, and other devices to
+  // communicate with each other.
   MIDI,
 
   // This content setting type is for caching password protection service's
@@ -206,10 +216,10 @@ enum class ContentSettingsType : int32_t {
   // screens. See also: https://w3c.github.io/window-placement
   WINDOW_MANAGEMENT,
 
-  // Stores whether to allow insecure websites to make local network requests.
-  // See also: https://wicg.github.io/local-network-access
+  // Stores whether to allow insecure websites to make private network requests.
+  // See also: https://wicg.github.io/cors-rfc1918
   // Set through enterprise policies only.
-  INSECURE_LOCAL_NETWORK,
+  INSECURE_PRIVATE_NETWORK,
 
   // Content setting which stores whether or not a site can access low-level
   // locally installed font data using the Local Fonts Access API.
@@ -330,6 +340,21 @@ enum class ContentSettingsType : int32_t {
   // Setting for enabling the `getAllScreensMedia` API. Spec link:
   // https://github.com/screen-share/capture-all-screens
   ALL_SCREEN_CAPTURE,
+
+  // Stores per origin metadata for cookie controls.
+  COOKIE_CONTROLS_METADATA,
+
+  // Content Setting for 3PC accesses granted via 3PC deprecation trial.
+  TPCD_SUPPORT,
+
+  // Content setting used to indicate whether entering picture-in-picture
+  // automatically should be enabled.
+  AUTO_PICTURE_IN_PICTURE,
+
+  // Content Setting for 3PC accesses granted by metadata delivered via the
+  // component updater service. This type will only be used when
+  // `net::features::kTpcdMetadataGrants` is enabled.
+  TPCD_METADATA_GRANTS,
 
   NUM_TYPES,
 };

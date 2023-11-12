@@ -5,6 +5,7 @@
 #include "chrome/browser/companion/visual_search/visual_search_suggestions_service.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/metrics/histogram_macros_local.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
@@ -79,13 +80,33 @@ VisualSearchSuggestionsService::~VisualSearchSuggestionsService() {
   }
 }
 
+void VisualSearchSuggestionsService::BindModelReceiver(
+    mojo::PendingReceiver<mojom::VisualSuggestionsModelProvider> receiver) {
+  model_receivers_.Add(this, std::move(receiver));
+}
+
 void VisualSearchSuggestionsService::Shutdown() {
+  model_receivers_.Clear();
+  UnloadModelFile();
+}
+
+void VisualSearchSuggestionsService::UnloadModelFile() {
   if (model_file_) {
     // If the model file is already loaded, it should be closed on a
     // background thread.
     background_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&CloseModelFile, std::move(*model_file_)));
+    model_file_ = absl::nullopt;
   }
+}
+
+void VisualSearchSuggestionsService::NotifyModelUpdatesAndClear() {
+  for (auto& callback : model_callbacks_) {
+    std::move(callback).Run(
+        model_file_ ? model_file_->Duplicate() : base::File(),
+        GetModelSpec(model_metadata_));
+  }
+  model_callbacks_.clear();
 }
 
 void VisualSearchSuggestionsService::OnModelFileLoaded(base::File model_file) {
@@ -93,31 +114,27 @@ void VisualSearchSuggestionsService::OnModelFileLoaded(base::File model_file) {
     return;
   }
 
-  if (model_file_) {
-    // If the model file is already loaded, it should be closed on a
-    // background thread.
-    background_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&CloseModelFile, std::move(*model_file_)));
-  }
+  UnloadModelFile();
   model_file_ = std::move(model_file);
-  for (auto& callback : model_callbacks_) {
-    std::move(callback).Run(model_file_->Duplicate(),
-                            GetModelSpec(model_metadata_));
-  }
-  model_callbacks_.clear();
+  NotifyModelUpdatesAndClear();
 }
 
 void VisualSearchSuggestionsService::OnModelUpdated(
     optimization_guide::proto::OptimizationTarget optimization_target,
-    const optimization_guide::ModelInfo& model_info) {
+    base::optional_ref<const optimization_guide::ModelInfo> model_info) {
   if (optimization_target !=
       optimization_guide::proto::
           OPTIMIZATION_TARGET_VISUAL_SEARCH_CLASSIFICATION) {
     return;
   }
+  if (!model_info.has_value()) {
+    UnloadModelFile();
+    NotifyModelUpdatesAndClear();
+    return;
+  }
 
   const absl::optional<optimization_guide::proto::Any>& metadata =
-      model_info.GetModelMetadata();
+      model_info->GetModelMetadata();
 
   if (metadata.has_value()) {
     model_metadata_ = optimization_guide::ParsedAnyMetadata<
@@ -125,12 +142,12 @@ void VisualSearchSuggestionsService::OnModelUpdated(
   }
 
   background_task_runner_->PostTaskAndReplyWithResult(
-      FROM_HERE, base::BindOnce(&LoadModelFile, model_info.GetModelFilePath()),
+      FROM_HERE, base::BindOnce(&LoadModelFile, model_info->GetModelFilePath()),
       base::BindOnce(&VisualSearchSuggestionsService::OnModelFileLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void VisualSearchSuggestionsService::SetModelUpdateCallback(
+void VisualSearchSuggestionsService::RegisterModelUpdateCallback(
     ModelUpdateCallback callback) {
   if (model_file_) {
     std::move(callback).Run(model_file_->Duplicate(),
@@ -138,6 +155,13 @@ void VisualSearchSuggestionsService::SetModelUpdateCallback(
     return;
   }
   model_callbacks_.emplace_back(std::move(callback));
+}
+
+void VisualSearchSuggestionsService::GetModelWithMetadata(
+    GetModelWithMetadataCallback callback) {
+  RegisterModelUpdateCallback(base::BindOnce(std::move(callback)));
+  LOCAL_HISTOGRAM_BOOLEAN(
+      "Companion.VisualQuery.Service.GetModelRequestSuccess", true);
 }
 
 }  // namespace companion::visual_search

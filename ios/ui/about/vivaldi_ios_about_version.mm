@@ -5,6 +5,7 @@
 #import "app/vivaldi_resources.h"
 #import "app/vivaldi_version_info.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/grit/components_scaled_resources.h"
 #import "components/version_ui/version_ui_constants.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/web/public/webui/web_ui_ios_data_source.h"
@@ -12,6 +13,10 @@
 namespace vivaldi {
 
 void UpdateVersionUIIOSDataSource(web::WebUIIOSDataSource* html_source) {
+
+  html_source->AddResourcePath("images/product_logo_white.png",
+                               IDR_PRODUCT_LOGO);
+
   html_source->AddString(version_ui::kVersion,
                          vivaldi::GetVivaldiVersionString());
 #if defined(OFFICIAL_BUILD) && \

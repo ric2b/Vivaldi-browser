@@ -6,6 +6,7 @@
  * @fileoverview consolidated consent screen implementation.
  */
 
+import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import '//resources/js/action_link.js';
@@ -90,7 +91,7 @@ const ConsolidatedConsentUserAction = {
  * @implements {MultiStepBehaviorInterface}
  */
 const ConsolidatedConsentScreenElementBase = mixinBehaviors(
-    [OobeI18nBehavior, MultiStepBehavior, LoginScreenBehavior], PolymerElement);
+    [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior], PolymerElement);
 
 /**
  * @polymer
@@ -405,6 +406,11 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
     // Content.
     if (!this.isDemo_) {
       webview.executeScript({code: 'document.body.innerHTML;'}, (results) => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+              'Failed to get consent contents: ' +
+              chrome.runtime.lastError.message);
+        }
         if (!results || results.length != 1 || typeof results[0] !== 'string') {
           return;
         }
@@ -414,8 +420,6 @@ class ConsolidatedConsent extends ConsolidatedConsentScreenElementBase {
 
     this.arcTosLoading_ = false;
     this.maybeSetLoadedStep_();
-    this.$.consolidatedConsentArcTosWebview.insertCSS(
-        {code: 'header{display:none !important}'});
   }
 
   onPrivacyPolicyContentLoad_() {

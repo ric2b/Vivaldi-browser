@@ -79,7 +79,6 @@ test("device_unittests") {
       "bluetooth/test/mock_bluetooth_central_manager_mac.h",
       "bluetooth/test/mock_bluetooth_central_manager_mac.mm",
     ]
-    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_mac) {
@@ -201,6 +200,10 @@ test("device_unittests") {
       "//services/data_decoder/public/cpp:test_support",
     ]
 
+    if (is_chromeos_lacros) {
+      deps += [ "//chromeos/startup" ]
+    }
+
     if (is_mac) {
       data_deps += [ "fido/strings:fido_test_strings" ]
     }
@@ -267,7 +270,11 @@ test("device_unittests") {
     ]
     deps += [ "//chromeos/constants" ]
     if (is_chromeos_ash) {
-      deps += [ "//ash/constants" ]
+      deps += [
+        "//ash/constants",
+        "//chromeos/ash/services/nearby/public/cpp/",
+        "//chromeos/ash/services/secure_channel/public/cpp/shared",
+      ]
     }
     if (is_chromeos_lacros) {
       deps += [ "//chromeos/lacros:test_support" ]
@@ -296,6 +303,7 @@ test("device_unittests") {
       "bluetooth/floss/floss_admin_client_unittest.cc",
       "bluetooth/floss/floss_advertiser_client_unittest.cc",
       "bluetooth/floss/floss_battery_manager_client_unittest.cc",
+      "bluetooth/floss/floss_bluetooth_telephony_client_unittest.cc",
       "bluetooth/floss/floss_dbus_client_unittest.cc",
       "bluetooth/floss/floss_gatt_manager_client_unittest.cc",
       "bluetooth/floss/floss_lescan_client_unittest.cc",
@@ -511,5 +519,32 @@ if (is_android) {
 
   java_cpp_enum("bluetooth_test_javagen") {
     sources = [ "bluetooth/test/bluetooth_test.h" ]
+  }
+}
+
+if (is_win || is_linux || is_mac) {
+  test("passkey_enclave") {
+    testonly = true
+    sources = [ "fido/enclave/test/passkey_enclave.cc" ]
+
+    deps = [
+      "//base",
+      "//build/win:default_exe_manifest",
+      "//device/fido:enclave_service",
+      "//device/fido:fido",
+    ]
+  }
+
+  test("passkey_enclave_client") {
+    testonly = true
+    sources = [ "fido/enclave/test/passkey_enclave_client.cc" ]
+
+    deps = [
+      "//base",
+      "//build/win:default_exe_manifest",
+      "//components/sync/protocol:protocol",
+      "//device/fido",
+      "//net",
+    ]
   }
 }

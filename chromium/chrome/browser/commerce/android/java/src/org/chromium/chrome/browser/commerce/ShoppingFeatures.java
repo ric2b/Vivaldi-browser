@@ -4,10 +4,12 @@
 
 package org.chromium.chrome.browser.commerce;
 
-import androidx.annotation.VisibleForTesting;
-
+import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
+
+//Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.components.commerce.core.ShoppingService;
 
 /** Self-documenting feature class for shopping. */
@@ -16,6 +18,7 @@ public class ShoppingFeatures {
 
     /** Wrapper function for ShoppingService.isShoppingListEligibile(). */
     public static boolean isShoppingListEligible() {
+        if (BuildConfig.IS_VIVALDI) return false;
         if (sShoppingListEligibleForTestsing != null) return sShoppingListEligibleForTestsing;
         if (!ProfileManager.isInitialized()) return false;
 
@@ -26,8 +29,8 @@ public class ShoppingFeatures {
         return service.isShoppingListEligible();
     }
 
-    @VisibleForTesting
     public static void setShoppingListEligibleForTesting(Boolean eligible) {
         sShoppingListEligibleForTestsing = eligible;
+        ResettersForTesting.register(() -> sShoppingListEligibleForTestsing = null);
     }
 }

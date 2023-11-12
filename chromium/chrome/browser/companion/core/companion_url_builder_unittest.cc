@@ -4,7 +4,7 @@
 
 #include "chrome/browser/companion/core/companion_url_builder.h"
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/logging.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/companion/core/constants.h"
@@ -12,7 +12,7 @@
 #include "chrome/browser/companion/core/mock_signin_delegate.h"
 #include "chrome/browser/companion/core/promo_handler.h"
 #include "chrome/browser/companion/core/proto/companion_url_params.pb.h"
-#include "chrome/browser/companion/visual_search/features.h"
+#include "chrome/common/companion/visual_search/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
@@ -87,15 +87,18 @@ class CompanionUrlBuilderTest : public testing::Test {
       EXPECT_EQ(proto.page_url(), std::string());
     }
 
-    EXPECT_TRUE(proto.has_msbb_enabled());
+    EXPECT_TRUE(proto.is_msbb_enabled());
+    EXPECT_FALSE(proto.is_pco_enabled());
   }
   // Deserialize the query param into proto::CompanionUrlParams.
   proto::CompanionUrlParams DeserializeCompanionRequest(
       const std::string& companion_url_param) {
+    std::string serialized_proto;
+    EXPECT_TRUE(base::Base64UrlDecode(
+        companion_url_param, base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+        &serialized_proto));
+
     companion::proto::CompanionUrlParams proto;
-    auto base64_decoded = base::Base64Decode(companion_url_param);
-    auto serialized_proto = std::string(base64_decoded.value().begin(),
-                                        base64_decoded.value().end());
     EXPECT_TRUE(proto.ParseFromString(serialized_proto));
     return proto;
   }
@@ -134,7 +137,8 @@ TEST_F(CompanionUrlBuilderTest, SignIn) {
   EXPECT_EQ(proto.page_url(), std::string());
   EXPECT_FALSE(proto.is_sign_in_allowed());
   EXPECT_FALSE(proto.is_signed_in());
-  EXPECT_FALSE(proto.has_msbb_enabled());
+  EXPECT_FALSE(proto.is_msbb_enabled());
+  EXPECT_FALSE(proto.is_pco_enabled());
 
   // Allowed to sign-in, but not signed in, no msbb.
   SetSignInAndMsbbExpectations(/*is_sign_in_allowed=*/true,
@@ -146,7 +150,8 @@ TEST_F(CompanionUrlBuilderTest, SignIn) {
   EXPECT_EQ(proto.page_url(), std::string());
   EXPECT_TRUE(proto.is_sign_in_allowed());
   EXPECT_FALSE(proto.is_signed_in());
-  EXPECT_FALSE(proto.has_msbb_enabled());
+  EXPECT_FALSE(proto.is_msbb_enabled());
+  EXPECT_FALSE(proto.is_pco_enabled());
 }
 
 TEST_F(CompanionUrlBuilderTest, MsbbOff) {
@@ -182,14 +187,18 @@ TEST_F(CompanionUrlBuilderTest, MsbbOff) {
   EXPECT_EQ(proto.page_url(), std::string());
   EXPECT_TRUE(proto.is_signed_in());
   EXPECT_TRUE(proto.is_sign_in_allowed());
-  EXPECT_FALSE(proto.has_msbb_enabled());
+  EXPECT_FALSE(proto.is_msbb_enabled());
+  EXPECT_FALSE(proto.is_pco_enabled());
   EXPECT_TRUE(proto.is_upload_dialog_supported());
+  EXPECT_TRUE(proto.is_hard_refresh_supported());
 }
 
 TEST_F(CompanionUrlBuilderTest, MsbbOn) {
   EXPECT_CALL(signin_delegate_, IsSignedIn())
       .WillRepeatedly(testing::Return(true));
-  pref_service_.SetUserPref(kExpsPromoShownCountPref, base::Value(2));
+  pref_service_.SetUserPref(kExpsPromoShownCountPref, base::Value(3));
+  pref_service_.SetUserPref(kPcoPromoShownCountPref, base::Value(2));
+  pref_service_.SetUserPref(kPcoPromoDeclinedCountPref, base::Value(1));
 
   GURL page_url(kValidUrl);
   GURL companion_url = url_builder_->BuildCompanionURL(page_url);
@@ -216,19 +225,23 @@ TEST_F(CompanionUrlBuilderTest, MsbbOn) {
 
   // Verify fields inside protobuf.
   EXPECT_EQ(proto.page_url(), page_url.spec());
-  EXPECT_TRUE(proto.has_msbb_enabled());
+  EXPECT_TRUE(proto.is_msbb_enabled());
+  EXPECT_FALSE(proto.is_pco_enabled());
   EXPECT_TRUE(proto.is_signed_in());
   EXPECT_TRUE(proto.is_entrypoint_pinned_by_default());
   EXPECT_TRUE(proto.links_open_in_new_tab());
   EXPECT_FALSE(proto.is_vqs_enabled_on_chrome());
   EXPECT_TRUE(proto.is_upload_dialog_supported());
+  EXPECT_TRUE(proto.is_hard_refresh_supported());
 
   // Verify promo state.
   EXPECT_TRUE(proto.has_promo_state());
   EXPECT_EQ(1, proto.promo_state().signin_promo_denial_count());
   EXPECT_EQ(0, proto.promo_state().msbb_promo_denial_count());
   EXPECT_EQ(0, proto.promo_state().exps_promo_denial_count());
-  EXPECT_EQ(2, proto.promo_state().exps_promo_shown_count());
+  EXPECT_EQ(3, proto.promo_state().exps_promo_shown_count());
+  EXPECT_EQ(2, proto.promo_state().pco_promo_shown_count());
+  EXPECT_EQ(1, proto.promo_state().pco_promo_denial_count());
   EXPECT_TRUE(proto.promo_state().should_show_region_search_iph());
 }
 
@@ -278,6 +291,28 @@ TEST_F(CompanionUrlBuilderTest, WithoutTextQuery) {
 
   EXPECT_TRUE(net::GetValueForKeyInQuery(companion_url, "origin", &value));
   EXPECT_EQ(value, kOrigin);
+}
+
+TEST_F(CompanionUrlBuilderTest, WithQueryStartTime) {
+  auto time = base::Time::Now();
+  auto timestamp = std::make_unique<base::Time>(time);
+  int64_t nanoseconds_in_milliseconds = 1e6;
+  int64_t time_nanoseconds = time.ToJavaTime() * nanoseconds_in_milliseconds;
+  GURL page_url(kValidUrl);
+  std::string encoded_proto =
+      url_builder_->BuildCompanionUrlParamProto(page_url, std::move(timestamp));
+
+  // Deserialize the query param into protobuf.
+  companion::proto::CompanionUrlParams proto =
+      DeserializeCompanionRequest(encoded_proto);
+
+  companion::proto::Timestamp* query_start_time =
+      proto.mutable_query_start_time();
+  EXPECT_TRUE(query_start_time);
+  EXPECT_EQ(query_start_time->seconds(),
+            time_nanoseconds / base::Time::kNanosecondsPerSecond);
+  EXPECT_EQ(query_start_time->nanos(),
+            time_nanoseconds % base::Time::kNanosecondsPerSecond);
 }
 
 class CompanionUrlBuilderCurrentTabTest : public CompanionUrlBuilderTest {

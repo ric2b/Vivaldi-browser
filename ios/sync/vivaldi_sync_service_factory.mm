@@ -2,56 +2,52 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/sync/vivaldi_sync_service_factory.h"
+#import "ios/sync/vivaldi_sync_service_factory.h"
 
-#include <utility>
+#import <utility>
 
-#include "base/functional/bind.h"
-#include "base/no_destructor.h"
-#include "base/time/time.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "components/network_time/network_time_tracker.h"
-#include "components/policy/core/common/policy_map.h"
-#include "components/prefs/pref_service.h"
-#include "components/sync/base/command_line_switches.h"
-#include "components/sync/base/sync_util.h"
-#include "components/sync/service/sync_service_impl.h"
-#include "components/sync/service/sync_service.h"
-#include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmark_undo_service_factory.h"
-#include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_sync_service_factory.h"
-#include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#include "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
-#include "ios/chrome/browser/favicon/favicon_service_factory.h"
-#include "ios/chrome/browser/history/history_service_factory.h"
-#include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
-#include "ios/chrome/browser/policy/browser_state_policy_connector.h"
-#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#include "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#include "ios/chrome/browser/shared/model/application_context/application_context.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
-#include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
-#include "ios/chrome/browser/sync/model_type_store_service_factory.h"
-#include "ios/chrome/browser/sync/session_sync_service_factory.h"
-#include "ios/chrome/browser/sync/sync_invalidations_service_factory.h"
-#include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
-#include "ios/chrome/common/channel_info.h"
-#include "ios/notes/notes_factory.h"
-#include "ios/sync/vivaldi_sync_client.h"
-#include "ios/vivaldi_account/vivaldi_account_manager_factory.h"
-#include "ios/web/public/thread/web_task_traits.h"
-#include "ios/web/public/thread/web_thread.h"
-#include "prefs/vivaldi_pref_names.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "sync/vivaldi_sync_service_impl.h"
-#include "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#import "base/functional/bind.h"
+#import "base/no_destructor.h"
+#import "base/time/time.h"
+#import "components/autofill/core/browser/personal_data_manager.h"
+#import "components/keyed_service/ios/browser_state_dependency_manager.h"
+#import "components/network_time/network_time_tracker.h"
+#import "components/policy/core/common/policy_map.h"
+#import "components/prefs/pref_service.h"
+#import "components/sync/base/command_line_switches.h"
+#import "components/sync/base/sync_util.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_service_impl.h"
+#import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_undo_service_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
+#import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
+#import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/policy/browser_state_policy_connector.h"
+#import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/device_info_sync_service_factory.h"
+#import "ios/chrome/browser/sync/ios_chrome_sync_client.h"
+#import "ios/chrome/browser/sync/ios_user_event_service_factory.h"
+#import "ios/chrome/browser/sync/model_type_store_service_factory.h"
+#import "ios/chrome/browser/sync/session_sync_service_factory.h"
+#import "ios/chrome/browser/sync/sync_invalidations_service_factory.h"
+#import "ios/chrome/browser/webdata_services/web_data_service_factory.h"
+#import "ios/chrome/common/channel_info.h"
+#import "ios/notes/notes_factory.h"
+#import "ios/vivaldi_account/vivaldi_account_manager_factory.h"
+#import "ios/web/public/thread/web_task_traits.h"
+#import "ios/web/public/thread/web_thread.h"
+#import "prefs/vivaldi_pref_names.h"
+#import "services/network/public/cpp/shared_url_loader_factory.h"
+#import "sync/vivaldi_sync_service_impl.h"
+#import "url/gurl.h"
 
 namespace vivaldi {
 // static
@@ -86,6 +82,17 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() {
 
 VivaldiSyncServiceFactory::~VivaldiSyncServiceFactory() {}
 
+// static
+VivaldiSyncServiceImpl* VivaldiSyncServiceFactory::GetForBrowserStateVivaldi(
+    ChromeBrowserState* browser_state) {
+  if (!syncer::IsSyncAllowedByFlag()) {
+    return nullptr;
+  }
+
+  return static_cast<VivaldiSyncServiceImpl*>(
+      GetInstance()->GetServiceForBrowserState(browser_state, true));
+}
+
 std::unique_ptr<KeyedService>
 VivaldiSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
@@ -96,7 +103,7 @@ VivaldiSyncServiceFactory::BuildServiceInstanceFor(
   init_params.identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
   init_params.sync_client =
-      std::make_unique<VivaldiSyncClient>(browser_state);
+      std::make_unique<IOSChromeSyncClient>(browser_state);
   init_params.url_loader_factory = browser_state->GetSharedURLLoaderFactory();
   init_params.network_connection_tracker =
       GetApplicationContext()->GetNetworkConnectionTracker();

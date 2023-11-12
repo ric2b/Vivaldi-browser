@@ -16,14 +16,11 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/common/bookmark_features.h"
+#import "components/sync/base/features.h"
 #import "components/sync/test/test_sync_service.h"
-#import "ios/chrome/browser/bookmarks/bookmark_ios_unit_test_support.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_ios_unit_test_support.h"
 #import "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest_mac.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using bookmarks::BookmarkNode;
 
@@ -42,7 +39,7 @@ class BookmarkIOSUtilsUnitTest : public BookmarkIOSUnitTestSupport,
  protected:
   void SetUp() override {
     scoped_feature_list_.InitWithFeatureState(
-        bookmarks::kEnableBookmarksAccountStorage, IsAccountStorageEnabled());
+        syncer::kEnableBookmarksAccountStorage, IsAccountStorageEnabled());
     BookmarkIOSUnitTestSupport::SetUp();
   }
 

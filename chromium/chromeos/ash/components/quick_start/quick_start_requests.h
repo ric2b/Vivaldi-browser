@@ -8,17 +8,16 @@
 #include <array>
 #include <string>
 
-#include "base/values.h"
 #include "components/cbor/values.h"
+#include "crypto/sha2.h"
 #include "quick_start_message.h"
-#include "url/origin.h"
 
 namespace ash::quick_start::requests {
 
 std::unique_ptr<QuickStartMessage> BuildBootstrapOptionsRequest();
 
 std::unique_ptr<QuickStartMessage> BuildAssertionRequestMessage(
-    const std::string& challenge_b64url);
+    std::array<uint8_t, crypto::kSHA256Length> client_data_hash);
 
 std::unique_ptr<QuickStartMessage> BuildGetInfoRequestMessage();
 
@@ -28,10 +27,8 @@ std::unique_ptr<QuickStartMessage> BuildRequestWifiCredentialsMessage(
 
 std::vector<uint8_t> CBOREncodeGetAssertionRequest(const cbor::Value& request);
 
-std::string CreateFidoClientDataJson(const url::Origin& origin,
-                                     const std::string& challenge_b64url);
-
-cbor::Value GenerateGetAssertionRequest(const std::string& challenge_b64url);
+cbor::Value GenerateGetAssertionRequest(
+    std::array<uint8_t, crypto::kSHA256Length> client_data_hash);
 
 std::unique_ptr<QuickStartMessage> BuildNotifySourceOfUpdateMessage(
     int32_t session_id,

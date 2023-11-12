@@ -55,7 +55,8 @@ class VIEWS_EXPORT WidgetDelegate
     std::u16string accessible_title;
 
     // Whether the window should display controls for the user to minimize,
-    // maximize, or resize it.
+    // maximize, resize it, or go into fullscreen.
+    bool can_fullscreen = false;
     bool can_maximize = false;
     bool can_minimize = false;
     bool can_resize = false;
@@ -155,6 +156,9 @@ class VIEWS_EXPORT WidgetDelegate
 
   // Returns true if the window can be resized.
   bool CanResize() const;
+
+  // Returns true if the window can go into fullscreen.
+  virtual bool CanFullscreen() const;
 
   // Returns true if the window can be maximized.
   virtual bool CanMaximize() const;
@@ -330,6 +334,7 @@ class VIEWS_EXPORT WidgetDelegate
   // setters, there is no need to override the corresponding virtual getters.
   void SetAccessibleWindowRole(ax::mojom::Role role);
   void SetAccessibleTitle(std::u16string title);
+  void SetCanFullscreen(bool can_fullscreen);
   void SetCanMaximize(bool can_maximize);
   void SetCanMinimize(bool can_minimize);
   void SetCanResize(bool can_resize);
@@ -410,14 +415,14 @@ class VIEWS_EXPORT WidgetDelegate
 
   // The Widget that was initialized with this instance as its WidgetDelegate,
   // if any.
-  raw_ptr<Widget, DanglingUntriaged> widget_ = nullptr;
+  raw_ptr<Widget, AcrossTasksDanglingUntriaged> widget_ = nullptr;
   Params params_;
 
-  raw_ptr<View, DanglingUntriaged> default_contents_view_ = nullptr;
+  raw_ptr<View, AcrossTasksDanglingUntriaged> default_contents_view_ = nullptr;
   bool contents_view_taken_ = false;
   bool can_activate_ = true;
 
-  raw_ptr<View, DanglingUntriaged> unowned_contents_view_ = nullptr;
+  raw_ptr<View, AcrossTasksDanglingUntriaged> unowned_contents_view_ = nullptr;
   std::unique_ptr<View> owned_contents_view_;
 
   // Managed by Widget. Ensures |this| outlives its Widget.

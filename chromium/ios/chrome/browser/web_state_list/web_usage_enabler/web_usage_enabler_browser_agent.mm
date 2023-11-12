@@ -6,10 +6,6 @@
 
 #import "ios/web/public/navigation/navigation_manager.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 BROWSER_USER_DATA_KEY_IMPL(WebUsageEnablerBrowserAgent)
 
 WebUsageEnablerBrowserAgent::WebUsageEnablerBrowserAgent(Browser* browser)
@@ -71,12 +67,12 @@ void WebUsageEnablerBrowserAgent::BrowserDestroyed(Browser* browser) {
 
 #pragma mark - WebStateListObserver
 
-void WebUsageEnablerBrowserAgent::WebStateListChanged(
+void WebUsageEnablerBrowserAgent::WebStateListDidChange(
     WebStateList* web_state_list,
     const WebStateListChange& change,
-    const WebStateSelection& selection) {
+    const WebStateListStatus& status) {
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
+    case WebStateListChange::Type::kStatusOnly:
       // Do nothing when a WebState is selected and its status is updated.
       break;
     case WebStateListChange::Type::kDetach: {
@@ -108,7 +104,7 @@ void WebUsageEnablerBrowserAgent::WebStateListChanged(
           change.As<WebStateListChangeInsert>();
       UpdateWebUsageForAddedWebState(
           insert_change.inserted_web_state(),
-          /*triggers_initial_load=*/selection.activating);
+          /*triggers_initial_load=*/status.active_web_state_change());
       break;
     }
   }

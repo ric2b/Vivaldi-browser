@@ -47,7 +47,6 @@ void VivaldiSystemMenuModelBuilder::BuildMenu(ui::SimpleMenuModel* model) {
   BuildSystemMenuForBrowserWindow(model);
   //  else
   //    BuildSystemMenuForAppOrPopupWindow(model);
-  AddFrameToggleItems(model);
 }
 
 void VivaldiSystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
@@ -95,13 +94,4 @@ void VivaldiSystemMenuModelBuilder::BuildSystemMenuForAppOrPopupWindow(
   model->AddSeparator(ui::NORMAL_SEPARATOR);
   model->AddItemWithStringId(IDC_CLOSE_WINDOW, IDS_CLOSE);
 #endif
-}
-
-void VivaldiSystemMenuModelBuilder::AddFrameToggleItems(
-    ui::SimpleMenuModel* model) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDebugEnableFrameToggle)) {
-    model->AddSeparator(ui::NORMAL_SEPARATOR);
-    model->AddItem(IDC_DEBUG_FRAME_TOGGLE, u"Toggle Frame Type");
-  }
 }

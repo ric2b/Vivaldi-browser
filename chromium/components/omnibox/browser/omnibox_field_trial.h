@@ -289,6 +289,14 @@ bool HUPSearchDatabase();
 // ---------------------------------------------------------
 // For UI experiments.
 
+// Returns true if the OmniboxActionsUISimplification feature is enabled.
+bool IsActionsUISimplificationEnabled();
+// Indicates whether to delete extra matches produced by splitting
+// actions out to become independent suggestions. Note, this will only
+// apply if `IsActionsUISimplificationEnabled` returns true and the
+// total number of matches exceeds the limit (i.e. there are extra matches).
+extern const base::FeatureParam<bool> kActionsUISimplificationTrimExtra;
+
 // Returns true if the fuzzy URL suggestions feature is enabled.
 bool IsFuzzyUrlSuggestionsEnabled();
 // Indicates whether fuzzy match behavior is counterfactual.
@@ -364,6 +372,9 @@ bool IsChromeRefreshSuggestIconsEnabled();
 // Returns true if the feature to enable CR23 action chip icons is enabled.
 bool IsChromeRefreshActionChipIconsEnabled();
 
+// Omnibox CR23 - action chip shape.
+// Returns true if the feature to enable CR23 action chip shape is enabled.
+bool IsChromeRefreshActionChipShapeEnabled();
 // Omnibox CR23 - suggestion hover fill shape.
 // Returns true if the feature to enable CR23 suggestion hover fill shape is
 // enabled.
@@ -380,6 +391,11 @@ extern const base::FeatureParam<int> kFontSizeNonTouchUI;
 // Omnibox CR23 - layout.
 // Returns true if `kExpandedLayout` is enabled.
 bool IsCr23LayoutEnabled();
+
+// Omnibox CR23 - steady state background color.
+// Returns true if the feature to enable CR23 omnibox steady state background
+// color is enabled.
+bool IsChromeRefreshSteadyStateBackgroundColorEnabled();
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -565,6 +581,7 @@ extern const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring;
 // on the main thread. After that, it can be called from any thread.
 struct MLConfig {
   MLConfig();
+  MLConfig(const MLConfig&);
 
   // If true, logs Omnibox URL scoring signals to OmniboxEventProto.
   // Equivalent to omnibox::kLogUrlScoringSignals.
@@ -582,6 +599,9 @@ struct MLConfig {
   // If true, runs batch ML scoring of URL candidates.
   bool ml_batch_url_scoring{false};
 
+  // If true, runs sync batch ML scoring of URL candidates.
+  bool ml_sync_batch_url_scoring{false};
+
   // If true, runs the ML scoring model but does not assign new relevance scores
   // to the URL suggestions and does not rerank them.
   // Equivalent to OmniboxFieldTrial::kMlUrlScoringCounterfactual.
@@ -589,8 +609,9 @@ struct MLConfig {
 
   // If true, increases the number of candidates the URL autocomplete providers
   // pass to the controller beyond `provider_max_matches`.
-  // Equivalent to OmniboxFieldTrial::kMlUrlScoringIncreaseNumCandidates.
-  bool ml_url_scoring_increase_num_candidates{false};
+  // `ml_url_scoring_max_matches_by_provider` does nothing if this is true.
+  // Equivalent to OmniboxFieldTrial::kMlUrlScoringUnlimitedNumCandidates.
+  bool ml_url_scoring_unlimited_num_candidates{false};
 
   // If true, the ML model only re-scores and re-ranks the final set of matches
   // that would be shown in the legacy scoring system. The full legacy system
@@ -607,6 +628,13 @@ struct MLConfig {
   // If true, creates Omnibox autocompete URL scoring model.
   // Equivalent to omnibox::kUrlScoringModel.
   bool url_scoring_model{false};
+
+  // Sets the maximum matches provided by each provider.  See
+  // `OmniboxFieldTrial::GetProviderMaxMatches()` for more info. When ML Scoring
+  // is enabled, this param takes precedence over
+  // `OmniboxFieldTrial::kUIMaxAutocompleteMatchesByProviderParam`. This param
+  // has no effect if `ml_url_scoring_unlimited_num_candidates` is true.
+  std::string ml_url_scoring_max_matches_by_provider;
 };
 
 // A testing utility class for overriding the current configuration returned
@@ -644,8 +672,10 @@ bool AreScoringSignalsAnnotatorsEnabled();
 // URL suggestions and reranks them.
 bool IsMlUrlScoringEnabled();
 
-// Whether batch ML url scoring is enabled.
-bool IsMlBatchUrlScoringEnabled();
+// If enabled, runs synchronous batch ML scoring to assign new relevance scores
+// to the URL suggestions received in the sync pass of autocomplete and reranks
+// them.
+bool IsMlSyncBatchUrlScoringEnabled();
 
 // If true, runs the ML scoring model but does not assign new relevance scores
 // to URL suggestions.
@@ -653,7 +683,7 @@ bool IsMlUrlScoringCounterfactual();
 
 // If true, increases the number of candidates the url autocomplete providers
 // pass to the controller.
-bool IsMlUrlScoringIncreaseNumCandidatesEnabled();
+bool IsMlUrlScoringUnlimitedNumCandidatesEnabled();
 
 // Whether the URL scoring model is enabled.
 bool IsUrlScoringModelEnabled();
@@ -726,6 +756,11 @@ constexpr base::FeatureParam<bool> kActionsInSuggestPromoteReviewsAction(
 extern const base::FeatureParam<bool>
     kOmniboxModernizeVisualUpdateMergeClipboardOnNTP;
 // <- Android UI Revamp
+// ---------------------------------------------------------
+// Touch Down Trigger For Prefetch ->
+extern const base::FeatureParam<int>
+    kTouchDownTriggerForPrefetchMaxPrefetchesPerOmniboxSession;
+// <- Touch Down Trigger For Prefetch
 // ---------------------------------------------------------
 
 // New params should be inserted above this comment. They should be ordered

@@ -2,43 +2,57 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/android_autofill/browser/autofill_provider.h"
+
 #include "base/memory/raw_ptr.h"
 #include "components/android_autofill/browser/android_autofill_manager.h"
 #include "components/android_autofill/browser/test_autofill_provider.h"
-#include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_browser_context.h"
-#include "content/public/test/web_contents_tester.h"
+#include "components/autofill/content/browser/test_autofill_client_injector.h"
+#include "components/autofill/content/browser/test_autofill_driver_injector.h"
+#include "components/autofill/content/browser/test_autofill_manager_injector.h"
+#include "components/autofill/content/browser/test_content_autofill_client.h"
+#include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/autofill/core/common/unique_ids.h"
+#include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
 
-class AndroidAutofillManagerTestHelper : public AndroidAutofillManager {
+class TestAndroidAutofillManager : public AndroidAutofillManager {
  public:
-  explicit AndroidAutofillManagerTestHelper(AutofillProvider* autofill_provider)
-      : AndroidAutofillManager(nullptr, nullptr) {
-    set_autofill_provider_for_testing(autofill_provider);
+  explicit TestAndroidAutofillManager(ContentAutofillDriver* driver,
+                                      ContentAutofillClient* client)
+      : AndroidAutofillManager(driver, client) {}
+
+  void SimulatePropagateAutofillPredictions(FormGlobalId form_id) {
+    NotifyObservers(&Observer::OnFieldTypesDetermined, form_id,
+                    Observer::FieldTypeSource::kAutofillServer);
   }
 
-  void SimulatePropagateAutofillPredictions() {
-    PropagateAutofillPredictions({});
-  }
+  void SimulateOnAskForValuesToFillImpl(FormGlobalId form_id) {
+    FormData form;
+    form.host_frame = form_id.frame_token;
+    form.unique_renderer_id = form_id.renderer_id;
 
-  void SimulateOnAskForValuesToFillImpl() {
+    FormFieldData field;
+    field.host_frame = form.host_frame;
+    field.unique_renderer_id = test::MakeFieldRendererId();
     OnAskForValuesToFillImpl(
-        FormData(), FormFieldData(), gfx::RectF(),
+        form, field, gfx::RectF(),
         AutofillSuggestionTriggerSource::kTextFieldDidChange);
   }
 };
 
-class AutofillProviderTestHelper : public TestAutofillProvider {
+class FakeAutofillProvider : public TestAutofillProvider {
  public:
-  explicit AutofillProviderTestHelper(content::WebContents* web_contents)
-      : TestAutofillProvider(web_contents) {}
+  using TestAutofillProvider::TestAutofillProvider;
 
-  bool HasServerPrediction() const { return manager_->has_server_prediction(); }
+  bool HasServerPrediction(FormGlobalId form_id) const {
+    return manager_->has_server_prediction(form_id);
+  }
 
  private:
-  // AutofillProvider
+  // AutofillProvider:
   void OnAskForValuesToFill(
       AndroidAutofillManager* manager,
       const FormData& form,
@@ -47,62 +61,65 @@ class AutofillProviderTestHelper : public TestAutofillProvider {
       AutofillSuggestionTriggerSource trigger_source) override {
     manager_ = manager;
   }
+
   void OnServerQueryRequestError(AndroidAutofillManager* manager,
                                  FormSignature form_signature) override {}
 
-  raw_ptr<AndroidAutofillManager> manager_;
+  raw_ptr<AndroidAutofillManager> manager_ = nullptr;
 };
 
-class AutofillProviderTest : public testing::Test {
+class AutofillProviderTest : public content::RenderViewHostTestHarness {
  public:
   void SetUp() override {
-    web_contents_ = content::WebContentsTester::CreateTestWebContents(
-        &browser_context_, nullptr);
-    // Owned by WebContents.
-    autofill_provider_test_helper_ =
-        new AutofillProviderTestHelper(web_contents_.get());
-    android_autofill_manager_test_helper_ =
-        std::make_unique<AndroidAutofillManagerTestHelper>(
-            autofill_provider_test_helper_.get());
+    content::RenderViewHostTestHarness::SetUp();
+    CreateAutofillProvider();
+    NavigateAndCommit(GURL("about:blank"));
   }
 
-  AutofillProviderTestHelper* autofill_provider_test_helper() {
-    return autofill_provider_test_helper_.get();
+  TestAndroidAutofillManager& android_autofill_manager() {
+    return *autofill_manager_injector_[web_contents()];
   }
 
-  AndroidAutofillManagerTestHelper* android_autofill_manager_test_helper() {
-    return android_autofill_manager_test_helper_.get();
+  FakeAutofillProvider& autofill_provider() {
+    return *static_cast<FakeAutofillProvider*>(
+        FakeAutofillProvider::FromWebContents(web_contents()));
   }
 
  private:
-  content::BrowserTaskEnvironment task_environment_;
-  content::TestBrowserContext browser_context_;
-  std::unique_ptr<content::WebContents> web_contents_;
-  // Owned by WebContents.
-  raw_ptr<AutofillProviderTestHelper> autofill_provider_test_helper_;
-  std::unique_ptr<AndroidAutofillManagerTestHelper>
-      android_autofill_manager_test_helper_;
+  // The AutofillProvider is owned by the `web_contents()`. It registers itself
+  // as WebContentsUserData.
+  void CreateAutofillProvider() {
+    ASSERT_FALSE(FakeAutofillProvider::FromWebContents(web_contents()));
+    new FakeAutofillProvider(web_contents());
+    ASSERT_TRUE(FakeAutofillProvider::FromWebContents(web_contents()));
+  }
+
+  test::AutofillUnitTestEnvironment autofill_environment_;
+  TestAutofillClientInjector<TestContentAutofillClient>
+      autofill_client_injector_;
+  TestAutofillManagerInjector<TestAndroidAutofillManager>
+      autofill_manager_injector_;
 };
 
 TEST_F(AutofillProviderTest, HasServerPredictionAfterQuery) {
   // Simulate the result arrives after starting autofill.
-  android_autofill_manager_test_helper()->SimulateOnAskForValuesToFillImpl();
-  EXPECT_FALSE(autofill_provider_test_helper()->HasServerPrediction());
-  android_autofill_manager_test_helper()
-      ->SimulatePropagateAutofillPredictions();
-  EXPECT_TRUE(autofill_provider_test_helper()->HasServerPrediction());
-  android_autofill_manager_test_helper()->Reset();
-  EXPECT_FALSE(autofill_provider_test_helper()->HasServerPrediction());
+  FormGlobalId form_id = test::MakeFormGlobalId();
+  android_autofill_manager().SimulateOnAskForValuesToFillImpl(form_id);
+  EXPECT_FALSE(autofill_provider().HasServerPrediction(form_id));
+  android_autofill_manager().SimulatePropagateAutofillPredictions(form_id);
+  EXPECT_TRUE(autofill_provider().HasServerPrediction(form_id));
+  android_autofill_manager().Reset();
+  EXPECT_FALSE(autofill_provider().HasServerPrediction(form_id));
 }
 
 TEST_F(AutofillProviderTest, HasServerPredictionBeforeQuery) {
   // Simulate the result arrives before starting autofill.
-  android_autofill_manager_test_helper()
-      ->SimulatePropagateAutofillPredictions();
-  android_autofill_manager_test_helper()->SimulateOnAskForValuesToFillImpl();
-  EXPECT_TRUE(autofill_provider_test_helper()->HasServerPrediction());
-  android_autofill_manager_test_helper()->Reset();
-  EXPECT_FALSE(autofill_provider_test_helper()->HasServerPrediction());
+  FormGlobalId form_id = test::MakeFormGlobalId();
+  android_autofill_manager().SimulatePropagateAutofillPredictions(form_id);
+  android_autofill_manager().SimulateOnAskForValuesToFillImpl(form_id);
+  EXPECT_TRUE(autofill_provider().HasServerPrediction(form_id));
+  android_autofill_manager().Reset();
+  EXPECT_FALSE(autofill_provider().HasServerPrediction(form_id));
 }
 
 }  // namespace autofill

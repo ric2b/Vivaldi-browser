@@ -7,22 +7,23 @@
 #include "chrome/browser/policy/messaging_layer/util/test_request_payload.h"
 
 #include <string>
+#include <string_view>
 
 #include "base/json/json_reader.h"
+#include "third_party/abseil-cpp/absl/strings/ascii.h"
 
 namespace reporting {
 
 // Return true if s a properly formatted positive integer, i.e., is not empty,
 // contains digits only and does not start with 0.
-static bool IsPositiveInteger(base::StringPiece s) {
+static bool IsPositiveInteger(std::string_view s) {
   if (s.empty()) {
     return false;
-  } else if (s.size() == 1) {
-    return std::isdigit(s[0]);
-  } else {
-    return s[0] != '0' &&
-           s.find_first_not_of("0123456789") == std::string::npos;
   }
+  if (s.size() == 1) {
+    return absl::ascii_isdigit(static_cast<unsigned char>(s[0]));
+  }
+  return s[0] != '0' && s.find_first_not_of("0123456789") == std::string::npos;
 }
 
 // Get the record list. If it can't, print the message to listener and return a
@@ -89,6 +90,102 @@ void NoAttachEncryptionSettingsMatcher::DescribeNegationTo(
 
 std::string NoAttachEncryptionSettingsMatcher::Name() const {
   return "no-attach-encryption-settings-matcher";
+}
+
+bool AttachConfigurationFileMatcher::MatchAndExplain(
+    const base::Value::Dict& arg,
+    MatchResultListener* listener) const {
+  const auto attach_configuration_file =
+      arg.FindBool("attachConfigurationFile");
+  if (!attach_configuration_file) {
+    *listener << "No key named \"attachConfigurationFile\" in the argument or "
+                 "the value is not of bool type.";
+    return false;
+  }
+  if (!attach_configuration_file.value()) {
+    *listener << "The value of \"attachConfigurationFile\" is false.";
+    return false;
+  }
+  return true;
+}
+
+void AttachConfigurationFileMatcher::DescribeTo(std::ostream* os) const {
+  *os << "has a valid attachConfigurationFile field.";
+}
+
+void AttachConfigurationFileMatcher::DescribeNegationTo(
+    std::ostream* os) const {
+  *os << "has an invalid attachConfigurationFile field.";
+}
+
+std::string AttachConfigurationFileMatcher::Name() const {
+  return "attach-configuration-file-matcher";
+}
+
+bool NoAttachConfigurationFileMatcher::MatchAndExplain(
+    const base::Value::Dict& arg,
+    MatchResultListener* listener) const {
+  if (arg.Find("attachConfigurationFile") != nullptr) {
+    *listener << "Found \"attachConfigurationFile\" in the argument.";
+    return false;
+  }
+  return true;
+}
+
+void NoAttachConfigurationFileMatcher::DescribeTo(std::ostream* os) const {
+  *os << "expectedly has no attachConfigurationFile field.";
+}
+
+void NoAttachConfigurationFileMatcher::DescribeNegationTo(
+    std::ostream* os) const {
+  *os << "unexpectedly has an attachConfigurationFile field.";
+}
+
+std::string NoAttachConfigurationFileMatcher::Name() const {
+  return "no-attach-configuration-file-matcher";
+}
+
+bool SourceMatcher::MatchAndExplain(const base::Value::Dict& arg,
+                                    MatchResultListener* listener) const {
+  if (arg.FindString("source") == nullptr) {
+    *listener << "No key named \"source\" or the value "
+                 "is not a string in the argument.";
+    return false;
+  }
+  return true;
+}
+
+void SourceMatcher::DescribeTo(std::ostream* os) const {
+  *os << "has a valid source field.";
+}
+
+void SourceMatcher::DescribeNegationTo(std::ostream* os) const {
+  *os << "has an invalid source field.";
+}
+
+std::string SourceMatcher::Name() const {
+  return "source-test-matcher";
+}
+
+bool NoSourceMatcher::MatchAndExplain(const base::Value::Dict& arg,
+                                      MatchResultListener* listener) const {
+  if (arg.Find("source") != nullptr) {
+    *listener << "Found \"source\" in the argument.";
+    return false;
+  }
+  return true;
+}
+
+void NoSourceMatcher::DescribeTo(std::ostream* os) const {
+  *os << "expectedly has no source field.";
+}
+
+void NoSourceMatcher::DescribeNegationTo(std::ostream* os) const {
+  *os << "unexpectedly has an Source field.";
+}
+
+std::string NoSourceMatcher::Name() const {
+  return "source-test-matcher";
 }
 
 void CompressionInformationMatcher::DescribeTo(std::ostream* os) const {
@@ -335,7 +432,7 @@ bool RequestContainingRecordMatcher::IsSubDict(const base::Value::Dict& sub,
 }
 
 RequestContainingRecordMatcher::RequestContainingRecordMatcher(
-    base::StringPiece matched_record_json)
+    std::string_view matched_record_json)
     : matched_record_json_(matched_record_json) {}
 
 bool RequestContainingRecordMatcher::MatchAndExplain(

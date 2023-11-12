@@ -33,6 +33,9 @@ struct DistantTab;
 class SyncedSessions;
 }  // namespace synced_sessions
 
+class UrlLoadingBrowserAgent;
+enum class UrlLoadStrategy;
+
 // Class that manages the life cycle of the "Bring tabs from Android"
 // experience.
 class BringAndroidTabsToIOSService : public KeyedService {
@@ -49,9 +52,12 @@ class BringAndroidTabsToIOSService : public KeyedService {
 
   ~BringAndroidTabsToIOSService() override;
 
-  //  Loads the list of recent tabs brought from the user's last Android device
+  //  Loads a list of recent tabs brought from the user's last Android device
   //  into the service on demand. Could be called repeatedly to retrieve updated
   //  results.
+  //
+  //  Note that the recency of the session the tab is in takes precedence over
+  //  the recency of the tab.
   void LoadTabs();
 
   // Returns the number of recent tabs / the tab at the given index.
@@ -62,6 +68,11 @@ class BringAndroidTabsToIOSService : public KeyedService {
   // returned values would be computed from the last call to `LoadTabs`.
   virtual size_t GetNumberOfAndroidTabs() const;
   virtual synced_sessions::DistantTab* GetTabAtIndex(size_t index) const;
+
+  // Open the tabs in tab grid.
+  virtual void OpenTabsAtIndices(const std::vector<size_t>& indices,
+                                 UrlLoadingBrowserAgent* url_loader);
+  virtual void OpenAllTabs(UrlLoadingBrowserAgent* url_loader);
 
   // Called when the Bring Android Tabs Prompt has been displayed.
   virtual void OnBringAndroidTabsPromptDisplayed();

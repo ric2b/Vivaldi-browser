@@ -24,10 +24,6 @@
 #import "ios/web/public/web_state_observer.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
@@ -67,9 +63,11 @@ class TestAnnotationTextObserver : public AnnotationsTextObserver {
 
   void OnTextExtracted(WebState* web_state,
                        const std::string& text,
-                       int seq_id) override {
+                       int seq_id,
+                       const base::Value::Dict& metadata) override {
     extracted_text_ = text;
     seq_id_ = seq_id;
+    metadata_ = metadata.Clone();
   }
 
   void OnDecorated(WebState* web_state,
@@ -91,10 +89,12 @@ class TestAnnotationTextObserver : public AnnotationsTextObserver {
   int annotations() const { return annotations_; }
   int clicks() const { return clicks_; }
   int seq_id() const { return seq_id_; }
+  const base::Value::Dict& metadata() const { return metadata_; }
 
  private:
   std::string extracted_text_;
   int successes_, annotations_, clicks_, seq_id_;
+  base::Value::Dict metadata_;
 };
 
 }  // namespace
@@ -162,25 +162,30 @@ class AnnotationTextManagerTest : public web::WebTestWithWebState {
 
   // Loads given `html` and waits until text is extracted.
   void LoadHtmlAndExtractText(const std::string& html) {
+    int seq_id = observer()->seq_id();
     ASSERT_TRUE(LoadHtml(html));
     ASSERT_TRUE(WaitForWebFramesCount(1));
 
     EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^{
-      return !observer()->extracted_text().empty();
+      return observer()->seq_id() > seq_id;
     }));
   }
 
   // Creates and applies annotations based on `source` text and all matching
-  // `items`.
-  void CreateAndApplyAnnotations(NSString* source,
-                                 NSArray<NSString*>* items,
-                                 int seq_id) {
+  // `items`. `items` is a dictionary when the key is the annotation type to
+  // apply to the its values.
+  void CreateAndApplyAnnotationsWithTypes(
+      NSString* source,
+      NSDictionary<NSString*, NSArray<NSString*>*>* items,
+      int seq_id) {
     // Create annotation.
     base::Value::List annotations;
-    for (NSString* item in items) {
-      NSRange range = [source rangeOfString:item];
-      annotations.Append(
-          web::ConvertMatchToAnnotation(source, range, @"data", @"type"));
+    for (NSString* type in items) {
+      for (NSString* item in items[type]) {
+        NSRange range = [source rangeOfString:item];
+        annotations.Append(
+            web::ConvertMatchToAnnotation(source, range, @"data", type));
+      }
     }
     auto* manager = AnnotationsTextManager::FromWebState(web_state());
     base::Value value = base::Value(std::move(annotations));
@@ -189,6 +194,14 @@ class AnnotationTextManagerTest : public web::WebTestWithWebState {
     EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^{
       return observer()->annotations() > 0;
     }));
+  }
+
+  // Creates and applies annotations based on `source` text and all matching
+  // `items` with type "type".
+  void CreateAndApplyAnnotations(NSString* source,
+                                 NSArray<NSString*>* items,
+                                 int seq_id) {
+    CreateAndApplyAnnotationsWithTypes(source, @{@"type" : items}, seq_id);
   }
 
   // Verifies the now state of html text and tags of the document. Tags have no
@@ -255,6 +268,41 @@ TEST_F(AnnotationTextManagerTest, ExtractText) {
             "\nCastro Street, Mountain View, CA"
             "\nEnjoy",
             observer()->extracted_text());
+}
+
+TEST_F(AnnotationTextManagerTest, CheckMetadata) {
+  LoadHtmlAndExtractText("<html lang=\"fr\">"
+                         "<head>"
+                         "<meta http-equiv=\"content-language\" content=\"fr\">"
+                         "<meta name=\"chrome\" content=\"nointentdetection\"/>"
+                         "<meta name=\"google\" content=\"notranslate\"/>"
+                         "</head>"
+                         "<body>"
+                         "<p>You'll find it on</p>"
+                         "<p>Castro Street, <span>Mountain View</span>, CA</p>"
+                         "<p>Enjoy</p>"
+                         "</body></html>");
+  std::string fr = "fr";
+  EXPECT_TRUE(observer()->metadata().FindBool("hasNoIntentDetection").value());
+  EXPECT_TRUE(observer()->metadata().FindBool("hasNoTranslate").value());
+  EXPECT_EQ(fr, *observer()->metadata().FindString("htmlLang"));
+  EXPECT_EQ(fr, *observer()->metadata().FindString("httpContentLanguage"));
+}
+
+TEST_F(AnnotationTextManagerTest, CheckNoMetadata) {
+  LoadHtmlAndExtractText("<html>"
+                         "<head>"
+                         "</head>"
+                         "<body>"
+                         "<p>You'll find it on</p>"
+                         "<p>Castro Street, <span>Mountain View</span>, CA</p>"
+                         "<p>Enjoy</p>"
+                         "</body></html>");
+  std::string empty = "";
+  EXPECT_FALSE(observer()->metadata().FindBool("hasNoIntentDetection").value());
+  EXPECT_FALSE(observer()->metadata().FindBool("hasNoTranslate").value());
+  EXPECT_EQ(empty, *observer()->metadata().FindString("htmlLang"));
+  EXPECT_EQ(empty, *observer()->metadata().FindString("httpContentLanguage"));
 }
 
 // Tests page decoration when page doesn't change.
@@ -384,6 +432,83 @@ TEST_F(AnnotationTextManagerTest, ClickAnnotation) {
   ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
     return observer()->clicks() == 1;
   }));
+}
+
+// Tests removing annotation of one type
+TEST_F(AnnotationTextManagerTest, RemoveDecorationTypeTest) {
+  std::string html = "<html><body>"
+                     "<p>abc def</p>"
+                     "<p>zzzzz ghi zzzzz</p>"
+                     "<p>zzzzz klm zzzzz</p>"
+                     "</body></html>";
+  LoadHtmlAndExtractText(html);
+  CheckHtml(html);
+  auto* manager = AnnotationsTextManager::FromWebState(web_state());
+
+  NSString* source = base::SysUTF8ToNSString(observer()->extracted_text());
+
+  CreateAndApplyAnnotationsWithTypes(
+      source,
+      @{@"type1" : @[ @"abc", @"ghi" ],
+        @"type2" : @[ @"def", @"klm" ]},
+      observer()->seq_id());
+
+  // Check the resulting html is annotating at the right place.
+  CheckHtml("<html><body>"
+            "<p><chrome_annotation>abc</chrome_annotation> "
+            "<chrome_annotation>def</chrome_annotation></p>"
+            "<p>zzzzz <chrome_annotation>ghi</chrome_annotation> zzzzz</p>"
+            "<p>zzzzz <chrome_annotation>klm</chrome_annotation> zzzzz</p>"
+            "</body></html>");
+
+  ClickAnnotation(0);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 1;
+  }));
+
+  ClickAnnotation(1);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 2;
+  }));
+
+  ClickAnnotation(2);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 3;
+  }));
+
+  ClickAnnotation(3);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 4;
+  }));
+
+  manager->RemoveDecorationsWithType("type1");
+  // Check the resulting html is annotating at the right place.
+  CheckHtml("<html><body>"
+            "<p><chrome_annotation>abc</chrome_annotation> "
+            "<chrome_annotation>def</chrome_annotation></p>"
+            "<p>zzzzz ghi zzzzz</p>"
+            "<p>zzzzz <chrome_annotation>klm</chrome_annotation> zzzzz</p>"
+            "</body></html>");
+
+  // First annotation should be inactive
+  ClickAnnotation(0);
+  ASSERT_FALSE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 5;
+  }));
+
+  ClickAnnotation(1);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 5;
+  }));
+
+  ClickAnnotation(2);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 6;
+  }));
+
+  // Make sure it's back to the original.
+  manager->RemoveDecorations();
+  CheckHtml(html);
 }
 
 }  // namespace web

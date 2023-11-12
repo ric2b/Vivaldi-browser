@@ -27,10 +27,9 @@ source_set("cells") {
     "//ios/chrome/common/ui/util",
     "//ios/third_party/material_components_ios",
     "//ui/base",
-    "//vivaldi/ios/ui/notes/resources:panel_notes"
+    "//vivaldi/ios/ui/notes/resources:panel_notes",
+    "//vivaldi/ios/ui/notes/resources:single_note_icon"
 
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 

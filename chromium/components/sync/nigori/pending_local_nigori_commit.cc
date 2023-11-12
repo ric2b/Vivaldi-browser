@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "components/sync/base/features.h"
 #include "components/sync/engine/nigori/cross_user_sharing_public_key.h"
@@ -27,16 +26,21 @@ namespace {
 
 using sync_pb::NigoriSpecifics;
 
-void InitKeyPair(NigoriState* state) {
-  if (state->cross_user_sharing_public_key.has_value()) {
-    return;
-  }
-  CrossUserSharingPublicPrivateKeyPair key_pair =
-      CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair();
+void InitKeyPair(
+    const CrossUserSharingPublicPrivateKeyPair& cross_user_sharing_key_pair,
+    NigoriState* state) {
+  CHECK(!state->cross_user_sharing_public_key.has_value());
+
   state->cross_user_sharing_public_key =
-      CrossUserSharingPublicKey::CreateByImport(key_pair.GetRawPublicKey());
+      CrossUserSharingPublicKey::CreateByImport(
+          cross_user_sharing_key_pair.GetRawPublicKey());
   state->cross_user_sharing_key_pair_version = 0;
-  state->cryptographer->EmplaceKeyPair(std::move(key_pair), 0);
+  absl::optional<CrossUserSharingPublicPrivateKeyPair> key_pair =
+      CrossUserSharingPublicPrivateKeyPair::CreateByImport(
+          cross_user_sharing_key_pair.GetRawPrivateKey());
+  CHECK(key_pair.has_value());
+  state->cryptographer->EmplaceKeyPair(std::move(key_pair.value()), 0);
+  state->cryptographer->SelectDefaultCrossUserSharingKey(0);
 }
 
 void LogCrossUserSharingPublicPrivateKeyInit(bool is_succesful) {
@@ -108,8 +112,6 @@ class CustomPassphraseSetter : public PendingLocalNigoriCommit {
     observer->OnEncryptedTypesChanged(state.GetEncryptedTypes(),
                                       /*encrypt_everything=*/true);
     observer->OnPassphraseAccepted();
-
-    UMA_HISTOGRAM_BOOLEAN("Sync.CustomEncryption", true);
   }
 
   void OnFailure(SyncEncryptionHandler::Observer* observer) override {}
@@ -121,7 +123,12 @@ class CustomPassphraseSetter : public PendingLocalNigoriCommit {
 
 class KeystoreInitializer : public PendingLocalNigoriCommit {
  public:
-  KeystoreInitializer() = default;
+  KeystoreInitializer() {
+    if (base::FeatureList::IsEnabled(kSharingOfferKeyPairBootstrap)) {
+      cross_user_sharing_public_private_key_pair_ =
+          CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair();
+    }
+  }
 
   KeystoreInitializer(const KeystoreInitializer&) = delete;
   KeystoreInitializer& operator=(const KeystoreInitializer&) = delete;
@@ -137,12 +144,14 @@ class KeystoreInitializer : public PendingLocalNigoriCommit {
     std::unique_ptr<CryptographerImpl> cryptographer =
         state->keystore_keys_cryptographer->ToCryptographerImpl();
     DCHECK(!cryptographer->GetDefaultEncryptionKeyName().empty());
-    state->cryptographer->EmplaceKeysAndSelectDefaultKeyFrom(*cryptographer);
+    state->cryptographer->EmplaceAllNigoriKeysFrom(*cryptographer);
+    state->cryptographer->SelectDefaultEncryptionKey(
+        cryptographer->GetDefaultEncryptionKeyName());
     state->passphrase_type = NigoriSpecifics::KEYSTORE_PASSPHRASE;
     state->keystore_migration_time = base::Time::Now();
 
-    if (base::FeatureList::IsEnabled(kSharingOfferKeyPairBootstrap)) {
-      InitKeyPair(state);
+    if (cross_user_sharing_public_private_key_pair_.has_value()) {
+      InitKeyPair(cross_user_sharing_public_private_key_pair_.value(), state);
     }
     return true;
   }
@@ -164,6 +173,10 @@ class KeystoreInitializer : public PendingLocalNigoriCommit {
       LogCrossUserSharingPublicPrivateKeyInit(false);
     }
   }
+
+ private:
+  absl::optional<CrossUserSharingPublicPrivateKeyPair>
+      cross_user_sharing_public_private_key_pair_;
 };
 
 class KeystoreReencryptor : public PendingLocalNigoriCommit {
@@ -198,7 +211,9 @@ class KeystoreReencryptor : public PendingLocalNigoriCommit {
 class CrossUserSharingPublicPrivateKeyInitializer
     : public PendingLocalNigoriCommit {
  public:
-  CrossUserSharingPublicPrivateKeyInitializer() = default;
+  CrossUserSharingPublicPrivateKeyInitializer()
+      : cross_user_sharing_public_private_key_pair_(
+            CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair()) {}
 
   CrossUserSharingPublicPrivateKeyInitializer(
       const CrossUserSharingPublicPrivateKeyInitializer&) = delete;
@@ -214,7 +229,7 @@ class CrossUserSharingPublicPrivateKeyInitializer
         state->cross_user_sharing_public_key.has_value()) {
       return false;
     }
-    InitKeyPair(state);
+    InitKeyPair(cross_user_sharing_public_private_key_pair_, state);
     return true;
   }
 
@@ -228,6 +243,10 @@ class CrossUserSharingPublicPrivateKeyInitializer
   void OnFailure(SyncEncryptionHandler::Observer* observer) override {
     LogCrossUserSharingPublicPrivateKeyInit(false);
   }
+
+ private:
+  CrossUserSharingPublicPrivateKeyPair
+      cross_user_sharing_public_private_key_pair_;
 };
 
 }  // namespace

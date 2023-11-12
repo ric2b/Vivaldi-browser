@@ -10,6 +10,7 @@ namespace vivaldiprefs {
 // Profile prefs go here.
 extern const char kAutoUpdateEnabled[];
 extern const char kVivaldiAccountPendingRegistration[];
+extern const char kVivaldiAddressBarSearchDirectMatchEnabled[];
 extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiPIPPlacement[];

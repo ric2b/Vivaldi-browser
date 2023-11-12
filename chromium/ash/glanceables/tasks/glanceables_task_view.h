@@ -13,7 +13,9 @@
 #include "base/time/time.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/layout/box_layout_view.h"
 #include "ui/views/metadata/view_factory.h"
 
 namespace ash {
@@ -29,7 +31,7 @@ namespace ash {
 // | |                 | | |'tasks_title_view_'                | | |
 // | |                 | | +-----------------------------------+ | |
 // | |                 | | +---------------------------------  + | |
-// | |                 | | |'tasks_due_date_view_'             | | |
+// | |                 | | |'tasks_details_view_'              | | |
 // | |                 | | +-----------------------------------+ | |
 // | +-----------------+ +---------------------------------------+ |
 // +---------------------------------------------------------------+
@@ -44,30 +46,26 @@ class ASH_EXPORT GlanceablesTaskView : public views::FlexLayoutView {
   ~GlanceablesTaskView() override;
 
   void ButtonPressed();
-  void MarkedAsCompleted(bool success);
 
-  // views::View:
-  gfx::Size CalculatePreferredSize() const override;
-
-  const views::ImageButton* GetButtonForTest() const { return button_; }
-  bool GetCompletedForTest() const { return completed_; }
+  const views::ImageButton* GetButtonForTest() const;
+  bool GetCompletedForTest() const;
 
  private:
-  // Owned by views hierarchy.
-  raw_ptr<views::ImageButton> button_ = nullptr;
-  raw_ptr<views::FlexLayoutView, ExperimentalAsh> contents_view_ = nullptr;
-  raw_ptr<views::FlexLayoutView, ExperimentalAsh> tasks_title_view_ = nullptr;
-  raw_ptr<views::FlexLayoutView, ExperimentalAsh> tasks_due_date_view_ =
-      nullptr;
+  class CheckButton;
 
-  // Whether the task shown by this view is being marked as completed.
-  bool completed_ = false;
+  void SetupTasksLabel(bool completed);
+
+  // Owned by views hierarchy.
+  raw_ptr<CheckButton> button_ = nullptr;
+  raw_ptr<views::FlexLayoutView, ExperimentalAsh> contents_view_ = nullptr;
+  raw_ptr<views::BoxLayoutView, ExperimentalAsh> tasks_title_view_ = nullptr;
+  raw_ptr<views::FlexLayoutView, ExperimentalAsh> tasks_details_view_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> tasks_label_ = nullptr;
+
   // ID for the task list that owns this task.
   const std::string task_list_id_;
   // ID for the task represented by this view.
   const std::string task_id_;
-
-  base::WeakPtrFactory<GlanceablesTaskView> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

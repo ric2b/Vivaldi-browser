@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Obnovi nastavitve</translation>
 <translation id="4478664379124702289">Shrani povezav&amp;o kot...</translation>
 <translation id="4520385623207007473">Piškotki v uporabi</translation>
+<translation id="456449593072900590">Izbriši ob izhodu</translation>
 <translation id="4580596421317071374">Gesla so shranjena v <ph name="GOOGLE_PASSWORD_MANAGER" /> v tej napravi.</translation>
 <translation id="4593021220803146968">&amp;Pojdi na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacije in razširitve lahko spreminja samo skrbnik (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Barva</translation>
 <translation id="5485102783864353244">Dodaj aplikacijo</translation>
 <translation id="5486561344817861625">Simuliraj vnovični zagon brskalnika</translation>
-<translation id="5487521232677179737">Počisti podatke</translation>
 <translation id="5509693895992845810">Shrani &amp;kot...</translation>
 <translation id="5521078259930077036">Ali je to domača stran, ki ste jo pričakovali?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Neznano</translation>
 <translation id="5851868085455377790">Izdajatelj</translation>
 <translation id="5860491529813859533">Vklop</translation>
-<translation id="5867841422488265304">Iščite ali vnesite spletni naslov</translation>
 <translation id="5910363049092958439">Sh&amp;rani sliko kot ...</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> bitov):
 <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@ Javni eksponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bitov):
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Preveri črkovanje med tipkanjem</translation>
-<translation id="73786666777299047">Odpri spletno trgovino Chrome</translation>
 <translation id="7385854874724088939">Napaka pri tiskanju. Preverite tiskalnik in poskusite znova.</translation>
 <translation id="7412226954991670867">GPU pomnilnik</translation>
 <translation id="7421925624202799674">&amp;Prikaz izvorne kode strani</translation>
@@ -441,6 +439,7 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8382913212082956454">Kopiraj &amp;e-poštni naslov</translation>
 <translation id="8434480141477525001">NaCl vrata za odpravljanje napak</translation>
 <translation id="8449008133205184768">Prilepi in uskladi slog</translation>
+<translation id="8477178913400731244">Izbriši podatke</translation>
 <translation id="8477384620836102176">&amp;Splošno</translation>
 <translation id="8496717697661868878">Zaženi ta vtičnik</translation>
 <translation id="8512476990829870887">Končaj proces</translation>

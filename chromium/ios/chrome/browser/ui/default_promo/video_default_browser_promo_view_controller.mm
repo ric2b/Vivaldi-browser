@@ -9,21 +9,20 @@
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_view_controller.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
-#import "ios/chrome/grit/ios_google_chrome_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/lottie/lottie_animation_api.h"
 #import "ios/public/provider/chrome/browser/lottie/lottie_animation_configuration.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
-constexpr CGFloat kSpacingBeforeImageIfNoNavigationBar = 2;
+constexpr CGFloat kSpacingBeforeImageIfNoNavigationBar = 24;
 constexpr CGFloat kpacingAfterImageWithAnimation = 24;
 NSString* const kDarkModeAnimationSuffix = @"_darkmode";
 NSString* const kDefaultBrowserAnimation = @"default_browser_animation";
+NSString* const kDefaultBrowserAppKeypath = @"IDS_DEFAULT_BROWSER_APP";
+NSString* const kDefaultBrowserApp2Keypath = @"IDS_DEFAULT_BROWSER_APP_2";
+NSString* const kChromeKeypath = @"IDS_CHROME";
+NSString* const kChromeSettingsKeypath = @"IDS_CHROME_SETTINGS";
 }  // namespace
 
 @interface VideoDefaultBrowserPromoViewController ()
@@ -54,6 +53,19 @@ NSString* const kDefaultBrowserAnimation = @"default_browser_animation";
     _animationViewWrapperDarkMode = [self
         createAnimation:[kDefaultBrowserAnimation
                             stringByAppendingString:kDarkModeAnimationSuffix]];
+
+    // Set the text localization.
+    NSDictionary* textProvider = @{
+      kDefaultBrowserAppKeypath : l10n_util::GetNSString(
+          IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_DEFAULT_BROWSER_APP),
+      kDefaultBrowserApp2Keypath : l10n_util::GetNSString(
+          IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_DEFAULT_BROWSER_APP),
+      kChromeKeypath : l10n_util::GetNSString(IDS_IOS_SHORT_PRODUCT_NAME),
+      kChromeSettingsKeypath : l10n_util::GetNSString(
+          IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_APP_SETTINGS)
+    };
+    [_animationViewWrapper setDictionaryTextProvider:textProvider];
+    [_animationViewWrapperDarkMode setDictionaryTextProvider:textProvider];
   }
   return self;
 }

@@ -75,15 +75,13 @@ class BrowserCommandHandler : public CommandUpdaterDelegate,
   virtual bool BrowserSupportsCustomizeChromeSidePanel();
   virtual bool DefaultSearchProviderIsGoogle();
 
-  virtual bool BrowserHasTabGroups();
-  virtual bool BrowserSupportsNewPasswordManager();
-
  private:
   virtual void NavigateToURL(const GURL& url,
                              WindowOpenDisposition disposition);
   virtual void OpenFeedbackForm();
   virtual user_education::TutorialService* GetTutorialService();
   virtual ui::ElementContext GetUiElementContext();
+  virtual void NavigateToEnhancedProtectionSetting();
   virtual void OpenPasswordManager();
   void StartTabGroupTutorial();
   void OpenNTPAndStartCustomizeChromeTutorial(

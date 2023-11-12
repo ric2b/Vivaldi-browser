@@ -4,31 +4,22 @@
 
 #include "components/sync/service/sync_service_crypto.h"
 
-#include <list>
-#include <map>
 #include <utility>
 
 #include "base/base64.h"
-#include "base/containers/contains.h"
-#include "base/functional/callback_helpers.h"
-#include "base/memory/raw_ptr.h"
-#include "base/observer_list.h"
-#include "base/run_loop.h"
+#include "base/functional/callback.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/mock_callback.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "components/sync/base/sync_prefs.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/engine/sync_status.h"
 #include "components/sync/test/mock_sync_engine.h"
-#include "components/trusted_vault/trusted_vault_client.h"
+#include "components/trusted_vault/test/fake_trusted_vault_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace syncer {
 
@@ -42,6 +33,7 @@ using testing::Ne;
 using testing::Not;
 using testing::NotNull;
 using testing::Return;
+using testing::ReturnPointee;
 using testing::ReturnRef;
 using testing::SaveArg;
 
@@ -128,215 +120,16 @@ class MockDelegate : public SyncServiceCrypto::Delegate {
   MOCK_METHOD(void, CryptoStateChanged, (), (override));
   MOCK_METHOD(void, CryptoRequiredUserActionChanged, (), (override));
   MOCK_METHOD(void, ReconfigureDataTypesDueToCrypto, (), (override));
+  MOCK_METHOD(void, SetPassphraseType, (PassphraseType), (override));
+  MOCK_METHOD(absl::optional<PassphraseType>,
+              GetPassphraseType,
+              (),
+              (const override));
   MOCK_METHOD(void,
               SetEncryptionBootstrapToken,
               (const std::string&),
               (override));
-  MOCK_METHOD(std::string, GetEncryptionBootstrapToken, (), (override));
-};
-
-// Object representing a server that contains the authoritative trusted vault
-// keys, and TestTrustedVaultClient reads from.
-class TestTrustedVaultServer {
- public:
-  TestTrustedVaultServer() = default;
-  ~TestTrustedVaultServer() = default;
-
-  void StoreKeysOnServer(const std::string& gaia_id,
-                         const std::vector<std::vector<uint8_t>>& keys) {
-    gaia_id_to_keys_[gaia_id] = keys;
-  }
-
-  // Mimics a user going through a key-retrieval flow (e.g. reauth) such that
-  // keys are fetched from the server and cached in |client|.
-  void MimicKeyRetrievalByUser(const std::string& gaia_id,
-                               trusted_vault::TrustedVaultClient* client) {
-    DCHECK(client);
-    DCHECK_NE(0U, gaia_id_to_keys_.count(gaia_id))
-        << "StoreKeysOnServer() should have been called for " << gaia_id;
-
-    client->StoreKeys(gaia_id, gaia_id_to_keys_[gaia_id],
-                      /*last_key_version=*/
-                      static_cast<int>(gaia_id_to_keys_[gaia_id].size()) - 1);
-  }
-
-  // Mimics the server RPC endpoint that allows key rotation.
-  std::vector<std::vector<uint8_t>> RequestRotatedKeysFromServer(
-      const std::string& gaia_id,
-      const std::vector<uint8_t>& key_known_by_client) const {
-    auto it = gaia_id_to_keys_.find(gaia_id);
-    if (it == gaia_id_to_keys_.end()) {
-      return {};
-    }
-
-    const std::vector<std::vector<uint8_t>>& latest_keys = it->second;
-    if (!base::Contains(latest_keys, key_known_by_client)) {
-      // |key_known_by_client| is invalid or too old: cannot be used to follow
-      // key rotation.
-      return {};
-    }
-
-    return latest_keys;
-  }
-
- private:
-  std::map<std::string, std::vector<std::vector<uint8_t>>> gaia_id_to_keys_;
-};
-
-// Simple in-memory implementation of TrustedVaultClient.
-class TestTrustedVaultClient : public trusted_vault::TrustedVaultClient {
- public:
-  explicit TestTrustedVaultClient(const TestTrustedVaultServer* server)
-      : server_(server) {}
-
-  ~TestTrustedVaultClient() override = default;
-
-  // Exposes the total number of calls to FetchKeys().
-  int fetch_count() const { return fetch_count_; }
-
-  // Exposes the total number of calls to MarkLocalKeysAsStale().
-  bool keys_marked_as_stale_count() const {
-    return keys_marked_as_stale_count_;
-  }
-
-  // Exposes the total number of calls to the server's RequestKeysFromServer().
-  int server_request_count() const { return server_request_count_; }
-
-  // Exposes the total number of calls to GetIsRecoverabilityDegraded().
-  int get_is_recoverablity_degraded_call_count() const {
-    return get_is_recoverablity_degraded_call_count_;
-  }
-
-  // Mimics the completion of the next (FIFO) FetchKeys() request.
-  bool CompleteFetchKeysRequest() {
-    if (pending_responses_.empty()) {
-      return false;
-    }
-
-    base::OnceClosure cb = std::move(pending_responses_.front());
-    pending_responses_.pop_front();
-    std::move(cb).Run();
-    return true;
-  }
-
-  void SetIsRecoverabilityDegraded(bool is_recoverability_degraded) {
-    is_recoverability_degraded_ = is_recoverability_degraded;
-    for (Observer& observer : observer_list_) {
-      observer.OnTrustedVaultRecoverabilityChanged();
-    }
-  }
-
-  // TrustedVaultClient implementation.
-  void AddObserver(Observer* observer) override {
-    observer_list_.AddObserver(observer);
-  }
-
-  void RemoveObserver(Observer* observer) override {
-    observer_list_.RemoveObserver(observer);
-  }
-
-  void FetchKeys(
-      const CoreAccountInfo& account_info,
-      base::OnceCallback<void(const std::vector<std::vector<uint8_t>>&)> cb)
-      override {
-    const std::string& gaia_id = account_info.gaia;
-
-    ++fetch_count_;
-
-    CachedKeysPerUser& cached_keys = gaia_id_to_cached_keys_[gaia_id];
-
-    // If there are no keys cached, the only way to bootstrap the client is by
-    // going through a retrieval flow, see MimicKeyRetrievalByUser().
-    if (cached_keys.keys.empty()) {
-      pending_responses_.push_back(
-          base::BindOnce(std::move(cb), std::vector<std::vector<uint8_t>>()));
-      return;
-    }
-
-    // If the locally cached keys are not marked as stale, return them directly.
-    if (!cached_keys.marked_as_stale) {
-      pending_responses_.push_back(
-          base::BindOnce(std::move(cb), cached_keys.keys));
-      return;
-    }
-
-    // Fetch keys from the server and cache them.
-    cached_keys.keys =
-        server_->RequestRotatedKeysFromServer(gaia_id, cached_keys.keys.back());
-    cached_keys.marked_as_stale = false;
-
-    // Return the newly-cached keys.
-    pending_responses_.push_back(
-        base::BindOnce(std::move(cb), cached_keys.keys));
-  }
-
-  // Store keys in the client-side cache, usually retrieved from the server as
-  // part of the key retrieval process, see MimicKeyRetrievalByUser().
-  void StoreKeys(const std::string& gaia_id,
-                 const std::vector<std::vector<uint8_t>>& keys,
-                 int last_key_version) override {
-    CachedKeysPerUser& cached_keys = gaia_id_to_cached_keys_[gaia_id];
-    cached_keys.keys = keys;
-    cached_keys.marked_as_stale = false;
-    for (Observer& observer : observer_list_) {
-      observer.OnTrustedVaultKeysChanged();
-    }
-  }
-
-  void MarkLocalKeysAsStale(const CoreAccountInfo& account_info,
-                            base::OnceCallback<void(bool)> cb) override {
-    const std::string& gaia_id = account_info.gaia;
-
-    ++keys_marked_as_stale_count_;
-
-    CachedKeysPerUser& cached_keys = gaia_id_to_cached_keys_[gaia_id];
-
-    if (cached_keys.keys.empty() || cached_keys.marked_as_stale) {
-      // Nothing changed so report |false|.
-      std::move(cb).Run(false);
-      return;
-    }
-
-    // The cache is stale and should be invalidated. Following calls to
-    // FetchKeys() will read from the server.
-    cached_keys.marked_as_stale = true;
-    std::move(cb).Run(true);
-  }
-
-  void GetIsRecoverabilityDegraded(const CoreAccountInfo& account_info,
-                                   base::OnceCallback<void(bool)> cb) override {
-    ++get_is_recoverablity_degraded_call_count_;
-    std::move(cb).Run(is_recoverability_degraded_);
-  }
-
-  void AddTrustedRecoveryMethod(const std::string& gaia_id,
-                                const std::vector<uint8_t>& public_key,
-                                int method_type_hint,
-                                base::OnceClosure cb) override {
-    // Not relevant in these tests.
-    std::move(cb).Run();
-  }
-
-  void ClearLocalDataForAccount(const CoreAccountInfo& account_info) override {
-    // Not relevant in these tests.
-  }
-
- private:
-  struct CachedKeysPerUser {
-    bool marked_as_stale = false;
-    std::vector<std::vector<uint8_t>> keys;
-  };
-
-  const raw_ptr<const TestTrustedVaultServer> server_;
-
-  std::map<std::string, CachedKeysPerUser> gaia_id_to_cached_keys_;
-  base::ObserverList<Observer> observer_list_;
-  int fetch_count_ = 0;
-  int keys_marked_as_stale_count_ = 0;
-  int get_is_recoverablity_degraded_call_count_ = 0;
-  int server_request_count_ = 0;
-  std::list<base::OnceClosure> pending_responses_;
-  bool is_recoverability_degraded_ = false;
+  MOCK_METHOD(std::string, GetEncryptionBootstrapToken, (), (const override));
 };
 
 class SyncServiceCryptoTest : public testing::Test {
@@ -345,16 +138,18 @@ class SyncServiceCryptoTest : public testing::Test {
   const CoreAccountInfo kSyncingAccount =
       MakeAccountInfoWithGaia("syncingaccount");
 
-  // Initial trusted vault keys stored on the server |TestTrustedVaultServer|
-  // for |kSyncingAccount|.
+  // Initial trusted vault keys stored on the server for |kSyncingAccount|.
   const std::vector<std::vector<uint8_t>> kInitialTrustedVaultKeys = {
       {0, 1, 2, 3, 4}};
 
-  SyncServiceCryptoTest()
-      : trusted_vault_client_(&trusted_vault_server_),
-        crypto_(&delegate_, &trusted_vault_client_) {
-    trusted_vault_server_.StoreKeysOnServer(kSyncingAccount.gaia,
-                                            kInitialTrustedVaultKeys);
+  SyncServiceCryptoTest() : crypto_(&delegate_, &trusted_vault_client_) {
+    trusted_vault_client_.server()->StoreKeysOnServer(kSyncingAccount.gaia,
+                                                      kInitialTrustedVaultKeys);
+
+    ON_CALL(delegate_, GetPassphraseType())
+        .WillByDefault(ReturnPointee(&passphrase_type_));
+    ON_CALL(delegate_, SetPassphraseType(_))
+        .WillByDefault(SaveArg<0>(&passphrase_type_));
   }
 
   ~SyncServiceCryptoTest() override = default;
@@ -370,13 +165,14 @@ class SyncServiceCryptoTest : public testing::Test {
   }
 
   void MimicKeyRetrievalByUser() {
-    trusted_vault_server_.MimicKeyRetrievalByUser(kSyncingAccount.gaia,
-                                                  &trusted_vault_client_);
+    trusted_vault_client_.server()->MimicKeyRetrievalByUser(
+        kSyncingAccount.gaia, &trusted_vault_client_);
   }
 
+  absl::optional<PassphraseType> passphrase_type_;
+
   testing::NiceMock<MockDelegate> delegate_;
-  TestTrustedVaultServer trusted_vault_server_;
-  TestTrustedVaultClient trusted_vault_client_;
+  trusted_vault::FakeTrustedVaultClient trusted_vault_client_;
   testing::NiceMock<MockSyncEngine> engine_;
   SyncServiceCrypto crypto_;
 };
@@ -395,7 +191,6 @@ TEST_F(SyncServiceCryptoTest, ShouldSetUpNewCustomPassphrase) {
 
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
   ASSERT_FALSE(crypto_.IsPassphraseRequired());
-  ASSERT_FALSE(crypto_.IsUsingExplicitPassphrase());
   ASSERT_FALSE(crypto_.IsEncryptEverythingEnabled());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Ne(PassphraseType::kCustomPassphrase));
@@ -419,9 +214,8 @@ TEST_F(SyncServiceCryptoTest, ShouldSetUpNewCustomPassphrase) {
 
   EXPECT_FALSE(crypto_.IsPassphraseRequired());
   EXPECT_TRUE(crypto_.IsEncryptEverythingEnabled());
-  ASSERT_THAT(crypto_.GetPassphraseType(),
+  EXPECT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kCustomPassphrase));
-  EXPECT_TRUE(crypto_.IsUsingExplicitPassphrase());
 }
 
 TEST_F(SyncServiceCryptoTest, ShouldExposePassphraseRequired) {
@@ -786,7 +580,7 @@ TEST_F(SyncServiceCryptoTest,
               base::OnceClosure done_cb) { add_keys_cb = std::move(done_cb); });
 
   // Mimic completion of the fetch.
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(add_keys_cb);
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
 
@@ -830,7 +624,7 @@ TEST_F(SyncServiceCryptoTest,
               base::OnceClosure done_cb) { add_keys_cb = std::move(done_cb); });
 
   // Mimic completion of the fetch.
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(add_keys_cb);
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
 
@@ -867,7 +661,7 @@ TEST_F(SyncServiceCryptoTest,
 
   // Mimic completion of the fetch, which should lead to a reconfiguration.
   EXPECT_CALL(delegate_, ReconfigureDataTypesDueToCrypto());
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_TRUE(crypto_.IsTrustedVaultKeyRequired());
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(1));
 
@@ -907,7 +701,7 @@ TEST_F(SyncServiceCryptoTest, ShouldReadInvalidTrustedVaultKeysFromClient) {
   // Mimic completion of the client.
   EXPECT_CALL(engine_,
               AddTrustedVaultDecryptionKeys(kInitialTrustedVaultKeys, _));
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(add_keys_cb);
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
 
@@ -922,7 +716,7 @@ TEST_F(SyncServiceCryptoTest, ShouldReadInvalidTrustedVaultKeysFromClient) {
   // Mimic completion of the client for the second pass.
   EXPECT_CALL(engine_,
               AddTrustedVaultDecryptionKeys(kInitialTrustedVaultKeys, _));
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(add_keys_cb);
 
   // Mimic completion of the engine, without OnTrustedVaultKeyAccepted(), for
@@ -949,9 +743,10 @@ TEST_F(SyncServiceCryptoTest, ShouldFollowKeyRotationDueToSecondFetch) {
 
   // Mimic server-side key rotation which the keys, in a way that the rotated
   // keys are a continuation of kInitialTrustedVaultKeys, such that
-  // TestTrustedVaultServer will allow the client to silently follow key
-  // rotation.
-  trusted_vault_server_.StoreKeysOnServer(kSyncingAccount.gaia, kRotatedKeys);
+  // FakeTrustedVaultClient::server() will allow the client to silently follow
+  // key rotation.
+  trusted_vault_client_.server()->StoreKeysOnServer(kSyncingAccount.gaia,
+                                                    kRotatedKeys);
 
   // The engine replies with OnTrustedVaultKeyAccepted() only if |kRotatedKeys|
   // are provided.
@@ -977,7 +772,7 @@ TEST_F(SyncServiceCryptoTest, ShouldFollowKeyRotationDueToSecondFetch) {
   // The keys fetched in the first attempt (|kInitialTrustedVaultKeys|) are
   // insufficient and should be marked as stale. In addition, a second fetch
   // should be triggered.
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
   ASSERT_THAT(trusted_vault_client_.fetch_count(), Eq(2));
 
@@ -989,7 +784,7 @@ TEST_F(SyncServiceCryptoTest, ShouldFollowKeyRotationDueToSecondFetch) {
   // TrustedVaultServer should successfully deliver the new keys |kRotatedKeys|
   // to the client.
   EXPECT_CALL(delegate_, ReconfigureDataTypesDueToCrypto());
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
   ASSERT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
 }
@@ -1024,23 +819,24 @@ TEST_F(SyncServiceCryptoTest, ShouldRefetchTrustedVaultKeysWhenChangeObserved) {
   crypto_.SetSyncEngine(kSyncingAccount, &engine_);
   crypto_.OnTrustedVaultKeyRequired();
   ASSERT_THAT(trusted_vault_client_.fetch_count(), Eq(1));
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   // Note that this initial attempt involves two fetches, where both return
   // |kInitialTrustedVaultKeys|.
   ASSERT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
   ASSERT_THAT(trusted_vault_client_.fetch_count(), Eq(2));
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequired());
 
   // Mimic server-side key reset and a new retrieval.
-  trusted_vault_server_.StoreKeysOnServer(kSyncingAccount.gaia, kNewKeys);
+  trusted_vault_client_.server()->StoreKeysOnServer(kSyncingAccount.gaia,
+                                                    kNewKeys);
   MimicKeyRetrievalByUser();
 
   // Key retrieval should have initiated a third fetch.
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(3));
   EXPECT_CALL(delegate_, ReconfigureDataTypesDueToCrypto());
-  EXPECT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
   EXPECT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
 }
@@ -1077,7 +873,8 @@ TEST_F(SyncServiceCryptoTest,
 
   // While there is an ongoing fetch, mimic server-side key reset and a new
   // retrieval.
-  trusted_vault_server_.StoreKeysOnServer(kSyncingAccount.gaia, kNewKeys);
+  trusted_vault_client_.server()->StoreKeysOnServer(kSyncingAccount.gaia,
+                                                    kNewKeys);
   MimicKeyRetrievalByUser();
 
   // Because there's already an ongoing fetch, a second one should not have been
@@ -1086,13 +883,13 @@ TEST_F(SyncServiceCryptoTest,
 
   // As soon as the first fetch completes, the second one (deferred) should be
   // started.
-  EXPECT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(2));
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
 
   // The completion of the second fetch should resolve the encryption issue.
   EXPECT_CALL(delegate_, ReconfigureDataTypesDueToCrypto());
-  EXPECT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(2));
   EXPECT_FALSE(crypto_.IsTrustedVaultKeyRequired());
 }
@@ -1122,7 +919,7 @@ TEST_F(
   crypto_.SetSyncEngine(kSyncingAccount, &engine_);
   crypto_.OnTrustedVaultKeyRequired();
   ASSERT_THAT(trusted_vault_client_.fetch_count(), Eq(1));
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(trusted_vault_client_.fetch_count(), Eq(1));
   ASSERT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(0));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequired());
@@ -1136,19 +933,20 @@ TEST_F(
   // While the second fetch is ongoing, mimic additional keys being retrieved.
   // Because there's already an ongoing fetch, a third one should not have been
   // triggered yet and should be deferred instead.
-  trusted_vault_server_.StoreKeysOnServer(kSyncingAccount.gaia, kLatestKeys);
+  trusted_vault_client_.server()->StoreKeysOnServer(kSyncingAccount.gaia,
+                                                    kLatestKeys);
   MimicKeyRetrievalByUser();
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(2));
 
   // As soon as the second fetch completes, the keys should be marked as stale
   // and a third fetch attempt triggered.
-  EXPECT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_THAT(trusted_vault_client_.keys_marked_as_stale_count(), Eq(1));
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(3));
 
   // As soon as the third fetch completes, the fourth one (deferred) should be
   // started.
-  EXPECT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_THAT(trusted_vault_client_.fetch_count(), Eq(3));
 }
 
@@ -1179,6 +977,7 @@ TEST_F(SyncServiceCryptoTest,
   crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
                                   base::Time::Now());
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kTrustedVaultPassphrase));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
@@ -1203,6 +1002,7 @@ TEST_F(SyncServiceCryptoTest,
   crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
                                   base::Time::Now());
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kTrustedVaultPassphrase));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
@@ -1236,6 +1036,7 @@ TEST_F(SyncServiceCryptoTest, ShouldReportDegradedRecoverabilityUponChange) {
   crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
                                   base::Time::Now());
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kTrustedVaultPassphrase));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
@@ -1246,6 +1047,7 @@ TEST_F(SyncServiceCryptoTest, ShouldReportDegradedRecoverabilityUponChange) {
   // IsTrustedVaultRecoverabilityDegraded().
   EXPECT_CALL(delegate_, CryptoStateChanged());
   trusted_vault_client_.SetIsRecoverabilityDegraded(true);
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_TRUE(crypto_.IsTrustedVaultRecoverabilityDegraded());
 
   // For UMA purposes, only the initial value counts (false).
@@ -1265,6 +1067,7 @@ TEST_F(SyncServiceCryptoTest,
   crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
                                   base::Time::Now());
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kTrustedVaultPassphrase));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
@@ -1275,6 +1078,7 @@ TEST_F(SyncServiceCryptoTest,
   // IsTrustedVaultRecoverabilityDegraded().
   EXPECT_CALL(delegate_, CryptoStateChanged());
   trusted_vault_client_.SetIsRecoverabilityDegraded(false);
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   EXPECT_FALSE(crypto_.IsTrustedVaultRecoverabilityDegraded());
 
   // For UMA purposes, only the initial value counts (true).
@@ -1300,7 +1104,7 @@ TEST_F(SyncServiceCryptoTest, ShouldReportDegradedRecoverabilityUponRetrieval) {
   ASSERT_FALSE(crypto_.IsTrustedVaultRecoverabilityDegraded());
 
   // Complete the fetching of initial keys (no keys) from the client.
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequired());
   ASSERT_FALSE(crypto_.IsTrustedVaultRecoverabilityDegraded());
@@ -1313,9 +1117,13 @@ TEST_F(SyncServiceCryptoTest, ShouldReportDegradedRecoverabilityUponRetrieval) {
         std::move(done_cb).Run();
       });
   MimicKeyRetrievalByUser();
-  ASSERT_TRUE(trusted_vault_client_.CompleteFetchKeysRequest());
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
   ASSERT_FALSE(crypto_.IsTrustedVaultKeyRequired());
+
+  // Complete degraded recoverability refresh, that should be triggered upon
+  // successful key retrieval.
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
 
   // The recoverability state should be exposed.
   EXPECT_TRUE(crypto_.IsTrustedVaultRecoverabilityDegraded());
@@ -1338,6 +1146,7 @@ TEST_F(SyncServiceCryptoTest,
   crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
                                   base::Time::Now());
   crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
   ASSERT_THAT(crypto_.GetPassphraseType(),
               Eq(PassphraseType::kTrustedVaultPassphrase));
   ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
@@ -1360,6 +1169,29 @@ TEST_F(SyncServiceCryptoTest,
 
   // Recoverability should no longer be considered degraded.
   EXPECT_FALSE(crypto_.IsTrustedVaultRecoverabilityDegraded());
+}
+
+// Regression test for crbug.com/1475589.
+TEST_F(SyncServiceCryptoTest,
+       ShouldIgnoreDegradedRecoverabilityRequestCompletionAfterReset) {
+  crypto_.OnPassphraseTypeChanged(PassphraseType::kTrustedVaultPassphrase,
+                                  base::Time::Now());
+  crypto_.SetSyncEngine(CoreAccountInfo(), &engine_);
+  ASSERT_THAT(crypto_.GetPassphraseType(),
+              Eq(PassphraseType::kTrustedVaultPassphrase));
+  ASSERT_TRUE(crypto_.IsTrustedVaultKeyRequiredStateKnown());
+  ASSERT_FALSE(crypto_.IsTrustedVaultKeyRequired());
+  ASSERT_FALSE(crypto_.IsPassphraseRequired());
+
+  // Reset all in-memory |crypto_| state, including engine pointer. Passphrase
+  // type will remain kTrustedVaultPassphrase, because it is cached by delegate.
+  crypto_.Reset();
+  ASSERT_THAT(crypto_.GetPassphraseType(),
+              Eq(PassphraseType::kTrustedVaultPassphrase));
+
+  // There is an ongoing GetIsRecoverabilityRequest(), mimic its completion.
+  // Main expectation: no crashes.
+  EXPECT_TRUE(trusted_vault_client_.CompleteAllPendingRequests());
 }
 
 }  // namespace

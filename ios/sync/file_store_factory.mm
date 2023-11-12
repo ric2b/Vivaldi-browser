@@ -10,10 +10,6 @@
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_impl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // static
 file_sync::SyncedFileStore* SyncedFileStoreFactory::GetForBrowserState(
     ChromeBrowserState* browser_state) {

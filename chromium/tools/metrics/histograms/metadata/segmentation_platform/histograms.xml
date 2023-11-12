@@ -26,15 +26,33 @@ chromium-metrics-reviews@google.com.
   <variant name="ChromeLowUserEngagement"/>
   <variant name="ChromeStartAndroid"/>
   <variant name="ChromeStartAndroidV2"/>
-  <variant name="CrossDeviceUser"/>
-  <variant name="DeviceTier"/>
-  <variant name="FeedUserSegment"/>
+  <variant name="CrossDeviceUser">
+    <obsolete>
+      Deprecated. Replaced by CrossDeviceUserSegment.
+    </obsolete>
+  </variant>
+  <variant name="CrossDeviceUserSegment"/>
+  <variant name="FeedUserSegment">
+    <obsolete>
+      Deprecated. Replaced by FeedUser.
+    </obsolete>
+  </variant>
   <variant name="FrequentFeatureUser"/>
-  <variant name="IntentionalUser"/>
+  <variant name="IntentionalUser">
+    <obsolete>
+      Deprecated. Replaced by IntentionalUserSegment.
+    </obsolete>
+  </variant>
+  <variant name="IntentionalUserSegment"/>
   <variant name="PowerUser"/>
   <variant name="QueryTiles"/>
   <variant name="ResumeHeavyUser"/>
   <variant name="SearchUser"/>
+  <variant name="SearchUserSegment">
+    <obsolete>
+      Deprecated. Replaced by SearchUser.
+    </obsolete>
+  </variant>
   <variant name="ShoppingUser"/>
   <variant name="TabletProductivityUser"/>
 </variants>
@@ -64,12 +82,14 @@ chromium-metrics-reviews@google.com.
   <variant name="ChromeStartAndroidV2"/>
   <variant name="ContextualPageActions"/>
   <variant name="CrossDeviceUser"/>
+  <variant name="DesktopNtpModule"/>
   <variant name="DeviceSwitcher"/>
   <variant name="DeviceTier"/>
   <variant name="DummyFeature"/>
   <variant name="FeedUserSegment"/>
   <variant name="FrequentFeatureUser"/>
   <variant name="IntentionalUser"/>
+  <variant name="IosModuleRanker"/>
   <variant name="PasswordManagerUser"/>
   <variant name="PowerUser"/>
   <variant name="QueryTiles"/>
@@ -87,19 +107,46 @@ chromium-metrics-reviews@google.com.
   <variant name="ChromeStartAndroid"/>
   <variant name="ChromeStartAndroidV2"/>
   <variant name="ContextualPageActionPriceTracking"/>
-  <variant name="CrossDeviceUser"/>
+  <variant name="CrossDeviceUser">
+    <obsolete>
+      Deprecated. Replaced by CrossDeviceUserSegment.
+    </obsolete>
+  </variant>
+  <variant name="CrossDeviceUserSegment"/>
+  <variant name="DesktopNtpModule"/>
   <variant name="DeviceSwitcher"/>
-  <variant name="DeviceTier"/>
+  <variant name="DeviceTier">
+    <obsolete>
+      Deprecated. Replaced by DeviceTierSegment.
+    </obsolete>
+  </variant>
+  <variant name="DeviceTierSegment"/>
   <variant name="Dummy"/>
-  <variant name="FeedUserSegment"/>
+  <variant name="FeedUser"/>
+  <variant name="FeedUserSegment">
+    <obsolete>
+      Deprecated. Replaced by FeedUser.
+    </obsolete>
+  </variant>
   <variant name="FrequentFeatureUserSegment"/>
-  <variant name="IntentionalUser"/>
+  <variant name="IntentionalUser">
+    <obsolete>
+      Deprecated. Replaced by IntentionalUserSegment.
+    </obsolete>
+  </variant>
+  <variant name="IntentionalUserSegment"/>
+  <variant name="IosModuleRanker"/>
   <variant name="NewTab"/>
   <variant name="PasswordManagerUser"/>
   <variant name="PowerUserSegment"/>
   <variant name="QueryTiles"/>
   <variant name="ResumeHeavyUserSegment"/>
-  <variant name="SearchUserSegment"/>
+  <variant name="SearchUser"/>
+  <variant name="SearchUserSegment">
+    <obsolete>
+      Deprecated. Replaced by SearchUser.
+    </obsolete>
+  </variant>
   <variant name="Share"/>
   <variant name="ShoppingUser"/>
   <variant name="TabletProductivityUser"/>
@@ -137,7 +184,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.AdaptiveToolbar.SegmentSelected.Startup"
-    enum="AdaptiveToolbarButtonVariant" expires_after="2023-12-04">
+    enum="AdaptiveToolbarButtonVariant" expires_after="2024-02-04">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -148,7 +195,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.AdaptiveToolbar.SegmentSelection.Computed"
-    enum="AdaptiveToolbarButtonVariant" expires_after="2023-12-17">
+    enum="AdaptiveToolbarButtonVariant" expires_after="2024-02-05">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -158,7 +205,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.AdaptiveToolbar.SegmentSwitched"
-    enum="AdaptiveToolbarSegmentSwitch" expires_after="2023-12-04">
+    enum="AdaptiveToolbarSegmentSwitch" expires_after="2024-02-04">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -170,7 +217,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.ClassificationRequest.TotalDuration.{SegmentationKey}"
-    units="ms" expires_after="2023-10-10">
+    units="ms" expires_after="2024-02-20">
   <owner>ritikagup@google.com</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -183,6 +230,81 @@ chromium-metrics-reviews@google.com.
     returned.
   </summary>
   <token key="SegmentationKey" variants="SegmentationKey"/>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.DefaultModelDelivery.Metadata.FeatureCount.{SegmentationModel}"
+    units="features" expires_after="2024-08-14">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records how many tensor features an updated {SegmentationModel} segmentation
+    model requires in its metadata. Recorded only for embedded model.
+
+    Recorded every time the {SegmentationModel} model is updated, which can
+    happen at any time, but usually happens at least once during startup.
+  </summary>
+  <token key="SegmentationModel" variants="SegmentationModel"/>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.DefaultModelDelivery.Metadata.Validation.{ValidationPhase}.{SegmentationModel}"
+    enum="SegmentationPlatformValidationResult" expires_after="2024-08-14">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records the result of metadata validation {ValidationPhase} the metadata has
+    been merged with the existing metadata for {SegmentationModel}. Recorded
+    only for embedded model.
+
+    Recorded every time the {SegmentationModel} model is updated, which can
+    happen at any time, but usually happens at least once during startup.
+  </summary>
+  <token key="SegmentationModel" variants="SegmentationModel"/>
+  <token key="ValidationPhase" variants="ValidationPhase"/>
+</histogram>
+
+<histogram name="SegmentationPlatform.DefaultModelDelivery.Received"
+    enum="SegmentationPlatformSegmentationModel" expires_after="2024-08-14">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records what type of model has been received.
+
+    Recorded every time a model is updated, which can happen at any time, but
+    usually happens at least once during startup. Recorded only for embedded
+    model.
+  </summary>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.DefaultModelDelivery.SaveResult.{SegmentationModel}"
+    enum="BooleanSuccess" expires_after="2024-08-14">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records whether an updated {SegmentationModel} segmentation model was
+    successfully saved. Recorded only for embedded model.
+
+    Recorded every time the {SegmentationModel} model is updated, which can
+    happen at any time, but usually happens at least once during startup.
+  </summary>
+  <token key="SegmentationModel" variants="SegmentationModel"/>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.DefaultModelDelivery.SegmentIdMatches.{SegmentationModel}"
+    enum="BooleanYesNo" expires_after="2024-08-14">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records whether an updated {SegmentationModel} segmentation model type
+    matches what was stored for that type. Recorded only for embedded model.
+
+    Recorded every time the {SegmentationModel} model is updated, which can
+    happen at any time, but usually happens at least once during startup.
+  </summary>
+  <token key="SegmentationModel" variants="SegmentationModel"/>
 </histogram>
 
 <histogram name="SegmentationPlatform.DeviceCountByOsType.{OsType}"
@@ -211,30 +333,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="SegmentationPlatform.DeviceSwicther.TimeFromConsentToResult"
-    units="ms" expires_after="2023-10-01">
-  <owner>ssid@chromium.org</owner>
-  <owner>chrome-segmentation-platform@google.com</owner>
-  <summary>
-    The time taken from the time user enabled sync consent to the time result is
-    available for device switcher user segment. This includes the network delay
-    for downloading the device info data. The metric is recorded once for each
-    user at the time when the user enables sync on the device.
-  </summary>
-</histogram>
-
-<histogram name="SegmentationPlatform.DeviceSwicther.TimeFromStartupToResult"
-    units="ms" expires_after="2023-10-01">
-  <owner>ssid@chromium.org</owner>
-  <owner>chrome-segmentation-platform@google.com</owner>
-  <summary>
-    The time taken from the startup to the time result is available for the
-    device switcher user segment. The metric is recorded once for each user the
-    first time the device switcher segmentation is enabled, only if the user
-    already had sync enabled.
-  </summary>
-</histogram>
-
 <histogram
     name="SegmentationPlatform.FeatureProcessing.Error.{SegmentationModel}"
     enum="SegmentationPlatformFeatureProcessingError"
@@ -251,7 +349,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.Init.CreationToInitializationLatency"
-    units="ms" expires_after="2023-10-01">
+    units="ms" expires_after="2024-01-28">
   <owner>ssid@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -276,7 +374,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.Init.ProcessCreationToServiceCreationLatency"
-    units="ms" expires_after="2023-12-04">
+    units="ms" expires_after="2024-02-04">
   <owner>ssid@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -335,6 +433,27 @@ chromium-metrics-reviews@google.com.
     way to check if a model is available, this histogram records an entry when
     model is requested and one when model is available. The difference should
     show how often a model is not returned.
+
+    Recorded every time the {SegmentationModel} model is updated, which can
+    happen at any time, but usually happens at least once during startup. If a
+    model becomes no longer available then we'll record a value of 3 (No model
+    metadata available) once before deleting the model metadata.
+  </summary>
+  <token key="SegmentationModel" variants="SegmentationModel"/>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.ModelDelivery.DeleteResult.{SegmentationModel}"
+    enum="BooleanSuccess" expires_after="2023-10-01">
+  <owner>salg@chromium.org</owner>
+  <owner>ssid@chromium.org</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records whether a deleted {SegmentationModel} server segmentation model was
+    successfully deleted from the local storage.
+
+    Recorded after deleting the local data of a server model, should only happen
+    if a server update removes a model that was stored locally.
   </summary>
   <token key="SegmentationModel" variants="SegmentationModel"/>
 </histogram>
@@ -363,7 +482,7 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
     Records how many tensor features an updated {SegmentationModel} segmentation
-    model requires in its metadata.
+    model requires in its metadata. Recorded only for server model.
 
     Recorded every time the {SegmentationModel} model is updated, which can
     happen at any time, but usually happens at least once during startup.
@@ -379,7 +498,8 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
     Records the result of metadata validation {ValidationPhase} the metadata has
-    been merged with the existing metadata for {SegmentationModel}.
+    been merged with the existing metadata for {SegmentationModel}. Recorded
+    only for server model.
 
     Recorded every time the {SegmentationModel} model is updated, which can
     happen at any time, but usually happens at least once during startup.
@@ -389,7 +509,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.ModelDelivery.Received"
-    enum="SegmentationPlatformSegmentationModel" expires_after="2023-12-04">
+    enum="SegmentationPlatformSegmentationModel" expires_after="2024-02-04">
   <owner>nyquist@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
@@ -397,7 +517,8 @@ chromium-metrics-reviews@google.com.
     Records what type of model has been received.
 
     Recorded every time a model is updated, which can happen at any time, but
-    usually happens at least once during startup.
+    usually happens at least once during startup. Recorded only for server
+    model.
   </summary>
 </histogram>
 
@@ -409,7 +530,7 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
     Records whether an updated {SegmentationModel} segmentation model was
-    successfully saved.
+    successfully saved. Recorded only for server model.
 
     Recorded every time the {SegmentationModel} model is updated, which can
     happen at any time, but usually happens at least once during startup.
@@ -425,7 +546,7 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
     Records whether an updated {SegmentationModel} segmentation model type
-    matches what was stored for that type.
+    matches what was stored for that type. Recorded only for server model.
 
     Recorded every time the {SegmentationModel} model is updated, which can
     happen at any time, but usually happens at least once during startup.
@@ -614,18 +735,20 @@ chromium-metrics-reviews@google.com.
     the models associated with {SegmentationKey}.
 
     Starts recording every time the on-demand segment selection method is called
-    for {SegmentationKey}. Records the duration when a {SelectedSegment} is
-    returned as the result.
+    for {SegmentationKey}.
+
+    Any: recorded when any segment was selected. None: recorded when no segment
+    was selected.
   </summary>
   <token key="SegmentationKey" variants="SegmentationKey"/>
-  <token key="SelectedSegment" variants="SegmentationModel">
+  <token key="SelectedSegment">
     <variant name="Any"/>
     <variant name="None"/>
   </token>
 </histogram>
 
 <histogram name="SegmentationPlatform.SelectionFailedReason"
-    enum="SegmentationSelectionFailureReason" expires_after="2023-12-17">
+    enum="SegmentationSelectionFailureReason" expires_after="2024-02-05">
   <owner>ssid@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -669,7 +792,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.SignalDatabase.GetSamples.Result"
-    enum="BooleanSuccess" expires_after="2023-10-01">
+    enum="BooleanSuccess" expires_after="2024-01-21">
   <owner>nyquist@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
@@ -721,7 +844,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.SyncSessions.RecordTabCountAtSyncUpdate"
-    units="tabs" expires_after="2023-12-04">
+    units="tabs" expires_after="2024-02-04">
   <owner>ritikagup@google.com</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -731,7 +854,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.SyncSessions.TabsCountAtStartup"
-    units="tabs" expires_after="2023-12-04">
+    units="tabs" expires_after="2024-02-04">
   <owner>ritikagup@google.com</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -742,7 +865,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.SyncSessions.TimeFromStartupToFirstSyncUpdate"
-    units="ms" expires_after="2023-12-04">
+    units="ms" expires_after="2024-02-04">
   <owner>ritikagup@google.com</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -768,7 +891,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.SyncSessions.TimeFromTabLoadedToSyncUpdate"
-    units="ms" expires_after="2023-12-04">
+    units="ms" expires_after="2024-02-04">
   <owner>ritikagup@google.com</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>

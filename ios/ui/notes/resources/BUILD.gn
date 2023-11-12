@@ -9,3 +9,11 @@ imageset("panel_notes") {
     "panel_notes.imageset/panel_notes@3x.png",
     ]
 }
+
+imageset("single_note_icon") {
+  sources = [
+    "single_note_icon.imageset/Contents.json",
+    "single_note_icon.imageset/single_note_icon.pdf",
+    "single_note_icon.imageset/single_note_icon_dark.pdf",
+    ]
+}

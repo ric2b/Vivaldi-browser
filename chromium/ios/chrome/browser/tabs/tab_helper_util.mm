@@ -4,10 +4,6 @@
 
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 #import "base/feature_list.h"
 #import "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
 #import "components/breadcrumbs/core/breadcrumbs_status.h"
@@ -23,8 +19,8 @@
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
-#import "ios/chrome/browser/app_launcher/app_launcher_abuse_detector.h"
-#import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
+#import "ios/chrome/browser/app_launcher/model/app_launcher_abuse_detector.h"
+#import "ios/chrome/browser/app_launcher/model/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
 #import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
@@ -43,6 +39,7 @@
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/java_script_find_tab_helper.h"
+#import "ios/chrome/browser/find_in_page/util.h"
 #import "ios/chrome/browser/follow/follow_tab_helper.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/history/history_tab_helper.h"
@@ -113,7 +110,6 @@
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_query_manager.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_tab_helper.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_unsafe_resource_container.h"
-#import "ios/public/provider/chrome/browser/find_in_page/find_in_page_api.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ios/web/common/annotations_utils.h"
 #import "ios/web/common/features.h"
@@ -132,7 +128,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   IOSChromeSyncedTabDelegate::CreateForWebState(web_state);
   InfoBarManagerImpl::CreateForWebState(web_state);
   BlockedPopupTabHelper::CreateForWebState(web_state);
-  if (ios::provider::IsNativeFindInPageEnabled()) {
+  if (IsNativeFindInPageAvailable()) {
     FindTabHelper::CreateForWebState(web_state);
   } else {
     JavaScriptFindTabHelper::CreateForWebState(web_state);
@@ -189,8 +185,11 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   PolicyUrlBlockingTabHelper::CreateForWebState(web_state);
 
+  // Supervised user services are not supported for off-the-record browser
+  // state.
   if (base::FeatureList::IsEnabled(
-          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS)) {
+          supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS) &&
+      !is_off_the_record) {
     SupervisedUserURLFilterTabHelper::CreateForWebState(web_state);
     SupervisedUserErrorContainer::CreateForWebState(web_state);
   }
@@ -251,9 +250,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     AutofillBottomSheetTabHelper::CreateForWebState(
         web_state, PasswordTabHelper::FromWebState(web_state)
                        ->GetPasswordsAccountStorageNoticeHandler());
-    AutofillTabHelper::CreateForWebState(
-        web_state,
-        PasswordTabHelper::FromWebState(web_state)->GetPasswordManager());
+    AutofillTabHelper::CreateForWebState(web_state);
 
     FormSuggestionTabHelper::CreateForWebState(web_state, @[
       PasswordTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
@@ -301,7 +298,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
         HttpsUpgradeServiceFactory::GetForBrowserState(browser_state));
   }
 
-  if (IsWebChannelsEnabled() && !is_off_the_record) {
+  if (!is_off_the_record) {
     FollowTabHelper::CreateForWebState(web_state);
   }
 

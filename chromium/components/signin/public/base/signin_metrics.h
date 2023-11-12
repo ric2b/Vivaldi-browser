@@ -89,9 +89,13 @@ enum class ProfileSignout {
   // User tapped 'Undo' in a snackbar that is shown right after sign-in through
   // promo in bookmarks and reading list page. (iOS only).
   kUserTappedUndoRightAfterSignIn = 26,
+  // User has signed-in previously for the sole purpose of enabling history sync
+  // (eg. using history sync promo in recent tabs), but declined history sync
+  // eventually.
+  kUserDeclinedHistorySyncAfterDedicatedSignIn = 27,
 
   // Keep this as the last enum.
-  kMaxValue = kUserTappedUndoRightAfterSignIn
+  kMaxValue = kUserDeclinedHistorySyncAfterDedicatedSignIn
 };
 
 // Enum values used for use with "AutoLogin.Reverse" histograms.
@@ -470,23 +474,6 @@ enum class FetchAccountCapabilitiesFromSystemLibraryResult {
   kMaxValue = kErrorUnexpectedValue
 };
 
-// Enum values used for "Signin.SyncConsentScreen.DataRowClicked"
-// histogram, which records that a user tapped on an entry in TangibleSync
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// TODO(crbug.com/1373063): use this enum in java
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
-enum class SigninSyncConsentDataRow {
-  // The bookmark row is tapped.
-  kBookmarksRowTapped = 0,
-  // The Autofill row is tapped.
-  kAutofillRowTapped = 1,
-  // The "History and more" row is tapped.
-  kHistoryRowTapped = 2,
-  // Always the last enumerated type.
-  kMaxValue = kHistoryRowTapped,
-};
-
 // -----------------------------------------------------------------------------
 // Histograms
 // -----------------------------------------------------------------------------
@@ -593,6 +580,9 @@ void RecordSigninAccountType(signin::ConsentLevel consent_level,
 
 // Records corresponding sign in user action for an access point.
 void RecordSigninUserActionForAccessPoint(AccessPoint access_point);
+
+// Records corresponding sign out user action.
+void RecordSignoutUserAction(bool force_clear_data);
 
 // Records |Signin_Impression_From*| user action.
 void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point);

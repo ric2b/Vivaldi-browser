@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="1063263220330818888">プライベート検索</translation>
+<translation id="1137850887415122856">プライベートタブをロックするには、Touch ID、Face ID、またはパスコードを設定します。</translation>
+<translation id="1310184829257917508">他のアプリからリンクを開く際にプライベートタブで開くかどうかを聞く</translation>
 <translation id="1512201558627495343">新しいプライベートタブ</translation>
+<translation id="1786453623676543866">新しい Vivaldi のタブで検索を開始する。</translation>
+<translation id="207677936531967364">新しいプライベートタブページ</translation>
+<translation id="2899836479226240291">Vivaldi をデフォルトのブラウザアプリに設定すると、Vivaldi で自動的にリンクを開くことができます。</translation>
+<translation id="3171582312249481866">Vivaldi 設定を開く</translation>
+<translation id="3372807273343182542">URL を Vivaldi のプライベートタブで開く</translation>
+<translation id="3379322781901918214">1. Vivaldi 設定を開く</translation>
+<translation id="3473652525653758699">新しいプライベートウィンドウ</translation>
+<translation id="3501504415290398157">プライベートタブのロックを解除には<ph name="BIOMETRIC_AUTHENITCATION_TYPE" />を使用してください。</translation>
+<translation id="3692650606013198282">プライベートタブで開く</translation>
+<translation id="3709782636417497984">新しいプライベートタブで開く</translation>
+<translation id="3981599532037327317">${url} をプライベートタブで開く</translation>
+<translation id="4755216899422789286">URL を Vivaldi で開く</translation>
+<translation id="6233792867654386826">入力した URL を Vivaldi で開く。</translation>
 <translation id="6827597288286078054">プライベート検索</translation>
+<translation id="7175743738896712454">入力した URL を Vivaldi のプライベートタブで開く。</translation>
+<translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> でプライベートタブのロックを解除する</translation>
+<translation id="7347289093190902150">プライベートタブで開きますか？</translation>
+<translation id="7549299604720382000">新しいプライベートタブ</translation>
+<translation id="8326104954595890674">新しいプライベートタブ</translation>
+<translation id="8763006697839582351">Vivaldi のプライベートタブで開く</translation>
+<translation id="9060728682512999830">Vivaldi で検索</translation>
 </translationbundle>

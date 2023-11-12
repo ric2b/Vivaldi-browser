@@ -10,6 +10,9 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
+#include "components/autofill/core/common/aliases.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -41,14 +44,17 @@ class PopupCellView : public views::View {
     virtual ~AccessibilityDelegate() = default;
 
     // Sets the a11y information in `node_data` based on whether the cell in
-    // question `is_selected` or not.
+    // question `is_selected` or not, or `is_permanently_highlighted` or not.
     virtual void GetAccessibleNodeData(bool is_selected,
+                                       bool is_permanently_highlighted,
                                        ui::AXNodeData* node_data) const = 0;
   };
 
   METADATA_HEADER(PopupCellView);
 
-  PopupCellView();
+  explicit PopupCellView(
+      bool should_ignore_mouse_observed_outside_item_bounds_check = false);
+
   PopupCellView(const PopupCellView&) = delete;
   PopupCellView& operator=(const PopupCellView&) = delete;
   ~PopupCellView() override;
@@ -56,6 +62,12 @@ class PopupCellView : public views::View {
   // Gets and sets the selected state of the cell.
   bool GetSelected() const { return selected_; }
   virtual void SetSelected(bool selected);
+
+  // Sets the highlighted state of the cell, for which there is an external
+  // reason like opening a sub-popup.
+  void SetPermanentlyHighlighted(bool permanently_highlighted);
+
+  bool IsHighlighted() const;
 
   // Gets and sets the tooltip of the cell.
   const std::u16string& GetTooltipText() const { return tooltip_text_; }
@@ -79,10 +91,11 @@ class PopupCellView : public views::View {
   void SetOnExitedCallback(base::RepeatingClosure callback);
   // Gets and sets the callback that is run when the cell is accepted (left
   // mouse click, tap, enter key).
-  const base::RepeatingClosure& GetOnAcceptedCallback() const {
+  using OnAcceptedCallback = base::RepeatingCallback<void(base::TimeTicks)>;
+  const PopupCellView::OnAcceptedCallback& GetOnAcceptedCallback() const {
     return on_accepted_callback_;
   }
-  void SetOnAcceptedCallback(base::RepeatingClosure callback);
+  void SetOnAcceptedCallback(OnAcceptedCallback callback);
   // Gets and sets the callbacks for when the cell is (un)selected.
   const base::RepeatingClosure& GetOnSelectedCallback() const {
     return on_selected_callback_;
@@ -123,6 +136,7 @@ class PopupCellView : public views::View {
  protected:
   // The selection state.
   bool selected_ = false;
+  bool permanently_highlighted_ = false;
   base::RepeatingClosure on_selected_callback_;
   base::RepeatingClosure on_unselected_callback_;
 
@@ -130,6 +144,10 @@ class PopupCellView : public views::View {
   // Returns true if the mouse is within the bounds of this item. This is not
   // affected by whether or not the item is overlaid by another popup.
   bool IsMouseInsideItemBounds() const { return IsMouseHovered(); }
+
+  // Computes the actual `TimeTicks` at which the event occurred (taking latency
+  // into account) and runs the OnAccepted callback.
+  void RunOnAcceptedForEvent(const ui::Event& event);
 
   // views::View:
   std::u16string GetTooltipText(const gfx::Point& p) const override;
@@ -141,7 +159,7 @@ class PopupCellView : public views::View {
 
   base::RepeatingClosure on_entered_callback_;
   base::RepeatingClosure on_exited_callback_;
-  base::RepeatingClosure on_accepted_callback_;
+  OnAcceptedCallback on_accepted_callback_;
 
   // The labels whose style is updated when the cell's selection status changes.
   std::vector<raw_ptr<views::Label>> tracked_labels_;
@@ -157,6 +175,20 @@ class PopupCellView : public views::View {
   // a double click were executed at intervals larger than the threshold (500ms)
   // checked in the controller (crbug.com/1418837).
   bool mouse_observed_outside_item_bounds_ = false;
+
+  // Whether the `mouse_observed_outside_item_bounds_` will be ignored or not.
+  // Today this happens when:
+  // 1. The AutofillSuggestionTriggerSource is
+  // `kManualFallbackForAutocompleteUnrecognized`. This is because in this
+  // situation even though the popup could appear behind the cursor, the user
+  // intention about opening it is explicit.
+  //
+  // 2. The suggestions are of autocomplete type and were regenerated due to a
+  // suggestion being removed. We want to ignore the check in this case because
+  // the cursor can be above the popup after a row is deleted. This however does
+  // not mean that the popup just showed up to the user so there is no need to
+  // move the cursor out and in.
+  bool should_ignore_mouse_observed_outside_item_bounds_check_;
 };
 
 BEGIN_VIEW_BUILDER(/* no export*/, PopupCellView, views::View)
@@ -165,7 +197,7 @@ VIEW_BUILDER_PROPERTY(std::unique_ptr<PopupCellView::AccessibilityDelegate>,
                       AccessibilityDelegate)
 VIEW_BUILDER_PROPERTY(base::RepeatingClosure, OnEnteredCallback)
 VIEW_BUILDER_PROPERTY(base::RepeatingClosure, OnExitedCallback)
-VIEW_BUILDER_PROPERTY(base::RepeatingClosure, OnAcceptedCallback)
+VIEW_BUILDER_PROPERTY(PopupCellView::OnAcceptedCallback, OnAcceptedCallback)
 VIEW_BUILDER_PROPERTY(base::RepeatingClosure, OnSelectedCallback)
 VIEW_BUILDER_PROPERTY(base::RepeatingClosure, OnUnselectedCallback)
 END_VIEW_BUILDER

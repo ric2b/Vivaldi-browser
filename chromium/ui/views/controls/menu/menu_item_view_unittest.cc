@@ -74,7 +74,7 @@ TEST_F(MenuItemViewUnitTest, TestMenuItemViewWithFlexibleWidthChild) {
   views::MenuItemView* flexible_view = root_menu.AppendMenuItem(2);
   flexible_view->AddChildView(new SquareView());
   // Set margins to 0 so that we know width should match height.
-  flexible_view->SetMargins(0, 0);
+  flexible_view->set_vertical_margin(0);
 
   views::SubmenuView* submenu = root_menu.GetSubmenu();
 
@@ -93,9 +93,10 @@ TEST_F(MenuItemViewUnitTest, TestMenuItemViewWithFlexibleWidthChild) {
   EXPECT_EQ(label_size.width(), flex_height);
 
   // The submenu should be tall enough to allow for both menu items at the
-  // given width.
-  EXPECT_EQ(label_size.height() + flex_height,
-            submenu->GetPreferredSize().height());
+  // given width. (It may be taller if there is padding between/around the
+  // items.)
+  EXPECT_GE(submenu->GetPreferredSize().height(),
+            label_size.height() + flex_height);
 }
 
 // Tests that a menu item with hidden children should contain the "(empty)" menu

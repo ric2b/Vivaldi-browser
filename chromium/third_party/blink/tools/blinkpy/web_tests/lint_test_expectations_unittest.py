@@ -26,9 +26,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import json
 import optparse
 import textwrap
 import unittest
+from unittest import mock
 
 from blinkpy.common import exit_codes
 from blinkpy.common.host_mock import MockHost
@@ -461,6 +463,84 @@ class LintTest(LoggingTestCase):
         self.assertEquals(len(failures), 1)
         self.assertRegexpMatches(failures[0], ':2 .*Skip')
 
+    @mock.patch('blinkpy.w3c.wpt_manifest.WPTManifest.ensure_manifest')
+    def test_lint_ban_wpt(self, _):
+        options = optparse.Values({
+            'additional_expectations': [],
+            'platform': 'test-linux-trusty',
+        })
+        host = MockHost()
+        host.project_config.switched_to_wptrunner = True
+        finder = PathFinder(host.filesystem)
+        host.filesystem.write_text_file(
+            finder.path_from_web_tests('VirtualTestSuites'),
+            json.dumps([{
+                'prefix': 'fake-suite',
+                'platforms': ['Linux'],
+                'bases': ['wpt_internal/dir'],
+                'args': ['--enable-features=FakeFeature'],
+            }]))
+        expectations_contents = textwrap.dedent("""\
+            # results: [ Pass Failure ]
+            not/a/wpt/test.html [ Failure ]
+            external/wpt/test.html [ Failure ]
+            virtual/fake-suite/wpt_internal/dir/multiglob.https.any.html [ Failure ]
+            """)
+        host.filesystem.write_text_file(
+            finder.path_from_web_tests('not/a/wpt/test.html'), '')
+        host.filesystem.write_text_file(
+            finder.path_from_wpt_tests('MANIFEST.json'),
+            json.dumps({
+                'items': {
+                    'reftest': {
+                        'test.html': [
+                            'c3f2fb6f436da59d43aeda0a7e8a018084557033',
+                            [None, [['test-ref.html', '==']], {}],
+                        ],
+                    },
+                },
+            }))
+        host.filesystem.write_text_file(
+            finder.path_from_web_tests('wpt_internal', 'MANIFEST.json'),
+            json.dumps({
+                'url_base': '/wpt_internal/',
+                'items': {
+                    'testharness': {
+                        'dir': {
+                            'multiglob.https.any.js': [
+                                'd6498c3e388e0c637830fa080cca78b0ab0e5305',
+                                ['dir/multiglob.https.any.html', {}],
+                            ],
+                        },
+                    },
+                },
+            }))
+
+        with mock.patch(
+                'blinkpy.web_tests.port.base.Port.expectations_dict',
+                return_value={'TestExpectations': expectations_contents}):
+            failures, warnings = lint_test_expectations.lint(host, options)
+        failure1, failure2 = sorted(failures)
+        self.assertRegex(failure1, 'TestExpectations:3:')
+        self.assertRegex(failure1,
+                         'TestExpectations no longer set WPT expectations')
+        self.assertRegex(
+            failure1, 'Create or update a metadata file '
+            "'external/wpt/test\.html\.ini' instead")
+        self.assertRegex(failure2, 'TestExpectations:4:')
+        self.assertRegex(failure2,
+                         'TestExpectations no longer set WPT expectations')
+        self.assertRegex(
+            failure2, 'Create or update a metadata file '
+            "'wpt_internal/dir/multiglob\.https\.any\.js\.ini' instead")
+        self.assertLog([
+            'WARNING: TestExpectation lines should not be used anymore '
+            'for WPT. Please see this doc for the new way to set WPT '
+            'expectations in `.ini` files: '
+            'https://chromium.googlesource.com/chromium/src/+/HEAD/'
+            'docs/testing/web_platform_tests_wptrunner.md#Expectations\n',
+        ])
+
 
 class CheckVirtualSuiteTest(unittest.TestCase):
     def setUp(self):
@@ -545,19 +625,19 @@ class MainTest(unittest.TestCase):
         self.orig_lint_fn = lint_test_expectations.lint
         self.orig_check_fn = lint_test_expectations.check_virtual_test_suites
         lint_test_expectations.check_virtual_test_suites = lambda host, options: []
-        self.orig_check_smoke = lint_test_expectations.check_smoke_tests
-        lint_test_expectations.check_smoke_tests = lambda host, options: []
+        self.orig_check_test_lists = lint_test_expectations.check_test_lists
+        lint_test_expectations.check_test_lists = lambda host, options: []
         self.stderr = StringIO()
 
     def tearDown(self):
         lint_test_expectations.lint = self.orig_lint_fn
         lint_test_expectations.check_virtual_test_suites = self.orig_check_fn
-        lint_test_expectations.check_smoke_tests = self.orig_check_smoke
+        lint_test_expectations.check_test_lists = self.orig_check_test_lists
 
     def test_success(self):
         lint_test_expectations.lint = lambda host, options: ([], [])
         res = lint_test_expectations.main(['--platform', 'test'], self.stderr)
-        self.assertEqual('Lint succeeded.', self.stderr.getvalue().strip())
+        self.assertEqual('', self.stderr.getvalue().strip())
         self.assertEqual(res, 0)
 
     def test_success_with_warning(self):

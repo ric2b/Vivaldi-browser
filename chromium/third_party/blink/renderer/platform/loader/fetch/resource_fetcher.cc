@@ -33,6 +33,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -190,8 +191,19 @@ bool ShouldResourceBeAddedToMemoryCache(const FetchParameters& params,
          !IsRawResource(*resource);
 }
 
-bool ShouldResourceBeKeptStrongReferenceByType(Resource* resource) {
+bool ShouldResourceBeKeptStrongReferenceByType(
+    Resource* resource,
+    const SecurityOrigin* settings_object_origin) {
   // Image, fonts, stylesheets and scripts are the most commonly reused scripts.
+
+  if (base::FeatureList::IsEnabled(
+          features::kMemoryCacheStrongReferenceFilterCrossOriginScripts) &&
+      resource->GetType() == ResourceType::kScript &&
+      !SecurityOrigin::Create(resource->Url())
+           ->IsSameOriginWith(settings_object_origin)) {
+    return false;
+  }
+
   return (resource->GetType() == ResourceType::kImage &&
           !base::FeatureList::IsEnabled(
               features::kMemoryCacheStrongReferenceFilterImages)) ||
@@ -199,14 +211,18 @@ bool ShouldResourceBeKeptStrongReferenceByType(Resource* resource) {
           !base::FeatureList::IsEnabled(
               features::kMemoryCacheStrongReferenceFilterScripts)) ||
          resource->GetType() == ResourceType::kFont ||
-         resource->GetType() == ResourceType::kCSSStyleSheet;
+         resource->GetType() == ResourceType::kCSSStyleSheet ||
+         resource->GetType() == ResourceType::kMock;  // For tests.
 }
 
-bool ShouldResourceBeKeptStrongReference(Resource* resource) {
+bool ShouldResourceBeKeptStrongReference(
+    Resource* resource,
+    const SecurityOrigin* settings_object_origin) {
   return IsMainThread() && resource->IsLoaded() &&
          resource->GetResourceRequest().HttpMethod() == http_names::kGET &&
          resource->Options().data_buffering_policy != kDoNotBufferData &&
-         ShouldResourceBeKeptStrongReferenceByType(resource) &&
+         ShouldResourceBeKeptStrongReferenceByType(resource,
+                                                   settings_object_origin) &&
          !resource->GetResponse().CacheControlContainsNoCache() &&
          !resource->GetResponse().CacheControlContainsNoStore();
 }
@@ -438,13 +454,24 @@ network::mojom::RequestDestination ResourceFetcher::DetermineRequestDestination(
   return network::mojom::RequestDestination::kEmpty;
 }
 
-// static
 void ResourceFetcher::AddPriorityObserverForTesting(
     const KURL& resource_url,
-    base::OnceCallback<void(int)> callback) {
-  PriorityObservers()->Set(
-      MemoryCache::RemoveFragmentIdentifierIfNeeded(resource_url),
-      std::move(callback));
+    base::OnceCallback<void(int)> callback,
+    bool new_load_only) {
+  KURL normalized_url =
+      MemoryCache::RemoveFragmentIdentifierIfNeeded(resource_url);
+
+  if (!new_load_only) {
+    auto it = cached_resources_map_.find(normalized_url.GetString());
+    if (it != cached_resources_map_.end()) {
+      Resource* resource = it->value;
+      std::move(callback).Run(
+          static_cast<int>(resource->GetResourceRequest().InitialPriority()));
+      return;
+    }
+  }
+
+  PriorityObservers()->Set(normalized_url.GetString(), std::move(callback));
 }
 
 // This method simply takes in information about a ResourceRequest, and returns
@@ -465,7 +492,8 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
     mojom::blink::ScriptType script_type,
     bool is_link_preload,
     const absl::optional<float> resource_width,
-    const absl::optional<float> resource_height) {
+    const absl::optional<float> resource_height,
+    bool is_potentially_lcp_element) {
   DCHECK(!resource_request.PriorityHasBeenSet() ||
          type == ResourceType::kImage);
   ResourceLoadPriority priority = TypeToPriority(type);
@@ -564,6 +592,24 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
       } else {
         priority = ResourceLoadPriority::kLowest;
       }
+    }
+  }
+
+  // LCP Critical Path Predictor identified resources get a priority boost.
+  // TODO(crbug.com/1419756): Separate out async script priorities from that of
+  // images.
+  if (is_potentially_lcp_element) {
+    ++potentially_lcp_resource_priority_boosts_;
+    switch (features::kLCPCriticalPathPredictorImageLoadPriority.Get()) {
+      case features::LcppImageLoadPriority::kMedium:
+        priority = std::max(priority, ResourceLoadPriority::kMedium);
+        break;
+      case features::LcppImageLoadPriority::kHigh:
+        priority = std::max(priority, ResourceLoadPriority::kHigh);
+        break;
+      case features::LcppImageLoadPriority::kVeryHigh:
+        priority = std::max(priority, ResourceLoadPriority::kVeryHigh);
+        break;
     }
   }
 
@@ -709,6 +755,12 @@ Resource* ResourceFetcher::CachedResource(const KURL& resource_url) const {
   return it->value.Get();
 }
 
+const HeapHashSet<Member<Resource>>
+ResourceFetcher::MoveResourceStrongReferences() {
+  document_resource_strong_refs_total_size_ = 0;
+  return std::move(document_resource_strong_refs_);
+}
+
 mojom::ControllerServiceWorkerMode
 ResourceFetcher::IsControlledByServiceWorker() const {
   return properties_->GetControllerServiceWorkerMode();
@@ -773,7 +825,7 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
 
   resource_load_observer_->DidFinishLoading(
       request.InspectorId(), base::TimeTicks(), 0,
-      resource->GetResponse().DecodedBodyLength(), false);
+      resource->GetResponse().DecodedBodyLength());
 
   if (!is_static_data) {
     base::TimeTicks now = base::TimeTicks::Now();
@@ -1061,7 +1113,8 @@ absl::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
         ResourcePriority::kNotVisible, params.Defer(),
         params.GetSpeculativePreloadType(), params.GetRenderBlockingBehavior(),
         params.GetScriptType(), params.IsLinkPreload(),
-        params.GetResourceWidth(), params.GetResourceHeight());
+        params.GetResourceWidth(), params.GetResourceHeight(),
+        params.IsPotentiallyLCPElement());
   }
 
   DCHECK_NE(computed_load_priority, ResourceLoadPriority::kUnresolved);
@@ -1347,19 +1400,13 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   if (client)
     client->SetResource(resource, freezable_task_runner_.get());
 
-  // TODO(yoav): It is not clear why preloads are exempt from this check. Can we
-  // remove the exemption?
-  if (!params.IsSpeculativePreload() || policy != RevalidationPolicy::kUse) {
-    // When issuing another request for a resource that is already in-flight
-    // make sure to not demote the priority of the in-flight request. If the new
-    // request isn't at the same priority as the in-flight request, only allow
-    // promotions. This can happen when a visible image's priority is increased
-    // and then another reference to the image is parsed (which would be at a
-    // lower priority).
-    if (resource_request.Priority() > resource->GetResourceRequest().Priority())
-      resource->DidChangePriority(resource_request.Priority(), 0);
-    // TODO(yoav): I'd expect the stated scenario to not go here, as its policy
-    // would be Use.
+  // Increase the priority of an existing request if the new request is
+  // of a higher priority.
+  // This can happen in a lot of cases but a common one is if a resource is
+  // preloaded at a low priority but then the resource itself requires a
+  // high-priority load.
+  if (resource_request.Priority() > resource->GetResourceRequest().Priority()) {
+    resource->DidChangePriority(resource_request.Priority(), 0);
   }
 
   // If only the fragment identifiers differ, it is the same resource.
@@ -1414,7 +1461,8 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     }
     if (!StartLoad(resource,
                    std::move(params.MutableResourceRequest().MutableBody()),
-                   load_blocking_policy, params.GetRenderBlockingBehavior())) {
+                   load_blocking_policy, params.GetRenderBlockingBehavior(),
+                   params.CountORBBlockAs())) {
       resource->FinishAsError(ResourceError::CancelledError(params.Url()),
                               freezable_task_runner_.get());
     }
@@ -1435,9 +1483,17 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 }
 
 void ResourceFetcher::RemoveResourceStrongReference(Resource* resource) {
-  if (resource) {
+  if (resource && document_resource_strong_refs_.Contains(resource)) {
+    const size_t resource_size =
+        static_cast<size_t>(resource->GetResponse().DecodedBodyLength());
     document_resource_strong_refs_.erase(resource);
+    CHECK_GE(document_resource_strong_refs_total_size_, resource_size);
+    document_resource_strong_refs_total_size_ -= resource_size;
   }
+}
+
+bool ResourceFetcher::HasStrongReferenceForTesting(Resource* resource) {
+  return document_resource_strong_refs_.Contains(resource);
 }
 
 void ResourceFetcher::ResourceTimingReportTimerFired(TimerBase* timer) {
@@ -1497,8 +1553,7 @@ std::unique_ptr<URLLoader> ResourceFetcher::CreateURLLoader(
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       unfreezable_task_runner_;
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kKeepAliveInBrowserMigration) &&
+  if (!blink::features::IsKeepAliveInBrowserMigrationEnabled() &&
       request.GetKeepalive()) {
     base::UmaHistogramBoolean("Blink.Fetch.KeepAlive.Total", true);
     // Set the `task_runner` to the `AgentGroupScheduler`'s task-runner for
@@ -1723,8 +1778,9 @@ void ResourceFetcher::InsertAsPreloadIfNecessary(Resource* resource,
     return;
   }
   PreloadKey key(params.Url(), type);
-  if (preloads_.find(key) != preloads_.end())
+  if (base::Contains(preloads_, key)) {
     return;
+  }
 
   preloads_.insert(key, resource);
   resource->MarkAsPreload();
@@ -2052,8 +2108,7 @@ void ResourceFetcher::ClearContext() {
   StopFetching();
 
   if ((!loaders_.empty() || !non_blocking_loaders_.empty()) &&
-      !base::FeatureList::IsEnabled(
-          blink::features::kKeepAliveInBrowserMigration)) {
+      !blink::features::IsKeepAliveInBrowserMigrationEnabled()) {
     // There are some keepalive requests.
 
     // Records the current time to estimate how long the remaining requests will
@@ -2175,10 +2230,7 @@ void ResourceFetcher::WarnUnusedPreloads() {
 void ResourceFetcher::HandleLoaderFinish(Resource* resource,
                                          base::TimeTicks response_end,
                                          LoaderFinishType type,
-                                         uint32_t inflight_keepalive_bytes,
-                                         bool should_report_corb_blocking,
-                                         bool pervasive_payload_requested,
-                                         int64_t bytes_fetched) {
+                                         uint32_t inflight_keepalive_bytes) {
   DCHECK(resource);
 
   // kRaw might not be subresource, and we do not need them.
@@ -2202,15 +2254,6 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
     UpdateServiceWorkerSubresourceMetrics(
         resource->GetType(),
         resource->GetResponse().WasFetchedViaServiceWorker());
-  }
-
-  subresource_load_metrics_.pervasive_payload_requested |=
-      pervasive_payload_requested;
-  if (bytes_fetched > 0) {
-    subresource_load_metrics_.total_bytes_fetched += bytes_fetched;
-    if (pervasive_payload_requested) {
-      subresource_load_metrics_.pervasive_bytes_fetched += bytes_fetched;
-    }
   }
 
   context_->UpdateSubresourceLoadMetrics(subresource_load_metrics_);
@@ -2279,8 +2322,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
     DCHECK(!IsDetached());
     resource_load_observer_->DidFinishLoading(
         resource->InspectorId(), response_end, encoded_data_length,
-        resource->GetResponse().DecodedBodyLength(),
-        should_report_corb_blocking);
+        resource->GetResponse().DecodedBodyLength());
   }
   MaybeSaveResourceToStrongReference(resource);
 }
@@ -2355,14 +2397,15 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
   }
   return StartLoad(resource, ResourceRequestBody(),
                    ImageLoadBlockingPolicy::kDefault,
-                   RenderBlockingBehavior::kNonBlocking);
+                   RenderBlockingBehavior::kNonBlocking, absl::nullopt);
 }
 
 bool ResourceFetcher::StartLoad(
     Resource* resource,
     ResourceRequestBody request_body,
     ImageLoadBlockingPolicy policy,
-    RenderBlockingBehavior render_blocking_behavior) {
+    RenderBlockingBehavior render_blocking_behavior,
+    absl::optional<mojom::blink::WebFeature> count_orb_block_as_) {
   DCHECK(resource);
   DCHECK(resource->StillNeedsLoad());
 
@@ -2408,7 +2451,7 @@ bool ResourceFetcher::StartLoad(
 
     loader = MakeGarbageCollected<ResourceLoader>(
         this, scheduler_, resource, context_lifecycle_notifier_,
-        std::move(request_body), size);
+        std::move(request_body), size, count_orb_block_as_);
     // Preload requests should not block the load event. IsLinkPreload()
     // actually continues to return true for Resources matched from the preload
     // cache that must block the load event, but that is OK because this method
@@ -2466,8 +2509,7 @@ void ResourceFetcher::RemoveResourceLoader(ResourceLoader* loader) {
 }
 
 void ResourceFetcher::StopFetching() {
-  if (base::FeatureList::IsEnabled(
-          blink::features::kKeepAliveInBrowserMigration)) {
+  if (blink::features::IsKeepAliveInBrowserMigrationEnabled()) {
     StopFetchingInternal(StopFetchingTarget::kIncludingKeepaliveLoaders);
   } else {
     StopFetchingInternal(StopFetchingTarget::kExcludingKeepaliveLoaders);
@@ -2792,20 +2834,44 @@ void ResourceFetcher::CancelWebBundleSubresourceLoadersFor(
 }
 
 void ResourceFetcher::MaybeSaveResourceToStrongReference(Resource* resource) {
-  if (base::FeatureList::IsEnabled(features::kMemoryCacheStrongReference) &&
-      ShouldResourceBeKeptStrongReference(resource)) {
-    document_resource_strong_refs_.insert(resource);
-    freezable_task_runner_->PostDelayedTask(
-        FROM_HERE,
-        WTF::BindOnce(&ResourceFetcher::RemoveResourceStrongReference,
-                      WrapWeakPersistent(this), WrapWeakPersistent(resource)),
-        GetResourceStrongReferenceTimeout(resource));
+  if (!base::FeatureList::IsEnabled(features::kMemoryCacheStrongReference)) {
+    return;
   }
+
+  static const size_t total_size_threshold = static_cast<size_t>(
+      features::kMemoryCacheStrongReferenceTotalSizeThresholdParam.Get());
+  static const size_t resource_size_threshold = static_cast<size_t>(
+      features::kMemoryCacheStrongReferenceResourceSizeThresholdParam.Get());
+  const size_t resource_size =
+      static_cast<size_t>(resource->GetResponse().DecodedBodyLength());
+  const bool size_is_small_enough = resource_size <= resource_size_threshold &&
+                                    resource_size <= total_size_threshold &&
+                                    document_resource_strong_refs_total_size_ <=
+                                        total_size_threshold - resource_size;
+
+  if (!size_is_small_enough) {
+    return;
+  }
+
+  const SecurityOrigin* settings_object_origin =
+      properties_->GetFetchClientSettingsObject().GetSecurityOrigin();
+  if (!ShouldResourceBeKeptStrongReference(resource, settings_object_origin)) {
+    return;
+  }
+
+  document_resource_strong_refs_.insert(resource);
+  document_resource_strong_refs_total_size_ += resource_size;
+  freezable_task_runner_->PostDelayedTask(
+      FROM_HERE,
+      WTF::BindOnce(&ResourceFetcher::RemoveResourceStrongReference,
+                    WrapWeakPersistent(this), WrapWeakPersistent(resource)),
+      GetResourceStrongReferenceTimeout(resource));
 }
 
 void ResourceFetcher::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel level) {
   document_resource_strong_refs_.clear();
+  document_resource_strong_refs_total_size_ = 0;
 }
 
 void ResourceFetcher::SetResourceCache(
@@ -2853,6 +2919,15 @@ void ResourceFetcher::OnResourceCacheContainsFinished(
       base::StrCat({"Blink.MemoryCache.Remote.", visibility, lifecycle,
                     ".IPCRecvDelay"}),
       recv_delay);
+}
+
+void ResourceFetcher::RecordLCPPSubresourceMetrics() {
+  if (!context_->DoesLCPPHaveAnyHintData()) {
+    return;
+  }
+
+  base::UmaHistogramCounts100("Blink.LCPP.PotentiallyLCPResourcePriorityBoosts",
+                              potentially_lcp_resource_priority_boosts_);
 }
 
 void ResourceFetcher::Trace(Visitor* visitor) const {

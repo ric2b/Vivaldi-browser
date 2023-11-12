@@ -5,7 +5,6 @@
 import("//build/config/ios/swift_source_set.gni")
 
 source_set("bring_android_tabs") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bring_android_tabs_prompt_coordinator.h",
     "bring_android_tabs_prompt_coordinator.mm",
@@ -35,13 +34,11 @@ source_set("bring_android_tabs") {
     "//ios/chrome/browser/shared/ui/table_view",
     "//ios/chrome/browser/synced_sessions",
     "//ios/chrome/browser/url_loading",
-    "//ios/chrome/browser/url_loading:url_loading_params_header",
     "//ios/chrome/common/ui/favicon:favicon_constants",
   ]
 }
 
 source_set("bring_android_tabs_ui") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bring_android_tabs_prompt_view_controller_delegate.h",
     "tab_list_from_android_consumer.h",
@@ -89,7 +86,6 @@ swift_source_set("bring_android_tabs_ui_swift") {
 }
 
 source_set("constants") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "constants.h",
     "constants.mm",
@@ -98,7 +94,6 @@ source_set("constants") {
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "bring_android_tabs_prompt_mediator_unittest.mm",
@@ -115,12 +110,9 @@ source_set("unit_tests") {
     "//ios/chrome/browser/bring_android_tabs:test_support",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/segmentation_platform",
-    "//ios/chrome/browser/shared/model/browser/test:test_support",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/synced_sessions",
-    "//ios/chrome/browser/url_loading",
-    "//ios/chrome/browser/url_loading:test_support",
     "//ios/chrome/test:test_support",
     "//ios/web/public/test",
     "//testing/gtest:gtest",
@@ -128,16 +120,15 @@ source_set("unit_tests") {
 }
 
 source_set("eg_app_support+eg2") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bring_android_tabs_app_interface.h",
     "bring_android_tabs_app_interface.mm",
+    "bring_android_tabs_test_session.h",
   ]
   deps = [
+    "//base",
     "//base/test:test_support",
     "//components/sync_device_info",
     "//ios/chrome/browser/synced_sessions",
@@ -148,23 +139,18 @@ source_set("eg_app_support+eg2") {
 }
 
 source_set("eg_test_support+eg2") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bring_android_tabs_app_interface.h",
     "bring_android_tabs_app_interface_stub.mm",
+    "bring_android_tabs_test_session.h",
   ]
   deps = [ "//ios/testing/earl_grey:eg_test_support+eg2" ]
 }
 
 source_set("eg2_tests") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bring_android_tabs_bottom_message_egtest.mm",
@@ -177,6 +163,7 @@ source_set("eg2_tests") {
   deps = [
     ":constants",
     ":eg_test_support+eg2",
+    "//base",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/bring_android_tabs:features",
     "//ios/chrome/browser/signin:fake_system_identity",
@@ -185,6 +172,7 @@ source_set("eg2_tests") {
     "//ios/chrome/common/ui/promo_style:constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//net:test_support",
     "//ui/base",
   ]
   frameworks = [ "UIKit.framework" ]

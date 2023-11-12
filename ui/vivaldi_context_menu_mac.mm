@@ -122,10 +122,11 @@ bool VivaldiContextMenuMac::Show() {
   if (!parent_view)
     return false;
 
-  menu_controller_.reset(
+  // TODO: Test properly for problems wrt ARC transition
+  menu_controller_ =
       [[MenuControllerCocoa alloc] initWithModel:menu_model_
                      delegate:nil
-                     useWithPopUpButtonCell:NO]);
+                     useWithPopUpButtonCell:NO];
 
   // Synthesize an event for the click, as there is no certainty that
   // [NSApp currentEvent] will return a valid event.

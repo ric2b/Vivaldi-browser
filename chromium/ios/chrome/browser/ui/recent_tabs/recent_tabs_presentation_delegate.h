@@ -21,6 +21,11 @@ struct DistantSession;
 // tabs. If `searchTerms` is not empty, it will be used to pre-populate the
 // search bar and filter results.
 - (void)showHistoryFromRecentTabsFilteredBySearchTerms:(NSString*)searchTerms;
+// Tells the receiver to show the History Sync Opt-In screen. If the user has
+// signed-in just before this step for the sole purpose of enabling history sync
+// (Eg. using the Recent Tabs sync promo), `dedicatedSignInDone` will be `YES`,
+// and the user is signed-out if history opt-in is declined.
+- (void)showHistorySyncOptInAfterDedicatedSignIn:(BOOL)dedicatedSignInDone;
 // Tells the receiver to open all tabs from the given `session`.
 - (void)openAllTabsFromSession:(const synced_sessions::DistantSession*)session;
 
@@ -29,6 +34,22 @@ struct DistantSession;
 // already be aware of the ongoing search mode and terms. If this method is not
 // implemented, the "Search Open Tabs" Suggested Action will not be displayed.
 - (void)showRegularTabGridFromRecentTabs;
+
+// Vivaldi
+@optional
+// Tells the receiver that Login button is tapped from empty state view of
+// synced tabs, and asks to open login view.
+- (void)didSelectLoginFromEmptyStateView;
+@optional
+// Tells the receiver that Register button is tapped from empty state view of
+// synced tabs, and asks to open create account view.
+- (void)didSelectRegisterFromEmptyStateView;
+@optional
+// Tells the receiver that Enable Sync button is tapped from empty state view of
+// synced tabs, and asks to enable history and tabs sync.
+- (void)didSelectEnableSyncFromEmptyStateView;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_RECENT_TABS_RECENT_TABS_PRESENTATION_DELEGATE_H_

@@ -66,7 +66,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
 - (void)dealloc {
   [self reset];
-  [super dealloc];
+  // TODO: Test properly for problems wrt ARC transition
+  //[super dealloc];
 }
 
 - (vivaldi::FaviconLoaderMac*)faviconLoader {
@@ -349,14 +350,14 @@ void setMenuItemBold(NSMenuItem* item, bool bold) {
     font = [NSFont menuFontOfSize:0];
   }
 
-  NSString* title = [item title];
+  // TODO: Test properly for problems wrt ARC transition
+  NSString* __strong title = [item title];
   NSDictionary* fontAttribute =
     [NSDictionary dictionaryWithObjectsAndKeys:font, NSFontAttributeName, nil];
   NSMutableAttributedString* newTitle =
     [[NSMutableAttributedString alloc] initWithString:title
                                            attributes:fontAttribute];
   [item setAttributedTitle:newTitle];
-  [newTitle release];
 }
 
 NSMenuItem* MakeMenuItem(NSString* title, const std::string& shortcut, int tag) {
@@ -444,15 +445,17 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           break;
         case IDC_VIV_SHARE_MENU_MAC:
           [menuItem setTag:0];
-          [menuItem setSubmenu:[[[NSMenu alloc] initWithTitle:
-              base::SysUTF8ToNSString(item.name)] autorelease]];
+          // TODO: Test properly for problems wrt ARC transition
+          [menuItem setSubmenu:[[NSMenu alloc] initWithTitle:
+              base::SysUTF8ToNSString(item.name)]];
           [appController vivInitShareMenu:menuItem];
           break;
         case IDC_VIV_MAC_SERVICES:
           [menuItem setTag:0];
-          [menuItem setSubmenu:[[[NSMenu alloc] initWithTitle:
-              base::SysUTF8ToNSString(item.name)] autorelease]];
-          [NSApp setServicesMenu:[menuItem submenu]];
+          // TODO: Test properly for problems wrt ARC transition
+          [menuItem setSubmenu:[[NSMenu alloc] initWithTitle:
+              base::SysUTF8ToNSString(item.name)]];
+          [NSApp setServicesMenu :[menuItem submenu]];
           // Otherwise, as above, do nothing.
           break;
         case IDC_VIV_BOOKMARK_CONTAINER:
@@ -577,7 +580,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       }
     } else {
       NSString* title = base::SysUTF8ToNSString(item.name);
-      subMenu = [[[NSMenu alloc] initWithTitle:title] autorelease];
+      // TODO: Test properly for problems wrt ARC transition
+      subMenu = [[NSMenu alloc] initWithTitle:title];
       [menuItem setSubmenu:subMenu];
     }
 
@@ -602,14 +606,19 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       }
       // The second pass hands over information to chrome now that the items
       // are in place.
+      bool has_container = false;
       pos = 0;
       for (const menubar::MenuItem& child: *item.items) {
         if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
           SetContainerState(extensions::vivaldi::menubar::ToString(child.edge),
               pos);
+          has_container = true;
           break;
         }
         pos ++;
+      }
+      if (!has_container) {
+        SetContainerState("below", -1);
       }
     } else {
       for (const menubar::MenuItem& child: *item.items) {

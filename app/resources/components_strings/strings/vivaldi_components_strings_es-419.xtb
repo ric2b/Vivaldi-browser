@@ -162,7 +162,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
-<translation id="7260504762447901703">Revocar acceso</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7419106976560586862">Ruta al perfil</translation>
 <translation id="7445762425076701745">La identidad del servidor al que estás conectado no se puede validar completamente. Estás conectado a un servidor utilizando un nombre que sólo es válido dentro de tu red y cuya propiedad no puede validar ninguna entidad externa de certificación. Debido a que  aún así hay algunas entidades que emiten certificados para estos nombres, no hay forma de asegurar que estás conectado al sitio web que pretendías, o en su lugar al de un atacante.</translation>

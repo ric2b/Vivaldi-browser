@@ -41,7 +41,7 @@ absl::optional<int> VivaldiMainDelegate::BasicStartupComplete() {
       *base::CommandLine::ForCurrentProcess();
 
   if (command_line.HasSwitch(chromium_version_switch)) {
-    printf("%s\n", version_info::GetVersionNumber().c_str());
+    printf("%s\n", version_info::GetVersionNumber().data());
     return 0;
   }
 

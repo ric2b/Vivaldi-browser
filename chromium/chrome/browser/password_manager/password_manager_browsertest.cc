@@ -30,7 +30,9 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/password_manager/passwords_navigation_observer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
@@ -43,9 +45,11 @@
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom-test-utils.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -54,6 +58,7 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_observer.h"
@@ -63,14 +68,13 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/password_manager/core/browser/test_password_store.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -79,6 +83,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -106,13 +111,12 @@
 #endif  // BUIDLFLAG(ENABLE_DICE_SUPPORT)
 
 using autofill::ParsingResult;
+using autofill::test::CreateFieldPrediction;
 using base::ASCIIToUTF16;
 using base::Feature;
 using testing::_;
 using testing::ElementsAre;
 using testing::Field;
-using FieldPrediction = autofill::AutofillQueryResponse::FormSuggestion::
-    FieldSuggestion::FieldPrediction;
 
 namespace password_manager {
 namespace {
@@ -137,6 +141,20 @@ class PasswordManagerBrowserTest : public PasswordManagerBrowserTestBase {
   }
 
   ~PasswordManagerBrowserTest() override = default;
+};
+
+// A test fixture that injects an `ObservingAutofillClient` into newly created
+// tabs to allow waiting for an Autofill popup to open.
+class PasswordManagerAutofillPopupBrowserTest
+    : public PasswordManagerBrowserTest {
+ protected:
+  ObservingAutofillClient& autofill_client() {
+    return *autofill_client_injector_[WebContents()];
+  }
+
+ private:
+  autofill::TestAutofillClientInjector<ObservingAutofillClient>
+      autofill_client_injector_;
 };
 
 // This fixture enables communication to the Autofill crowdsourcing server, but
@@ -194,14 +212,10 @@ class PasswordManagerBackForwardCacheBrowserTest
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    // TODO(https://crbug.com/1158630): Remove this and below after confirming
-    // whether setup is completing.
-    LOG(INFO) << "SetUpCommandLine started.";
     scoped_feature_list_.InitWithFeaturesAndParameters(
         content::GetDefaultEnabledBackForwardCacheFeaturesForTesting(),
         content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
     PasswordManagerBrowserTest::SetUpCommandLine(command_line);
-    LOG(INFO) << "SetUpCommandLine complete.";
   }
 
  private:
@@ -1206,33 +1220,30 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // Get form data
   autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
 
-  // Username
-  bool is_placeholder = false;
-  autofill::FormStructure form_structure(form_data);
-  std::vector<FieldPrediction> username_predictions;
-  FieldPrediction username_prediction;
-  username_prediction.set_type(autofill::USERNAME);
-  username_predictions.push_back(username_prediction);
-  form_structure.field(0)->set_server_predictions(username_predictions);
-  form_structure.field(0)->set_may_use_prefilled_placeholder(is_placeholder);
-
-  // Password
-  std::vector<FieldPrediction> password_predictions;
-  FieldPrediction password_prediction;
-  password_prediction.set_type(autofill::PASSWORD);
-  password_predictions.push_back(password_prediction);
-  form_structure.field(1)->set_server_predictions(password_predictions);
+  // Create server predictions.
+  autofill::AutofillType::ServerPrediction username_prediction;
+  username_prediction.server_predictions = {
+      CreateFieldPrediction(autofill::ServerFieldType::USERNAME)};
+  autofill::AutofillType::ServerPrediction password_prediction;
+  password_prediction.server_predictions = {
+      CreateFieldPrediction(autofill::ServerFieldType::PASSWORD)};
 
   // Navigate to the page
   NavigateToFile("/password/nonplaceholder_username.html");
 
-  // Use autofill predictions
-  autofill::ContentAutofillClient* autofill_client =
-      autofill::ContentAutofillClient::FromWebContents(WebContents());
-  autofill_client->PropagateAutofillPredictions(
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(
-          WebContents()->GetPrimaryMainFrame()),
-      {&form_structure});
+  // Use server predictions.
+  password_manager::ContentPasswordManagerDriver* driver =
+      password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
+          WebContents())
+          ->GetDriverForFrame(WebContents()->GetPrimaryMainFrame());
+  const std::vector<const autofill::FormData*> forms = {&form_data};
+  const base::flat_map<autofill::FieldGlobalId,
+                       autofill::AutofillType::ServerPrediction>
+      field_predictions = {
+          {form_data.fields[0].global_id(), std::move(username_prediction)},
+          {form_data.fields[1].global_id(), std::move(password_prediction)}};
+  driver->GetPasswordManager()->ProcessAutofillPredictions(driver, forms,
+                                                           field_predictions);
 
   // Check original values before interaction
   CheckElementValue("username_field", "example@example.com");
@@ -1270,33 +1281,33 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // Get form data
   autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
 
-  // Username
-  bool is_placeholder = true;
-  autofill::FormStructure form_structure(form_data);
-  std::vector<FieldPrediction> username_predictions;
-  FieldPrediction username_prediction;
-  username_prediction.set_type(autofill::USERNAME);
-  username_predictions.push_back(username_prediction);
-  form_structure.field(0)->set_server_predictions(username_predictions);
-  form_structure.field(0)->set_may_use_prefilled_placeholder(is_placeholder);
-
-  // Password
-  std::vector<FieldPrediction> password_predictions;
-  FieldPrediction password_prediction;
-  password_prediction.set_type(autofill::PASSWORD);
-  password_predictions.push_back(password_prediction);
-  form_structure.field(1)->set_server_predictions(password_predictions);
+  // Create server predictions.
+  autofill::AutofillType::ServerPrediction username_prediction;
+  username_prediction.server_predictions = {
+      autofill::test::CreateFieldPrediction(
+          autofill::ServerFieldType::USERNAME)};
+  username_prediction.may_use_prefilled_placeholder = true;
+  autofill::AutofillType::ServerPrediction password_prediction;
+  password_prediction.server_predictions = {
+      autofill::test::CreateFieldPrediction(
+          autofill::ServerFieldType::PASSWORD)};
 
   // Navigate to the page
   NavigateToFile("/password/nonplaceholder_username.html");
 
-  // Use autofill predictions
-  autofill::AutofillClient* autofill_client =
-      autofill::ContentAutofillClient::FromWebContents(WebContents());
-  autofill_client->PropagateAutofillPredictions(
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(
-          WebContents()->GetPrimaryMainFrame()),
-      {&form_structure});
+  // Use server predictions.
+  password_manager::ContentPasswordManagerDriver* driver =
+      password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
+          WebContents())
+          ->GetDriverForFrame(WebContents()->GetPrimaryMainFrame());
+  const std::vector<const autofill::FormData*> forms = {&form_data};
+  const base::flat_map<autofill::FieldGlobalId,
+                       autofill::AutofillType::ServerPrediction>
+      field_predictions = {
+          {form_data.fields[0].global_id(), std::move(username_prediction)},
+          {form_data.fields[1].global_id(), std::move(password_prediction)}};
+  driver->GetPasswordManager()->ProcessAutofillPredictions(driver, forms,
+                                                           field_predictions);
 
   // Check original values before interaction
   CheckElementValue("username_field", "example@example.com");
@@ -2022,7 +2033,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+IN_PROC_BROWSER_TEST_F(PasswordManagerAutofillPopupBrowserTest,
                        InFrameNavigationDoesNotClearPopupState) {
   password_manager::PasswordStoreInterface* password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
@@ -2035,21 +2046,6 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   password_store->AddLogin(signin_form);
 
   NavigateToFile("/password/password_form.html");
-
-  // Mock out the AutofillClient so we know how long to wait. Unfortunately
-  // there isn't otherwise a good event to wait on to verify that the popup
-  // would have been shown.
-  password_manager::ContentPasswordManagerDriverFactory* driver_factory =
-      password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
-          WebContents());
-  ObservingAutofillClient::CreateForWebContents(WebContents());
-  ObservingAutofillClient* observing_autofill_client =
-      ObservingAutofillClient::FromWebContents(WebContents());
-  password_manager::ContentPasswordManagerDriver* driver =
-      driver_factory->GetDriverForFrame(WebContents()->GetPrimaryMainFrame());
-  driver->GetPasswordAutofillManager()->set_autofill_client_for_test(
-      observing_autofill_client);
-
   // Trigger in page navigation.
   std::string in_page_navigate = "location.hash = '#blah';";
   ASSERT_TRUE(content::ExecJs(RenderFrameHost(), in_page_navigate,
@@ -2058,8 +2054,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // Click on the username field to display the popup.
   content::SimulateMouseClickOrTapElementWithId(WebContents(),
                                                 "username_field");
-  // Make sure the popup would be shown.
-  observing_autofill_client->WaitForAutofillPopup();
+  // Make sure that the popup is showing.
+  autofill_client().WaitForAutofillPopup();
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ChangePwdFormBubbleShown) {
@@ -2355,18 +2351,19 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
       "'iframe').contentDocument.getElementById('username_field')"
       ".getBoundingClientRect();",
       content::EXECUTE_SCRIPT_NO_USER_GESTURE));
-  int y = content::EvalJs(RenderFrameHost(),
-                          "usernameRect.top + usernameRect.bottom;",
-                          content::EXECUTE_SCRIPT_NO_USER_GESTURE)
-              .ExtractInt();
-  int x = content::EvalJs(RenderFrameHost(),
-                          "usernameRect.left + usernameRect.right;",
-                          content::EXECUTE_SCRIPT_NO_USER_GESTURE)
-              .ExtractInt();
+  int y =
+      content::EvalJs(RenderFrameHost(),
+                      "Math.floor(usernameRect.top + usernameRect.height / 2)",
+                      content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+          .ExtractInt();
+  int x =
+      content::EvalJs(RenderFrameHost(),
+                      "Math.floor(usernameRect.left + usernameRect.width / 2)",
+                      content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+          .ExtractInt();
 
-  content::SimulateMouseClickAt(WebContents(), 0,
-                                blink::WebMouseEvent::Button::kLeft,
-                                gfx::Point(x / 2, y / 2));
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(x, y));
   // Verify username and password have been autofilled
   WaitForElementValue("iframe", "username_field", "temp");
   WaitForElementValue("iframe", "password_field", "pa55w0rd");
@@ -3969,6 +3966,27 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   EXPECT_TRUE(prompt_observer.IsSavePromptAvailable());
 }
 
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       ShowPasswordManagerNoBrowser) {
+  // Create a WebContent without tab helpers so it has no associated browser.
+  std::unique_ptr<content::WebContents> new_web_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser()->profile()));
+
+  // Verify that there is no browser.
+  ASSERT_FALSE(chrome::FindBrowserWithWebContents(new_web_contents.get()));
+
+  // Create ChromePasswordManagerClient for newly created web_contents.
+  autofill::ChromeAutofillClient::CreateForWebContents(new_web_contents.get());
+  ChromePasswordManagerClient::CreateForWebContents(new_web_contents.get());
+
+  ChromePasswordManagerClient* client =
+      ChromePasswordManagerClient::FromWebContents(new_web_contents.get());
+  ASSERT_TRUE(client);
+  ASSERT_NO_FATAL_FAILURE(client->NavigateToManagePasswordsPage(
+      password_manager::ManagePasswordsReferrer::kPasswordsGoogleWebsite));
+}
+
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // This test suite only applies to Gaia signin page, and checks that the
 // signin interception bubble and the password bubbles never conflict.
@@ -4199,13 +4217,17 @@ class MockPrerenderPasswordManagerDriver
   MOCK_METHOD(void,
               UserModifiedNonPasswordField,
               (autofill::FieldRendererId renderer_id,
-               const std::u16string& field_name,
                const std::u16string& value,
-               bool autocomplete_attribute_has_username),
+               bool autocomplete_attribute_has_username,
+               bool is_likely_otp),
               (override));
   MOCK_METHOD(void,
               ShowPasswordSuggestions,
-              (base::i18n::TextDirection text_direction,
+              (autofill::FieldRendererId element_id,
+               const autofill::FormData& form,
+               uint64_t username_field_index,
+               uint64_t password_field_index,
+               base::i18n::TextDirection text_direction,
                const std::u16string& typed_username,
                int options,
                const gfx::RectF& bounds),
@@ -4269,18 +4291,24 @@ class MockPrerenderPasswordManagerDriver
     });
     ON_CALL(*this, UserModifiedNonPasswordField)
         .WillByDefault([this](autofill::FieldRendererId renderer_id,
-                              const std::u16string& field_name,
                               const std::u16string& value,
-                              bool autocomplete_attribute_has_username) {
+                              bool autocomplete_attribute_has_username,
+                              bool is_likely_otp) {
           impl_->UserModifiedNonPasswordField(
-              renderer_id, field_name, value,
-              autocomplete_attribute_has_username);
+              renderer_id, value, autocomplete_attribute_has_username,
+              is_likely_otp);
         });
     ON_CALL(*this, ShowPasswordSuggestions)
-        .WillByDefault([this](base::i18n::TextDirection text_direction,
+        .WillByDefault([this](autofill::FieldRendererId element_id,
+                              const autofill::FormData& form,
+                              uint64_t username_field_index,
+                              uint64_t password_field_index,
+                              base::i18n::TextDirection text_direction,
                               const std::u16string& typed_username, int options,
                               const gfx::RectF& bounds) {
-          impl_->ShowPasswordSuggestions(text_direction, typed_username,
+          const autofill::FormData form_data;
+          impl_->ShowPasswordSuggestions(element_id, form_data, 0, 0,
+                                         text_direction, typed_username,
                                          options, bounds);
         });
 #if BUILDFLAG(IS_ANDROID)
@@ -4334,8 +4362,8 @@ class MockPrerenderPasswordManagerDriver
   }
   base::OnceClosure quit_closure_;
   uint32_t wait_type_ = WAIT_FOR_NOTHING;
-  raw_ptr<autofill::mojom::PasswordManagerDriver, DanglingUntriaged> impl_ =
-      nullptr;
+  raw_ptr<autofill::mojom::PasswordManagerDriver, AcrossTasksDanglingUntriaged>
+      impl_ = nullptr;
 };
 
 class MockPrerenderPasswordManagerDriverInjector
@@ -4390,7 +4418,7 @@ class PasswordManagerPrerenderBrowserTest : public PasswordManagerBrowserTest {
   ~PasswordManagerPrerenderBrowserTest() override = default;
 
   void SetUp() override {
-    prerender_helper_.SetUp(embedded_test_server());
+    prerender_helper_.RegisterServerRequestMonitor(embedded_test_server());
     PasswordManagerBrowserTest::SetUp();
   }
 
@@ -4434,10 +4462,7 @@ class PasswordManagerPrerenderBrowserTest : public PasswordManagerBrowserTest {
     // logging.
     autofill::ChromeAutofillClient::CreateForWebContents(
         owned_web_contents.get());
-    ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
-        owned_web_contents.get(),
-        autofill::ContentAutofillClient::FromWebContents(
-            owned_web_contents.get()));
+    ChromePasswordManagerClient::CreateForWebContents(owned_web_contents.get());
     ASSERT_TRUE(
         ChromePasswordManagerClient::FromWebContents(owned_web_contents.get()));
     ManagePasswordsUIController::CreateForWebContents(owned_web_contents.get());

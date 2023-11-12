@@ -46,6 +46,8 @@ export const OOBE_UI_STATE = {
   MARKETING_OPT_IN: 19,
   GAIA_INFO: 21,
   CHOOBE: 22,
+  SETUP_CHILD: 23,
+  ENROLL_TRIAGE: 24,
 };
 
 // TODO(crbug.com/1229130) - Refactor/remove these constants.

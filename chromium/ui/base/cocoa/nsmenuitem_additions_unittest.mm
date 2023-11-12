@@ -10,15 +10,11 @@
 #include <ostream>
 
 #include "base/apple/bridging.h"
-#include "base/mac/foundation_util.h"
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/strings/sys_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/keycodes/keyboard_code_conversion_mac.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface NSEventForTesting : NSEvent
 @property(copy, nonatomic) NSString* characters;
@@ -71,8 +67,7 @@ NSMenuItem* MenuItem(NSString* equiv, NSUInteger mask = 0) {
   NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:@""
                                                 action:nil
                                          keyEquivalent:@""];
-  item.keyEquivalent = equiv;
-  item.keyEquivalentModifierMask = mask;
+  [item cr_setKeyEquivalent:equiv modifierMask:mask];
   return item;
 }
 
@@ -551,7 +546,7 @@ TEST(NSMenuItemAdditionsTest, TestCmdCapsLockOnPersianStandardLayout) {
   // The layout generates an event with a capital W. We have to force the
   // characters because the regular NSEvent machinery insists on converting
   // the string to lower case.
-  [base::mac::ObjCCastStrict<NSEventForTesting>(cmdWWithCapsLock)
+  [base::apple::ObjCCastStrict<NSEventForTesting>(cmdWWithCapsLock)
       setCharacters:capitalW];
   ExpectKeyFiresItem(cmdWWithCapsLock, closeTabItem, /*compare_cocoa=*/false);
 
@@ -559,7 +554,7 @@ TEST(NSMenuItemAdditionsTest, TestCmdCapsLockOnPersianStandardLayout) {
   NSEvent* shiftCmdW =
       KeyEvent(NSEventModifierFlagCommand | NSEventModifierFlagShift, capitalW,
                @"\u1612", kVK_ANSI_W);
-  [base::mac::ObjCCastStrict<NSEventForTesting>(shiftCmdW)
+  [base::apple::ObjCCastStrict<NSEventForTesting>(shiftCmdW)
       setCharacters:capitalW];
   ExpectKeyFiresItem(shiftCmdW, closeWindowItem, /*compare_cocoa=*/false);
 
@@ -568,7 +563,7 @@ TEST(NSMenuItemAdditionsTest, TestCmdCapsLockOnPersianStandardLayout) {
       KeyEvent(NSEventModifierFlagCommand | NSEventModifierFlagShift |
                    NSEventModifierFlagCapsLock,
                capitalW, @"\u1612", kVK_ANSI_W);
-  [base::mac::ObjCCastStrict<NSEventForTesting>(shiftCmdWWithCapsLock)
+  [base::apple::ObjCCastStrict<NSEventForTesting>(shiftCmdWWithCapsLock)
       setCharacters:capitalW];
   ExpectKeyFiresItem(shiftCmdWWithCapsLock, closeWindowItem,
                      /*compare_cocoa=*/false);
@@ -592,7 +587,7 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
   // can be fired on all layouts.
   NSMenuItem* item = MenuItem(@"m", NSEventModifierFlagCommand);
 
-  base::ScopedCFTypeRef<CFMutableDictionaryRef> filter(
+  base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> filter(
       CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
                                 &kCFTypeDictionaryKeyCallBacks,
                                 &kCFTypeDictionaryValueCallBacks));
@@ -601,7 +596,7 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
 
   // Docs say that including all layouts instead of just the active ones is
   // slow, but there's no way around that.
-  base::ScopedCFTypeRef<CFArrayRef> list(
+  base::apple::ScopedCFTypeRef<CFArrayRef> list(
       TISCreateInputSourceList(filter, /*includeAllInstalled=*/true));
 
   for (CFIndex i = 0; i < CFArrayGetCount(list); ++i) {
@@ -611,13 +606,14 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
 
     // On a few layouts, "m" has a different key code.
     NSString* layout_id =
-        base::apple::CFToNSPtrCast(base::mac::CFCast<CFStringRef>(
+        base::apple::CFToNSPtrCast(base::apple::CFCast<CFStringRef>(
             TISGetInputSourceProperty(ref, kTISPropertyInputSourceID)));
     ASSERT_TRUE(layout_id);
     if ([layout_id isEqualToString:@"com.apple.keylayout.Belgian"] ||
         [layout_id isEqualToString:@"com.apple.keylayout.Italian"] ||
         [layout_id isEqualToString:@"com.apple.keylayout.ABC-AZERTY"] ||
-        [layout_id hasPrefix:@"com.apple.keylayout.French"]) {
+        [layout_id hasPrefix:@"com.apple.keylayout.French"] ||
+        [layout_id isEqualToString:@"com.apple.keylayout.Kabyle-AZERTY"]) {
       key_code = 0x29;
     } else if ([layout_id isEqualToString:@"com.apple.keylayout.Turkish"] ||
                [layout_id
@@ -638,6 +634,11 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
     } else if ([layout_id isEqualToString:@"com.apple.keylayout.Geez-QWERTY"]) {
       // There is no way to type an "m" using the Amharic keyboard. It's
       // designed for the Ge'ez language.
+      continue;
+    } else if ([layout_id
+                   isEqualToString:@"com.apple.keylayout.Tifinagh-AZERTY"]) {
+      // There is no way to type an "m" using the Tamazight keyboard. It's
+      // designed for Moroccan.
       continue;
     } else if (IsCommandlessCyrillicLayout(layout_id)) {
       // Commandless layouts have no way to trigger a menu key equivalent at
@@ -740,6 +741,19 @@ TEST(NSMenuItemAdditionsTest, MMFKEHandlesFlagsChangedEvents) {
   // Make sure we correctly handle the situation of function key press event
   // with no characters (dead keys).
   EXPECT_EQ(expected_flags, ModifierMaskForKeyEvent(empty_chars_event));
+}
+
+// Tests that cr_clearKeyEquivalent clears a menu item's key equivalent.
+TEST(NSMenuItemAdditionsTest, TestClearKeyEquivalent) {
+  NSMenuItem* item =
+      MenuItem(@"W", NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                         NSEventModifierFlagOption);
+  [item cr_clearKeyEquivalent];
+
+  NSString* kNoKeyEquivalentString = @"";
+  EXPECT_TRUE([kNoKeyEquivalentString isEqualToString:item.keyEquivalent]);
+  NSUInteger kEmptyMask = 0;
+  EXPECT_EQ(item.keyEquivalentModifierMask, kEmptyMask);
 }
 
 }  // namespace

@@ -53,11 +53,13 @@
 <translation id="3109728660330352905">Nincs jogosultsága az oldal megjelenítésére.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Próbálkozz a kapcsolódási diagnosztika futtatásával<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Az oldal olyan űrlapot tartalmaz, amely esetében előfordulhat, hogy küldése nem biztonságosan történik. Az elküldött adatokat továbbítás közben mások is megtekinthetik, illetve támadók módosíthatják, hogy a szerver mást kapjon helyettük.</translation>
-<translation id="3176929007561373547">Ellenőrizd a proxybeállításokat, vagy kérdezd meg a rendszergazdádtól, hogy a proxyszerver működik-e. Ha úgy gondolod, hogy nem használsz proxyszervert:
+<translation id="3176929007561373547">Ellenőrizd a proxybeállításokat, vagy kérdezd meg a rendszergazdádtól,
+      hogy a proxyszerver működik-e. Ha úgy gondolod, hogy
+      nem használsz proxyszervert:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Nyomd meg a frissítés gombot, az oldal betöltéséhez szükséges adatok újraküldéséhez.</translation>
 <translation id="3234666976984236645">Mindig észlelje a fontos tartalmat ezen a webhelyen</translation>
-<translation id="3308738399950580893">Hirdetések</translation>
+<translation id="3308738399950580893">Reklámok</translation>
 <translation id="3384522979010096022">Szervezeted nem engedélyezi a webhely megtekintését</translation>
 <translation id="3422472998109090673">A(z) <ph name="HOST_NAME" /> jelenleg nem érhető el.</translation>
 <translation id="3427092606871434483">Engedélyezés (alapértelmezett)</translation>
@@ -129,7 +131,7 @@
 <translation id="5838278095973806738">Ne írj be semmilyen bizalmas adatot (például jelszót vagy hitelkártyaadatot) a webhelyen, mivel a támadók ellophatják.</translation>
 <translation id="5869405914158311789">A webhely nem érhető el</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 van használatban}other{# van használatban}}</translation>
-<translation id="5932224571077948991">A webhely tolakodó vagy félrevezető hirdetéseket jelenít meg</translation>
+<translation id="5932224571077948991">A webhely tolakodó vagy félrevezető reklámokat jelenít meg</translation>
 <translation id="6051221802930200923">Pillanatnyilag nem tudod felkeresni a(z) <ph name="SITE" /> webhelyet, mivel a webhely tanúsítványrögzítést használ. A hálózati hibák és támadások rendszerint átmenetiek, ezért az említett oldal működése később valószínűleg helyreáll.</translation>
 <translation id="6146055958333702838">Ellenőrizze a kábeleket, majd indítsa újra a routert, modemet vagy más
     hálózati eszközt, amelyet használ.</translation>
@@ -163,7 +165,6 @@
 <translation id="7210863904660874423">A(z) <ph name="HOST_NAME" /> nem felel meg a biztonsági szabványoknak.</translation>
 <translation id="7219179957768738017">A kapcsolat a következőt használja: <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Értesítéseket megjelenítése</translation>
-<translation id="7260504762447901703">Hozzáférés visszavonása</translation>
 <translation id="7353601530677266744">Parancssor</translation>
 <translation id="7364115444476960850">A meglátogatni kívánt oldalt blokkolta a Vivaldi <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profil elérési útja</translation>
@@ -174,7 +175,7 @@
 <translation id="759889825892636187">A(z) <ph name="HOST_NAME" /> jelenleg nem tudja kezelni ezt a kérést.</translation>
 <translation id="7662298039739062396">A beállítást bővítmény vezérli</translation>
 <translation id="7663736086183791259"><ph name="CERTIFICATE_VALIDITY" /> tanúsítvány</translation>
-<translation id="7669271284792375604">A webhelyen lévő támadók megpróbálhatnak csellel rávenni olyan programok telepítésére, amelyek károsak a böngészési élmény szempontjából (például módosítják a kezdőlapot, vagy plusz hirdetéseket jelenítenek meg a felkeresett webhelyeken).</translation>
+<translation id="7669271284792375604">A webhelyen lévő támadók megpróbálhatnak csellel rávenni olyan programok telepítésére, amelyek károsak a böngészési élmény szempontjából (például módosítják a kezdőlapot, vagy plusz reklámokat jelenítenek meg a felkeresett webhelyeken).</translation>
 <translation id="7714464543167945231">Tanúsítvány</translation>
 <translation id="7716147886133743102">A rendszergazda letiltotta</translation>
 <translation id="7716424297397655342">A webhely nem tölthető be a gyorsítótárból</translation>

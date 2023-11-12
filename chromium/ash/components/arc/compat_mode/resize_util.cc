@@ -21,6 +21,7 @@
 #include "components/exo/shell_surface_base.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -68,16 +69,27 @@ gfx::Size GetPossibleSizeInWorkArea(views::Widget* widget,
 }
 
 void ResizeToPhone(views::Widget* widget) {
-  if (widget->IsMaximized())
-    widget->Restore();
+  // Clear the restore state/bounds key to make sure it's going to be restored
+  // to normal state.
+  widget->GetNativeWindow()->ClearProperty(aura::client::kRestoreShowStateKey);
+  widget->GetNativeWindow()->ClearProperty(aura::client::kRestoreBoundsKey);
+  // Always make sure the window is in normal state because the window might be
+  // maximized/snapped.
+  widget->Restore();
+
   widget->CenterWindow(GetPossibleSizeInWorkArea(widget, kPortraitPhoneDp));
 
   RecordResizeLockAction(ResizeLockActionType::ResizeToPhone);
 }
 
 void ResizeToTablet(views::Widget* widget) {
-  if (widget->IsMaximized())
-    widget->Restore();
+  // Clear the restore state/bounds key to make sure it's going to be restored
+  // to normal state.
+  widget->GetNativeWindow()->ClearProperty(aura::client::kRestoreShowStateKey);
+  widget->GetNativeWindow()->ClearProperty(aura::client::kRestoreBoundsKey);
+  // Always make sure the window is in normal state because the window might be
+  // maximized/snapped.
+  widget->Restore();
 
   // We here don't shrink the preferred size according to the available workarea
   // bounds like ResizeToPhone, because we'd like to let Android decide if the
@@ -137,7 +149,7 @@ void TurnOffResizeLockWithConfirmationIfNeeded(
   // Set target app window as parent so that the dialog will be destroyed
   // together when the app window is destroyed (e.g. app crashed).
   ResizeConfirmationDialogView::Show(
-      /*parent=*/target_widget->GetNativeWindow(),
+      /*parent=*/target_widget,
       base::BindOnce(
           [](views::Widget* widget, ArcResizeLockPrefDelegate* delegate,
              bool accepted, bool do_not_ask_again) {

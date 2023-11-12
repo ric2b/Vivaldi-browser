@@ -1,4 +1,8 @@
 <style>
+  :host {
+    display: block;
+  }
+
   .experiment {
     color: var(--secondary-color);
     line-height: 1.45;
@@ -91,7 +95,8 @@
     }
   }
 
-  textarea {
+  textarea,
+  input {
     background: var(--input-background);
     border-radius: 3px;
     box-sizing: border-box;
@@ -114,14 +119,19 @@
     color: white;
   }
 
+  .experiment-switched option {
+    background: white;
+    color: var(--link-color);
+  }
+
   @media (prefers-color-scheme: dark) {
     .experiment-switched select {
       color: var(--google-grey-900);
     }
 
     .experiment-switched option {
-      background: inherit;
-      color: inherit;
+      background: var(--toolbar-color);
+      color: var(--primary-color);
     }
   }
 
@@ -132,10 +142,6 @@
 
   .permalink {
     color: var(--secondary-color);
-  }
-
-  .hidden {
-    display: none;
   }
 
   @media (max-width: 480px) {
@@ -163,11 +169,16 @@
     }
 
     /* Hide the overflow description text */
-    .experiment p {
+    .body {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       width: 100%;
+    }
+
+    .expand .body {
+      overflow: visible;
+      white-space: normal;
     }
   }
 
@@ -182,10 +193,11 @@
   <div class="experiment-default flex-container">
     <div class="flex">
       <h2 class="experiment-name"></h2>
-      <p part="description">
+      <p class="body" part="body">
         <span class="description"></span> – <span class="platforms"></span>
       </p>
       <div class="textarea-container"></div>
+      <div class="input-container"></div>
       <a class="permalink" tabindex="7"></a>
     </div>
     <div class="flex experiment-actions"></div>

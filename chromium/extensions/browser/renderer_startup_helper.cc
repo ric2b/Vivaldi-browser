@@ -470,16 +470,17 @@ RendererStartupHelperFactory::RendererStartupHelperFactory()
 
 RendererStartupHelperFactory::~RendererStartupHelperFactory() = default;
 
-KeyedService* RendererStartupHelperFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+RendererStartupHelperFactory::BuildServiceInstanceForBrowserContext(
     BrowserContext* context) const {
-  return new RendererStartupHelper(context);
+  return std::make_unique<RendererStartupHelper>(context);
 }
 
 BrowserContext* RendererStartupHelperFactory::GetBrowserContextToUse(
     BrowserContext* context) const {
   // Redirected in incognito.
-  return ExtensionsBrowserClient::Get()->GetRedirectedContextInIncognito(
-      context, /*force_guest_profile=*/true, /*force_system_profile=*/false);
+  return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
+      context, /*force_guest_profile=*/true);
 }
 
 bool RendererStartupHelperFactory::ServiceIsCreatedWithBrowserContext() const {

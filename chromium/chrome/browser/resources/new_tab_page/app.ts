@@ -10,6 +10,7 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
+import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {ClickInfo, Command} from 'chrome://resources/js/browser_command.mojom-webui.js';
 import {BrowserCommandProxy} from 'chrome://resources/js/browser_command/browser_command_proxy.js';
 import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
@@ -25,7 +26,7 @@ import {CustomizeDialogPage} from './customize_dialog_types.js';
 import {loadTimeData} from './i18n_setup.js';
 import {IframeElement} from './iframe.js';
 import {LogoElement} from './logo.js';
-import {recordLoadDuration} from './metrics_utils.js';
+import {recordDuration, recordLoadDuration} from './metrics_utils.js';
 import {CustomizeChromeSection, NtpBackgroundImageSource, PageCallbackRouter, PageHandlerRemote, Theme} from './new_tab_page.mojom-webui.js';
 import {NewTabPageProxy} from './new_tab_page_proxy.js';
 import {$$} from './utils.js';
@@ -97,7 +98,6 @@ function ensureLazyLoaded() {
   script.src = getTrustedScriptURL`./lazy_load.js`;
   document.body.appendChild(script);
 }
-
 
 const AppElementBase = HelpBubbleMixin(PolymerElement) as
     {new (): PolymerElement & HelpBubbleMixinInterface};
@@ -295,18 +295,6 @@ export class AppElement extends AppElementBase {
         observer: 'onPromoAndModulesLoadedChange_',
       },
 
-      removeScrim_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('removeScrim'),
-        reflectToAttribute: true,
-      },
-
-      showOneGoogleBarScrim_: {
-        type: Boolean,
-        computed:
-            'computeShowOneGoogleBarScrim_(removeScrim_, showBackgroundImage_)',
-      },
-
       showLensUploadDialog_: Boolean,
 
       /**
@@ -324,7 +312,7 @@ export class AppElement extends AppElementBase {
 
   static get observers() {
     return [
-      'udpateOneGoogleBarAppearance_(oneGoogleBarLoaded_, theme_)',
+      'updateOneGoogleBarAppearance_(oneGoogleBarLoaded_, theme_)',
     ];
   }
 
@@ -357,7 +345,6 @@ export class AppElement extends AppElementBase {
   private modulesLoaded_: boolean;
   private modulesShownToUser: boolean;
   private promoAndModulesLoaded_: boolean;
-  private removeScrim_: boolean;
   private lazyRender_: boolean;
   private scrolledToTop_: boolean;
 
@@ -370,6 +357,7 @@ export class AppElement extends AppElementBase {
   private shouldPrintPerformance_: boolean;
   private backgroundImageLoadStartEpoch_: number;
   private backgroundImageLoadStart_: number = 0;
+  private showWebstoreToastListenerId_: number|null = null;
 
   constructor() {
     performance.mark('app-creation-start');
@@ -423,6 +411,18 @@ export class AppElement extends AppElementBase {
             (visible: boolean) => {
               this.showCustomize_ = visible;
             });
+    this.showWebstoreToastListenerId_ =
+        NewTabPageProxy.getInstance()
+            .callbackRouter.showWebstoreToast.addListener(() => {
+              if (this.showCustomize_) {
+                const toast = $$<CrToastElement>(this, '#webstoreToast');
+                if (toast) {
+                  toast!.hidden = false;
+                  toast!.show();
+                }
+              }
+            });
+
     // Open Customize Chrome if there are Customize Chrome URL params.
     if (this.showCustomize_) {
       this.setCustomizeChromeSidePanelVisible_(this.showCustomize_);
@@ -445,22 +445,23 @@ export class AppElement extends AppElementBase {
     this.eventTracker_.add(document, 'scroll', () => {
       this.scrolledToTop_ = document.documentElement.scrollTop <= 0;
     });
-    if (this.shouldPrintPerformance_) {
-      // It is possible that the background image has already loaded by now.
-      // If it has, we request it to re-send the load time so that we can
-      // actually catch the load time.
+    if (loadTimeData.getString('backgroundImageUrl')) {
       this.backgroundManager_.getBackgroundImageLoadTime().then(
           time => {
             const duration = time - this.backgroundImageLoadStartEpoch_;
-            this.printPerformanceDatum_(
-                'background-image-load', this.backgroundImageLoadStart_,
-                duration);
-            this.printPerformanceDatum_(
-                'background-image-loaded',
-                this.backgroundImageLoadStart_ + duration);
+            recordDuration(
+                'NewTabPage.Images.ShownTime.BackgroundImage', duration);
+            if (this.shouldPrintPerformance_) {
+              this.printPerformanceDatum_(
+                  'background-image-load', this.backgroundImageLoadStart_,
+                  duration);
+              this.printPerformanceDatum_(
+                  'background-image-loaded',
+                  this.backgroundImageLoadStart_ + duration);
+            }
           },
           () => {
-            console.error('Failed to capture background image load time');
+              // Ignore. Failed to capture background image load time.
           });
     }
     FocusOutlineManager.forDocument(document);
@@ -477,7 +478,7 @@ export class AppElement extends AppElementBase {
   override ready() {
     super.ready();
     this.pageHandler_.onAppRendered(WindowProxy.getInstance().now());
-    // Let the browser breath and then render remaining elements.
+    // Let the browser breathe and then render remaining elements.
     WindowProxy.getInstance().waitForLazyRender().then(() => {
       ensureLazyLoaded();
       this.lazyRender_ = true;
@@ -487,7 +488,7 @@ export class AppElement extends AppElementBase {
   }
 
   // Called to update the OGB of relevant NTP state changes.
-  private udpateOneGoogleBarAppearance_() {
+  private updateOneGoogleBarAppearance_() {
     if (this.oneGoogleBarLoaded_) {
       const isNtpDarkTheme =
           this.theme_ && (!!this.theme_.backgroundImage || this.theme_.isDark);
@@ -527,10 +528,6 @@ export class AppElement extends AppElementBase {
     return (!loadTimeData.getBoolean('middleSlotPromoEnabled') ||
             this.middleSlotPromoLoaded_) &&
         (!loadTimeData.getBoolean('modulesEnabled') || this.modulesLoaded_);
-  }
-
-  private computeShowOneGoogleBarScrim_(): boolean {
-    return this.removeScrim_ && this.showBackgroundImage_;
   }
 
   private async onLazyRendered_() {
@@ -627,7 +624,6 @@ export class AppElement extends AppElementBase {
         'NewTabPage.Collections.IdOnLoad',
         theme.backgroundImageCollectionId ?? '');
   }
-
 
   private onPromoAndModulesLoadedChange_() {
     if (this.promoAndModulesLoaded_ &&
@@ -836,6 +832,12 @@ export class AppElement extends AppElementBase {
       }
       log(entry);
     });
+  }
+
+  private onWebstoreToastButtonClick_() {
+    window.location.assign(
+        `https://chrome.google.com/webstore/category/collection/chrome_color_themes?hl=${
+            window.navigator.language}`);
   }
 
   private onWindowClick_(e: Event) {

@@ -1,0 +1,46 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("vivaldi_custom_app_icon") {
+  sources = []
+
+  deps = [
+    "resources/imagesets:imagesets",
+    ":vivaldi_custom_app_icon_swift",
+    "cells:vivaldi_app_icon_settings_table_view_cells",
+    "//base",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework"
+  ]
+}
+
+swift_source_set("vivaldi_custom_app_icon_swift") {
+  bridge_header = "vivaldi_custom_app_icon_swift_bridge.h"
+  sources = [
+    "vivaldi_app_icon_image.swift",
+    "vivaldi_app_icon_model.swift",
+    "vivaldi_app_icon_selector.swift",
+    "vivaldi_app_shelf_view.swift",
+    "vivaldi_app_icon_provider.swift",
+    "vivaldi_app_icon_action_bridge.swift",
+    "vivaldi_app_icon_helper.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//url",
+    "//ios/chrome/app/strings"
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

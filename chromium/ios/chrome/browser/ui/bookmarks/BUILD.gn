@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 source_set("bookmarks") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bookmarks_coordinator.h",
     "bookmarks_coordinator.mm",
@@ -24,7 +23,7 @@ source_set("bookmarks") {
     "//components/prefs",
     "//components/signin/public/identity_manager",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/default_browser:utils",
     "//ios/chrome/browser/metrics:metrics_internal",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
@@ -57,7 +56,6 @@ source_set("bookmarks") {
 }
 
 source_set("core") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bookmark_mediator.h",
     "bookmark_mediator.mm",
@@ -75,7 +73,7 @@ source_set("core") {
     "//components/prefs",
     "//components/sync/service",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/default_browser:utils",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
@@ -86,6 +84,7 @@ source_set("core") {
     "//ios/chrome/browser/shared/ui/util:url_with_title",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
+    "//ios/chrome/browser/ui/ntp/metrics:home_metrics",
     "//ios/chrome/common/ui/colors",
     "//ios/third_party/material_components_ios",
     "//ui/base",
@@ -94,7 +93,6 @@ source_set("core") {
 }
 
 source_set("utils") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bookmark_utils_ios.h",
     "bookmark_utils_ios.mm",
@@ -116,13 +114,14 @@ source_set("utils") {
     "//components/undo",
     "//components/url_formatter",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
+    "//ios/chrome/browser/ui/ntp/metrics:home_metrics",
     "//ios/chrome/common/ui/colors",
     "//ios/third_party/material_components_ios",
     "//ui/base",
@@ -130,7 +129,6 @@ source_set("utils") {
 }
 
 source_set("constants") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "bookmark_ui_constants.h",
     "bookmark_ui_constants.mm",
@@ -139,7 +137,6 @@ source_set("constants") {
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "bookmark_mediator_unittest.mm",
@@ -157,7 +154,7 @@ source_set("unit_tests") {
     "//components/sync/service",
     "//components/sync_preferences:test_support",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/bookmarks:test_support",
+    "//ios/chrome/browser/bookmarks/model:test_support",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
     "//ios/chrome/browser/shared/public/features",
@@ -173,10 +170,7 @@ source_set("unit_tests") {
 }
 
 source_set("eg2_tests") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bookmarks_accessibility_egtest.mm",
@@ -194,6 +188,7 @@ source_set("eg2_tests") {
     "//components/policy:generated",
     "//components/signin/public/base",
     "//components/strings",
+    "//components/sync/base:features",
     "//components/url_formatter",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/policy:eg_test_support+eg2",
@@ -214,10 +209,7 @@ source_set("eg2_tests") {
 }
 
 source_set("eg_app_support+eg2") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bookmark_earl_grey_app_interface.h",
@@ -234,7 +226,7 @@ source_set("eg_app_support+eg2") {
     "//components/prefs",
     "//components/query_parser",
     "//components/strings",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/signin:fake_system_identity",
@@ -249,10 +241,7 @@ source_set("eg_app_support+eg2") {
 }
 
 source_set("eg_test_support+eg2") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
     "bookmark_earl_grey.h",
@@ -266,6 +255,7 @@ source_set("eg_test_support+eg2") {
     ":constants",
     "//base",
     "//base/test:test_support",
+    "//components/bookmarks/common",
     "//components/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/shared/public/features",

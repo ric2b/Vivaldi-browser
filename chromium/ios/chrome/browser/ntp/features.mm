@@ -6,15 +6,13 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/containers/contains.h"
 #import "base/metrics/field_trial_params.h"
+#import "components/country_codes/country_codes.h"
 #import "components/version_info/channel.h"
 #import "ios/chrome/app/background_mode_buildflags.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/common/channel_info.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -62,13 +60,9 @@ BASE_FEATURE(kCreateDiscoverFeedServiceEarly,
              "CreateDiscoverFeedServiceEarly",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableFeedBottomSignInPromo,
-             "EnableFeedBottomSignInPromo",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableFeedCardMenuSignInPromo,
              "EnableFeedCardMenuSignInPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableFeedAblation,
              "EnableFeedAblation",
@@ -86,7 +80,15 @@ BASE_FEATURE(kFeedDisableHotStartRefresh,
 
 BASE_FEATURE(kEnableFollowUIUpdate,
              "EnableFollowUIUpdate",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDiscoverFeedSportCard,
+             "DiscoverFeedSportCard",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kContentPushNotifications,
+             "ContentPushNotifications",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Key for NSUserDefaults containing a bool indicating whether the next run
 // should enable feed background refresh capability. This is used because
@@ -129,6 +131,11 @@ const char kEnableFeedUseInteractivityInvalidationForForegroundRefreshes[] =
     "EnableFeedUseInteractivityInvalidationForForegroundRefreshes";
 
 bool IsWebChannelsEnabled() {
+  std::string launched_countries[6] = {"AU", "CA", "GB", "NZ", "US", "ZA"};
+  if (base::Contains(launched_countries,
+                     country_codes::GetCurrentCountryCode())) {
+    return true;
+  }
   return base::FeatureList::IsEnabled(kEnableWebChannels);
 }
 
@@ -334,10 +341,6 @@ bool IsFeedUseInteractivityInvalidationForForegroundRefreshesEnabled() {
       /*default=*/false);
 }
 
-bool IsFeedBottomSignInPromoEnabled() {
-  return base::FeatureList::IsEnabled(kEnableFeedBottomSignInPromo);
-}
-
 bool IsFeedCardMenuSignInPromoEnabled() {
   return base::FeatureList::IsEnabled(kEnableFeedCardMenuSignInPromo);
 }
@@ -360,4 +363,8 @@ bool IsFeedHotStartRefreshDisabled() {
 
 bool IsFollowUIUpdateEnabled() {
   return base::FeatureList::IsEnabled(kEnableFollowUIUpdate);
+}
+
+bool IsContentPushNotificationsEnabled() {
+  return base::FeatureList::IsEnabled(kContentPushNotifications);
 }

@@ -19,6 +19,7 @@ import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.image_fetcher.ImageFetcher;
+import org.chromium.components.sync.SyncService;
 import org.chromium.url.GURL;
 
 import java.util.Iterator;
@@ -31,6 +32,7 @@ public class BookmarkImageFetcher {
     private final LargeIconBridge mLargeIconBridge;
     private final int mFaviconFetchSize;
     private final CallbackController mCallbackController = new CallbackController();
+    private final PageImageServiceQueue mPageImageServiceQueue;
 
     private RoundedIconGenerator mRoundedIconGenerator;
     private int mImageSize;
@@ -47,7 +49,8 @@ public class BookmarkImageFetcher {
      */
     public BookmarkImageFetcher(Context context, BookmarkModel bookmarkModel,
             ImageFetcher imageFetcher, LargeIconBridge largeIconBridge,
-            RoundedIconGenerator roundedIconGenerator, int imageSize, int faviconSize) {
+            RoundedIconGenerator roundedIconGenerator, int imageSize, int faviconSize,
+            SyncService syncService) {
         mContext = context;
         mBookmarkModel = bookmarkModel;
         mImageFetcher = imageFetcher;
@@ -57,11 +60,13 @@ public class BookmarkImageFetcher {
         mRoundedIconGenerator = roundedIconGenerator;
         mImageSize = imageSize;
         mFaviconSize = faviconSize;
+        mPageImageServiceQueue = new PageImageServiceQueue(mBookmarkModel, syncService);
     }
 
     /** Destroys this object. */
     public void destroy() {
         mCallbackController.destroy();
+        mPageImageServiceQueue.destroy();
     }
 
     /**
@@ -146,7 +151,8 @@ public class BookmarkImageFetcher {
                     }
                 });
 
-        mBookmarkModel.getImageUrlForBookmark(
+        // This call may invoke the callback immediately if the url is cached.
+        mPageImageServiceQueue.getSalientImageUrl(
                 item.getUrl(), mCallbackController.makeCancelable((imageUrl) -> {
                     if (imageUrl == null) {
                         callback.onResult(null);

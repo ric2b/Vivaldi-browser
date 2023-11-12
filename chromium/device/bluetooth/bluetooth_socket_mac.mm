@@ -13,11 +13,11 @@
 #include <string>
 #include <utility>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/containers/queue.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
@@ -33,10 +33,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using device::BluetoothSocket;
 
@@ -443,7 +439,7 @@ void BluetoothSocketMac::Connect(IOBluetoothDevice* device,
                                         device:device
                               success_callback:std::move(success_callback)
                                 error_callback:std::move(error_callback)];
-  [device performSDPQuery:listener uuids:@[ GetIOBluetoothSDPUUID(uuid_) ]];
+  [device performSDPQuery:listener];
 }
 
 void BluetoothSocketMac::ListenUsingRfcomm(

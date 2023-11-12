@@ -16,7 +16,7 @@
 #import "components/segmentation_platform/embedder/default_model/device_switcher_model.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "components/segmentation_platform/public/result.h"
-#import "components/sync/base/sync_prefs.h"
+#import "components/sync/service/sync_prefs.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "components/sync_device_info/device_info.h"
@@ -30,11 +30,10 @@
 #import "ios/chrome/browser/synced_sessions/distant_session.h"
 #import "ios/chrome/browser/synced_sessions/distant_tab.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions.h"
+#import "ios/chrome/browser/synced_sessions/synced_sessions_util.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ui/base/device_form_factor.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -43,6 +42,9 @@ using ::bring_android_tabs::PromptAttemptStatus;
 
 // The length of time from now in which the tabs will be brought over.
 const base::TimeDelta kTimeRangeOfTabsImported = base::Days(14);
+
+// Maximum number of tabs that should be imported.
+const size_t kMaxNumberOfTabs = 20;
 
 // Logs `status` on UMA.
 void RecordPromptAttemptStatus(PromptAttemptStatus status) {
@@ -145,7 +147,9 @@ void BringAndroidTabsToIOSService::LoadTabs() {
 
 size_t BringAndroidTabsToIOSService::GetNumberOfAndroidTabs() const {
   CHECK(load_tabs_invoked_);
-  return position_of_tabs_in_synced_sessions_.size();
+  size_t tab_count = position_of_tabs_in_synced_sessions_.size();
+  CHECK_LE(tab_count, kMaxNumberOfTabs);
+  return tab_count;
 }
 
 synced_sessions::DistantTab* BringAndroidTabsToIOSService::GetTabAtIndex(
@@ -156,6 +160,28 @@ synced_sessions::DistantTab* BringAndroidTabsToIOSService::GetTabAtIndex(
   size_t session_idx = std::get<0>(indices);
   size_t tab_idx = std::get<1>(indices);
   return synced_sessions_->GetSession(session_idx)->tabs[tab_idx].get();
+}
+
+void BringAndroidTabsToIOSService::OpenTabsAtIndices(
+    const std::vector<size_t>& indices,
+    UrlLoadingBrowserAgent* url_loader) {
+  const int tab_count = static_cast<int>(indices.size());
+  const bool in_incognito = false;
+  const int maximum_instant_load_tabs =
+      GetDefaultNumberOfTabsToLoadSimultaneously();
+  for (int i = 0; i < tab_count; i++) {
+    const bool instant_load = i < maximum_instant_load_tabs;
+    OpenDistantTabInBackground(GetTabAtIndex(indices[i]), in_incognito,
+                               instant_load, url_loader,
+                               UrlLoadStrategy::NORMAL);
+  }
+}
+
+void BringAndroidTabsToIOSService::OpenAllTabs(
+    UrlLoadingBrowserAgent* url_loader) {
+  std::vector<size_t> indices(GetNumberOfAndroidTabs());
+  std::iota(std::begin(indices), std::end(indices), 0);
+  OpenTabsAtIndices(indices, url_loader);
 }
 
 void BringAndroidTabsToIOSService::OnBringAndroidTabsPromptDisplayed() {
@@ -186,6 +212,7 @@ BringAndroidTabsToIOSService::LoadSyncedSessionsAndComputeTabPositions() {
     return PromptAttemptStatus::kTabSyncDisabled;
   }
 
+  // Synced sessions sorted by recency.
   synced_sessions_ =
       std::make_unique<synced_sessions::SyncedSessions>(session_sync_service_);
   size_t session_count = synced_sessions_->GetSessionCount();
@@ -199,9 +226,16 @@ BringAndroidTabsToIOSService::LoadSyncedSessionsAndComputeTabPositions() {
       continue;
     }
     size_t tab_size = session->tabs.size();
+    // Tabs are already ordered by recency.
     for (size_t tab_idx = 0; tab_idx < tab_size; tab_idx++) {
       std::tuple<size_t, size_t> indices = {session_idx, tab_idx};
       position_of_tabs_in_synced_sessions_.push_back(indices);
+      if (position_of_tabs_in_synced_sessions_.size() >= kMaxNumberOfTabs) {
+        break;
+      }
+    }
+    if (position_of_tabs_in_synced_sessions_.size() >= kMaxNumberOfTabs) {
+      break;
     }
   }
   return position_of_tabs_in_synced_sessions_.empty()

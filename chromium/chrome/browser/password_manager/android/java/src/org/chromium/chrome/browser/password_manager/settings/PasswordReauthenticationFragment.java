@@ -12,12 +12,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 
-import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.password_manager.ReauthResult;
+
+// Vivaldi
+import org.chromium.base.Callback;
+import org.chromium.content.browser.webcontents.WebContentsImpl;
 
 /** Show the lock screen confirmation and lock the screen. */
 public class PasswordReauthenticationFragment extends Fragment {
@@ -42,6 +45,9 @@ public class PasswordReauthenticationFragment extends Fragment {
     private static boolean sPreventLockDevice;
 
     private FragmentManager mFragmentManager;
+
+    // Vivaldi
+    private Callback<Boolean> mScreenLockCallback;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -77,13 +83,20 @@ public class PasswordReauthenticationFragment extends Fragment {
                 ReauthenticationManager.resetLastReauth();
             }
             mFragmentManager.popBackStack();
+
+            // Vivaldi
+            if (mScreenLockCallback != null) {
+                mScreenLockCallback.onResult(ReauthenticationManager.authenticationStillValid(
+                        ReauthenticationManager.ReauthScope.ONE_AT_A_TIME));
+                mScreenLockCallback = null;
+                WebContentsImpl.sIsScreenLockActive = false;
+            }
         }
     }
 
     /**
      * Prevent calling the {@link #lockDevice} method in {@link #onCreate}.
      */
-    @VisibleForTesting
     public static void preventLockingForTesting() {
         sPreventLockDevice = true;
     }
@@ -103,5 +116,12 @@ public class PasswordReauthenticationFragment extends Fragment {
             return;
         }
         mFragmentManager.popBackStackImmediate();
+    }
+
+    /**
+     * Vivaldi: Applies the screen lock callback which will be invoked after onActivityResult().
+     */
+    public void setScreenLockCallback(Callback<Boolean> callback) {
+        mScreenLockCallback = callback;
     }
 }

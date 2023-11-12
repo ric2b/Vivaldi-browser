@@ -33,6 +33,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/file_access/test/mock_scoped_file_access_delegate.h"
 #include "components/prefs/testing_pref_service.h"
@@ -87,6 +88,7 @@ constexpr char kBlockingScansForMalware[] = R"(
   "block_until_verdict": 1
 })";
 
+#if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 constexpr char kLocalServiceProvider[] = R"(
 {
   "service_provider": "local_user_agent",
@@ -97,6 +99,7 @@ constexpr char kLocalServiceProvider[] = R"(
     }
   ]
 })";
+#endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 constexpr char kNothingEnabled[] = R"({ "service_provider": "google" })";
 
@@ -213,7 +216,8 @@ class FilesRequestHandlerTest : public BaseTest {
                 settings->cloud_or_local_settings.is_cloud_analysis()),
             /*upload_service=*/nullptr, profile_, *settings, GURL(kTestUrl), "",
             "", kUserActionId, kTabTitle,
-            safe_browsing::DeepScanAccessPoint::UPLOAD, paths,
+            safe_browsing::DeepScanAccessPoint::UPLOAD,
+            ContentAnalysisRequest::FILE_PICKER_DIALOG, paths,
             future.GetCallback());
 
     fake_files_request_handler_->UploadData();
@@ -372,6 +376,24 @@ TEST_F(FilesRequestHandlerTest, Empty) {
   EXPECT_EQ(0u, results->size());
 }
 
+TEST_F(FilesRequestHandlerTest, ZeroLengthFileSucceeds) {
+  GURL url(kTestUrl);
+
+  std::vector<base::FilePath> paths =
+      CreateFilesForTest({FILE_PATH_LITERAL("zerolength.doc")}, "");
+  PathFailsDeepScan(
+      paths[0],
+      test::FakeContentAnalysisDelegate::MalwareResponse(TriggeredRule::BLOCK));
+
+  auto results = ScanUpload(paths);
+  ASSERT_TRUE(results.has_value());
+
+  EXPECT_EQ(1u, results->size());
+  EXPECT_THAT((*results)[0],
+              MatchesRequestHandlerResult(
+                  true, FinalContentAnalysisResult::SUCCESS, ""));
+}
+
 TEST_F(FilesRequestHandlerTest, FileDataPositiveMalwareAndDlpVerdicts) {
   GURL url(kTestUrl);
 
@@ -459,6 +481,7 @@ TEST_F(FilesRequestHandlerTest, FileIsEncrypted) {
 
 // With a local service provider, a scan should not terminate early due to
 // encryption.
+#if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 TEST_F(FilesRequestHandlerTest, FileIsEncrypted_LocalAnalysis) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
@@ -483,6 +506,7 @@ TEST_F(FilesRequestHandlerTest, FileIsEncrypted_LocalAnalysis) {
               MatchesRequestHandlerResult(
                   true, FinalContentAnalysisResult::SUCCESS, ""));
 }
+#endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 TEST_F(FilesRequestHandlerTest, FileIsEncrypted_PolicyAllows) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
@@ -521,6 +545,7 @@ TEST_F(FilesRequestHandlerTest, FileIsEncrypted_PolicyAllows) {
 
 // With a local service provider, a scan should not terminate early due to
 // size.
+#if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 TEST_F(FilesRequestHandlerTest, FileIsLarge_LocalAnalysis) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
@@ -546,9 +571,11 @@ TEST_F(FilesRequestHandlerTest, FileIsLarge_LocalAnalysis) {
               MatchesRequestHandlerResult(
                   true, FinalContentAnalysisResult::SUCCESS, ""));
 }
+#endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 // With a local service provider, multiple file uploads should result in
 // multiple analysis requests.
+#if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 TEST_F(FilesRequestHandlerTest, MultipleFilesUpload_LocalAnalysis) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
@@ -570,6 +597,7 @@ TEST_F(FilesRequestHandlerTest, MultipleFilesUpload_LocalAnalysis) {
               MatchesRequestHandlerResult(
                   true, FinalContentAnalysisResult::SUCCESS, ""));
 }
+#endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 TEST_F(FilesRequestHandlerTest, FileDataNegativeMalwareVerdict) {
   SetScanPolicies(/*dlp=*/false, /*malware=*/true);

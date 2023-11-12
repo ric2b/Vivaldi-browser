@@ -79,10 +79,11 @@ std::unique_ptr<unwindstack::Regs> CreateFromRegisterContext(
 }  // namespace
 
 LibunwindstackUnwinderAndroid::LibunwindstackUnwinderAndroid()
-    : memory_regions_map_(NativeUnwinderAndroid::CreateMemoryRegionsMap(
-          /*use_updatable_maps=*/false)),
-      process_memory_(std::shared_ptr<unwindstack::Memory>(
-          memory_regions_map_->TakeMemory().release())) {
+    : memory_regions_map_(
+          static_cast<NativeUnwinderAndroidMemoryRegionsMapImpl*>(
+              NativeUnwinderAndroid::CreateMemoryRegionsMap(
+                  /*use_updatable_maps=*/false)
+                  .release())) {
   TRACE_EVENT_INSTANT(
       TRACE_DISABLED_BY_DEFAULT("cpu_profiler"),
       "LibunwindstackUnwinderAndroid::LibunwindstackUnwinderAndroid");
@@ -100,8 +101,8 @@ bool LibunwindstackUnwinderAndroid::CanUnwindFrom(
 unwindstack::JitDebug* LibunwindstackUnwinderAndroid::GetOrCreateJitDebug(
     unwindstack::ArchEnum arch) {
   if (!jit_debug_) {
-    jit_debug_ =
-        unwindstack::CreateJitDebug(arch, process_memory_, search_libs_);
+    jit_debug_ = unwindstack::CreateJitDebug(
+        arch, memory_regions_map_->memory(), search_libs_);
   }
   return jit_debug_.get();
 }
@@ -109,8 +110,8 @@ unwindstack::JitDebug* LibunwindstackUnwinderAndroid::GetOrCreateJitDebug(
 unwindstack::DexFiles* LibunwindstackUnwinderAndroid::GetOrCreateDexFiles(
     unwindstack::ArchEnum arch) {
   if (!dex_files_) {
-    dex_files_ =
-        unwindstack::CreateDexFiles(arch, process_memory_, search_libs_);
+    dex_files_ = unwindstack::CreateDexFiles(
+        arch, memory_regions_map_->memory(), search_libs_);
   }
   return dex_files_.get();
 }
@@ -137,8 +138,8 @@ UnwindResult LibunwindstackUnwinderAndroid::TryUnwind(
   std::unique_ptr<unwindstack::Regs> regs =
       CreateFromRegisterContext(thread_context);
   DCHECK(regs);
-  unwindstack::Unwinder unwinder(kMaxFrames, memory_regions_map_->GetMaps(),
-                                 regs.get(), process_memory_);
+  unwindstack::Unwinder unwinder(kMaxFrames, memory_regions_map_->maps(),
+                                 regs.get(), memory_regions_map_->memory());
 
   unwinder.SetJitDebug(GetOrCreateJitDebug(regs->Arch()));
   unwinder.SetDexFiles(GetOrCreateDexFiles(regs->Arch()));
@@ -174,13 +175,24 @@ UnwindResult LibunwindstackUnwinderAndroid::TryUnwind(
     const ModuleCache::Module* module =
         module_cache()->GetModuleForAddress(frame.pc);
     if (module == nullptr && frame.map_info != nullptr) {
-      auto module_for_caching =
-          std::make_unique<NonElfModule>(frame.map_info.get());
-      module = module_for_caching.get();
-      module_cache()->AddCustomNativeModule(std::move(module_for_caching));
+      // Try searching for the module with same module start.
+      module = module_cache()->GetModuleForAddress(frame.map_info->start());
+      if (module == nullptr) {
+        auto module_for_caching =
+            std::make_unique<NonElfModule>(frame.map_info.get());
+        module = module_for_caching.get();
+        module_cache()->AddCustomNativeModule(std::move(module_for_caching));
+      }
+      // TODO(crbug/1446766): Cleanup after finishing crash investigation.
+      if (frame.pc < frame.map_info->start() ||
+          frame.pc >= frame.map_info->end()) {
+        TRACE_EVENT_INSTANT(TRACE_DISABLED_BY_DEFAULT("cpu_profiler.debug"),
+                            "PC out of map range");
+      }
     }
     stack->emplace_back(frame.pc, module, frame.function_name);
   }
   return UnwindResult::kCompleted;
 }
+
 }  // namespace base

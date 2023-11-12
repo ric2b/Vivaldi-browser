@@ -87,9 +87,30 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
       return false;
     }
     blink::PhysicalRect document_rect = layout_view->DocumentRect();
-    gfx::SizeF float_page_size = local_frame->ResizePageRectsKeepingRatio(
-        gfx::SizeF(document_rect.Width(), document_rect.Height()),
-        gfx::SizeF(document_rect.Width(), document_rect.Height()));
+
+    gfx::SizeF aspect_ratio =
+        gfx::SizeF(document_rect.Width(), document_rect.Height());
+    gfx::SizeF expected_size =
+        gfx::SizeF(document_rect.Width(), document_rect.Height());
+
+    auto* layout_object = local_frame->ContentLayoutObject();
+    if (!layout_object)
+      return false;
+
+    bool is_horizontal = layout_object->StyleRef().IsHorizontalWritingMode();
+    float numerator =
+        is_horizontal ? aspect_ratio.height() : aspect_ratio.width();
+    float denominator =
+        is_horizontal ? aspect_ratio.width() : aspect_ratio.height();
+    float ratio = numerator / denominator;
+
+    float inline_size = floorf(is_horizontal ? expected_size.width()
+                                              : expected_size.height());
+    float block_size = floorf(inline_size * ratio);
+    gfx::SizeF float_page_size = is_horizontal
+                                     ? gfx::SizeF(inline_size, block_size)
+                                     : gfx::SizeF(block_size, inline_size);
+
     float_page_size.set_height(
         std::min(float_page_size.height(), static_cast<float>(rect.height())));
     gfx::Size page_size = ToCeiledSize(float_page_size);

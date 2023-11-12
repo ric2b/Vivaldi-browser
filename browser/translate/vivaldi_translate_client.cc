@@ -158,15 +158,8 @@ const translate::LanguageState& VivaldiTranslateClient::GetLanguageState() {
 
 translate::ContentTranslateDriver* VivaldiTranslateClient::translate_driver() {
   if (translate_driver_) {
-    DCHECK(!translate::IsSubFrameTranslationEnabled());
     return translate_driver_.get();
   }
-  return nullptr;
-}
-
-translate::PerFrameContentTranslateDriver*
-VivaldiTranslateClient::per_frame_translate_driver() {
-  // Not enabled yet in Chromium, disable it for now.
   return nullptr;
 }
 

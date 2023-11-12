@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.ntp;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -30,18 +31,19 @@ import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.feed.FeedActionDelegateImpl;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
+import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feature_guide.notifications.FeatureNotificationUtils;
 import org.chromium.chrome.browser.feature_guide.notifications.FeatureType;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
-import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.FeedReliabilityLogger;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.feed.FeedSurfaceDelegate;
@@ -55,6 +57,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
+import org.chromium.chrome.browser.logo.LogoUtils;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
@@ -106,7 +109,6 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.util.List;
 
@@ -128,7 +130,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
     private final String mTitle;
     private Context mContext;
-    private final int mBackgroundColor;
+    private int mBackgroundColor;
     protected final NewTabPageManagerImpl mNewTabPageManager;
     protected final TileGroup.Delegate mTileGroupDelegate;
     private final boolean mIsTablet;
@@ -164,6 +166,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     private final Supplier<Toolbar> mToolbarSupplier;
     private final TabModelSelector mTabModelSelector;
     private final TemplateUrlService mTemplateUrlService;
+    private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
 
     private SingleTabSwitcherCoordinator mSingleTabSwitcherCoordinator;
     private ViewGroup mSingleTabCardContainer;
@@ -172,6 +175,9 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     private final HomeSurfaceTracker mHomeSurfaceTracker;
     private final boolean mIsNtpAsHomeSurfaceEnabled;
     private boolean mSnapshotSingleTabCardChanged;
+    private final boolean mIsSurfacePolishEnabled;
+    private final boolean mIsSurfacePolishOmniboxColorEnabled;
+    private final boolean mIsInNightMode;
 
     @Nullable
     private SearchResumptionModuleCoordinator mSearchResumptionModuleCoordinator;
@@ -319,11 +325,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
             for (MostVisitedTileClickObserver observer : mMostVisitedTileClickObservers) {
                 observer.onMostVisitedTileClicked(tile, mTab);
             }
-            if (windowDisposition != WindowOpenDisposition.NEW_WINDOW) {
-                RecordHistogram.recordMediumTimesHistogram("NewTabPage.MostVisitedTime",
-                        (System.nanoTime() - mLastShownTimeNs)
-                                / TimeUtils.NANOSECONDS_PER_MILLISECOND);
-            }
         }
     }
 
@@ -356,7 +357,8 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
             BottomSheetController bottomSheetController,
             Supplier<ShareDelegate> shareDelegateSupplier, WindowAndroid windowAndroid,
             Supplier<Toolbar> toolbarSupplier, SettingsLauncher settingsLauncher,
-            HomeSurfaceTracker homeSurfaceTracker) {
+            HomeSurfaceTracker homeSurfaceTracker,
+            ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
         mConstructedTimeNs = System.nanoTime();
         TraceEvent.begin(TAG);
 
@@ -372,6 +374,8 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         mBottomSheetController = bottomSheetController;
         mSettingsLauncher = settingsLauncher;
         mHomeSurfaceTracker = homeSurfaceTracker;
+        mTabContentManagerSupplier = tabContentManagerSupplier;
+        mIsInNightMode = isInNightMode;
 
         Profile profile = Profile.fromWebContents(mTab.getWebContents());
 
@@ -384,7 +388,16 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
         mContext = activity;
         mTitle = activity.getResources().getString(R.string.new_tab_title);
-        mBackgroundColor = SemanticColorUtils.getDefaultBgColor(mContext);
+
+        mIsSurfacePolishEnabled = ChromeFeatureList.sSurfacePolish.isEnabled();
+        mIsSurfacePolishOmniboxColorEnabled = mIsSurfacePolishEnabled
+                && StartSurfaceConfiguration.SURFACE_POLISH_OMNIBOX_COLOR.getValue();
+        if (mIsSurfacePolishEnabled) {
+            mBackgroundColor = ChromeColors.getSurfaceColor(
+                    mContext, R.dimen.home_surface_background_color_elevation);
+        } else {
+            mBackgroundColor = SemanticColorUtils.getDefaultBgColor(mContext);
+        }
         mIsTablet = isTablet;
         mTemplateUrlService = TemplateUrlServiceFactory.getForProfile(profile);
         mTemplateUrlService.addObserver(this);
@@ -404,7 +417,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 if (mSingleTabSwitcherCoordinator != null
                         && (mHomeSurfaceTracker == null
                                 || !mHomeSurfaceTracker.canShowHomeSurface(mTab))) {
-                    setSingleTabCardVisibility(false);
+                    mSingleTabSwitcherCoordinator.hide();
                 }
             }
 
@@ -482,7 +495,8 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 mFeedSurfaceProvider.getScrollDelegate(),
                 mFeedSurfaceProvider.getTouchEnabledDelegate(), mFeedSurfaceProvider.getUiConfig(),
                 lifecycleDispatcher, uma, mTab.isIncognito(), windowAndroid,
-                mIsNtpAsHomeSurfaceEnabled, FeedFeatures.isMultiColumnFeedEnabled(mContext));
+                mIsNtpAsHomeSurfaceEnabled, mIsSurfacePolishEnabled,
+                mIsSurfacePolishOmniboxColorEnabled);
 
         // If new NewTabPage is created via back operations, re-show the single Tab card with the
         // previously tracked Tab.
@@ -866,7 +880,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     /**
      * @return Whether the NTP has finished loaded.
      */
-    @VisibleForTesting
     public boolean isLoadedForTests() {
         return mIsLoaded;
     }
@@ -931,9 +944,29 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     @Override
     public @ColorInt int getToolbarTextBoxBackgroundColor(@ColorInt int defaultColor) {
         if (isLocationBarShownInNTP()) {
-            return isLocationBarScrolledToTopInNtp()
-                    ? ChromeColors.getSurfaceColor(mContext, R.dimen.toolbar_text_box_elevation)
-                    : ChromeColors.getPrimaryBackgroundColor(mContext, false);
+            if (!mIsSurfacePolishEnabled) {
+                return isLocationBarScrolledToTopInNtp()
+                        ? ChromeColors.getSurfaceColor(mContext, R.dimen.toolbar_text_box_elevation)
+                        : ChromeColors.getPrimaryBackgroundColor(mContext, false);
+            }
+
+            if (!isLocationBarScrolledToTopInNtp()) {
+                return ChromeColors.getSurfaceColor(
+                        mContext, R.dimen.home_surface_background_color_elevation);
+            }
+
+            if (mIsSurfacePolishOmniboxColorEnabled) {
+                if (mIsInNightMode) {
+                    return mContext.getColor(R.color.color_primary_with_alpha_20);
+                } else {
+                    return SemanticColorUtils.getColorPrimaryContainer(mContext);
+                }
+            }
+
+            // When only enable the Surface Polish flag and the location bar has been scrolled
+            // to top.
+            return ChromeColors.getSurfaceColor(
+                    mContext, R.dimen.home_surface_search_box_background_neutral_color_elevation);
         }
         return defaultColor;
     }
@@ -995,28 +1028,23 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 && (mOmniboxStub != null && mOmniboxStub.isUrlBarFocused());
     }
 
-    @VisibleForTesting
     public FeedSurfaceCoordinator getCoordinatorForTesting() {
         return (FeedSurfaceCoordinator) mFeedSurfaceProvider;
     }
 
-    @VisibleForTesting
     public NewTabPageManager getNewTabPageManagerForTesting() {
         return mNewTabPageManager;
     }
 
-    @VisibleForTesting
     public TileGroup.Delegate getTileGroupDelegateForTesting() {
         return mTileGroupDelegate;
     }
 
-    @VisibleForTesting
     public FeedActionDelegate getFeedActionDelegateForTesting() {
         return ((FeedSurfaceCoordinator) mFeedSurfaceProvider)
                 .getActionDelegateForTesting(); // IN-TEST
     }
 
-    @VisibleForTesting
     TabObserver getTabObserverForTesting() {
         return mTabObserver;
     }
@@ -1030,19 +1058,45 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     private int getLogoMargin(boolean isTopMargin) {
         if (FeedPositionUtils.isFeedPullUpEnabled() && mSearchProviderHasLogo) return 0;
 
-        if (mIsNtpAsHomeSurfaceEnabled && mSearchProviderHasLogo) {
-            return isTopMargin ? mNewTabPageLayout.getResources().getDimensionPixelSize(
-                           R.dimen.ntp_logo_vertical_top_margin_tablet)
-                               : mNewTabPageLayout.getResources().getDimensionPixelSize(
-                                       R.dimen.ntp_logo_vertical_bottom_margin_tablet);
-        }
-
-        return isTopMargin ? mNewTabPageLayout.getResources().getDimensionPixelSize(
-                       R.dimen.ntp_logo_margin_top)
-                           : mNewTabPageLayout.getResources().getDimensionPixelSize(
-                                   R.dimen.ntp_logo_margin_bottom);
+        return isTopMargin ? getLogoTopMargin() : getLogoBottomMargin();
     }
 
+    private int getLogoTopMargin() {
+        Resources resources = mNewTabPageLayout.getResources();
+        if (mIsSurfacePolishEnabled && mSearchProviderHasLogo) {
+            if (StartSurfaceConfiguration.SURFACE_POLISH_LESS_BRAND_SPACE.getValue()
+                    && !mIsTablet) {
+                return LogoUtils.getTopMarginPolishedSmall(resources);
+
+            } else {
+                return LogoUtils.getTopMarginPolished(resources);
+            }
+        }
+
+        if (mIsNtpAsHomeSurfaceEnabled && mSearchProviderHasLogo) {
+            return resources.getDimensionPixelSize(R.dimen.ntp_logo_vertical_top_margin_tablet);
+        }
+
+        return resources.getDimensionPixelSize(R.dimen.ntp_logo_margin_top);
+    }
+
+    private int getLogoBottomMargin() {
+        Resources resources = mNewTabPageLayout.getResources();
+        if (mIsSurfacePolishEnabled && mSearchProviderHasLogo) {
+            if (StartSurfaceConfiguration.SURFACE_POLISH_LESS_BRAND_SPACE.getValue()
+                    && !mIsTablet) {
+                return LogoUtils.getBottomMarginPolishedSmall(resources);
+            } else {
+                return LogoUtils.getBottomMarginPolished(resources);
+            }
+        }
+
+        if (mIsNtpAsHomeSurfaceEnabled && mSearchProviderHasLogo) {
+            return resources.getDimensionPixelSize(R.dimen.ntp_logo_vertical_bottom_margin_tablet);
+        }
+
+        return resources.getDimensionPixelSize(R.dimen.ntp_logo_margin_bottom);
+    }
     private void mayCreateSearchResumptionModule(
             Profile profile, AutocompleteControllerProvider provider) {
         // The module is disabled on tablets.
@@ -1063,8 +1117,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         if (mSingleTabSwitcherCoordinator == null) {
             initializeSingleTabCard(mostRecentTab);
         } else {
-            boolean hasTabToTrack = mSingleTabSwitcherCoordinator.updateTrackingTab(mostRecentTab);
-            setSingleTabCardVisibility(hasTabToTrack);
+            mSingleTabSwitcherCoordinator.showModule(mostRecentTab);
         }
     }
 
@@ -1075,16 +1128,20 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         if (mostRecentTab == null || UrlUtilities.isNTPUrl(mostRecentTab.getUrl())) {
             return;
         }
+
         mSingleTabCardContainer = (FrameLayout) ((ViewStub) mNewTabPageLayout.findViewById(
                                                          R.id.tab_switcher_module_container_stub))
                                           .inflate();
         updateSingleTabCardContainerMargins();
-        mSingleTabSwitcherCoordinator = new SingleTabSwitcherCoordinator(mActivity,
-                mSingleTabCardContainer, mActivityLifecycleDispatcher, mTabModelSelector, true,
-                isScrollableMvtEnabled(mContext), mostRecentTab, this::onSingleTabCardClicked,
-                () -> mSnapshotSingleTabCardChanged = true);
+        mSingleTabSwitcherCoordinator = new SingleTabSwitcherCoordinator(
+                mActivity, mSingleTabCardContainer, mActivityLifecycleDispatcher, mTabModelSelector,
+                true, isScrollableMvtEnabled(mContext), mostRecentTab, this::onSingleTabCardClicked,
+                ()
+                        -> mSnapshotSingleTabCardChanged = true,
+                mTabContentManagerSupplier.get() /* tabContentManager */
+        );
         mSingleTabSwitcherCoordinator.initWithNative();
-        setSingleTabCardVisibility(true);
+        mSingleTabSwitcherCoordinator.showModule();
     }
 
     private void onSingleTabCardClicked() {
@@ -1098,7 +1155,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
      * Updates the margins for the single tab card container based on the type of MV tiles.
      */
     private void updateSingleTabCardContainerMargins() {
-        if (!mIsNtpAsHomeSurfaceEnabled) return;
+        if (!mIsNtpAsHomeSurfaceEnabled || mIsSurfacePolishEnabled) return;
 
         MarginLayoutParams marginLayoutParams =
                 (MarginLayoutParams) mSingleTabCardContainer.getLayoutParams();
@@ -1111,22 +1168,12 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                         R.dimen.feed_header_tab_list_view_top_bottom_margin);
     }
 
-    /* Set the visibility of the single tab card.
-     * @param isVisible Whether the single tab card is visible or not.
-     */
-    void setSingleTabCardVisibility(boolean isVisible) {
-        if (mSingleTabSwitcherCoordinator != null) {
-            mSingleTabSwitcherCoordinator.setVisibility(isVisible);
-        }
-    }
-
     static boolean isScrollableMvtEnabled(Context context) {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_ANDROID)
                 && (ChromeFeatureList.sStartSurfaceOnTablet.isEnabled()
                         || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context));
     }
 
-    @VisibleForTesting
     public boolean isSingleTabCardVisibleForTesting() {
         if (mSingleTabSwitcherCoordinator == null) return false;
 
@@ -1137,12 +1184,11 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     @VisibleForTesting
     void destroySingleTabCard() {
         mSingleTabCardContainer.removeAllViews();
-        setSingleTabCardVisibility(false);
+        mSingleTabSwitcherCoordinator.hide();
         mSingleTabSwitcherCoordinator.destroy();
         mSingleTabSwitcherCoordinator = null;
     }
 
-    @VisibleForTesting
     public boolean getSnapshotSingleTabCardChangedForTesting() {
         return mSnapshotSingleTabCardChanged;
     }

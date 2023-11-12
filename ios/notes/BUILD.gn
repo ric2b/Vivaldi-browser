@@ -14,6 +14,4 @@ source_set("notes") {
     "//components/keyed_service/ios",
     "//components/prefs",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

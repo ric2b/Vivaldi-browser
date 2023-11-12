@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/offers_metrics.h"
+#include "components/autofill/core/browser/payments/offer_notification_options.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
@@ -71,10 +72,7 @@ std::u16string OfferNotificationBubbleControllerImpl::GetWindowTitle() const {
           IDS_AUTOFILL_CARD_LINKED_OFFER_REMINDER_TITLE);
     case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
       return l10n_util::GetStringUTF16(
-          base::FeatureList::IsEnabled(
-              features::kAutofillFillMerchantPromoCodeFields)
-              ? IDS_AUTOFILL_GPAY_PROMO_CODE_OFFERS_REMINDER_TITLE
-              : IDS_AUTOFILL_PROMO_CODE_OFFERS_REMINDER_TITLE);
+          IDS_AUTOFILL_GPAY_PROMO_CODE_OFFERS_REMINDER_TITLE);
     case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       return l10n_util::GetStringUTF16(
           IDS_AUTOFILL_PROMO_CODE_OFFERS_REMINDER_TITLE);
@@ -120,6 +118,14 @@ bool OfferNotificationBubbleControllerImpl::IsIconVisible() const {
   return bubble_state_ != BubbleState::kHidden;
 }
 
+bool OfferNotificationBubbleControllerImpl::ShouldIconExpand() const {
+  return icon_should_expand_;
+}
+
+void OfferNotificationBubbleControllerImpl::OnIconExpanded() {
+  icon_should_expand_ = false;
+}
+
 void OfferNotificationBubbleControllerImpl::OnBubbleClosed(
     PaymentsBubbleClosedReason closed_reason) {
   set_bubble_view(nullptr);
@@ -163,8 +169,10 @@ void OfferNotificationBubbleControllerImpl::OnPromoCodeButtonClicked() {
 void OfferNotificationBubbleControllerImpl::ShowOfferNotificationIfApplicable(
     const AutofillOfferData* offer,
     const CreditCard* card,
-    bool should_show_icon_only) {
+    const OfferNotificationOptions& options) {
   DCHECK(offer);
+
+  icon_should_expand_ = options.expand_notification_icon;
 
   // If this is not the bubble's first show, and offer to be shown has not
   // changed, and it has not been shown for more than
@@ -206,10 +214,11 @@ void OfferNotificationBubbleControllerImpl::ShowOfferNotificationIfApplicable(
 
   is_user_gesture_ = false;
 
-  if (should_show_icon_only)
-    HideBubbleAndClearTimestamp(/*should_show_icon=*/true);
-  else
+  if (options.show_notification_automatically) {
     Show();
+  } else {
+    HideBubbleAndClearTimestamp(/*should_show_icon=*/true);
+  }
 }
 
 void OfferNotificationBubbleControllerImpl::ReshowBubble() {

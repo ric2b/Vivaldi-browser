@@ -148,7 +148,7 @@ void SetShape(wl_client* client,
 }
 
 void SetTopInset(wl_client* client, wl_resource* resource, int32_t height) {
-  NOTIMPLEMENTED_LOG_ONCE();
+  GetUserDataAs<TestZAuraToplevel>(resource)->set_top_inset(height);
 }
 
 void AckRotateFocus(wl_client* client,
@@ -161,6 +161,22 @@ void AckRotateFocus(wl_client* client,
   } else {
     NOTIMPLEMENTED_LOG_ONCE();
   }
+}
+
+void SetCanMaximize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TestZAuraToplevel>(resource)->set_can_maximize(true);
+}
+
+void UnsetCanMaximize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TestZAuraToplevel>(resource)->set_can_maximize(false);
+}
+
+void SetCanFullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TestZAuraToplevel>(resource)->set_can_fullscreen(true);
+}
+
+void UnsetCanFullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<TestZAuraToplevel>(resource)->set_can_fullscreen(false);
 }
 
 }  // namespace
@@ -197,6 +213,10 @@ const struct zaura_toplevel_interface kTestZAuraToplevelImpl = {
     &SetShape,
     &SetTopInset,
     &AckRotateFocus,
+    &SetCanMaximize,
+    &UnsetCanMaximize,
+    &SetCanFullscreen,
+    &UnsetCanFullscreen,
 };
 
 }  // namespace wl

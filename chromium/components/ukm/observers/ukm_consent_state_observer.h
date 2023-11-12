@@ -20,9 +20,6 @@ class PrefService;
 
 namespace ukm {
 
-// This feature controls whether App Sync relies on MSBB to be enabled.
-BASE_DECLARE_FEATURE(kAppMetricsOnlyRelyOnAppSync);
-
 // Observer that monitors whether UKM is allowed for all profiles.
 //
 // For one profile, UKM is allowed iff URL-keyed anonymized data collection is
@@ -139,7 +136,7 @@ class UkmConsentStateObserver
       std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>>
       consent_helpers_;
 
-  // Tracks what type of UKM is allowed for all profiles after the last state
+  // Tracks what consent type is granted on all profiles after the last state
   // change. Consent is only granted when EVERY profile consents.
   // Empty means none.
   UkmConsentState ukm_consent_state_;

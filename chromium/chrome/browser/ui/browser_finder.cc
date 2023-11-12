@@ -29,6 +29,9 @@
 #include "components/account_id/account_id.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+
 using content::WebContents;
 
 namespace {
@@ -39,7 +42,8 @@ bool IsBrowserClosing(Browser* browser) {
   return base::Contains(closing_browsers, browser);
 }
 
-// Type used to indicate to match anything.
+// Type used to indicate to match anything. This does not include browsers
+// scheduled for deletion (see `kIncludeBrowsersScheduledForDeletion`).
 const uint32_t kMatchAny = 0;
 
 // See BrowserMatches for details.
@@ -51,9 +55,58 @@ const uint32_t kMatchDisplayId = 1 << 3;
 const uint32_t kMatchCurrentWorkspace = 1 << 4;
 #endif
 const uint32_t kMatchNotClosing = 1 << 5;
+// If set, a Browser marked for deletion will be returned. Generally
+// code using these functions does not want a browser scheduled for deletion,
+// but there are outliers.
+const uint32_t kIncludeBrowsersScheduledForDeletion = 1 << 6;
+
+bool DoesBrowserMatchProfile(Browser& browser,
+                             Profile* profile,
+                             uint32_t match_types) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Get the profile on which the window is currently shown.
+  // MultiUserWindowManagerHelper might be NULL under test scenario.
+  ash::MultiUserWindowManager* const multi_user_window_manager =
+      MultiUserWindowManagerHelper::GetWindowManager();
+  Profile* shown_profile = nullptr;
+  if (multi_user_window_manager) {
+    const AccountId& shown_account_id =
+        multi_user_window_manager->GetUserPresentingWindow(
+            browser.window()->GetNativeWindow());
+    shown_profile =
+        shown_account_id.is_valid()
+            ? multi_user_util::GetProfileFromAccountId(shown_account_id)
+            : nullptr;
+  }
+#endif
+
+  if (match_types & kMatchOriginalProfile) {
+    if (browser.profile()->GetOriginalProfile() !=
+        profile->GetOriginalProfile()) {
+      return false;
+    }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (shown_profile &&
+        shown_profile->GetOriginalProfile() != profile->GetOriginalProfile()) {
+      return false;
+    }
+#endif
+  } else {
+    if (browser.profile() != profile) {
+      return false;
+    }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (shown_profile && shown_profile != profile) {
+      return false;
+    }
+#endif
+  }
+  return true;
+}
 
 // Returns true if the specified |browser| matches the specified arguments.
 // |match_types| is a bitmask dictating what parameters to match:
+// . If kMatchAnyProfile is true, the profile is not considered.
 // . If it contains kMatchOriginalProfile then the original profile of the
 //   browser must match |profile->GetOriginalProfile()|. This is used to match
 //   incognito windows.
@@ -71,40 +124,8 @@ bool BrowserMatches(Browser* browser,
     return false;
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Get the profile on which the window is currently shown.
-  // MultiUserWindowManagerHelper might be NULL under test scenario.
-  ash::MultiUserWindowManager* const multi_user_window_manager =
-      MultiUserWindowManagerHelper::GetWindowManager();
-  Profile* shown_profile = nullptr;
-  if (multi_user_window_manager) {
-    const AccountId& shown_account_id =
-        multi_user_window_manager->GetUserPresentingWindow(
-            browser->window()->GetNativeWindow());
-    shown_profile =
-        shown_account_id.is_valid()
-            ? multi_user_util::GetProfileFromAccountId(shown_account_id)
-            : nullptr;
-  }
-#endif
-
-  if (match_types & kMatchOriginalProfile) {
-    if (browser->profile()->GetOriginalProfile() !=
-        profile->GetOriginalProfile())
-      return false;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (shown_profile &&
-        shown_profile->GetOriginalProfile() != profile->GetOriginalProfile()) {
-      return false;
-    }
-#endif
-  } else {
-    if (browser->profile() != profile)
-      return false;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (shown_profile && shown_profile != profile)
-      return false;
-#endif
+  if (!DoesBrowserMatchProfile(*browser, profile, match_types)) {
+    return false;
   }
 
   if ((match_types & kMatchNormal) && !browser->is_type_normal())
@@ -118,13 +139,19 @@ bool BrowserMatches(Browser* browser,
   }
 #endif  // BUILDFLAG(IS_WIN)
 
-  if (match_types & kMatchDisplayId) {
-    return display::Screen::GetScreen()
-               ->GetDisplayNearestWindow(browser->window()->GetNativeWindow())
-               .id() == display_id;
+  if (match_types & kMatchDisplayId &&
+      display::Screen::GetScreen()
+              ->GetDisplayNearestWindow(browser->window()->GetNativeWindow())
+              .id() != display_id) {
+    return false;
   }
 
   if ((match_types & kMatchNotClosing) && IsBrowserClosing(browser)) {
+    return false;
+  }
+
+  if ((match_types & kIncludeBrowsersScheduledForDeletion) == 0 &&
+      browser->is_delete_scheduled()) {
     return false;
   }
 
@@ -275,7 +302,13 @@ Browser* FindBrowserWithWebContents(const WebContents* web_contents) {
   auto& all_tabs = AllTabContentses();
   auto it = base::ranges::find(all_tabs, web_contents);
 
-  return (it == all_tabs.end()) ? nullptr : it.browser();
+  Browser* browser = (it == all_tabs.end()) ? nullptr : it.browser();
+  // Addition for Vivaldi is to find browser from embedded contents like popups
+  // and webpanels.
+  if (!browser && vivaldi::IsVivaldiRunning()) {
+    browser = vivaldi::FindBrowserWithNonTabContent(web_contents);
+  }
+  return browser;
 }
 
 Browser* FindBrowserWithGroup(tab_groups::TabGroupId group, Profile* profile) {
@@ -309,9 +342,13 @@ Browser* FindLastActiveWithProfile(Profile* profile) {
 }
 
 Browser* FindLastActive() {
-  BrowserList* browser_list_impl = BrowserList::GetInstance();
-  if (browser_list_impl)
-    return browser_list_impl->GetLastActive();
+  const BrowserList& bl = *BrowserList::GetInstance();
+  for (auto i = bl.begin_browsers_ordered_by_activation();
+       i != bl.end_browsers_ordered_by_activation(); ++i) {
+    if (!(*i)->is_delete_scheduled()) {
+      return *i;
+    }
+  }
   return nullptr;
 }
 
@@ -320,11 +357,12 @@ size_t GetTotalBrowserCount() {
 }
 
 size_t GetBrowserCount(Profile* profile) {
-  return GetBrowserCountImpl(profile, kMatchAny);
+  return GetBrowserCountImpl(profile, kIncludeBrowsersScheduledForDeletion);
 }
 
 size_t GetTabbedBrowserCount(Profile* profile) {
-  return GetBrowserCountImpl(profile, kMatchNormal);
+  return GetBrowserCountImpl(
+      profile, kMatchNormal | kIncludeBrowsersScheduledForDeletion);
 }
 
 }  // namespace chrome

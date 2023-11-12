@@ -2,7 +2,6 @@
 
 
 source_set("vivaldi_common") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "vivaldi_url_constants.h",
     "vivaldi_url_constants.mm",

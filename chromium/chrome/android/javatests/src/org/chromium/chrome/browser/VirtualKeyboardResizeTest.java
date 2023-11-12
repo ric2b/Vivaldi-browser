@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,8 +69,6 @@ public class VirtualKeyboardResizeTest {
 
     @After
     public void tearDown() {
-        mTestServer.stopAndDestroyServer();
-
         // Some tests set this pref. Clear it to ensure that state does not leak between tests.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             getPrefService().clearPref(Pref.VIRTUAL_KEYBOARD_RESIZES_LAYOUT_BY_DEFAULT);
@@ -374,6 +372,7 @@ public class VirtualKeyboardResizeTest {
      */
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1469918")
     public void testModeAfterNavigation() throws Throwable {
         startMainActivityWithURL("/chrome/test/data/android/page_with_editable.html");
 

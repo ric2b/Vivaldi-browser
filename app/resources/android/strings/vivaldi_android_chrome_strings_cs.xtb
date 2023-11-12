@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
 <translation id="1397811292916898096">Hledat pomocí vyhledávače <ph name="PRODUCT_NAME" /></translation>
+<translation id="1456207338570705181">Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle vybrané slovo a aktuální stránku jako kontext do Vyhledávání Google. Můžete jej vypnout v <ph name="BEGIN_LINK" />Nastavení<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Přepnout normální/soukromé listy</translation>
 <translation id="1644574205037202324">Historie</translation>
 <translation id="17513872634828108">Otevřené listy</translation>
@@ -32,9 +33,15 @@
 <translation id="4121750346708795461">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />zásadami ochrany soukromí<ph name="END_LINK2" /> prohlížeče Vivaldi.</translation>
 <translation id="4137746084635924146">Aktuální jazyk zařízení</translation>
 <translation id="4167670741834902166">Nový soukromý list</translation>
+<translation id="4195643157523330669">Otevřít na nové kartě</translation>
 <translation id="4243710787042215766">Otevřít v soukromém listu</translation>
+<translation id="451872707440238414">Prohledat záložky</translation>
 <translation id="4526803704855831732">Soukromé listy</translation>
+<translation id="4719086422742491124">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Vyberte jedno nebo více slov na stránce a vyhledejte je.
+
+Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi.</translation>
 <translation id="4759238208242260848">Stahování</translation>
+<translation id="4850886885716139402">Zobrazit</translation>
 <translation id="4883379392681899581">Opustit soukromý režim</translation>
 <translation id="4943872375798546930">Žádné výsledky</translation>
 <translation id="49576331685473090">Blokování obsahu</translation>
@@ -42,9 +49,11 @@
 <translation id="5118676864324397542">Úložiště aplikace <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Soukromí</translation>
 <translation id="5233638681132016545">Nový list</translation>
+<translation id="5375131951310889874">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle slovo a jeho okolní kontext do Vyhledávání Google a vrátí definice, obrázky, výsledky vyhledávání a další podrobnosti.
+
+Chcete-li upravit hledaný výraz, vyberte jej dlouhým stisknutím. Chcete-li vyhledávání upřesnit, posuňte panel úplně nahoru a klepněte na vyhledávací pole.</translation>
 <translation id="572328651809341494">Nedávno použité listy</translation>
 <translation id="6150320133806434356">Záložka uložena</translation>
-<translation id="6301525844455696527">Mrkněte na váš seznam četby</translation>
 <translation id="6336451774241870485">Nový soukromý list</translation>
 <translation id="6404511346730675251">Upravit záložku</translation>
 <translation id="6585139692466700358">Navrhovat překlad stránek v jiných jazycích pomocí překladatelské služby Vivaldi</translation>
@@ -56,6 +65,7 @@
 <translation id="7427132068601343474">O aplikaci</translation>
 <translation id="7465104139234185284">Zavřít všechny soukromé listy</translation>
 <translation id="7481312909269577407">Vpřed</translation>
+<translation id="7583262514280211622">Zde najdete svůj seznam četby</translation>
 <translation id="7968014550143838305">Přidáno do seznamu četby</translation>
 <translation id="804786196054284061">Smluvní podmínky Vivaldi</translation>
 <translation id="8127542551745560481">Upravit domovskou stránku</translation>
@@ -64,4 +74,5 @@
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9063523880881406963">Vypnout funkci Stránky pro počítač</translation>
 <translation id="9080642952018487277">Zahájit soukromé prohlížení</translation>
+<translation id="96681097142096641">Zobrazit zjednodušenou stránku?</translation>
 </translationbundle>

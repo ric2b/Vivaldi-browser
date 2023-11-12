@@ -8,7 +8,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/passwords/password_constants.h"
-#import "ios/chrome/grit/ios_google_chrome_strings.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -17,10 +17,6 @@
 #import "app/vivaldi_apptools.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface PasswordSuggestionViewController ()
 

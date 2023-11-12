@@ -6,10 +6,6 @@
 
 #import "base/check.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 AllWebStateObservationForwarder::AllWebStateObservationForwarder(
     WebStateList* web_state_list,
     web::WebStateObserver* observer)
@@ -28,12 +24,12 @@ AllWebStateObservationForwarder::~AllWebStateObservationForwarder() {}
 
 #pragma mark - WebStateListObserver
 
-void AllWebStateObservationForwarder::WebStateListChanged(
+void AllWebStateObservationForwarder::WebStateListDidChange(
     WebStateList* web_state_list,
     const WebStateListChange& change,
-    const WebStateSelection& selection) {
+    const WebStateListStatus& status) {
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
+    case WebStateListChange::Type::kStatusOnly:
       // Do nothing when a WebState is selected and its status is updated.
       break;
     case WebStateListChange::Type::kDetach: {

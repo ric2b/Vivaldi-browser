@@ -8,9 +8,11 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/wm/raster_scale/raster_scale_layer_observer.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_occlusion_tracker.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace aura {
@@ -27,6 +29,8 @@ namespace ash {
 class ASH_EXPORT WindowMirrorView : public views::View,
                                     public aura::WindowObserver {
  public:
+  METADATA_HEADER(WindowMirrorView);
+
   explicit WindowMirrorView(aura::Window* source,
                             bool show_non_client_view = false,
                             bool sync_bounds = false);
@@ -85,6 +89,11 @@ class ASH_EXPORT WindowMirrorView : public views::View,
 
   std::unique_ptr<aura::WindowOcclusionTracker::ScopedForceVisible>
       force_occlusion_tracker_visible_;
+
+  // While a window is mirrored, apply dynamic raster scale to the underlying
+  // window. This is used in e.g. alt-tab and overview mode.
+  absl::optional<ScopedRasterScaleLayerObserverLock>
+      raster_scale_observer_lock_;
 };
 
 }  // namespace ash

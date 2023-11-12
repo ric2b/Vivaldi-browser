@@ -19,11 +19,10 @@ import {MetadataModel} from '../foreground/js/metadata/metadata_model.js';
 import {Command} from '../foreground/js/ui/command.js';
 import {contextMenuHandler} from '../foreground/js/ui/context_menu_handler.js';
 import {Menu} from '../foreground/js/ui/menu.js';
-import {changeDirectory} from '../state/actions/current_directory.js';
-import {refreshNavigationRoots, updateNavigationEntry} from '../state/actions/navigation.js';
-import {readSubDirectories} from '../state/actions_producers/all_entries.js';
-import {convertEntryToFileData} from '../state/reducers/all_entries.js';
-import {driveRootEntryListKey} from '../state/reducers/volumes.js';
+import {convertEntryToFileData, readSubDirectories} from '../state/ducks/all_entries.js';
+import {changeDirectory} from '../state/ducks/current_directory.js';
+import {refreshNavigationRoots, updateNavigationEntry} from '../state/ducks/navigation.js';
+import {driveRootEntryListKey} from '../state/ducks/volumes.js';
 import {getEntry, getFileData, getStore, Store} from '../state/store.js';
 import {TreeSelectedChangedEvent, XfTree} from '../widgets/xf_tree.js';
 import {TreeItemCollapsedEvent, TreeItemExpandedEvent, XfTreeItem} from '../widgets/xf_tree_item.js';
@@ -139,14 +138,6 @@ export class DirectoryTreeContainer {
     // For file watcher.
     chrome.fileManagerPrivate.onDirectoryChanged.addListener(
         this.onFileWatcherEntryChanged_.bind(this));
-    this.tree.addEventListener('click', () => {
-      // Chromevox triggers |click| without switching focus, we force the focus
-      // here so we can handle further keyboard/mouse events to expand/collapse
-      // directories.
-      if (document.activeElement === document.body) {
-        this.tree.focus();
-      }
-    });
 
     this.store_ = getStore();
     this.store_.subscribe(this);
@@ -170,7 +161,7 @@ export class DirectoryTreeContainer {
       const element =
           this.getNavigationDataFromKey(currentDirectory.key)?.element;
       if (element && !element.selected) {
-        this.selectNavigationItem_(element);
+        element.selected = true;
       }
     }
 
@@ -663,11 +654,16 @@ export class DirectoryTreeContainer {
 
   /** Handler for navigation item selected. */
   private onNavigationItemSelected_(event: TreeSelectedChangedEvent) {
-    const treeItem = event.detail.selectedItem;
-    if (!treeItem) {
+    const {previousSelectedItem, selectedItem} = event.detail;
+    if (previousSelectedItem) {
+      previousSelectedItem.removeAttribute('aria-description');
+    }
+    if (!selectedItem) {
       return;
     }
-    const navigationKey = treeItem.dataset['navigationKey']!;
+    selectedItem.setAttribute(
+        'aria-description', str('CURRENT_DIRECTORY_LABEL'));
+    const navigationKey = selectedItem.dataset['navigationKey']!;
     // When the navigation item selection changed from the store (e.g. triggered
     // by other parts of the UI), we don't want to activate the directory again
     // because it's already activated.
@@ -687,7 +683,7 @@ export class DirectoryTreeContainer {
       this.recordUmaForItemSelected_(fileData);
     }
     this.activateDirectory_(
-        treeItem, isRoot, fileData,
+        selectedItem, isRoot, fileData,
         isRoot ? (navigationData as NavigationRootItemData).androidAppData :
                  null);
   }
@@ -1017,19 +1013,5 @@ export class DirectoryTreeContainer {
     const {currentDirectory} = this.store_.getState();
     return currentDirectory?.key === navigationKey &&
         currentDirectory.status === PropStatus.SUCCESS;
-  }
-
-  /** Select the tree item and update the a11y attribute. */
-  private selectNavigationItem_(item: XfTreeItem) {
-    const oldSelectedItem = this.tree.selectedItem;
-    if (oldSelectedItem === item) {
-      return;
-    }
-
-    if (oldSelectedItem) {
-      oldSelectedItem.removeAttribute('aria-description');
-    }
-    item.selected = true;
-    item.setAttribute('aria-description', str('CURRENT_DIRECTORY_LABEL'));
   }
 }

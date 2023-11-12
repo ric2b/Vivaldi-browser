@@ -35,6 +35,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "net/http/http_status_code.h"
@@ -45,7 +46,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_MAC)
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #endif
 
 namespace autofill {
@@ -95,7 +96,7 @@ std::vector<base::FilePath> GetTestFiles() {
   std::sort(files.begin(), files.end());
 
 #if BUILDFLAG(IS_MAC)
-  base::mac::ClearAmIBundledCache();
+  base::apple::ClearAmIBundledCache();
 #endif  // BUILDFLAG(IS_MAC)
 
   return files;
@@ -211,8 +212,6 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        features::kAutofillPageLanguageDetection,
        // TODO(crbug.com/1165780): Remove once shared labels are launched.
        features::kAutofillEnableSupportForParsingWithSharedLabels,
-       // TODO(crbug.com/1335549): Remove once launched.
-       features::kAutofillParseIBANFields,
        // TODO(crbug.com/1341387): Remove once launched.
        features::kAutofillParseVcnCardOnFileStandaloneCvcFields,
        // TODO(crbug.com/1311937): Remove once launched.
@@ -239,6 +238,8 @@ void FormStructureBrowserTest::SetUpCommandLine(
   // Suppress most output logs because we can't really control the output for
   // arbitrary test sites.
   command_line->AppendSwitchASCII(switches::kLoggingLevel, "2");
+  command_line->AppendSwitchASCII(
+      variations::switches::kVariationsOverrideCountry, "us");
 }
 
 void FormStructureBrowserTest::SetUpOnMainThread() {
@@ -282,7 +283,13 @@ std::unique_ptr<HttpResponse> FormStructureBrowserTest::HandleRequest(
   return std::move(response);
 }
 
-IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
+// TODO(crbug.com/1459409): Re-enable this test
+#if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
+#define MAYBE_DataDrivenHeuristics DISABLED_DataDrivenHeuristics
+#else
+#define MAYBE_DataDrivenHeuristics DataDrivenHeuristics
+#endif
+IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, MAYBE_DataDrivenHeuristics) {
   // Prints the path of the test to be executed.
   LOG(INFO) << GetParam().MaybeAsASCII();
   bool is_expected_to_pass =

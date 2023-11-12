@@ -2,7 +2,6 @@
 
 source_set("vivaldi_account") {
   configs += [
-    "//build/config/compiler:enable_arc",
     "//third_party/abseil-cpp:absl_include_config",
   ]
 

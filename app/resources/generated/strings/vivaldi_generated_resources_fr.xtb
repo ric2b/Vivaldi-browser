@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Rétablir les paramètres</translation>
 <translation id="4478664379124702289">Enregistrer le lie&amp;n sous…</translation>
 <translation id="4520385623207007473">Cookies utilisés</translation>
+<translation id="456449593072900590">Supprimer en quittant</translation>
 <translation id="4580596421317071374">Les mots de passe sont enregistrés dans le <ph name="GOOGLE_PASSWORD_MANAGER" /> sur cet appareil.</translation>
 <translation id="4593021220803146968">&amp;Accéder à <ph name="URL" /></translation>
 <translation id="4595560905247879544">Seul l’administrateur (<ph name="CUSTODIAN_NAME" />) est autorisé à modifier les applications et les extensions.</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Couleur</translation>
 <translation id="5485102783864353244">Ajouter l’application</translation>
 <translation id="5486561344817861625">Simuler le redémarrage du navigateur</translation>
-<translation id="5487521232677179737">Effacer les données</translation>
 <translation id="5509693895992845810">Enregistrer &amp;sous…</translation>
 <translation id="5521078259930077036">Est-ce bien la page d’accueil que vous attendiez ?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Inconnu</translation>
 <translation id="5851868085455377790">Émetteur</translation>
 <translation id="5860491529813859533">Activer</translation>
-<translation id="5867841422488265304">Recherchez ou saisissez une adresse Web</translation>
 <translation id="5910363049092958439">En&amp;registrer l’image sous…</translation>
 <translation id="5914724413750400082">Module (<ph name="MODULUS_NUM_BITS" /> bits) :
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Accès refusé.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
 <translation id="7339785458027436441">Vérifier l'orthographe lors de la frappe</translation>
-<translation id="73786666777299047">Ouvrir le Chrome Web Store</translation>
 <translation id="7385854874724088939">Erreur lors de la tentative d’impression. Vérifiez votre imprimante et réessayez.</translation>
 <translation id="7412226954991670867">Mémoire processeur graphique</translation>
 <translation id="7421925624202799674">&amp;Afficher le code source de la page</translation>
@@ -442,6 +440,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8382913212082956454">Copi&amp;er l’adresse e-mail</translation>
 <translation id="8434480141477525001">Port de débogage de Native Client</translation>
 <translation id="8449008133205184768">Coller en adaptant le style</translation>
+<translation id="8477178913400731244">Supprimer les données</translation>
 <translation id="8477384620836102176">&amp;Général</translation>
 <translation id="8496717697661868878">Exécuter ce plug-in</translation>
 <translation id="8512476990829870887">Arrêter le processus</translation>

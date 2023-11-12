@@ -48,6 +48,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
+#include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/url_identity.h"
 #include "chrome/browser/ui/webui/settings/recent_site_settings_helper.h"
@@ -372,12 +373,16 @@ bool IsPatternValidForType(const std::string& pattern_string,
   return true;
 }
 
-void UpdateDataFromModel(SiteSettingsHandler::AllSitesMap* all_sites_map,
-                         std::map<url::Origin, int64_t>* origin_size_map,
-                         const url::Origin& origin,
-                         int64_t size) {
+void UpdateDataFromModel(
+    SiteSettingsHandler::AllSitesMap* all_sites_map,
+    std::map<url::Origin, int64_t>* origin_size_map,
+    const url::Origin& origin,
+    int64_t size,
+    absl::optional<GroupingKey> partition_grouping_key = absl::nullopt) {
   UpdateDataForOrigin(origin, size, origin_size_map);
-  InsertOriginIntoGroup(all_sites_map, origin);
+  InsertOriginIntoGroup(all_sites_map, origin,
+                        /*is_origin_with_cookies=*/false,
+                        partition_grouping_key);
 }
 
 void LogAllSitesAction(AllSitesAction2 action) {
@@ -386,8 +391,8 @@ void LogAllSitesAction(AllSitesAction2 action) {
 
 int GetNumCookieExceptionsOfTypes(HostContentSettingsMap* map,
                                   const std::set<ContentSetting> types) {
-  ContentSettingsForOneType output;
-  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &output);
+  ContentSettingsForOneType output =
+      map->GetSettingsForOneType(ContentSettingsType::COOKIES);
   return base::ranges::count_if(
       output, [types](const ContentSettingPatternSource setting) {
         return types.count(
@@ -582,6 +587,8 @@ void ConvertSiteGroupMapToList(
   DCHECK(profile);
   auto* privacy_sandbox_service =
       PrivacySandboxServiceFactory::GetForProfile(profile);
+  if (!privacy_sandbox_service)
+    return;
   auto fps_map = GetFpsMap(privacy_sandbox_service, tree_model);
   base::flat_set<url::Origin> installed_origins =
       GetInstalledAppOrigins(profile);
@@ -801,6 +808,11 @@ void SiteSettingsHandler::RegisterMessages() {
       base::BindRepeating(&SiteSettingsHandler::HandleGetExceptionList,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
+      "getStorageAccessExceptionList",
+      base::BindRepeating(
+          &SiteSettingsHandler::HandleGetStorageAccessExceptionList,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
       "getFileSystemGrants",
       base::BindRepeating(&SiteSettingsHandler::HandleGetFileSystemGrants,
                           base::Unretained(this)));
@@ -984,6 +996,8 @@ void SiteSettingsHandler::OnGetUsageInfo() {
 
     auto* privacy_sandbox_service =
         PrivacySandboxServiceFactory::GetForProfile(profile_);
+    if (!privacy_sandbox_service)
+      break;
     auto fps_map =
         GetFpsMap(privacy_sandbox_service, cookies_tree_model_.get());
     auto etld_plus1 = GetEtldPlusOne(site->GetDetailedInfo().origin);
@@ -1006,6 +1020,8 @@ void SiteSettingsHandler::OnGetUsageInfo() {
     if (!entry.Matches(usage_origin)) {
       continue;
     }
+    // TODO(crbug.com/1468277): Step 5 - Check if the entry is backed by a
+    // StorageKey and count the size if the top-site matches too.
     size += entry.data_details->storage_size;
   }
 
@@ -1162,6 +1178,8 @@ void SiteSettingsHandler::HandleClearUnpartitionedUsage(
   RemoveNonTreeModelData(affected_origins);
 }
 
+// TODO(crbug.com/1468277): Step 5 - Handle clearing partitioned entries as
+// well where origin matches the top-site in the browsing data model.
 void SiteSettingsHandler::HandleClearPartitionedUsage(
     const base::Value::List& args) {
   CHECK_EQ(2U, args.size());
@@ -1497,6 +1515,35 @@ void SiteSettingsHandler::HandleGetExceptionList(
   ResolveJavascriptCallback(callback_id, exceptions);
 }
 
+void SiteSettingsHandler::HandleGetStorageAccessExceptionList(
+    const base::Value::List& args) {
+  AllowJavascript();
+
+  CHECK_EQ(2U, args.size());
+  const base::Value& callback_id = args[0];
+
+  ContentSetting setting;
+  CHECK(content_settings::ContentSettingFromString(args[1].GetString(),
+                                                   &setting));
+
+  Profile* incognito_ =
+      profile_->HasPrimaryOTRProfile()
+          ? profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true)
+          : nullptr;
+
+  // On Chrome OS in Guest mode the incognito profile is the primary profile,
+  // so do not fetch an extra copy of the same exceptions.
+  if (incognito_ && incognito_ == profile_) {
+    incognito_ = nullptr;
+  }
+
+  base::Value::List exceptions;
+  site_settings::GetStorageAccessExceptions(setting, profile_, incognito_,
+                                            web_ui(), &exceptions);
+
+  ResolveJavascriptCallback(callback_id, exceptions);
+}
+
 void SiteSettingsHandler::HandleGetChooserExceptionList(
     const base::Value::List& args) {
   AllowJavascript();
@@ -1604,10 +1651,7 @@ void SiteSettingsHandler::HandleRevokeFileSystemGrant(
   ChromeFileSystemAccessPermissionContext* permission_context =
       FileSystemAccessPermissionContextFactory::GetForProfile(profile_);
 
-  permission_context->RevokeGrant(
-      origin, file_path,
-      ChromeFileSystemAccessPermissionContext::PersistedPermissionOptions::
-          kUpdatePersistedPermission);
+  permission_context->RevokeGrant(origin, file_path);
 }
 
 void SiteSettingsHandler::HandleRevokeFileSystemGrants(
@@ -1627,9 +1671,7 @@ void SiteSettingsHandler::HandleRevokeFileSystemGrants(
   ChromeFileSystemAccessPermissionContext* permission_context =
       FileSystemAccessPermissionContextFactory::GetForProfile(profile_);
 
-  permission_context->RevokeGrants(
-      origin, ChromeFileSystemAccessPermissionContext::
-                  PersistedPermissionOptions::kUpdatePersistedPermission);
+  permission_context->RevokeGrants(origin);
 }
 
 void SiteSettingsHandler::HandleSetOriginPermissions(
@@ -2182,6 +2224,16 @@ void SiteSettingsHandler::ObserveSourcesForProfile(Profile* profile) {
       chooser_observations_.AddObservation(bluetooth_context);
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kFileSystemAccessPersistentPermissions)) {
+    auto* file_system_access_permission_context =
+        FileSystemAccessPermissionContextFactory::GetForProfile(profile);
+    if (!chooser_observations_.IsObservingSource(
+            file_system_access_permission_context)) {
+      chooser_observations_.AddObservation(
+          file_system_access_permission_context);
+    }
+  }
   observed_profiles_.AddObservation(profile);
 }
 
@@ -2210,21 +2262,19 @@ void SiteSettingsHandler::StopObservingSourcesForProfile(Profile* profile) {
       chooser_observations_.RemoveObservation(bluetooth_context);
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kFileSystemAccessPersistentPermissions)) {
+    auto* file_system_access_permission_context =
+        FileSystemAccessPermissionContextFactory::GetForProfile(profile);
+    if (chooser_observations_.IsObservingSource(
+            file_system_access_permission_context)) {
+      chooser_observations_.RemoveObservation(
+          file_system_access_permission_context);
+    }
+  }
+
   observed_profiles_.RemoveObservation(profile);
 }
-
-void SiteSettingsHandler::TreeNodesAdded(ui::TreeModel* model,
-                                         ui::TreeModelNode* parent,
-                                         size_t start,
-                                         size_t count) {}
-
-void SiteSettingsHandler::TreeNodesRemoved(ui::TreeModel* model,
-                                           ui::TreeModelNode* parent,
-                                           size_t start,
-                                           size_t count) {}
-
-void SiteSettingsHandler::TreeNodeChanged(ui::TreeModel* model,
-                                          ui::TreeModelNode* node) {}
 
 void SiteSettingsHandler::TreeModelEndBatchDeprecated(CookiesTreeModel* model) {
   ModelBuilt();
@@ -2255,8 +2305,19 @@ void SiteSettingsHandler::GetOriginStorage(
                          },
                          [](const url::Origin& origin) { return origin; }},
         *entry.data_owner);
+
+    // If the storage is backed by a StorageKey we need to ensure the grouping
+    // key matches the top-site and doesn't default to the origin in the UI.
+    absl::optional<GroupingKey> partition_grouping_key = absl::nullopt;
+    const blink::StorageKey* storage_key =
+        absl::get_if<blink::StorageKey>(&entry.data_key.get());
+    if (storage_key != nullptr && storage_key->IsThirdPartyContext()) {
+      partition_grouping_key = GroupingKey::Create(
+          url::Origin::Create(GURL(storage_key->top_level_site().Serialize())));
+    }
     UpdateDataFromModel(all_sites_map, origin_size_map, origin,
-                        entry.data_details->storage_size);
+                        entry.data_details->storage_size,
+                        partition_grouping_key);
   }
 }
 
@@ -2370,6 +2431,10 @@ void SiteSettingsHandler::HandleGetNumCookiesString(
 
 void SiteSettingsHandler::RemoveNonTreeModelData(
     const std::vector<url::Origin>& origins) {
+  if (origins.empty()) {
+    return;
+  }
+
   // TODO(crbug.com/1268626): Remove client hint information, which cannot be
   // associated with Cookie node information as the scheme in the cookie node
   // may not match due to HTTP / HTTPS distinction issues.
@@ -2411,7 +2476,7 @@ void SiteSettingsHandler::RemoveNonTreeModelData(
     }
   }
 
-  // Remove any Browsing Data Model data associated with the origins host.
+  // Remove any Browsing Data Model data associated with the origins.
   // TODO(crbug.com/1271155) - When the browsing data model supports all storage
   // types, re-work this handler to work directly with primary hosts as defined
   // by the model.
@@ -2421,8 +2486,13 @@ void SiteSettingsHandler::RemoveNonTreeModelData(
   // been created by permission info).
   if (browsing_data_model_) {
     for (const auto& origin : origins) {
-      browsing_data_model_->RemoveBrowsingData(origin.host(),
-                                               base::DoNothing());
+      browsing_data_model_->RemoveBrowsingData(origin, base::DoNothing());
+
+      // Also remove Browsing Data Model data associated with the origin's host.
+      if (origin.GetURL().SchemeIsHTTPOrHTTPS()) {
+        browsing_data_model_->RemoveBrowsingData(origin.host(),
+                                                 base::DoNothing());
+      }
     }
   }
 
@@ -2463,6 +2533,14 @@ void SiteSettingsHandler::ClearAllSitesMapForTesting() {
   all_sites_map_.clear();
 }
 
+CookiesTreeModel* SiteSettingsHandler::GetCookiesTreeModelForTesting() {
+  return cookies_tree_model_.get();
+}
+
+BrowsingDataModel* SiteSettingsHandler::GetBrowsingDataModelForTesting() {
+  return browsing_data_model_.get();
+}
+
 void SiteSettingsHandler::SendCookieSettingDescription() {
   FireWebUIListener("cookieSettingDescriptionChanged",
                     base::Value(GetCookieSettingDescription(profile_)));
@@ -2473,45 +2551,45 @@ void SiteSettingsHandler::SendCookieSettingDescription() {
 // {
 //     "origin" : <string>;
 //     "filePath" : <string>;
-//     "isWritable" : <bool>;
+//     "displayName" : <string>;
 //     "isDirectory" : <bool>;
 // }
 
 // Dictionary keys for an individual permission grant in
 // the returned `grants` List.
-// Note that while the `isWritable` and `isDirectory` values
-// are implied by the names of the grant lists, the
-// `FileSystemPermissionGrant` type contains these attributes
-// in order to make the data more easily accessible from the UI code.
-//
 // Schema (per origin):
 // [
 //  ...
 //   {
 //     "origin" : <string>;
-//     "directoryReadGrants" : FileSystemPermissionGrant[];
-//     "directoryWriteGrants" : FileSystemPermissionGrant[];
-//     "fileReadGrants" : FileSystemPermissionGrant[];
-//     "fileWriteGrants" : FileSystemPermissionGrant[];
+//     "viewGrants" : FileSystemPermissionGrant[];
+//     "editGrants" : FileSystemPermissionGrant[];
 //   }
 //  ...
 // ]
+
+// TODO(crbug.com/1373962): Store the `FilePathToValue(file_path)` value
+// as a separate variable throughout the `PopulateFileSystemGrantData` function
+// where possible, instead of computing the value every time that it is needed.
 base::Value::List SiteSettingsHandler::PopulateFileSystemGrantData() {
   base::Value::List grants;
 
   // TODO(crbug.com/1373962): Remove feature flag check after persisted
   // permissions is fully launched.
   if (!base::FeatureList::IsEnabled(
-          features::kFileSystemAccessPersistentPermissions))
+          features::kFileSystemAccessPersistentPermissions)) {
     return grants;
+  }
+
   ChromeFileSystemAccessPermissionContext* permission_context =
       FileSystemAccessPermissionContextFactory::GetForProfile(profile_);
-  std::vector<url::Origin> origins_with_grants =
+  std::set<url::Origin> origins_with_grants =
       permission_context->GetOriginsWithGrants();
 
   for (auto& origin : origins_with_grants) {
     ChromeFileSystemAccessPermissionContext::Grants grantObj =
-        permission_context->GetPermissionGrants(origin);
+        permission_context->ConvertObjectsToGrants(
+            permission_context->GetGrantedObjects(origin));
     if (grantObj.file_read_grants.empty() &&
         grantObj.file_write_grants.empty() &&
         grantObj.directory_read_grants.empty() &&
@@ -2519,13 +2597,15 @@ base::Value::List SiteSettingsHandler::PopulateFileSystemGrantData() {
       continue;
     }
 
-    base::Value::Dict file_system_permission_grant;
-    base::Value::List directory_read_grants;
-    base::Value::List directory_write_grants;
-    base::Value::List file_read_grants;
-    base::Value::List file_write_grants;
+    base::Value::Dict origin_file_system_permission_grants;
+    base::Value::List view_grants;
+    base::Value::List edit_grants;
+    std::vector<base::Value> directory_edit_grants_file_paths;
+    std::vector<base::Value> file_edit_grants_file_paths;
+
     std::string origin_string = origin.GetURL().spec();
-    file_system_permission_grant.Set(site_settings::kOrigin, origin_string);
+    origin_file_system_permission_grants.Set(site_settings::kOrigin,
+                                             origin_string);
 
     // Populate the `file_system_permission_grant` object with allowed
     // permissions.
@@ -2534,48 +2614,58 @@ base::Value::List SiteSettingsHandler::PopulateFileSystemGrantData() {
       directory_write_grant.Set(site_settings::kOrigin, origin_string);
       directory_write_grant.Set(site_settings::kFilePath,
                                 FilePathToValue(file_path));
-      directory_write_grant.Set(site_settings::kIsWritable, true);
+      directory_write_grant.Set(site_settings::kDisplayName,
+                                FilePathToValue(file_path));
       directory_write_grant.Set(site_settings::kIsDirectory, true);
-      directory_write_grants.Append(std::move(directory_write_grant));
+      directory_edit_grants_file_paths.push_back(FilePathToValue(file_path));
+      edit_grants.Append(std::move(directory_write_grant));
     }
-    file_system_permission_grant.Set(site_settings::kDirectoryWriteGrants,
-                                     std::move(directory_write_grants));
 
     for (auto& file_path : grantObj.directory_read_grants) {
+      if (base::Contains(directory_edit_grants_file_paths,
+                         FilePathToValue(file_path))) {
+        continue;
+      }
       base::Value::Dict directory_read_grant;
       directory_read_grant.Set(site_settings::kOrigin, origin_string);
       directory_read_grant.Set(site_settings::kFilePath,
                                FilePathToValue(file_path));
-      directory_read_grant.Set(site_settings::kIsWritable, false);
+      directory_read_grant.Set(site_settings::kDisplayName,
+                               FilePathToValue(file_path));
       directory_read_grant.Set(site_settings::kIsDirectory, true);
-      directory_read_grants.Append(std::move(directory_read_grant));
+      view_grants.Append(std::move(directory_read_grant));
     }
-    file_system_permission_grant.Set(site_settings::kDirectoryReadGrants,
-                                     std::move(directory_read_grants));
 
     for (auto& file_path : grantObj.file_write_grants) {
       base::Value::Dict file_write_grant;
       file_write_grant.Set(site_settings::kOrigin, origin_string);
       file_write_grant.Set(site_settings::kFilePath,
                            FilePathToValue(file_path));
-      file_write_grant.Set(site_settings::kIsWritable, true);
+      file_write_grant.Set(site_settings::kDisplayName,
+                           FilePathToValue(file_path));
       file_write_grant.Set(site_settings::kIsDirectory, false);
-      file_write_grants.Append(std::move(file_write_grant));
+      file_edit_grants_file_paths.push_back(FilePathToValue(file_path));
+      edit_grants.Append(std::move(file_write_grant));
     }
-    file_system_permission_grant.Set(site_settings::kFileWriteGrants,
-                                     std::move(file_write_grants));
 
     for (auto& file_path : grantObj.file_read_grants) {
+      if (base::Contains(file_edit_grants_file_paths,
+                         FilePathToValue(file_path))) {
+        continue;
+      }
       base::Value::Dict file_read_grant;
       file_read_grant.Set(site_settings::kOrigin, origin_string);
       file_read_grant.Set(site_settings::kFilePath, FilePathToValue(file_path));
-      file_read_grant.Set(site_settings::kIsWritable, false);
+      file_read_grant.Set(site_settings::kDisplayName,
+                          FilePathToValue(file_path));
       file_read_grant.Set(site_settings::kIsDirectory, false);
-      file_read_grants.Append((base::Value(std::move(file_read_grant))));
+      view_grants.Append((base::Value(std::move(file_read_grant))));
     }
-    file_system_permission_grant.Set(site_settings::kFileReadGrants,
-                                     std::move(file_read_grants));
-    grants.Append(std::move(file_system_permission_grant));
+    origin_file_system_permission_grants.Set("viewGrants",
+                                             std::move(view_grants));
+    origin_file_system_permission_grants.Set("editGrants",
+                                             std::move(edit_grants));
+    grants.Append(std::move(origin_file_system_permission_grants));
   }
   return grants;
 }
@@ -2585,6 +2675,9 @@ void SiteSettingsHandler::SendNotificationPermissionReviewList() {
           features::kSafetyCheckNotificationPermissions)) {
     return;
   }
+  NotificationPermissionsReviewService* service =
+      NotificationPermissionsReviewServiceFactory::GetForProfile(profile_);
+  CHECK(service);
   // Notify observers that the permission review list could have changed. Note
   // that the list is not guaranteed to have changed. In places where
   // determining whether the list has changed is cause for performance concerns,
@@ -2593,7 +2686,7 @@ void SiteSettingsHandler::SendNotificationPermissionReviewList() {
   // HandleSetCategoryPermissionForPattern.
   FireWebUIListener(
       site_settings::kNotificationPermissionsReviewListMaybeChangedEvent,
-      site_settings::PopulateNotificationPermissionReviewData(profile_));
+      service->PopulateNotificationPermissionReviewData(profile_));
 }
 
 }  // namespace settings

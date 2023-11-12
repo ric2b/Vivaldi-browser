@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "ash/ash_element_identifiers.h"
 #include "ash/system/media/quick_settings_media_view_container.h"
 #include "ash/system/media/unified_media_controls_container.h"
 #include "ash/system/tray/interacted_by_tap_recorder.h"
@@ -42,32 +43,6 @@ namespace {
 
 constexpr auto kPageIndicatorMargin = gfx::Insets::TLBR(0, 0, 8, 0);
 constexpr auto kSlidersContainerMargin = gfx::Insets::TLBR(4, 0, 0, 0);
-
-class DetailedViewContainer : public views::View {
- public:
-  METADATA_HEADER(DetailedViewContainer);
-
-  DetailedViewContainer() {
-    SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kVertical));
-  }
-
-  DetailedViewContainer(const DetailedViewContainer&) = delete;
-  DetailedViewContainer& operator=(const DetailedViewContainer&) = delete;
-
-  ~DetailedViewContainer() override = default;
-
-  // views::View:
-  void Layout() override {
-    for (auto* child : children()) {
-      child->SetBoundsRect(GetContentsBounds());
-    }
-    views::View::Layout();
-  }
-};
-
-BEGIN_METADATA(DetailedViewContainer, views::View)
-END_METADATA
 
 class AccessibilityFocusHelperView : public views::View {
  public:
@@ -130,6 +105,8 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
   DCHECK(controller_);
   controller_->model()->pagination_model()->AddObserver(this);
 
+  SetProperty(views::kElementIdentifierKey, kQuickSettingsViewElementId);
+
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   auto* scroll_view = AddChildView(std::make_unique<views::ScrollView>());
@@ -171,8 +148,8 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
   footer_ = system_tray_container_->AddChildView(
       std::make_unique<QuickSettingsFooter>(controller_));
 
-  detailed_view_container_ =
-      AddChildView(std::make_unique<DetailedViewContainer>());
+  detailed_view_container_ = AddChildView(std::make_unique<views::View>());
+  detailed_view_container_->SetUseDefaultFillLayout(true);
   detailed_view_container_->SetVisible(false);
 
   system_tray_container_->AddChildView(

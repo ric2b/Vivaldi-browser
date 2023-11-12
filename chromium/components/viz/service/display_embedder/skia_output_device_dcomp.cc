@@ -12,7 +12,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/viz/common/gpu/context_lost_reason.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -34,6 +33,7 @@
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -125,7 +125,7 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
   capabilities_.supports_dc_layers = true;
 
   DCHECK(context_state_);
-  DCHECK(context_state_->gr_context());
+  DCHECK(context_state_->gr_context() || context_state_->graphite_context());
   DCHECK(context_state_->context());
 
   // SRGB
@@ -200,9 +200,9 @@ void SkiaOutputDeviceDComp::ScheduleOverlays(
     // SwapChainPresenter uses the size of the overlay's resource in pixels to
     // calculate its swap chain size. `uv_rect` maps the portion of
     // `resource_size_in_pixels` that will be displayed.
-    params->content_rect = gfx::ToNearestRect(gfx::ScaleRect(
+    params->content_rect = gfx::ScaleRect(
         dc_layer.uv_rect, dc_layer.resource_size_in_pixels.width(),
-        dc_layer.resource_size_in_pixels.height()));
+        dc_layer.resource_size_in_pixels.height());
 
     params->quad_rect = gfx::ToEnclosingRect(dc_layer.display_rect);
     DCHECK(absl::holds_alternative<gfx::Transform>(dc_layer.transform));
@@ -210,7 +210,7 @@ void SkiaOutputDeviceDComp::ScheduleOverlays(
     params->clip_rect = dc_layer.clip_rect;
     params->protected_video_type = dc_layer.protected_video_type;
     params->color_space = dc_layer.color_space;
-    params->hdr_metadata = dc_layer.hdr_metadata.value_or(gfx::HDRMetadata());
+    params->hdr_metadata = dc_layer.hdr_metadata;
     params->possible_video_fullscreen_letterboxing =
         dc_layer.possible_video_fullscreen_letterboxing;
 
@@ -319,8 +319,9 @@ bool SkiaOutputDeviceDCompGLSurface::Reshape(const SkImageInfo& image_info,
       NOTREACHED() << "color_type: " << color_type;
   }
 
-  GrBackendRenderTarget render_target(size.width(), size.height(), sample_count,
-                                      /*stencilBits=*/0, framebuffer_info);
+  auto render_target =
+      GrBackendRenderTargets::MakeGL(size.width(), size.height(), sample_count,
+                                     /*stencilBits=*/0, framebuffer_info);
   auto origin = (gl_surface_->GetOrigin() == gfx::SurfaceOrigin::kTopLeft)
                     ? kTopLeft_GrSurfaceOrigin
                     : kBottomLeft_GrSurfaceOrigin;
@@ -417,7 +418,7 @@ SkiaOutputDeviceDCompPresenter::SkiaOutputDeviceDCompPresenter(
   capabilities_.supports_delegated_ink = presenter_->SupportsDelegatedInk();
   capabilities_.pending_swap_params.max_pending_swaps = 1;
   capabilities_.renderer_allocates_images = true;
-  capabilities_.supports_viewporter = true;
+  capabilities_.supports_viewporter = presenter_->SupportsViewporter();
 }
 
 SkiaOutputDeviceDCompPresenter::~SkiaOutputDeviceDCompPresenter() = default;

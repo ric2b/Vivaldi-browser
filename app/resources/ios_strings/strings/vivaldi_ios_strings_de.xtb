@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="1063263220330818888">Private Suche</translation>
+<translation id="1137850887415122856">Touch ID, Face ID oder einen Passcode einrichten, um private Tabs zu sperren.</translation>
+<translation id="1310184829257917508">Nachfragen zum Öffnen von Verknüfungen aus anderen Apps im privaten Modus</translation>
 <translation id="1512201558627495343">Neuer privater Tab</translation>
+<translation id="1786453623676543866">Starte eine Suche in einem neuen Vivaldi Tab.</translation>
+<translation id="207677936531967364">Neue private Tab Seite</translation>
+<translation id="2899836479226240291">Du kannst Links in Vivaldi automatisch öffnen, indem du es zu deiner Standard-Browser-App machst.</translation>
+<translation id="3171582312249481866">Vivaldi Einstellungen öffnen</translation>
+<translation id="3372807273343182542">URLs in Vivaldi im privaten Bereich öffnen</translation>
+<translation id="3379322781901918214">1. Öffnen Sie die Vivaldi Einstellungen</translation>
+<translation id="3473652525653758699">Neues privates Fenster</translation>
+<translation id="3501504415290398157"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> verwenden, um private Tabs zu entsperren.</translation>
+<translation id="3692650606013198282">Privat öffnen</translation>
+<translation id="3709782636417497984">In neuem privaten Tab öffnen</translation>
+<translation id="3981599532037327317">${url} privat öffnen</translation>
+<translation id="4755216899422789286">URLs in Vivaldi öffnen</translation>
+<translation id="6233792867654386826">Öffnet eingegebene URLs in Vivaldi.</translation>
 <translation id="6827597288286078054">Private Suche</translation>
+<translation id="7175743738896712454">Öffnet eingegebene URLs im privaten Bereich von Vivaldi.</translation>
+<translation id="7307970171564921489">Private Tabs mit <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> entsperren</translation>
+<translation id="7347289093190902150">Privat öffnen?</translation>
+<translation id="7549299604720382000">Neuer privater Tab</translation>
+<translation id="8326104954595890674">Neuer privater Tab</translation>
+<translation id="8763006697839582351">Öffnen im privaten Modus</translation>
+<translation id="9060728682512999830">Suche in Vivaldi</translation>
 </translationbundle>

@@ -12,8 +12,8 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/base/features.h"
-#import "components/sync/base/sync_prefs.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "components/sync/service/sync_prefs.h"
 #import "ios/chrome/browser/passwords/password_manager_app_interface.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
@@ -32,10 +32,6 @@
 #import "net/base/mac/url_conversions.h"
 #import "net/test/embedded_test_server/default_handlers.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 constexpr char kFormUsername[] = "un";
 constexpr char kFormPassword[] = "pw";
@@ -111,15 +107,11 @@ BOOL WaitForKeyboardToAppear() {
   AppLaunchConfiguration config;
   if ([self
           isRunningTest:@selector(testShowAccountStorageNoticeBeforeSaving)]) {
-    config.features_enabled.push_back(
-        password_manager::features::kEnablePasswordsAccountStorage);
     config.features_disabled.push_back(
         syncer::kReplaceSyncPromosWithSignInPromos);
   }
   if ([self
           isRunningTest:@selector(testShowAccountStorageNoticeBeforeFilling)]) {
-    config.features_enabled.push_back(
-        password_manager::features::kEnablePasswordsAccountStorage);
     config.features_disabled.push_back(
         syncer::kReplaceSyncPromosWithSignInPromos);
     config.features_disabled.push_back(
@@ -127,8 +119,6 @@ BOOL WaitForKeyboardToAppear() {
   }
   if ([self isRunningTest:@selector
             (testShowAccountStorageNoticeBeforeFillingBottomSheet)]) {
-    config.features_enabled.push_back(
-        password_manager::features::kEnablePasswordsAccountStorage);
     config.features_enabled.push_back(
         password_manager::features::kIOSPasswordBottomSheet);
     config.features_disabled.push_back(

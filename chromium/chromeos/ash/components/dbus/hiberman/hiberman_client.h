@@ -43,22 +43,14 @@ class COMPONENT_EXPORT(HIBERMAN_CLIENT) HibermanClient {
 
   virtual bool IsEnabled() const = 0;
 
+  virtual bool IsHibernateToS4Enabled() const = 0;
+
   // Actual DBus Methods:
   // Runs the callback as soon as the service becomes available.
   virtual void WaitForServiceToBeAvailable(
       chromeos::WaitForServiceToBeAvailableCallback callback) = 0;
 
-  // Resume from hibernate, if possible. Upon a successful resume from
-  // hibernation, this function does not return, as execution continues in the
-  // resumed image.
-  virtual void ResumeFromHibernate(const std::string& account_id,
-                                   ResumeFromHibernateCallback callback) = 0;
-
-  // Resume from hibernate with an auth session, if possible. Upon a successful
-  // resume from hibernation, this function does not return, as execution
-  // continues in the resumed image.
-  virtual void ResumeFromHibernateAS(const std::string& auth_session_id,
-                                     ResumeFromHibernateCallback callback) = 0;
+  virtual void ResumeFromHibernate(const std::string& auth_session_id) = 0;
 
   // Abort from hibernate. This will prevent any future hibernate or resume for
   // this user's session. If a resume was in progress it will be aborted. If a

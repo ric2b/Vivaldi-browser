@@ -83,7 +83,8 @@
 - (void)handleToolbarButtonVisibility:(BOOL)show;
 /// Update the vivaldi more actions based on web context. This is only available
 /// for iPhone landscape mode.
-- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled;
+- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled
+                                 atbSettingType:(ATBSettingType)type;
 /// Update tracker blocker shield icon based on settings.
 - (void)updateVivaldiShieldState:(ATBSettingType)setting;
 // End Vivaldi

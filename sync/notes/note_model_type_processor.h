@@ -11,10 +11,12 @@
 
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/sync/engine/model_type_processor.h"
 #include "components/sync/model/model_type_controller_delegate.h"
+#include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/notes/synced_note_tracker.h"
 
 namespace vivaldi {
@@ -33,7 +35,8 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                public syncer::ModelTypeControllerDelegate {
  public:
   NoteModelTypeProcessor(file_sync::SyncedFileStore* synced_file_store,
-                         bool wipe_model_on_stopping_sync_with_clear_data);
+                         syncer::WipeModelUponSyncDisabledBehavior
+                             wipe_model_upon_sync_disabled_behavior);
 
   NoteModelTypeProcessor(const NoteModelTypeProcessor&) = delete;
   NoteModelTypeProcessor& operator=(const NoteModelTypeProcessor&) = delete;
@@ -126,6 +129,10 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // instead the caller must meet this precondition.
   void StopTrackingMetadataAndResetTracker();
 
+  // Honors `wipe_model_upon_sync_disabled_behavior_`, i.e. deletes all
+  // notes in the model depending on the selected behavior.
+  void TriggerWipeModelUponSyncDisabledBehavior();
+
   // Creates a DictionaryValue for local and remote debugging information about
   // `node` and appends it to `all_nodes`. It does the same for child nodes
   // recursively. `index` is the index of `node` within its parent. `index`
@@ -144,11 +151,14 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // The note model we are processing local changes from and forwarding
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
-  raw_ptr<vivaldi::NotesModel> notes_model_ = nullptr;
+  raw_ptr<vivaldi::NotesModel, AcrossTasksDanglingUntriaged> notes_model_ =
+      nullptr;
 
-  // Controls whether notes should be wiped when sync is stopped. Not used in
-  // vivaldi
-  const bool wipe_model_on_stopping_sync_with_clear_data_;
+  // Controls whether notes should be wiped when sync is stopped. Not actually
+  // used in Vivaldi
+  syncer::WipeModelUponSyncDisabledBehavior
+      wipe_model_upon_sync_disabled_behavior_ =
+          syncer::WipeModelUponSyncDisabledBehavior::kNever;
 
   // The callback used to schedule the persistence of note model as well as
   // the metadata to a file during which latest metadata should also be pulled

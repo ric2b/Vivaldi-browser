@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -17,6 +18,9 @@ class TabListContainerProperties {
     public static final PropertyModel
             .WritableObjectPropertyKey<TabListRecyclerView.VisibilityListener> VISIBILITY_LISTENER =
             new PropertyModel.WritableObjectPropertyKey<>();
+
+    public static final PropertyModel.ReadableObjectPropertyKey<BrowserControlsStateProvider>
+            BROWSER_CONTROLS_STATE_PROVIDER = new PropertyModel.WritableObjectPropertyKey<>();
 
     /**
      * Integer, but not {@link PropertyModel.WritableIntPropertyKey} so that we can force update on
@@ -55,7 +59,6 @@ class TabListContainerProperties {
             .WritableObjectPropertyKey<Integer> FOCUS_TAB_INDEX_FOR_ACCESSIBILITY =
             new PropertyModel.WritableObjectPropertyKey<>(/*skipEquality=*/true);
 
-
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_NORMAL =
             new PropertyModel.WritableObjectPropertyKey<>(true);
@@ -63,10 +66,9 @@ class TabListContainerProperties {
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_PRIVATE =
             new PropertyModel.WritableObjectPropertyKey<>(true);
-
-    public static final PropertyKey[] ALL_KEYS =
-            new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO, VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX,
-                    ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT,
-                    SHADOW_TOP_OFFSET, BOTTOM_PADDING, MODE, FOCUS_TAB_INDEX_FOR_ACCESSIBILITY,
+    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
+            VISIBILITY_LISTENER, BROWSER_CONTROLS_STATE_PROVIDER, INITIAL_SCROLL_INDEX,
+            ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET,
+            BOTTOM_PADDING, MODE, FOCUS_TAB_INDEX_FOR_ACCESSIBILITY,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

@@ -53,6 +53,8 @@ void ExpectMouseWheelEventsEqual(const MouseWheelEvent& expected,
 
 void ExpectKeyEventsEqual(const KeyEvent& expected, const KeyEvent& actual) {
   EXPECT_EQ(expected.GetCharacter(), actual.GetCharacter());
+  EXPECT_EQ(expected.GetUnmodifiedText(), actual.GetUnmodifiedText());
+  EXPECT_EQ(expected.GetText(), actual.GetText());
   EXPECT_EQ(expected.is_char(), actual.is_char());
   EXPECT_EQ(expected.is_repeat(), actual.is_repeat());
   EXPECT_EQ(expected.GetConflatedWindowsKeyCode(),
@@ -100,13 +102,14 @@ TEST(StructTraitsTest, KeyEvent) {
       {ET_KEY_RELEASED, VKEY_MENU, EF_ALT_DOWN},
       {ET_KEY_PRESSED, VKEY_A, DomCode::US_A, EF_NONE},
       {ET_KEY_PRESSED, VKEY_B, DomCode::US_B, EF_CONTROL_DOWN | EF_ALT_DOWN},
-      {'\x12', VKEY_2, DomCode::NONE, EF_CONTROL_DOWN},
-      {'Z', VKEY_Z, DomCode::NONE, EF_CAPS_LOCK_ON},
-      {'z', VKEY_Z, DomCode::NONE, EF_NONE},
+      ui::KeyEvent::FromCharacter('\x12', VKEY_2, DomCode::NONE,
+                                  EF_CONTROL_DOWN),
+      ui::KeyEvent::FromCharacter('Z', VKEY_Z, DomCode::NONE, EF_CAPS_LOCK_ON),
+      ui::KeyEvent::FromCharacter('z', VKEY_Z, DomCode::NONE, EF_NONE),
       {ET_KEY_PRESSED, VKEY_Z, EF_NONE,
        base::TimeTicks() + base::Microseconds(101)},
-      {'Z', VKEY_Z, DomCode::NONE, EF_NONE,
-       base::TimeTicks() + base::Microseconds(102)},
+      ui::KeyEvent::FromCharacter('Z', VKEY_Z, DomCode::NONE, EF_NONE,
+                                  base::TimeTicks() + base::Microseconds(102)),
   };
 
   for (size_t i = 0; i < std::size(kTestData); i++) {

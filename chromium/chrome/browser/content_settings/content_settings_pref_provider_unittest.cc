@@ -14,12 +14,12 @@
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/browser/content_settings_mock_observer.h"
 #include "components/content_settings/core/browser/content_settings_observable_provider.h"
 #include "components/content_settings/core/browser/content_settings_pref.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
@@ -1055,6 +1055,62 @@ TEST_F(PrefProviderTest, LastVisitedTimeIsTracked) {
   EXPECT_NE(metadata.last_visited(), base::Time());
   EXPECT_GE(metadata.last_visited(), clock.Now() - base::Days(7));
   EXPECT_LE(metadata.last_visited(), clock.Now());
+
+  provider.ShutdownOnUIThread();
+}
+
+TEST_F(PrefProviderTest, RenewContentSetting) {
+  TestingProfile testing_profile;
+  PrefProvider provider(testing_profile.GetPrefs(), /*off_the_record=*/false,
+                        /*store_last_modified=*/true,
+                        /*restore_session=*/false);
+  base::SimpleTestClock clock;
+  clock.SetNow(base::Time::Now());
+  provider.SetClockForTesting(&clock);
+
+  GURL primary_url("https://example.com/");
+  ContentSettingsPattern primary_pattern =
+      ContentSettingsPattern::FromString("https://[*.]example.com");
+
+  ContentSettingConstraints constraints;
+  constraints.set_lifetime(base::Days(2));
+
+  ASSERT_TRUE(provider.SetWebsiteSetting(
+      primary_pattern, primary_pattern, ContentSettingsType::STORAGE_ACCESS,
+      base::Value(CONTENT_SETTING_ALLOW), constraints));
+
+  RuleMetaData metadata;
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, TestUtils::GetContentSetting(
+                                       &provider, primary_url, primary_url,
+                                       ContentSettingsType::STORAGE_ACCESS,
+                                       /*include_incognito=*/false, &metadata));
+  EXPECT_EQ(metadata.lifetime(), base::Days(2));
+  EXPECT_EQ(metadata.expiration(), clock.Now() + base::Days(2));
+
+  clock.Advance(base::Days(1));
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, TestUtils::GetContentSetting(
+                                       &provider, primary_url, primary_url,
+                                       ContentSettingsType::STORAGE_ACCESS,
+                                       /*include_incognito=*/false, &metadata));
+  EXPECT_EQ(metadata.lifetime(), base::Days(2));
+  EXPECT_EQ(metadata.expiration(), clock.Now() + base::Days(1));
+
+  // Wrong ContentSetting, doesn't match.
+  EXPECT_FALSE(provider.RenewContentSetting(primary_url, primary_url,
+                                            ContentSettingsType::STORAGE_ACCESS,
+                                            CONTENT_SETTING_BLOCK));
+
+  EXPECT_TRUE(provider.RenewContentSetting(primary_url, primary_url,
+                                           ContentSettingsType::STORAGE_ACCESS,
+                                           CONTENT_SETTING_ALLOW));
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, TestUtils::GetContentSetting(
+                                       &provider, primary_url, primary_url,
+                                       ContentSettingsType::STORAGE_ACCESS,
+                                       /*include_incognito=*/false, &metadata));
+  EXPECT_EQ(metadata.lifetime(), base::Days(2));
+  EXPECT_EQ(metadata.expiration(), clock.Now() + base::Days(2));
 
   provider.ShutdownOnUIThread();
 }

@@ -21,6 +21,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
+#include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
@@ -65,16 +66,6 @@ std::ostream& operator<<(std::ostream& stream,
                          const DeviceAccountInfo& device_account_info) {
   return stream << "{email: " << device_account_info.email
                 << ", user_type: " << device_account_info.user_type << "}";
-}
-
-DeviceAccountInfo GetActiveDirectoryDeviceAccountInfo() {
-  return {"fake-ad-id" /*id*/,
-          "primary@example.com" /*email*/,
-          "primary" /*fullName*/,
-          "example.com" /*organization*/,
-          user_manager::USER_TYPE_ACTIVE_DIRECTORY /*user_type*/,
-          account_manager::AccountType::kActiveDirectory /*account_type*/,
-          AccountManager::kActiveDirectoryDummyToken /*token*/};
 }
 
 DeviceAccountInfo GetGaiaDeviceAccountInfo() {
@@ -189,14 +180,7 @@ class AccountManagerUIHandlerTest
     auto user_manager = std::make_unique<FakeChromeUserManager>();
     const user_manager::User* user;
     if (GetDeviceAccountInfo().user_type ==
-        user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY) {
-      user = user_manager->AddUserWithAffiliationAndTypeAndProfile(
-          AccountId::AdFromUserEmailObjGuid(GetDeviceAccountInfo().email,
-                                            GetDeviceAccountInfo().id),
-          true, user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-          profile_.get());
-    } else if (GetDeviceAccountInfo().user_type ==
-               user_manager::UserType::USER_TYPE_CHILD) {
+        user_manager::UserType::USER_TYPE_CHILD) {
       user = user_manager->AddChildUser(AccountId::FromUserEmailGaiaId(
           GetDeviceAccountInfo().email, GetDeviceAccountInfo().id));
     } else {
@@ -261,15 +245,18 @@ class AccountManagerUIHandlerTest
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingProfile> profile_;
-  raw_ptr<AccountManager, ExperimentalAsh> account_manager_ = nullptr;
-  raw_ptr<signin::IdentityManager, ExperimentalAsh> identity_manager_ = nullptr;
+  raw_ptr<AccountManager, DanglingUntriaged | ExperimentalAsh>
+      account_manager_ = nullptr;
+  raw_ptr<signin::IdentityManager, DanglingUntriaged | ExperimentalAsh>
+      identity_manager_ = nullptr;
   content::TestWebUI web_ui_;
   AccountId primary_account_id_;
   std::unique_ptr<TestingAccountManagerUIHandler> handler_;
 };
 
 IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
-                       OnGetAccountsNoSecondaryAccounts) {
+                       // TODO(crbug.com/1474301): Re-enable this test
+                       DISABLED_OnGetAccountsNoSecondaryAccounts) {
   const std::vector<::account_manager::Account> account_manager_accounts =
       GetAccountsFromAccountManager();
   // Only Primary account.
@@ -396,18 +383,21 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    AccountManagerUIHandlerTestSuite,
-    AccountManagerUIHandlerTest,
-    ::testing::Values(GetActiveDirectoryDeviceAccountInfo(),
-                      GetGaiaDeviceAccountInfo(),
-                      GetChildDeviceAccountInfo()));
+INSTANTIATE_TEST_SUITE_P(AccountManagerUIHandlerTestSuite,
+                         AccountManagerUIHandlerTest,
+                         ::testing::Values(GetGaiaDeviceAccountInfo(),
+                                           GetChildDeviceAccountInfo()));
 
 class AccountManagerUIHandlerTestWithArcAccountRestrictions
     : public AccountManagerUIHandlerTest {
  public:
   AccountManagerUIHandlerTestWithArcAccountRestrictions() {
-    feature_list_.InitAndEnableFeature(ash::features::kLacrosSupport);
+    std::vector<base::test::FeatureRef> lacros =
+        ash::standalone_browser::GetFeatureRefs();
+    if (GetDeviceAccountInfo().user_type == user_manager::USER_TYPE_CHILD) {
+      lacros.push_back(crosapi::browser_util::kLacrosForSupervisedUsers);
+    }
+    feature_list_.InitWithFeatures(lacros, {});
   }
 
   void SetUpOnMainThread() override {
@@ -426,6 +416,9 @@ class AccountManagerUIHandlerTestWithArcAccountRestrictions
     handler_->RegisterMessages();
     handler_->AllowJavascriptForTesting();
     base::RunLoop().RunUntilIdle();
+
+    ASSERT_TRUE(
+        ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
   }
 
   void TearDownOnMainThread() override {
@@ -466,7 +459,8 @@ class AccountManagerUIHandlerTestWithArcAccountRestrictions
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  raw_ptr<AccountAppsAvailability, ExperimentalAsh> account_apps_availability_;
+  raw_ptr<AccountAppsAvailability, DanglingUntriaged | ExperimentalAsh>
+      account_apps_availability_;
   std::unique_ptr<TestingAccountManagerUIHandler> handler_;
 };
 
@@ -606,8 +600,6 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTestWithArcAccountRestrictions,
 INSTANTIATE_TEST_SUITE_P(
     AccountManagerUIHandlerTestWithArcAccountRestrictionsSuite,
     AccountManagerUIHandlerTestWithArcAccountRestrictions,
-    ::testing::Values(GetActiveDirectoryDeviceAccountInfo(),
-                      GetGaiaDeviceAccountInfo(),
-                      GetChildDeviceAccountInfo()));
+    ::testing::Values(GetGaiaDeviceAccountInfo(), GetChildDeviceAccountInfo()));
 
 }  // namespace ash::settings

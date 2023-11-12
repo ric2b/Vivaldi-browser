@@ -21,6 +21,7 @@
 
 using LoginState = content::IdentityRequestAccount::LoginState;
 using SignInMode = content::IdentityRequestAccount::SignInMode;
+using TokenError = content::IdentityCredentialTokenError;
 
 namespace {
 
@@ -35,7 +36,8 @@ class TestBubbleView : public AccountSelectionBubbleViewInterface {
     kAccountPicker,
     kConfirmAccount,
     kVerifying,
-    kFailure
+    kFailure,
+    kError
   };
 
   TestBubbleView() = default;
@@ -79,6 +81,15 @@ class TestBubbleView : public AccountSelectionBubbleViewInterface {
       const std::u16string& idp_for_display,
       const content::IdentityProviderMetadata& idp_metadata) override {
     sheet_type_ = SheetType::kFailure;
+    account_ids_ = {};
+  }
+
+  void ShowErrorDialog(const std::u16string& top_frame_for_display,
+                       const absl::optional<std::u16string>& iframe_for_display,
+                       const std::u16string& idp_for_display,
+                       const content::IdentityProviderMetadata& idp_metadata,
+                       const absl::optional<TokenError>& error) override {
+    sheet_type_ = SheetType::kError;
     account_ids_ = {};
   }
 
@@ -129,6 +140,7 @@ class TestFedCmAccountSelectionView : public FedCmAccountSelectionView {
   TestFedCmAccountSelectionView& operator=(
       const TestFedCmAccountSelectionView&) = delete;
 
+  const blink::mojom::RpContext& GetRpContext() { return rp_context_; }
   size_t num_bubbles_{0u};
 
  protected:
@@ -139,6 +151,7 @@ class TestFedCmAccountSelectionView : public FedCmAccountSelectionView {
       blink::mojom::RpContext rp_context,
       bool show_auto_reauthn_checkbox) override {
     ++num_bubbles_;
+    rp_context_ = rp_context;
     return widget_;
   }
 
@@ -149,6 +162,7 @@ class TestFedCmAccountSelectionView : public FedCmAccountSelectionView {
  private:
   raw_ptr<views::Widget> widget_;
   raw_ptr<TestBubbleView> bubble_view_;
+  blink::mojom::RpContext rp_context_;
 };
 
 // Stub AccountSelectionView::Delegate.
@@ -197,7 +211,9 @@ class FedCmAccountSelectionViewDesktopTest : public ChromeViewsTestBase {
     std::vector<content::IdentityRequestAccount> accounts;
     for (const auto& account_info : account_infos) {
       accounts.emplace_back(account_info.first, "", "", "", GURL::EmptyGURL(),
-                            std::vector<std::string>(), account_info.second);
+                            /*login_hints=*/std::vector<std::string>(),
+                            /*hosted_domains=*/std::vector<std::string>(),
+                            account_info.second);
     }
     return IdentityProviderDisplayData(u"", content::IdentityProviderMetadata(),
                                        content::ClientMetadata(GURL(), GURL()),
@@ -228,13 +244,25 @@ class FedCmAccountSelectionViewDesktopTest : public ChromeViewsTestBase {
         mode, show_auto_reauthn_checkbox);
   }
 
-  std::unique_ptr<TestFedCmAccountSelectionView> CreateAndShowMismatchDialog() {
+  std::unique_ptr<TestFedCmAccountSelectionView> CreateAndShowMismatchDialog(
+      blink::mojom::RpContext rp_context = blink::mojom::RpContext::kSignIn) {
     auto controller = std::make_unique<TestFedCmAccountSelectionView>(
         delegate_.get(), widget_.get(), bubble_view_.get());
     controller->ShowFailureDialog(kTopFrameEtldPlusOne, kIframeEtldPlusOne,
-                                  kIdpEtldPlusOne,
+                                  kIdpEtldPlusOne, rp_context,
                                   content::IdentityProviderMetadata());
     EXPECT_EQ(TestBubbleView::SheetType::kFailure, bubble_view_->sheet_type_);
+    return controller;
+  }
+
+  std::unique_ptr<TestFedCmAccountSelectionView> CreateAndShowErrorDialog(
+      blink::mojom::RpContext rp_context = blink::mojom::RpContext::kSignIn) {
+    auto controller = std::make_unique<TestFedCmAccountSelectionView>(
+        delegate_.get(), widget_.get(), bubble_view_.get());
+    controller->ShowErrorDialog(
+        kTopFrameEtldPlusOne, kIframeEtldPlusOne, kIdpEtldPlusOne, rp_context,
+        content::IdentityProviderMetadata(), /*error=*/absl::nullopt);
+    EXPECT_EQ(TestBubbleView::SheetType::kError, bubble_view_->sheet_type_);
     return controller;
   }
 
@@ -906,86 +934,36 @@ TEST_F(FedCmAccountSelectionViewDesktopTest,
   EXPECT_FALSE(widget_->IsVisible());
 
   // Emulate another mismatch so we need to show the mismatch dialog again.
-  controller->ShowFailureDialog(kTopFrameEtldPlusOne, kIframeEtldPlusOne,
-                                kIdpEtldPlusOne,
-                                content::IdentityProviderMetadata());
+  controller->ShowFailureDialog(
+      kTopFrameEtldPlusOne, kIframeEtldPlusOne, kIdpEtldPlusOne,
+      blink::mojom::RpContext::kSignIn, content::IdentityProviderMetadata());
 
   // Mismatch dialog is visible again.
   EXPECT_TRUE(widget_->IsVisible());
 }
 
-// Tests that when an accounts dialog is shown, the relevant duration metric is
-// recorded upon dismissal.
-TEST_F(FedCmAccountSelectionViewDesktopTest,
-       AccountsDialogShownDurationMetric) {
-  {
-    const char kAccountId[] = "account_id";
-    IdentityProviderDisplayData idp_data =
-        CreateIdentityProviderDisplayData({{kAccountId, LoginState::kSignIn}});
-    const std::vector<Account>& accounts = idp_data.accounts;
-    histogram_tester_.ExpectTotalCount(
-        "Blink.FedCm.Timing.AccountsDialogShownDuration", 0);
-    std::unique_ptr<TestFedCmAccountSelectionView> controller =
-        CreateAndShow(accounts, SignInMode::kAuto);
-  }
-
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.AccountsDialogShownDuration", 1);
-}
-
-// Tests that when a mismatch dialog is shown, the relevant duration metric is
-// recorded upon dismissal.
-TEST_F(FedCmAccountSelectionViewDesktopTest,
-       MismatchDialogShownDurationMetric) {
+// Tests that RP context is properly set for the mismatch UI.
+TEST_F(FedCmAccountSelectionViewDesktopTest, MismatchDialogWithRpContext) {
   {
     std::unique_ptr<TestFedCmAccountSelectionView> controller =
         CreateAndShowMismatchDialog();
-    histogram_tester_.ExpectTotalCount(
-        "Blink.FedCm.Timing.MismatchDialogShownDuration", 0);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kSignIn);
   }
-
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.MismatchDialogShownDuration", 1);
-}
-
-// Tests that when transitioning from IDP sign-in status mismatch dialog to
-// accounts dialog, the relevant duration metrics are recorded for each dialog.
-TEST_F(FedCmAccountSelectionViewDesktopTest,
-       MismatchDialogThenAccountsDialogShownDurationMetric) {
   {
-    // Trigger IdP sign-in status mismatch dialog.
     std::unique_ptr<TestFedCmAccountSelectionView> controller =
-        CreateAndShowMismatchDialog();
-    histogram_tester_.ExpectTotalCount(
-        "Blink.FedCm.Timing.MismatchDialogShownDuration", 0);
-
-    // Emulate user clicking on "Continue" button in the mismatch dialog.
-    AccountSelectionBubbleView::Observer* observer =
-        static_cast<AccountSelectionBubbleView::Observer*>(controller.get());
-    observer->OnSigninToIdP();
-    CreateAndShowPopupWindow(*controller);
-
-    // Metric for mismatch dialog should be recorded upon showing pop-up window.
-    histogram_tester_.ExpectTotalCount(
-        "Blink.FedCm.Timing.MismatchDialogShownDuration", 1);
-
-    // Emulate IdP closing the pop-up window.
-    controller->CloseModalDialog();
-
-    // Emulate IdP sending the IdP sign-in status header which updates the
-    // mismatch dialog to an accounts dialog.
-    const char kAccountId[] = "account_id";
-    IdentityProviderDisplayData idp_data = CreateIdentityProviderDisplayData({
-        {kAccountId, LoginState::kSignUp},
-    });
-    Show(*controller, idp_data.accounts, SignInMode::kExplicit);
-    histogram_tester_.ExpectTotalCount(
-        "Blink.FedCm.Timing.AccountsDialogShownDuration", 0);
+        CreateAndShowMismatchDialog(blink::mojom::RpContext::kSignUp);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kSignUp);
   }
-
-  // Metric for accounts dialog should be recorded upon dismissal.
-  histogram_tester_.ExpectTotalCount(
-      "Blink.FedCm.Timing.AccountsDialogShownDuration", 1);
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowMismatchDialog(blink::mojom::RpContext::kContinue);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kContinue);
+  }
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowMismatchDialog(blink::mojom::RpContext::kUse);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kUse);
+  }
 }
 
 // Tests that the accounts bubble is not shown if the tab is hidden after the
@@ -1020,4 +998,35 @@ TEST_F(FedCmAccountSelectionViewDesktopTest,
   EXPECT_TRUE(widget_->IsVisible());
   EXPECT_EQ(TestBubbleView::SheetType::kConfirmAccount,
             bubble_view_->sheet_type_);
+}
+
+// Tests that the error dialog can be shown.
+TEST_F(FedCmAccountSelectionViewDesktopTest, ErrorDialogShown) {
+  std::unique_ptr<TestFedCmAccountSelectionView> controller =
+      CreateAndShowErrorDialog();
+  EXPECT_TRUE(widget_->IsVisible());
+}
+
+// Tests that RP context is properly set for the error dialog.
+TEST_F(FedCmAccountSelectionViewDesktopTest, ErrorDialogWithRpContext) {
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowErrorDialog();
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kSignIn);
+  }
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowErrorDialog(blink::mojom::RpContext::kSignUp);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kSignUp);
+  }
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowErrorDialog(blink::mojom::RpContext::kContinue);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kContinue);
+  }
+  {
+    std::unique_ptr<TestFedCmAccountSelectionView> controller =
+        CreateAndShowErrorDialog(blink::mojom::RpContext::kUse);
+    EXPECT_EQ(controller->GetRpContext(), blink::mojom::RpContext::kUse);
+  }
 }

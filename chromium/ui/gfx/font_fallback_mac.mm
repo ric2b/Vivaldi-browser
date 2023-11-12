@@ -8,10 +8,10 @@
 #import <Foundation/Foundation.h>
 
 #include "base/apple/bridging.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/i18n/char_iterator.h"
-#include "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/strings/string_piece.h"
 #import "base/strings/sys_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -19,10 +19,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_fallback_skia_impl.h"
 #include "ui/gfx/platform_font.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace gfx {
 
@@ -47,7 +43,7 @@ std::vector<Font> GetFallbackFonts(const Font& font) {
   NSArray* languages =
       [NSUserDefaults.standardUserDefaults stringArrayForKey:@"AppleLanguages"];
   CFArrayRef languages_cf = base::apple::NSToCFPtrCast(languages);
-  base::ScopedCFTypeRef<CFArrayRef> cascade_list(
+  base::apple::ScopedCFTypeRef<CFArrayRef> cascade_list(
       CTFontCopyDefaultCascadeListForLanguages(font.GetCTFont(), languages_cf));
 
   std::vector<Font> fallback_fonts;
@@ -57,9 +53,9 @@ std::vector<Font> GetFallbackFonts(const Font& font) {
   const CFIndex fallback_count = CFArrayGetCount(cascade_list);
   for (CFIndex i = 0; i < fallback_count; ++i) {
     CTFontDescriptorRef descriptor =
-        base::mac::CFCastStrict<CTFontDescriptorRef>(
+        base::apple::CFCastStrict<CTFontDescriptorRef>(
             CFArrayGetValueAtIndex(cascade_list, i));
-    base::ScopedCFTypeRef<CTFontRef> fallback_font(
+    base::apple::ScopedCFTypeRef<CTFontRef> fallback_font(
         CTFontCreateWithFontDescriptor(descriptor, 0.0, nullptr));
     if (fallback_font.get()) {
       fallback_fonts.emplace_back(fallback_font.get());

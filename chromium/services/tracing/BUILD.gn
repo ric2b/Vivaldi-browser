@@ -133,7 +133,9 @@ source_set("tests") {
   }
 
   if (is_fuchsia) {
-    sources += [ "public/cpp/fuchsia_perfetto_producer_connector_unittest.cc" ]
+    sources += [
+      "public/cpp/perfetto/fuchsia_perfetto_producer_connector_unittest.cc",
+    ]
     deps += [
       "//net",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.tracing.perfetto:fuchsia.tracing.perfetto_cpp",
@@ -196,5 +198,16 @@ if (enable_loader_lock_sampling) {
     sources = [ "public/cpp/stack_sampling/loader_lock_sampler_test_dll.cc" ]
 
     deps = [ ":loader_lock_sampler_test_strings" ]
+  }
+}
+
+if (is_ios) {
+  bundle_data("services_tracing_perfetto_bundle_data") {
+    testonly = true
+    _relative_path = "third_party/perfetto/protos/perfetto/config"
+    public_deps = [ "//third_party/perfetto/protos/perfetto/config:descriptor" ]
+    sources = [ "$root_gen_dir/$_relative_path/config.descriptor" ]
+    outputs =
+        [ "{{bundle_resources_dir}}/gen/$_relative_path/{{source_file_part}}" ]
   }
 }

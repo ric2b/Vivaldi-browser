@@ -9,10 +9,9 @@ import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.compositor.LayerTitleCache;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
-import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -27,7 +26,9 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import android.view.View;
 
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -61,11 +62,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
      *         Start surface refactor is enabled. Used to create overviewLayout if it has value,
      *         otherwise will use the accessibility overview layout.
+     * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
+     *         controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
+            BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>
@@ -73,7 +77,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ActivityLifecycleDispatcher lifecycleDispatcher,
             MultiInstanceManager multiInstanceManager, View toolbarContainerView) {
         super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
-                tabContentManagerSupplier, topUiThemeColorProvider, null, null);
+                browserControlsStateProvider, tabContentManagerSupplier, topUiThemeColorProvider,
+                null, null);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -97,6 +102,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         };
         SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
         updateGlobalSceneOverlay();
+        // End Vivaldi
     }
 
     @Override
@@ -139,9 +145,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // Vivaldi
         if (!BuildConfig.IS_VIVALDI)
         if (getActiveLayout() == mStaticLayout && !incognito) {
-            startShowing(DeviceClassManager.enableAccessibilityLayout(mHost.getContext())
-                            ? mOverviewListLayout
-                            : (mTabSwitcherLayout != null ? mTabSwitcherLayout : mOverviewLayout),
+            startShowing(mTabSwitcherLayout != null ? mTabSwitcherLayout : mOverviewLayout,
                     /* animate= */ false);
         }
         super.onTabsAllClosing(incognito);

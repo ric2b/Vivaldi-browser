@@ -8,6 +8,8 @@
 <translation id="5167047459440711824">경고: Vivaldi는 확장 프로그램들이 당신의 브라우징 기록을 기록하는 것을 방지할 수 없습니다. 시크릿 모드에서 이 확장 프로그램을 사용 중지하려면 옵션을 선택 해제하세요.</translation>
 <translation id="5288672417093782294">Vivaldi 알림 설정으로 이동</translation>
 <translation id="5743878272102782872">작업 관리자 - Vivaldi</translation>
+<translation id="6524604576097824284">켜진 경우, Vivaldi는 비활성화된 탭에서 메모리를 회수합니다. 이렇게 하면 활성화된 탭과 다른 앱에서 더 많은 컴퓨터 자원을 사용할 수 있게 되어 Vivaldi가 빨라집니다. 비활성화된 탭은 다시 들어가면 활성화됩니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="6569282126279967574">이런! Vivaldi에 충돌이 발생했습니다. 지금 재시작하시겠습니까?</translation>
+<translation id="7642161109152167169">켜진 경우, Vivaldi에서는 백그라운드 활동 및 자연스러운 스크롤이나 영상 프레임과 같은 시각 효과를 제한해서 배터리를 절약합니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Vivaldi 앱</translation>
 </translationbundle>

@@ -227,7 +227,7 @@ void ContextMenuController::PopulateModel(const Element& child,
       // Set default document icon
       SetIcon(id, params_->properties.icons.at(0), menu_model);
       // Attempt loading a favicon that will replace the default.
-      id_to_url_map_[id] = item.url.has_value();
+      id_to_url_map_[id] = item.url.value_or("");
       LoadFavicon(id, item.url.value(), true);
     } else if (item.icons && item.icons->size() == 2) {
       const std::string icon = item.icons->at(dark_text_color ? 0 : 1);
@@ -494,7 +494,6 @@ bool ContextMenuController::GetShowShortcuts() {
 void ContextMenuController::OnDestroyed(VivaldiRenderViewContextMenu* menu) {
   rv_context_menu_->SetModelDelegate(nullptr);
   rv_context_menu_->SetMenuDelegate(nullptr);
-  rv_context_menu_ = nullptr;
   Delete();
 }
 
@@ -528,6 +527,7 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
 }
 
 void ContextMenuController::Delete() {
+  root_menu_model_ = nullptr;
   extensions::MenubarMenuAPI::SendClose(GetProfile());
   delete this;
 }

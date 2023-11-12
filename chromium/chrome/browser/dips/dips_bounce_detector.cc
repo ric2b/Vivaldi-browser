@@ -6,22 +6,26 @@
 
 #include <cmath>
 #include <cstddef>
+#include <ctime>
 #include <memory>
 #include <vector>
 
-#include "base/allocator/partition_allocator/pointers/raw_ptr.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/overloaded.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/rand_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/3pcd/heuristics/opener_heuristic_metrics.h"
+#include "chrome/browser/3pcd/heuristics/opener_heuristic_tab_helper.h"
+#include "chrome/browser/3pcd/heuristics/opener_heuristic_utils.h"
 #include "chrome/browser/dips/cookie_access_filter.h"
-#include "chrome/browser/dips/dips_features.h"
 #include "chrome/browser/dips/dips_redirect_info.h"
 #include "chrome/browser/dips/dips_service.h"
 #include "chrome/browser/dips/dips_storage.h"
@@ -34,8 +38,11 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_features.h"
 #include "net/cookies/canonical_cookie.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -120,7 +127,7 @@ DIPSBounceDetector::DIPSBounceDetector(DIPSBounceDetectorDelegate* delegate,
           /*redirect_prefix_count=*/0u),
       client_bounce_detection_timer_(
           FROM_HERE,
-          dips::kClientBounceDetectionTimeout.Get(),
+          features::kDIPSClientBounceDetectionTimeout.Get(),
           base::BindRepeating(
               &DIPSBounceDetector::OnClientBounceDetectionTimeout,
               base::Unretained(this)),
@@ -203,6 +210,16 @@ void DIPSRedirectContext::ReportIssue(const GURL& final_url) {
   issue_handler_.Run(std::move(redirectors_));
 
   redirectors_.clear();
+}
+
+absl::optional<std::pair<size_t, DIPSRedirectInfo*>>
+DIPSRedirectContext::GetRedirectInfoFromChain(const std::string& site) const {
+  for (size_t ind = 0; ind < redirects_.size(); ind++) {
+    if (GetSiteForDIPS(redirects_.at(ind)->url) == site) {
+      return std::make_pair(ind, redirects_.at(ind).get());
+    }
+  }
+  return absl::nullopt;
 }
 
 void DIPSRedirectContext::HandleUncommitted(
@@ -354,7 +371,7 @@ void DIPSWebContentsObserver::ReportRedirectorsWithoutInteraction(
   }
 
   dips_service_->storage()
-      ->AsyncCall(&DIPSStorage::FilterSitesWithoutInteraction)
+      ->AsyncCall(&DIPSStorage::FilterSitesWithoutInteractionOrWaa)
       .WithArgs(sites)
       .Then(issue_reporting_callback_);
 }
@@ -376,7 +393,9 @@ void DIPSWebContentsObserver::RecordEvent(DIPSRecordedEvent event,
       return;
     }
     case DIPSRecordedEvent::kWebAuthnAssertion: {
-      // TODO(crbug.com/1446678): Record this events in a dedicated db column.
+      dips_service_->storage()
+          ->AsyncCall(&DIPSStorage::RecordWebAuthnAssertion)
+          .WithArgs(url, time, dips_service_->GetCookieMode());
       return;
     }
   }
@@ -572,6 +591,17 @@ bool HasCHIPS(const net::CookieList& cookie_list) {
 void DIPSWebContentsObserver::OnCookiesAccessed(
     content::RenderFrameHost* render_frame_host,
     const content::CookieAccessDetails& details) {
+  if (!render_frame_host->IsInLifecycleState(
+          content::RenderFrameHost::LifecycleState::kPrerendering)) {
+    // Record a RedirectHeuristic UKM event if applicable. We cannot record it
+    // while prerendering due to our data collection policy.
+    MaybeRecordRedirectHeuristic(render_frame_host->GetPageUkmSourceId(),
+                                 details);
+  }
+
+  // Discard all notifications that are:
+  // - From other page types like FencedFrames and Prerendered.
+  // - Blocked by policies.
   if (!IsInPrimaryPage(render_frame_host) || details.blocked_by_policy) {
     return;
   }
@@ -587,6 +617,41 @@ void DIPSWebContentsObserver::OnCookiesAccessed(
   }
 
   detector_.OnClientCookiesAccessed(fpu.value(), details.type);
+}
+
+void DIPSWebContentsObserver::OnCookiesAccessed(
+    NavigationHandle* navigation_handle,
+    const content::CookieAccessDetails& details) {
+  // Record a RedirectHeuristic UKM event if applicable.
+  MaybeRecordRedirectHeuristic(navigation_handle->GetNextPageUkmSourceId(),
+                               details);
+
+  // Discard all notifications that are:
+  // - From other page types like FencedFrames and Prerendered.
+  // - Blocked by policies.
+  if (!IsInPrimaryPage(navigation_handle) || details.blocked_by_policy) {
+    return;
+  }
+
+  // All accesses within the primary page iframes are attributed to the URL of
+  // the main frame (ie the first party URL).
+  if (IsInPrimaryPageIFrame(navigation_handle)) {
+    const absl::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
+    if (!fpu.has_value()) {
+      return;
+    }
+
+    if (!HasCHIPS(details.cookie_list) &&
+        !IsSameSiteForDIPS(fpu.value(), details.url)) {
+      return;
+    }
+
+    detector_.OnClientSiteDataAccessed(fpu.value(), details.type);
+    return;
+  }
+
+  DIPSNavigationHandleImpl dips_handle(navigation_handle);
+  detector_.OnServerCookiesAccessed(&dips_handle, details.url, details.type);
 }
 
 void DIPSBounceDetector::OnClientCookiesAccessed(const GURL& url,
@@ -609,33 +674,6 @@ void DIPSBounceDetector::OnClientCookiesAccessed(const GURL& url,
   OnClientSiteDataAccessed(url, op);
 }
 
-void DIPSWebContentsObserver::OnCookiesAccessed(
-    NavigationHandle* navigation_handle,
-    const content::CookieAccessDetails& details) {
-  // Discard all notifications that are:
-  // - From other page types like FencedFrames, and Prerendered.
-  // - Blocked by policies.
-  if (!IsInPrimaryPage(navigation_handle) || details.blocked_by_policy) {
-    return;
-  }
-
-  // All access within the primary page iframes are attributed to the URL of the
-  // main frame (ie the first party URL).
-  if (IsInPrimaryPageIFrame(navigation_handle)) {
-    if (!HasCHIPS(details.cookie_list) &&
-        !IsSameSiteForDIPS(GetFirstPartyURL(navigation_handle), details.url)) {
-      return;
-    }
-
-    detector_.OnClientSiteDataAccessed(GetFirstPartyURL(navigation_handle),
-                                       details.type);
-    return;
-  }
-
-  DIPSNavigationHandleImpl dips_handle(navigation_handle);
-  detector_.OnServerCookiesAccessed(&dips_handle, details.url, details.type);
-}
-
 void DIPSBounceDetector::OnServerCookiesAccessed(
     DIPSNavigationHandle* navigation_handle,
     const GURL& url,
@@ -647,6 +685,164 @@ void DIPSBounceDetector::OnServerCookiesAccessed(
   if (state) {
     state->filter.AddAccess(url, op);
   }
+}
+
+void DIPSWebContentsObserver::MaybeRecordRedirectHeuristic(
+    const ukm::SourceId& first_party_source_id,
+    const content::CookieAccessDetails& details) {
+  const std::string first_party_site = GetSiteForDIPS(details.first_party_url);
+  const std::string third_party_site = GetSiteForDIPS(details.url);
+  if (first_party_site == third_party_site) {
+    // The redirect heuristic does not apply for first-party cookie access.
+    return;
+  }
+
+  auto first_party_site_info =
+      detector_.CommittedRedirectContext().GetRedirectInfoFromChain(
+          first_party_site);
+  size_t first_party_site_index;
+  if (first_party_site_info.has_value()) {
+    first_party_site_index = first_party_site_info->first;
+  } else {
+    // If the first-party site is not in the list of committed redirects, that
+    // must mean it's in an ongoing navigation.
+    first_party_site_index = detector_.CommittedRedirectContext().size();
+  }
+
+  auto third_party_site_info =
+      detector_.CommittedRedirectContext().GetRedirectInfoFromChain(
+          third_party_site);
+  if (!third_party_site_info.has_value()) {
+    // The redirect heuristic doesn't apply if the third party is not in the
+    // current redirect chain.
+    return;
+  }
+  size_t third_party_site_index = third_party_site_info->first;
+  ukm::SourceId third_party_source_id =
+      third_party_site_info->second->source_id;
+
+  if (first_party_site_index < third_party_site_index) {
+    // The redirect heuristic doesn't apply if the third party appears after the
+    // first party in the current redirect chain.
+    return;
+  }
+  const size_t sites_passed_count =
+      first_party_site_index - third_party_site_index;
+
+  dips_service_->storage()
+      ->AsyncCall(&DIPSStorage::LastInteractionTime)
+      .WithArgs(details.url)
+      .Then(base::BindOnce(&DIPSWebContentsObserver::RecordRedirectHeuristic,
+                           weak_factory_.GetWeakPtr(), first_party_source_id,
+                           third_party_source_id, details, sites_passed_count));
+}
+
+void DIPSWebContentsObserver::RecordRedirectHeuristic(
+    const ukm::SourceId& first_party_source_id,
+    const ukm::SourceId& third_party_source_id,
+    const content::CookieAccessDetails& details,
+    const size_t sites_passed_count,
+    absl::optional<base::Time> last_user_interaction_time) {
+  // This function can only be reached if the redirect heuristic is satisfied
+  // for the previous recorded redirect.
+  DCHECK(last_commit_timestamp_.has_value());
+  int milliseconds_since_redirect = Bucketize3PCDHeuristicTimeDelta(
+      detector_.GetClock()->Now() - last_commit_timestamp_.value(),
+      base::Days(30), base::BindRepeating(&base::TimeDelta::InMilliseconds));
+
+  int hours_since_last_interaction = -1;
+  if (last_user_interaction_time.has_value()) {
+    hours_since_last_interaction = Bucketize3PCDHeuristicTimeDelta(
+        detector_.GetClock()->Now() - last_user_interaction_time.value(),
+        base::Days(60),
+        base::BindRepeating(&base::TimeDelta::InHours)
+            .Then(base::BindRepeating([](int64_t t) { return t; })));
+  }
+
+  OptionalBool has_same_site_iframe = ToOptionalBool(
+      HasSameSiteIframe(WebContentsObserver::web_contents(), details.url));
+
+  int32_t access_id = base::RandUint64();
+
+  ukm::builders::RedirectHeuristic_CookieAccess(first_party_source_id)
+      .SetAccessId(access_id)
+      .SetAccessAllowed(!details.blocked_by_policy)
+      .SetHoursSinceLastInteraction(hours_since_last_interaction)
+      .SetMillisecondsSinceRedirect(milliseconds_since_redirect)
+      .SetOpenerHasSameSiteIframe(static_cast<int64_t>(has_same_site_iframe))
+      .SetSitesPassedCount(sites_passed_count)
+      .Record(ukm::UkmRecorder::Get());
+
+  ukm::builders::RedirectHeuristic_CookieAccessThirdParty(third_party_source_id)
+      .SetAccessId(access_id)
+      .Record(ukm::UkmRecorder::Get());
+}
+
+void DIPSWebContentsObserver::OnServiceWorkerAccessed(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& scope,
+    content::AllowServiceWorkerResult allowed) {
+  if (!IsInPrimaryPage(render_frame_host) || !allowed) {
+    return;
+  }
+
+  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  if (fpu.has_value()) {
+    detector_.OnWorkerInitialized(fpu.value());
+  }
+}
+
+void DIPSWebContentsObserver::OnServiceWorkerAccessed(
+    content::NavigationHandle* navigation_handle,
+    const GURL& scope,
+    content::AllowServiceWorkerResult allowed) {
+  if (!IsInPrimaryPage(navigation_handle) || !allowed) {
+    return;
+  }
+
+  const absl::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
+  if (!fpu.has_value()) {
+    return;
+  }
+
+  detector_.OnWorkerInitialized(fpu.value());
+}
+
+void DIPSWebContentsObserver::OnClientAdded(
+    const blink::SharedWorkerToken& token,
+    content::GlobalRenderFrameHostId render_frame_host_id) {
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromID(render_frame_host_id);
+
+  if (!IsInPrimaryPage(render_frame_host)) {
+    return;
+  }
+
+  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  if (fpu.has_value()) {
+    detector_.OnWorkerInitialized(fpu.value());
+  }
+}
+
+void DIPSWebContentsObserver::OnWorkerCreated(
+    const blink::DedicatedWorkerToken& worker_token,
+    int worker_process_id,
+    content::GlobalRenderFrameHostId ancestor_render_frame_host_id) {
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromID(ancestor_render_frame_host_id);
+
+  if (!IsInPrimaryPage(render_frame_host)) {
+    return;
+  }
+
+  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  if (fpu.has_value()) {
+    detector_.OnWorkerInitialized(fpu.value());
+  }
+}
+
+void DIPSBounceDetector::OnWorkerInitialized(const GURL& url) {
+  delegate_->RecordEvent(DIPSRecordedEvent::kStorage, url, clock_->Now());
 }
 
 void DIPSWebContentsObserver::DidFinishNavigation(
@@ -661,6 +857,7 @@ void DIPSWebContentsObserver::DidFinishNavigation(
       dips_service_->RemoveOpenSite(last_committed_site_.value());
     }
     last_committed_site_ = GetSiteForDIPS(navigation_handle->GetURL());
+    last_commit_timestamp_ = detector_.GetClock()->Now();
     dips_service_->AddOpenSite(last_committed_site_.value());
   }
 

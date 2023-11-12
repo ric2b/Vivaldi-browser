@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Gendan indstillinger</translation>
 <translation id="4478664379124702289">Gem lin&amp;k som...</translation>
 <translation id="4520385623207007473">Cookies i brug</translation>
+<translation id="456449593072900590">Slet ved lukning</translation>
 <translation id="4580596421317071374">Adgangskoder gemmes i <ph name="GOOGLE_PASSWORD_MANAGER" /> på denne enhed.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps og udvidelser kan kun ændres af administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Farve</translation>
 <translation id="5485102783864353244">Tilføj app</translation>
 <translation id="5486561344817861625">Simuler genstart af browser</translation>
-<translation id="5487521232677179737">Ryd data</translation>
 <translation id="5509693895992845810">Gem &amp;som...</translation>
 <translation id="5521078259930077036">Var det den startside, du forventede?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Ukendt</translation>
 <translation id="5851868085455377790">Udsteder</translation>
 <translation id="5860491529813859533">Aktivér</translation>
-<translation id="5867841422488265304">Søg, eller skriv webadresse</translation>
 <translation id="5910363049092958439">Ge&amp;m billede som...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Adgang nægtet.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrollér stavning under indtastning</translation>
-<translation id="73786666777299047">Åbn Chrome Webshop</translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
 <translation id="7412226954991670867">GPU-hukommelse</translation>
 <translation id="7421925624202799674">&amp;Vis sidens kilde</translation>
@@ -442,6 +440,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8382913212082956454">Kopier &amp;email-adresse</translation>
 <translation id="8434480141477525001">NaCl-fejlretningsport</translation>
 <translation id="8449008133205184768">Indsæt og match stil</translation>
+<translation id="8477178913400731244">Slet data</translation>
 <translation id="8477384620836102176">&amp;Generelt</translation>
 <translation id="8496717697661868878">Kør dette plugin</translation>
 <translation id="8512476990829870887">Afslut proces</translation>

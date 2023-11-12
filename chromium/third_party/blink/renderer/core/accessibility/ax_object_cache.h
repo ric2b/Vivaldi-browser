@@ -54,9 +54,10 @@ class HTMLOptionElement;
 class HTMLTableElement;
 class HTMLFrameOwnerElement;
 class HTMLSelectElement;
-class LayoutRect;
+class LayoutBlockFlow;
 class LocalFrameView;
 class NGAbstractInlineTextBox;
+struct PhysicalRect;
 
 class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
  public:
@@ -104,23 +105,25 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void Remove(LayoutObject*) = 0;
   virtual void Remove(Node*) = 0;
   virtual void RemoveSubtreeWhenSafe(Node*) = 0;
-  virtual void Remove(Document*) = 0;
+  virtual void RemovePopup(Document*) = 0;
   virtual void Remove(NGAbstractInlineTextBox*) = 0;
 
   virtual const Element* RootAXEditableElement(const Node*) = 0;
 
   // Called when aspects of the style (e.g. color, alignment) change.
-  virtual void StyleChanged(const LayoutObject*) = 0;
+  virtual void StyleChanged(const LayoutObject*,
+                            bool visibility_or_inertness_changed = false) = 0;
 
   // Called by a node when text or a text equivalent (e.g. alt) attribute is
   // changed.
   virtual void TextChanged(const LayoutObject*) = 0;
+  // Called when the NGOffsetMapping is invalidated for the given object.
+  virtual void TextOffsetsChanged(const LayoutBlockFlow*) = 0;
   virtual void DocumentTitleChanged() = 0;
-  // Called when a layout tree for a node has just been attached, so we can make
-  // sure we have the right subclass of AXObject.
-  virtual void UpdateCacheAfterNodeIsAttached(Node*) = 0;
-  // A DOM node was inserted , but does not necessarily have a layout tree.
-  virtual void DidInsertChildrenOfNode(Node*) = 0;
+  // Called when a node is connected to the document.
+  virtual void NodeIsConnected(Node*) = 0;
+  // Called when a node is attached to the layout tree.
+  virtual void NodeIsAttached(Node*) = 0;
 
   // Called to process queued subtree removals when flat tree traversal is safe.
   virtual void ProcessSubtreeRemovals() = 0;
@@ -131,6 +134,9 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
                                              Element* new_focused_node) = 0;
   virtual void HandleInitialFocus() = 0;
   virtual void HandleEditableTextContentChanged(Node*) = 0;
+  virtual void HandleDeletionOrInsertionInTextField(
+      const SelectionInDOMTree& changed_selection,
+      bool is_deletion) = 0;
   virtual void HandleTextMarkerDataAdded(Node* start, Node* end) = 0;
   virtual void HandleTextFormControlChanged(Node*) = 0;
   virtual void HandleValueChanged(Node*) = 0;
@@ -141,11 +147,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void HandleLoadComplete(Document*) = 0;
   virtual void HandleLayoutComplete(Document*) = 0;
   virtual void HandleClicked(Node*) = 0;
-  virtual void HandleValidationMessageVisibilityChanged(
-      const Node* form_control) = 0;
-  virtual void HandleEventListenerAdded(const Node& node,
+  virtual void HandleValidationMessageVisibilityChanged(Node* form_control) = 0;
+  virtual void HandleEventListenerAdded(Node& node,
                                         const AtomicString& event_type) = 0;
-  virtual void HandleEventListenerRemoved(const Node& node,
+  virtual void HandleEventListenerRemoved(Node& node,
                                           const AtomicString& event_type) = 0;
 
   // Handle any notifications which arrived while layout was dirty.
@@ -164,7 +169,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
 
   virtual void SetCanvasObjectBounds(HTMLCanvasElement*,
                                      Element*,
-                                     const LayoutRect&) = 0;
+                                     const PhysicalRect&) = 0;
 
   virtual void InlineTextBoxesUpdated(LayoutObject*) = 0;
 
@@ -216,7 +221,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // Returns true if there are any pending updates that need processing.
   virtual bool IsDirty() = 0;
 
-  virtual void SerializeLocationChanges() = 0;
+  virtual void SerializeLocationChanges(uint32_t reset_token) = 0;
 
   virtual AXObject* GetPluginRoot() = 0;
 

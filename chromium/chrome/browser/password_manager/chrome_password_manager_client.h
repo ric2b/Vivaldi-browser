@@ -14,7 +14,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "components/autofill/content/common/mojom/autofill_driver.mojom-forward.h"
+#include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
+#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/content/browser/content_credential_manager.h"
@@ -28,8 +29,6 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
-#include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_store_backend_error.h"
 #include "components/prefs/pref_member.h"
 #include "components/safe_browsing/buildflags.h"
@@ -39,13 +38,11 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/gfx/geometry/rect.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/password_manager/android/generated_password_saved_message_delegate.h"
 #include "chrome/browser/password_manager/android/password_manager_error_message_delegate.h"
-#include "chrome/browser/password_manager/android/password_manager_error_message_helper_bridge_impl.h"
 #include "chrome/browser/password_manager/android/password_migration_warning_startup_launcher.h"
 #include "chrome/browser/password_manager/android/save_update_password_message_delegate.h"
 #include "components/password_manager/core/browser/credential_cache.h"
@@ -56,10 +53,13 @@ class TouchToFillController;
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/password_manager/multi_profile_credentials_filter.h"
-#include "chrome/browser/ui/passwords/account_storage_auth_helper.h"
 #else
 #include "components/password_manager/core/browser/sync_credentials_filter.h"
 #endif
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/ui/passwords/account_storage_auth_helper.h"
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 class PasswordGenerationPopupObserver;
 class PasswordGenerationPopupControllerImpl;
@@ -84,8 +84,10 @@ class DeviceAuthenticator;
 }
 
 namespace password_manager {
+class FieldInfoManager;
 class WebAuthnCredentialsDelegate;
 class CredManController;
+class KeyboardReplacingSurfaceVisibilityController;
 }
 
 namespace webauthn {
@@ -99,11 +101,10 @@ class ChromePasswordManagerClient
     : public password_manager::PasswordManagerClient,
       public content::WebContentsObserver,
       public content::WebContentsUserData<ChromePasswordManagerClient>,
-      public autofill::mojom::PasswordGenerationDriver {
+      public autofill::mojom::PasswordGenerationDriver,
+      public autofill::AutofillManager::Observer {
  public:
-  static void CreateForWebContentsWithAutofillClient(
-      content::WebContents* contents,
-      autofill::AutofillClient* autofill_client);
+  static void CreateForWebContents(content::WebContents* contents);
   static void BindPasswordGenerationDriver(
       mojo::PendingAssociatedReceiver<autofill::mojom::PasswordGenerationDriver>
           receiver,
@@ -145,7 +146,7 @@ class ChromePasswordManagerClient
 
   void ShowKeyboardReplacingSurface(
       password_manager::PasswordManagerDriver* driver,
-      autofill::mojom::SubmissionReadinessState submission_readiness,
+      const password_manager::SubmissionReadinessParams& submission_readiness,
       bool is_webauthn_form) override;
 #endif
 
@@ -256,6 +257,7 @@ class ChromePasswordManagerClient
   GetPasswordRequirementsService() override;
   favicon::FaviconService* GetFaviconService() override;
   signin::IdentityManager* GetIdentityManager() override;
+  password_manager::FieldInfoManager* GetFieldInfoManager() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   network::mojom::NetworkContext* GetNetworkContext() const override;
   void UpdateFormManagers() override;
@@ -269,7 +271,6 @@ class ChromePasswordManagerClient
 
   bool IsIsolationForPasswordSitesEnabled() const override;
   bool IsNewTabPage() const override;
-  password_manager::FieldInfoManager* GetFieldInfoManager() const override;
   password_manager::WebAuthnCredentialsDelegate*
   GetWebAuthnCredentialsDelegateForDriver(
       password_manager::PasswordManagerDriver* driver) override;
@@ -311,6 +312,15 @@ class ChromePasswordManagerClient
   bool has_binding_for_credential_manager() const {
     return content_credential_manager_.HasBinding();
   }
+  base::WeakPtr<PasswordGenerationPopupControllerImpl>
+  generation_popup_controller() {
+    return popup_controller_;
+  }
+  void SetCurrentTargetFrameForTesting(
+      content::RenderFrameHost* render_frame_host) {
+    password_generation_driver_receivers_.SetCurrentTargetFrameForTesting(
+        render_frame_host);
+  }
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -325,16 +335,22 @@ class ChromePasswordManagerClient
 
  protected:
   // Callable for tests.
-  ChromePasswordManagerClient(content::WebContents* web_contents,
-                              autofill::AutofillClient* autofill_client);
+  explicit ChromePasswordManagerClient(content::WebContents* web_contents);
 
  private:
   friend class content::WebContentsUserData<ChromePasswordManagerClient>;
 
   // content::WebContentsObserver overrides.
   void PrimaryPageChanged(content::Page& page) override;
-  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void WebContentsDestroyed() override;
+
+  // autofill::AutofillManager::Observer:
+  void OnFieldTypesDetermined(autofill::AutofillManager& manager,
+                              autofill::FormGlobalId form_id,
+                              FieldTypeSource source) override;
+
+  password_manager::ContentPasswordManagerDriverFactory* GetDriverFactory()
+      const;
 
   // Given |bounds| in the renderers coordinate system, return the same bounds
   // in the screens coordinate system.
@@ -378,6 +394,9 @@ class ChromePasswordManagerClient
   void TryToShowLocalPasswordMigrationWarning();
 
   password_manager::CredManController* GetOrCreateCredManController();
+
+  base::WeakPtr<password_manager::KeyboardReplacingSurfaceVisibilityController>
+  GetOrCreateKeyboardReplacingSurfaceVisibilityController();
 #endif
 
   const raw_ptr<Profile> profile_;
@@ -397,6 +416,13 @@ class ChromePasswordManagerClient
   // Controller for Android Credential Manager API. Created on demand.
   std::unique_ptr<password_manager::CredManController> cred_man_controller_;
 
+  // Controller for CredMan and TouchToFill visibility. Both
+  // `TouchToFillController` and `CredManController` share the same instance to
+  // control their visibility state.
+  std::unique_ptr<
+      password_manager::KeyboardReplacingSurfaceVisibilityController>
+      keyboard_replacing_surface_visibility_controller_;
+
   std::unique_ptr<PasswordManagerErrorMessageDelegate>
       password_manager_error_message_delegate_;
 
@@ -404,10 +430,6 @@ class ChromePasswordManagerClient
   GeneratedPasswordSavedMessageDelegate
       generated_password_saved_message_delegate_;
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  raw_ptr<password_manager::ContentPasswordManagerDriverFactory,
-          DanglingUntriaged>
-      driver_factory_;
 
   // As a mojo service, will be registered into service registry
   // of the main frame host by ChromeContentBrowserClient
@@ -420,16 +442,19 @@ class ChromePasswordManagerClient
   // Observer for password generation popup.
   raw_ptr<PasswordGenerationPopupObserver> observer_;
 
-  // Controls the popup
+  // Controls the generation popup.
   base::WeakPtr<PasswordGenerationPopupControllerImpl> popup_controller_;
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // MultiProfileCredentialsFilter requires DICE support.
   const MultiProfileCredentialsFilter credentials_filter_;
-  AccountStorageAuthHelper account_storage_auth_helper_;
 #else
   const password_manager::SyncCredentialsFilter credentials_filter_;
 #endif
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  AccountStorageAuthHelper account_storage_auth_helper_;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
   std::unique_ptr<autofill::RoutingLogManager> log_manager_;
 
@@ -458,6 +483,10 @@ class ChromePasswordManagerClient
   std::unique_ptr<PasswordMigrationWarningStartupLauncher>
       password_migration_warning_startup_launcher_;
 #endif  // BUILDFLAG(IS_ANDROID)
+
+  // Observes `AutofillManager`s of the `WebContents` that `this` belongs to.
+  autofill::ScopedAutofillManagersObservation autofill_managers_observation_{
+      this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

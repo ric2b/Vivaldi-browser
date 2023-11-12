@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_home_node_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/url_formatter/elide_url.h"
@@ -22,10 +22,6 @@
 using vivaldi::IsVivaldiRunning;
 using vivaldi_bookmark_kit::GetSpeeddial;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @implementation BookmarksHomeNodeItem
 @synthesize bookmarkNode = _bookmarkNode;
@@ -49,12 +45,19 @@ using vivaldi_bookmark_kit::GetSpeeddial;
   if (_bookmarkNode->is_folder()) {
     if (IsVivaldiRunning()) {
       TableViewBookmarksFolderCell* bookmarkCell =
-        base::mac::ObjCCastStrict<TableViewBookmarksFolderCell>(cell);
+        base::apple::ObjCCastStrict<TableViewBookmarksFolderCell>(cell);
       bookmarkCell.folderTitleTextField.text =
         bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
-      bookmarkCell.folderImageView.image = GetSpeeddial(_bookmarkNode) ?
-        [UIImage imageNamed: vSpeedDialFolderIcon] :
-        [UIImage imageNamed: vBookmarksFolderIcon];
+      if (self.shouldShowTrashIcon) {
+        bookmarkCell.folderImageView.image =
+            [UIImage imageNamed:vBookmarkTrashFolder];
+      } else {
+        bookmarkCell.folderImageView.image = GetSpeeddial(_bookmarkNode) ?
+          [UIImage imageNamed: vSpeedDialFolderIcon] :
+          [UIImage imageNamed: vBookmarksFolderIcon];
+      }
+      bookmarkCell.folderImageView.contentMode =
+          UIViewContentModeScaleAspectFit;
       bookmarkCell.bookmarksAccessoryType =
           BookmarksFolderAccessoryTypeDisclosureIndicator;
       bookmarkCell.accessibilityIdentifier =
@@ -62,7 +65,7 @@ using vivaldi_bookmark_kit::GetSpeeddial;
       bookmarkCell.accessibilityTraits |= UIAccessibilityTraitButton;
     } else {
     TableViewBookmarksFolderCell* bookmarkCell =
-        base::mac::ObjCCastStrict<TableViewBookmarksFolderCell>(cell);
+        base::apple::ObjCCastStrict<TableViewBookmarksFolderCell>(cell);
     bookmarkCell.folderTitleTextField.text =
         bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
     bookmarkCell.folderImageView.image =
@@ -76,7 +79,7 @@ using vivaldi_bookmark_kit::GetSpeeddial;
     } // Vivaldi
   } else {
     TableViewURLCell* urlCell =
-        base::mac::ObjCCastStrict<TableViewURLCell>(cell);
+        base::apple::ObjCCastStrict<TableViewURLCell>(cell);
     urlCell.titleLabel.text =
         bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
     urlCell.URLLabel.text = base::SysUTF16ToNSString(

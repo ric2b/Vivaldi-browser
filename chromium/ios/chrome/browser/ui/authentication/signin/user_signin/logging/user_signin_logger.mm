@@ -6,10 +6,6 @@
 
 #import "base/metrics/user_metrics.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using base::RecordAction;
 using base::UserMetricsAction;
 using signin_metrics::AccessPoint;
@@ -36,7 +32,9 @@ using signin_metrics::PromoAction;
 }
 
 - (void)dealloc {
-  DCHECK(!self.accountManagerService);
+  // TODO(crbug.com/1464966): Switch back to DCHECK if the number of reports is
+  // low.
+  DUMP_WILL_BE_CHECK(!self.accountManagerService);
 }
 
 - (void)disconnect {

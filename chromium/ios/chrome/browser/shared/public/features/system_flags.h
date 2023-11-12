@@ -5,9 +5,15 @@
 #ifndef IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_SYSTEM_FLAGS_H_
 #define IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_SYSTEM_FLAGS_H_
 
+#import <string>
+
+#import "third_party/abseil-cpp/absl/types/optional.h"
+
 #import <Foundation/Foundation.h>
 
-#include <string>
+enum class UpdateChromeSafetyCheckState;
+enum class PasswordSafetyCheckState;
+enum class SafeBrowsingSafetyCheckState;
 
 // This file can be empty. Its purpose is to contain the flags living in the
 // System Settings, used for testing/debugging. No base::Feature (or check for
@@ -17,6 +23,9 @@ namespace experimental_flags {
 
 // Whether the First Run UI will be always be displayed.
 bool AlwaysDisplayFirstRun();
+
+// Whether the Upgrade Promo UI will be always be displayed.
+bool AlwaysDisplayUpgradePromo();
 
 // Returns the host name for an alternative Origin Server host for use by
 // `BrandCode` startup ping. Returns empty string if there is no alternative
@@ -84,12 +93,27 @@ bool MustClearApplicationGroupSandbox();
 // to display. Always returns nil for users in stable/beta.
 NSString* GetForcedPromoToDisplay();
 
+// Returns the forced state of the Update Chrome check in the Safety Check
+// (Magic Stack) module.
+absl::optional<UpdateChromeSafetyCheckState> GetUpdateChromeSafetyCheckState();
+
+// Returns the forced state of the Password check in the Safety Check (Magic
+// Stack) module.
+absl::optional<PasswordSafetyCheckState> GetPasswordSafetyCheckState();
+
+// Returns the forced state of the Safe Browsing check in the Safety Check
+// (Magic Stack) module.
+absl::optional<SafeBrowsingSafetyCheckState> GetSafeBrowsingSafetyCheckState();
+
 // Returns the selected device segment the user wants to simulate as a string;
 // the string should either be nil or one of the options from synthetic trial
 // "Segmentation_DeviceSwitcher."
 // The value could be set both from Experimental Settings and command line
 // switches, but the former takes precedence.
 std::string GetSegmentForForcedDeviceSwitcherExperience();
+
+// Whether a phone backup/restore state should be simulated.
+bool SimulatePostDeviceRestore();
 
 }  // namespace experimental_flags
 

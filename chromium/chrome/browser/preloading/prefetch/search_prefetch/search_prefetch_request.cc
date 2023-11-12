@@ -13,6 +13,8 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/functional/bind.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/state_transitions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -141,6 +143,16 @@ SearchPrefetchRequest::SearchPrefetchRequest(
 
 SearchPrefetchRequest::~SearchPrefetchRequest() {
   StopPrerender();
+  // If the loader has been taken by a real navigation.
+  if (!streaming_url_loader_) {
+    return;
+  }
+  streaming_url_loader_->ClearOwnerPointer();
+  // If it is the last instance owning StreamingSearchPrefetchURLLoader, it
+  // should be SearchPrefetchService that calls this method.
+  // In this case, there is no StreamingSearchPrefetchURLLoader instance that
+  // would be needed.
+  streaming_url_loader_.reset();
 }
 
 // static
@@ -235,10 +247,18 @@ bool SearchPrefetchRequest::StartPrefetchRequest(Profile* profile) {
       content::FrameAcceptHeaderValue(/*allow_sxg_responses=*/true, profile));
 
 #if BUILDFLAG(IS_ANDROID)
+  base::TimeTicks geo_header_start_timestamp = base::TimeTicks::Now();
   absl::optional<std::string> geo_header =
       GetGeolocationHeaderIfAllowed(resource_request->url, profile);
   if (geo_header) {
     resource_request->headers.AddHeaderFromString(geo_header.value());
+
+    std::string histogram_name =
+        "Omnibox.SearchPrefetch.GeoLocationHeaderTime.";
+    histogram_name.append(navigation_prefetch_ ? "NavigationPrefetch"
+                                               : "SuggestionPrefetch");
+    base::UmaHistogramTimes(
+        histogram_name, (base::TimeTicks::Now() - geo_header_start_timestamp));
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -298,8 +318,9 @@ bool SearchPrefetchRequest::StartPrefetchRequest(Profile* profile) {
 }
 
 bool SearchPrefetchRequest::ShouldBeCancelledOnResultChanges() const {
-  if (SearchPrefetchSkipsCancel())
+  if (SearchPrefetchSkipsCancel()) {
     return false;
+  }
   static constexpr auto CancelableStatus =
       base::MakeFixedFlatSet<SearchPrefetchStatus>({
           SearchPrefetchStatus::kInFlight,
@@ -378,8 +399,9 @@ void SearchPrefetchRequest::MaybeStartPrerenderSearchResult(
 
 void SearchPrefetchRequest::ErrorEncountered() {
   // When prerender fails, don't set the prefetch status to failure.
-  if (current_status_ != SearchPrefetchStatus::kPrerendered)
+  if (current_status_ != SearchPrefetchStatus::kPrerendered) {
     SetSearchPrefetchStatus(SearchPrefetchStatus::kRequestFailed);
+  }
   StopPrefetch();
   StopPrerender();
 }
@@ -447,31 +469,24 @@ void SearchPrefetchRequest::RecordClickTime() {
   time_clicked_ = base::TimeTicks::Now();
 }
 
-std::unique_ptr<StreamingSearchPrefetchURLLoader>
+scoped_refptr<StreamingSearchPrefetchURLLoader>
 SearchPrefetchRequest::TakeSearchPrefetchURLLoader() {
   DCHECK(streaming_url_loader_);
+  // This method should be called upon serving, so the service does not want to
+  // keep the request.
   streaming_url_loader_->ClearOwnerPointer();
 
   return std::move(streaming_url_loader_);
-}
-
-void SearchPrefetchRequest::TransferLoaderOwnershipIfStillServing() {
-  // The loader has been taken away.
-  if (!streaming_url_loader_) {
-    return;
-  }
-  std::unique_ptr<StreamingSearchPrefetchURLLoader> loader =
-      TakeSearchPrefetchURLLoader();
-  StreamingSearchPrefetchURLLoader* raw_loader = loader.get();
-  // Give the loader a chance to own itself.
-  loader = raw_loader->OwnItselfIfServing(std::move(loader));
 }
 
 SearchPrefetchURLLoader::RequestHandler
 SearchPrefetchRequest::CreateResponseReader() {
   DCHECK(prerender_utils::SearchPreloadShareableCacheIsEnabled());
   DCHECK(streaming_url_loader_);
-  return streaming_url_loader_->GetCallbackForReadingViaResponseReader();
+  // Make a new refptr for `streaming_url_loader_`, to keep it alive during
+  // serving.
+  return StreamingSearchPrefetchURLLoader::
+      GetCallbackForReadingViaResponseReader(streaming_url_loader_);
 }
 
 void SearchPrefetchRequest::StartPrefetchRequestInternal(
@@ -482,12 +497,19 @@ void SearchPrefetchRequest::StartPrefetchRequestInternal(
                "SearchPrefetchRequest::StartPrefetchRequestInternal");
   profile_ = profile;
   prefetch_url_ = resource_request->url;
-  streaming_url_loader_ = std::make_unique<StreamingSearchPrefetchURLLoader>(
-      this, profile, navigation_prefetch_, std::move(resource_request),
-      NetworkAnnotationForPrefetch(), std::move(report_error_callback));
+  streaming_url_loader_ =
+      base::MakeRefCounted<StreamingSearchPrefetchURLLoader>(
+          this, profile, navigation_prefetch_, std::move(resource_request),
+          NetworkAnnotationForPrefetch(), std::move(report_error_callback));
 }
 
 void SearchPrefetchRequest::StopPrefetch() {
+  if (!streaming_url_loader_) {
+    return;
+  }
+  // If it is the last reference to the `streaming_url_loader_`, we can release
+  // it directly and its callers are aware of it can be deleted.
+  streaming_url_loader_->ClearOwnerPointer();
   streaming_url_loader_.reset();
 }
 
@@ -512,6 +534,12 @@ void SearchPrefetchRequest::SetPrefetchAttemptFailureReason(
   // the PreloadingAttempt to avoid setting the values for different navigation
   // than the one we are observing.
   prefetch_preloading_attempt_.reset();
+}
+
+void SearchPrefetchRequest::SetLoaderDestructionCallbackForTesting(
+    base::OnceClosure streaming_url_loader_destruction_callback) {
+  streaming_url_loader_->set_on_destruction_callback_for_testing(  // IN-TEST
+      std::move(streaming_url_loader_destruction_callback));
 }
 
 void SearchPrefetchRequest::SetPrefetchAttemptTriggeringOutcome(

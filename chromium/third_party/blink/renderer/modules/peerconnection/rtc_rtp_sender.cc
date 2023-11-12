@@ -16,6 +16,7 @@
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token_builder.h"
+#include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_insertable_streams.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtcp_parameters.h"
@@ -59,6 +60,8 @@
 namespace blink {
 
 namespace {
+
+webrtc::RtpCodec ToWebrtcRtpCodec(const RTCRtpCodec* codec);
 
 // This enum is used for logging and values must match the ones in
 // tools/metrics/histograms/enums.xml
@@ -478,6 +481,52 @@ ToRtpParameters(ExecutionContext* context,
   return std::make_tuple(encodings, degradation_preference);
 }
 
+webrtc::RtpCodec ToWebrtcRtpCodec(const RTCRtpCodec* codec) {
+  webrtc::RtpCodec webrtc_codec;
+  std::string mime_type = codec->mimeType().Utf8();
+  auto slash_index = codec->mimeType().Find("/");
+  if (slash_index == WTF::kNotFound) {
+    webrtc_codec.kind = cricket::MEDIA_TYPE_UNSUPPORTED;
+    return webrtc_codec;
+  }
+  webrtc_codec.name = codec->mimeType().Substring(slash_index + 1).Utf8();
+  WTF::String codec_type = codec->mimeType().Substring(0, slash_index);
+
+  if (codec_type == "video") {
+    webrtc_codec.kind = cricket::MEDIA_TYPE_VIDEO;
+  } else if (codec_type == "audio") {
+    webrtc_codec.kind = cricket::MEDIA_TYPE_AUDIO;
+  } else {
+    webrtc_codec.kind = cricket::MEDIA_TYPE_UNSUPPORTED;
+    return webrtc_codec;
+  }
+
+  webrtc_codec.clock_rate = codec->clockRate();
+  if (codec->hasChannels()) {
+    webrtc_codec.num_channels = codec->channels();
+  }
+  if (codec->hasSdpFmtpLine()) {
+    WTF::Vector<WTF::String> fmtp_splits;
+    codec->sdpFmtpLine().Split(";", true, fmtp_splits);
+    for (const auto& fmtp_split : fmtp_splits) {
+      WTF::String parameter = fmtp_split.StripWhiteSpace();
+      auto equal_index = parameter.Find("=");
+      std::string name, value;
+      if (equal_index == WTF::kNotFound) {
+        // Handle parameters without any equal signs, such as RED "111/111"
+        name = "";
+        value = parameter.Utf8();
+      } else {
+        // Handle parameters with an equal sign "foo=bar"
+        name = parameter.Substring(0, equal_index).Utf8();
+        value = parameter.Substring(equal_index + 1).Utf8();
+      }
+      webrtc_codec.parameters[name] = value;
+    }
+  }
+  return webrtc_codec;
+}
+
 }  // namespace
 
 webrtc::RtpEncodingParameters ToRtpEncodingParameters(
@@ -494,6 +543,9 @@ webrtc::RtpEncodingParameters ToRtpEncodingParameters(
       PriorityToEnum(encoding->networkPriority());
   if (encoding->hasMaxBitrate()) {
     webrtc_encoding.max_bitrate_bps = ClampTo<int>(encoding->maxBitrate());
+  }
+  if (encoding->hasCodec()) {
+    webrtc_encoding.codec = ToWebrtcRtpCodec(encoding->codec());
   }
   if (kind == "video") {
     if (encoding->hasScaleResolutionDownBy()) {
@@ -585,6 +637,8 @@ RTCRtpSender::RTCRtpSender(RTCPeerConnection* pc,
   DCHECK(pc_);
   DCHECK(sender_);
   DCHECK(!track || kind_ == track->kind());
+  LogMessage(base::StringPrintf("%s({encoded_insertable_streams=%s})", __func__,
+                                encoded_insertable_streams ? "true" : "false"));
   if (encoded_audio_transformer_) {
     RegisterEncodedAudioStreamCallback();
   }
@@ -693,6 +747,9 @@ RTCRtpSendParameters* RTCRtpSender::getParameters() {
         PriorityFromDouble(webrtc_encoding.bitrate_priority).c_str());
     encoding->setNetworkPriority(
         PriorityFromEnum(webrtc_encoding.network_priority).c_str());
+    if (webrtc_encoding.codec) {
+      encoding->setCodec(ToRtpCodec(*webrtc_encoding.codec));
+    }
     if (kind_ == "video") {
       if (webrtc_encoding.scale_resolution_down_by) {
         encoding->setScaleResolutionDownBy(
@@ -859,6 +916,7 @@ RTCInsertableStreams* RTCRtpSender::createEncodedStreams(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LogMessage(__func__);
   if (kind_ == "audio")
     return createEncodedAudioStreams(script_state, exception_state);
   DCHECK_EQ(kind_, "video");
@@ -1097,8 +1155,7 @@ void RTCRtpSender::InitializeEncodedAudioStreams(ScriptState* script_state) {
     // Set up writable.
     audio_to_packetizer_underlying_sink_ =
         MakeGarbageCollected<RTCEncodedAudioUnderlyingSink>(
-            script_state, encoded_audio_transformer_,
-            webrtc::TransformableFrameInterface::Direction::kSender);
+            script_state, encoded_audio_transformer_);
 
     auto set_underlying_sink =
         WTF::CrossThreadBindOnce(&RTCRtpSender::SetAudioUnderlyingSink,
@@ -1238,6 +1295,12 @@ void RTCRtpSender::OnVideoFrameFromEncoder(
   if (video_from_encoder_underlying_source_) {
     video_from_encoder_underlying_source_->OnFrameFromSource(std::move(frame));
   }
+}
+
+void RTCRtpSender::LogMessage(const std::string& message) {
+  blink::WebRtcLogMessage(
+      base::StringPrintf("RtpSndr::%s [this=0x%" PRIXPTR "]", message.c_str(),
+                         reinterpret_cast<uintptr_t>(this)));
 }
 
 }  // namespace blink

@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.ui.signin;
 
-import android.accounts.Account;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.text.format.DateUtils;
@@ -18,6 +17,7 @@ import androidx.annotation.StringDef;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -216,17 +216,18 @@ public class SyncPromoController {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.FORCE_DISABLE_EXTENDED_SYNC_PROMOS)) {
             return false;
         }
-        final @Nullable Account visibleAccount = getVisibleAccount();
+        final @Nullable CoreAccountInfo visibleAccount = getVisibleAccount();
         if (visibleAccount == null) {
             return true;
         }
         final Promise<AccountInfo> visibleAccountPromise =
-                AccountInfoServiceProvider.get().getAccountInfoByEmail(visibleAccount.name);
-        return visibleAccountPromise.isFulfilled()
-                && visibleAccountPromise.getResult()
-                           .getAccountCapabilities()
-                           .canOfferExtendedSyncPromos()
-                == Tribool.TRUE;
+                AccountInfoServiceProvider.get().getAccountInfoByEmail(visibleAccount.getEmail());
+
+        AccountInfo accountInfo =
+                visibleAccountPromise.isFulfilled() ? visibleAccountPromise.getResult() : null;
+        if (accountInfo == null) return false;
+
+        return accountInfo.getAccountCapabilities().canOfferExtendedSyncPromos() == Tribool.TRUE;
     }
 
     private static boolean canShowSettingsPromo() {
@@ -240,17 +241,16 @@ public class SyncPromoController {
     }
 
     // Find the visible account for sync promos
-    private static @Nullable Account getVisibleAccount() {
+    private static @Nullable CoreAccountInfo getVisibleAccount() {
         final IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
                 Profile.getLastUsedRegularProfile());
         @Nullable
-        Account visibleAccount = CoreAccountInfo.getAndroidAccountFrom(
-                identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN));
+        CoreAccountInfo visibleAccount = identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN);
         final AccountManagerFacade accountManagerFacade =
                 AccountManagerFacadeProvider.getInstance();
         if (visibleAccount == null) {
-            visibleAccount =
-                    AccountUtils.getDefaultAccountIfFulfilled(accountManagerFacade.getAccounts());
+            visibleAccount = AccountUtils.getDefaultCoreAccountInfoIfFulfilled(
+                    accountManagerFacade.getCoreAccountInfos());
         }
         return visibleAccount;
     }
@@ -330,14 +330,14 @@ public class SyncPromoController {
                 Profile.getLastUsedRegularProfile());
         assert !identityManager.hasPrimaryAccount(ConsentLevel.SYNC) : "Sync is already enabled!";
 
-        final @Nullable Account visibleAccount = getVisibleAccount();
+        final @Nullable CoreAccountInfo visibleAccount = getVisibleAccount();
         // Set up the sync promo
         if (visibleAccount == null) {
             setupPromoView(view, /* profileData= */ null, listener);
             return;
         }
-        setupPromoView(
-                view, profileDataCache.getProfileDataOrDefault(visibleAccount.name), listener);
+        setupPromoView(view, profileDataCache.getProfileDataOrDefault(visibleAccount.getEmail()),
+                listener);
     }
 
     /**
@@ -461,9 +461,14 @@ public class SyncPromoController {
 
         view.getPrimaryButton().setText(SigninUtils.getContinueAsButtonText(context, mProfileData));
 
-        view.getSecondaryButton().setText(R.string.signin_promo_choose_another_account);
-        view.getSecondaryButton().setOnClickListener(v -> signinWithNotDefaultAccount(context));
-        view.getSecondaryButton().setVisibility(View.VISIBLE);
+        // Hide secondary button on automotive devices, as they only support one account per device
+        if (BuildInfo.getInstance().isAutomotive) {
+            view.getSecondaryButton().setVisibility(View.GONE);
+        } else {
+            view.getSecondaryButton().setText(R.string.signin_promo_choose_another_account);
+            view.getSecondaryButton().setOnClickListener(v -> signinWithNotDefaultAccount(context));
+            view.getSecondaryButton().setVisibility(View.VISIBLE);
+        }
     }
 
     private void signinWithNewAccount(Context context) {
@@ -521,13 +526,11 @@ public class SyncPromoController {
         RecordUserAction.record(mImpressionUserActionName);
     }
 
-    @VisibleForTesting
     public static void setPrefSigninPromoDeclinedBookmarksForTests(boolean isDeclined) {
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.SIGNIN_PROMO_BOOKMARKS_DECLINED, isDeclined);
     }
 
-    @VisibleForTesting
     public static int getMaxImpressionsBookmarksForTests() {
         return MAX_IMPRESSIONS_BOOKMARKS;
     }

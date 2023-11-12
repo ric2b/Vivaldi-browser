@@ -206,15 +206,19 @@ void CreateTestRenderPassDrawQuad(const SharedQuadState* shared_state,
                                   AggregatedRenderPass* render_pass) {
   auto* quad =
       render_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
+  // The full `rect` is drawn (visible_rect == rect) but texture coords
+  // are relative to the underlying image.
+  gfx::RectF tex_coords{static_cast<float>(rect.width()),
+                        static_cast<float>(rect.height())};
   quad->SetNew(shared_state, rect, rect, pass_id,
-               kInvalidResourceId,  // mask_resource_id
-               gfx::RectF(),        // mask_uv_rect
-               gfx::Size(),         // mask_texture_size
-               gfx::Vector2dF(),    // filters scale
-               gfx::PointF(),       // filter origin
-               gfx::RectF(rect),    // tex_coord_rect
-               false,               // force_anti_aliasing_off
-               1.0f);               // backdrop_filter_quality
+               kInvalidResourceId,    // mask_resource_id
+               gfx::RectF(),          // mask_uv_rect
+               gfx::Size(),           // mask_texture_size
+               gfx::Vector2dF(1, 1),  // filters scale
+               gfx::PointF(),         // filter origin
+               tex_coords,            // tex_coord_rect
+               false,                 // force_anti_aliasing_off
+               1.0f);                 // backdrop_filter_quality
 }
 
 // Create a TextureDrawDrawQuad with two given colors.
@@ -493,15 +497,15 @@ void CreateTestYUVVideoDrawQuad_FromVideoFrame(
     bits_per_channel = 10;
   }
 
-  SharedImageFormat yuv_highbit_resource_format =
+  SharedImageFormat yuv_highbit_format =
       video_resource_updater->YuvSharedImageFormat(bits_per_channel);
 
   float offset = 0.0f;
   float multiplier = 1.0f;
 
-  if (yuv_highbit_resource_format == SinglePlaneFormat::kR_16) {
+  if (yuv_highbit_format == SinglePlaneFormat::kR_16) {
     multiplier = 65535.0f / ((1 << bits_per_channel) - 1);
-  } else if (yuv_highbit_resource_format == SinglePlaneFormat::kLUMINANCE_F16) {
+  } else if (yuv_highbit_format == SinglePlaneFormat::kLUMINANCE_F16) {
     std::unique_ptr<media::HalfFloatMaker> half_float_maker =
         media::HalfFloatMaker::NewHalfFloatMaker(bits_per_channel);
     offset = half_float_maker->Offset();
@@ -1767,6 +1771,11 @@ TEST_P(GPURendererPixelTest, SolidColorWithTemperatureNonRootRenderPass) {
 
 TEST_P(GPURendererPixelTest,
        PremultipliedTextureWithBackgroundAndVertexOpacity) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect rect(this->device_viewport_size_);
 
   AggregatedRenderPassId id{1};
@@ -1799,6 +1808,47 @@ TEST_P(GPURendererPixelTest,
       &pass_list,
       base::FilePath(FILE_PATH_LITERAL("green_alpha_vertex_opacity.png")),
       cc::AlphaDiscardingFuzzyPixelOffByOneComparator()));
+}
+
+// Check that the renderer draws a fallback quad for quads that require overlay.
+TEST_P(GPURendererPixelTest, OverlayHintRequiredFallback) {
+  gfx::Rect rect(this->device_viewport_size_);
+
+  AggregatedRenderPassId id{1};
+  auto pass = CreateTestRootRenderPass(id, rect);
+
+  SharedQuadState* texture_quad_state = CreateTestSharedQuadState(
+      gfx::Transform(), rect, pass.get(), gfx::MaskFilterInfo());
+
+  // Add a texture quad with the overlay priority of "required". Most properties
+  // shouldn't matter since the renderer shouldn't attempt to draw this quad.
+  TextureDrawQuad* quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+  const float vertex_opacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  quad->SetNew(texture_quad_state, gfx::Rect(this->device_viewport_size_),
+               gfx::Rect(this->device_viewport_size_), false,
+               kInvalidResourceId, true, gfx::PointF(), gfx::PointF(),
+               SkColors::kTransparent, &vertex_opacity[0], false, false, false,
+               gfx::ProtectedVideoType::kClear);
+  quad->overlay_priority_hint = OverlayPriority::kRequired;
+
+  // Add a background that's not the expected fallback color.
+  SharedQuadState* color_quad_state = CreateTestSharedQuadState(
+      gfx::Transform(), rect, pass.get(), gfx::MaskFilterInfo());
+  auto* color_quad = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  color_quad->SetNew(color_quad_state, rect, rect, SkColors::kWhite, false);
+
+  AggregatedRenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+
+#if DCHECK_IS_ON()
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list, base::FilePath(FILE_PATH_LITERAL("magenta.png")),
+      cc::AlphaDiscardingFuzzyPixelOffByOneComparator()));
+#else
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list, base::FilePath(FILE_PATH_LITERAL("black.png")),
+      cc::AlphaDiscardingFuzzyPixelOffByOneComparator()));
+#endif
 }
 
 class IntersectingQuadPixelTest : public VizPixelTestWithParam {
@@ -3056,6 +3106,11 @@ TEST_P(RendererPixelTest, EnlargedRenderPassTextureWithAntiAliasing) {
 // This tests the case where we have a RenderPass with a mask, but the quad
 // for the masked surface does not include the full surface texture.
 TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
 
   AggregatedRenderPassId root_pass_id{1};
@@ -3132,7 +3187,7 @@ TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
       gfx::ScaleRect(gfx::RectF(sub_rect), 2.f / mask_rect.width(),
                      2.f / mask_rect.height()),  // mask_uv_rect
       gfx::Size(mask_rect.size()),               // mask_texture_size
-      gfx::Vector2dF(),                          // filters scale
+      gfx::Vector2dF(1.0f, 1.0f),                // filters scale
       gfx::PointF(),                             // filter origin
       gfx::RectF(sub_rect),                      // tex_coord_rect
       false,                                     // force_anti_aliasing_off
@@ -3154,6 +3209,11 @@ TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
 // This tests the case where we have a RenderPass with a mask, but the quad
 // for the masked surface does not include the full surface texture.
 TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
 
   AggregatedRenderPassId root_pass_id{1};
@@ -3230,7 +3290,7 @@ TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
       gfx::ScaleRect(gfx::RectF(sub_rect), 2.f / mask_rect.width(),
                      2.f / mask_rect.height()),  // mask_uv_rect
       gfx::Size(mask_rect.size()),               // mask_texture_size
-      gfx::Vector2dF(),                          // filters scale
+      gfx::Vector2dF(1.0f, 1.0f),                // filters scale
       gfx::PointF(),                             // filter origin
       gfx::RectF(sub_rect),                      // tex_coord_rect
       false,                                     // force_anti_aliasing_off
@@ -3250,6 +3310,11 @@ TEST_P(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
 }
 
 TEST_P(RendererPixelTest, RenderPassAndMaskForRoundedCorner) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
   constexpr int kInset = 20;
   constexpr int kCornerRadius = 20;
@@ -3316,7 +3381,7 @@ TEST_P(RendererPixelTest, RenderPassAndMaskForRoundedCorner) {
       gfx::ScaleRect(gfx::RectF(viewport_rect), 1.f / mask_rect.width(),
                      1.f / mask_rect.height()),  // mask_uv_rect
       gfx::Size(mask_rect.size()),               // mask_texture_size
-      gfx::Vector2dF(),                          // filters scale
+      gfx::Vector2dF(1.0f, 1.0f),                // filters scale
       gfx::PointF(),                             // filter origin
       gfx::RectF(viewport_rect),                 // tex_coord_rect
       false,                                     // force_anti_aliasing_off
@@ -3341,6 +3406,11 @@ TEST_P(RendererPixelTest, RenderPassAndMaskForRoundedCorner) {
 }
 
 TEST_P(RendererPixelTest, RenderPassAndMaskForRoundedCornerMultiRadii) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
   constexpr int kInset = 20;
   const SkVector kCornerRadii[4] = {
@@ -3445,6 +3515,13 @@ TEST_P(RendererPixelTest, RenderPassAndMaskForRoundedCornerMultiRadii) {
 
 class RendererPixelTestWithBackdropFilter : public VizPixelTestWithParam {
  protected:
+  void SetUp() override {
+    VizPixelTestWithParam::SetUp();
+    filter_pass_layer_rect_ = gfx::Rect(device_viewport_size_);
+    filter_pass_layer_rect_.Inset(gfx::Insets::TLBR(14, 12, 18, 16));
+    backdrop_filter_bounds_ = gfx::RRectF(gfx::RectF(filter_pass_layer_rect_));
+  }
+
   void SetUpRenderPassList() {
     gfx::Rect device_viewport_rect(this->device_viewport_size_);
 
@@ -3609,35 +3686,54 @@ INSTANTIATE_TEST_SUITE_P(,
                          testing::ValuesIn(GetRendererTypes()),
                          testing::PrintToStringParamName());
 
+TEST_P(RendererPixelTestWithBackdropFilter, ZoomFilter) {
+  if (is_software_renderer()) {
+    GTEST_SKIP() << "SoftwareRenderer doesn't support zoom filter";
+  }
+
+  backdrop_filters_.Append(cc::FilterOperation::CreateZoomFilter(2.0f, 20));
+  SetUpRenderPassList();
+  EXPECT_TRUE(RunPixelTest(
+      &pass_list_,
+      base::FilePath(FILE_PATH_LITERAL("backdrop_filter_zoom.png")),
+      cc::ExactPixelComparator()));
+}
+
+TEST_P(RendererPixelTestWithBackdropFilter, OffsetFilter) {
+  backdrop_filters_.Append(
+      cc::FilterOperation::CreateOffsetFilter(gfx::Point(5, 5)));
+  SetUpRenderPassList();
+  EXPECT_TRUE(RunPixelTest(
+      &pass_list_,
+      base::FilePath(FILE_PATH_LITERAL("backdrop_filter_offset.png")),
+      cc::ExactPixelComparator()));
+}
+
 TEST_P(RendererPixelTestWithBackdropFilter, InvertFilter) {
-  this->backdrop_filters_.Append(cc::FilterOperation::CreateInvertFilter(1.f));
-  this->filter_pass_layer_rect_ = gfx::Rect(this->device_viewport_size_);
-  this->filter_pass_layer_rect_.Inset(gfx::Insets::TLBR(14, 12, 18, 16));
-  this->backdrop_filter_bounds_ =
-      gfx::RRectF(gfx::RectF(this->filter_pass_layer_rect_));
-  this->SetUpRenderPassList();
-  EXPECT_TRUE(this->RunPixelTest(
-      &this->pass_list_,
-      base::FilePath(FILE_PATH_LITERAL("backdrop_filter.png")),
+  backdrop_filters_.Append(cc::FilterOperation::CreateInvertFilter(1.f));
+  SetUpRenderPassList();
+  EXPECT_TRUE(RunPixelTest(
+      &pass_list_, base::FilePath(FILE_PATH_LITERAL("backdrop_filter.png")),
       cc::AlphaDiscardingExactPixelComparator()));
 }
 
 TEST_P(RendererPixelTestWithBackdropFilter, InvertFilterWithMask) {
-  this->backdrop_filters_.Append(cc::FilterOperation::CreateInvertFilter(1.f));
-  this->filter_pass_layer_rect_ = gfx::Rect(this->device_viewport_size_);
-  this->filter_pass_layer_rect_.Inset(gfx::Insets::TLBR(14, 12, 18, 16));
-  this->backdrop_filter_bounds_ =
-      gfx::RRectF(gfx::RectF(this->filter_pass_layer_rect_));
-  this->include_backdrop_mask_ = true;
-  this->SetUpRenderPassList();
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
+  backdrop_filters_.Append(cc::FilterOperation::CreateInvertFilter(1.f));
+  include_backdrop_mask_ = true;
+  SetUpRenderPassList();
 
   base::FilePath expected_path(
       is_software_renderer()
           ? FILE_PATH_LITERAL("backdrop_filter_masked_sw.png")
           : FILE_PATH_LITERAL("backdrop_filter_masked.png"));
 
-  EXPECT_TRUE(this->RunPixelTest(&this->pass_list_, expected_path,
-                                 cc::FuzzyPixelOffByOneComparator()));
+  EXPECT_TRUE(RunPixelTest(&pass_list_, expected_path,
+                           cc::FuzzyPixelOffByOneComparator()));
 }
 
 // Software renderer does not support anti-aliased edges.
@@ -3834,7 +3930,7 @@ TEST_P(GPURendererPixelTest, RenderPassDrawQuadForceAntiAliasingOff) {
       root_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
   pass_quad->SetAll(pass_shared_state, rect, rect, needs_blending,
                     child_pass_id, kInvalidResourceId, gfx::RectF(),
-                    gfx::Size(), gfx::Vector2dF(), gfx::PointF(),
+                    gfx::Size(), gfx::Vector2dF(1.0f, 1.0f), gfx::PointF(),
                     gfx::RectF(rect), force_anti_aliasing_off,
                     backdrop_filter_quality, intersects_damage_under);
 
@@ -3997,7 +4093,7 @@ TEST_P(GPURendererPixelTest, TrilinearFiltering) {
       root_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
   child_pass_quad->SetNew(
       child_pass_shared_state, child_pass_rect, child_pass_rect, child_pass_id,
-      kInvalidResourceId, gfx::RectF(), gfx::Size(), gfx::Vector2dF(),
+      kInvalidResourceId, gfx::RectF(), gfx::Size(), gfx::Vector2dF(1.0f, 1.0f),
       gfx::PointF(), gfx::RectF(child_pass_rect), false, 1.0f);
 
   AggregatedRenderPassList pass_list;
@@ -5120,6 +5216,11 @@ TEST_P(RendererPixelTest, RoundedCornerOnRenderPass) {
 #define MAYBE_LinearGradientOnRenderPass LinearGradientOnRenderPass
 #endif  // BUILDFLAG(IS_IOS)
 TEST_P(GPURendererPixelTest, MAYBE_LinearGradientOnRenderPass) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
   constexpr int kCornerRadius = 20;
 
@@ -5172,6 +5273,11 @@ TEST_P(GPURendererPixelTest, MAYBE_LinearGradientOnRenderPass) {
 #define MAYBE_MultiLinearGradientOnRenderPass MultiLinearGradientOnRenderPass
 #endif  // BUILDFLAG(IS_IOS)
 TEST_P(GPURendererPixelTest, MAYBE_MultiLinearGradientOnRenderPass) {
+  // TODO(b/238763010): Skia Graphite needs mask filter support.
+  if (is_skia_graphite()) {
+    GTEST_SKIP();
+  }
+
   gfx::Rect viewport_rect(this->device_viewport_size_);
   constexpr int kCornerRadius = 20;
   constexpr int kInset = 20;
@@ -5643,7 +5749,13 @@ class ColorTransformPixelTest
   bool premultiplied_alpha_ = false;
 };
 
-TEST_P(ColorTransformPixelTest, Basic) {
+// TODO(https://crbug.com/1462855): use-of-uninitialized-value
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Basic DISABLED_Basic
+#else
+#define MAYBE_Basic Basic
+#endif
+TEST_P(ColorTransformPixelTest, MAYBE_Basic) {
 #if BUILDFLAG(IS_LINUX) && defined(THREAD_SANITIZER)
   // Test is flaking with failed large allocations under TSAN when using
   // SkiaRenderer with GL backend. See https://crbug.com/1320955.
@@ -5735,7 +5847,7 @@ class DelegatedInkTest : public VizPixelTestWithParam,
     return pass;
   }
 
-  bool DrawAndTestTrail(base::FilePath::StringPieceType file) {
+  bool DrawAndTestTrail(base::FilePath file) {
     gfx::Rect rect(this->device_viewport_size_);
 
     // Minimize the root render pass damage rect so that it has to be expanded
@@ -5757,8 +5869,7 @@ class DelegatedInkTest : public VizPixelTestWithParam,
     pass_list.push_back(std::move(pass));
 
     return this->RunPixelTest(
-        &pass_list, base::FilePath(file),
-        cc::AlphaDiscardingFuzzyPixelOffByOneComparator());
+        &pass_list, file, cc::AlphaDiscardingFuzzyPixelOffByOneComparator());
   }
 
  protected:
@@ -5789,13 +5900,18 @@ TEST_P(DelegatedInkTest, DrawTrailWithPredictionDisabled) {
   CreateAndSendMetadata(kFirstPoint, 3.5f, SkColors::kCyan, kFirstTimestamp,
                         gfx::RectF(0, 0, 200, 200));
 
+  base::FilePath expected_result = base::FilePath(
+      FILE_PATH_LITERAL("delegated_ink_trail_no_prediction.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+
   // Confirm that the trail was drawn without prediction.
-  EXPECT_TRUE(DrawAndTestTrail(
-      FILE_PATH_LITERAL("delegated_ink_trail_no_prediction.png")));
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // The metadata should have been cleared after drawing, so confirm that there
   // is no trail after another draw.
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+  EXPECT_TRUE(DrawAndTestTrail(base::FilePath(FILE_PATH_LITERAL("white.png"))));
 }
 
 class DelegatedInkWithPredictionTest : public DelegatedInkTest {
@@ -5840,12 +5956,16 @@ TEST_P(DelegatedInkWithPredictionTest, DrawOneTrailAndErase) {
                         gfx::RectF(0, 0, 175, 172));
   // Confirm that the trail was drawn. Test three times as
   // the trail will persist for two more frames before being erased.
-  EXPECT_TRUE(
-      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_one_trail.png")));
+  base::FilePath expected_result =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_one_trail.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // The metadata should have been cleared after drawing, so confirm that there
   // is no trail after another draw.
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+  EXPECT_TRUE(DrawAndTestTrail(base::FilePath(FILE_PATH_LITERAL("white.png"))));
 }
 
 // Confirm that drawing a second trail completely removes the first trail.
@@ -5863,8 +5983,12 @@ TEST_P(DelegatedInkWithPredictionTest, DrawTwoTrailsAndErase) {
                         gfx::RectF(0, 0, 200, 200));
 
   // Confirm that the trail was drawn correctly.
-  EXPECT_TRUE(DrawAndTestTrail(
-      FILE_PATH_LITERAL("delegated_ink_two_trails_first.png")));
+  base::FilePath expected_result =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_two_trails_first.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // Now provide new metadata and points to draw a new trail. Just use the last
   // point draw above as the starting point for the new trail. One point will
@@ -5874,11 +5998,16 @@ TEST_P(DelegatedInkWithPredictionTest, DrawTwoTrailsAndErase) {
   CreateAndSendPointFromLastPoint(gfx::PointF(150, 81.44f));
 
   // Confirm the first trail is gone and only the second remains.
-  EXPECT_TRUE(DrawAndTestTrail(
-      FILE_PATH_LITERAL("delegated_ink_two_trails_second.png")));
+  base::FilePath expected_result_second =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_two_trails_second.png"));
+  if (is_skia_graphite()) {
+    expected_result_second =
+        expected_result_second.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result_second));
 
   // Confirm all trails are gone.
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+  EXPECT_TRUE(DrawAndTestTrail(base::FilePath(FILE_PATH_LITERAL("white.png"))));
 }
 
 // Confirm that the trail can't be drawn beyond the presentation area.
@@ -5902,8 +6031,12 @@ TEST_P(DelegatedInkWithPredictionTest, TrailExtendsBeyondPresentationArea) {
   CreateAndSendMetadata(kFirstPoint, 15.22f, SkColors::kCyan, kFirstTimestamp,
                         kPresentationArea);
 
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL(
-      "delegated_ink_trail_clipped_by_presentation_area.png")));
+  base::FilePath expected_result = base::FilePath(FILE_PATH_LITERAL(
+      "delegated_ink_trail_clipped_by_presentation_area.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 }
 
 // Confirm that the trail appears on top of everything, including batched quads
@@ -5942,11 +6075,15 @@ TEST_P(DelegatedInkWithPredictionTest, DelegatedInkTrailAfterBatchedQuads) {
   CreateAndSendMetadata(kFirstPoint, 7.77f, SkColors::kDkGray, kFirstTimestamp,
                         kPresentationArea);
 
-  EXPECT_TRUE(this->RunPixelTest(
-      &pass_list,
-      base::FilePath(
-          FILE_PATH_LITERAL("delegated_ink_trail_on_batched_quads.png")),
-      cc::AlphaDiscardingFuzzyPixelOffByOneComparator()));
+  base::FilePath expected_result = base::FilePath(
+      FILE_PATH_LITERAL("delegated_ink_trail_on_batched_quads.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+
+  EXPECT_TRUE(
+      this->RunPixelTest(&pass_list, expected_result,
+                         cc::AlphaDiscardingFuzzyPixelOffByOneComparator()));
 }
 
 // Confirm that delegated ink trails are not drawn on non-root render passes.
@@ -6033,19 +6170,28 @@ TEST_P(DelegatedInkWithPredictionTest, DrawTrailsWithDifferentPointerIds) {
   // confirm that only that trail is drawn.
   CreateAndSendMetadata(kPointerId1StartPoint, 7, SkColors::kYellow,
                         kPointerId1StartTime, kPresentationArea);
-  EXPECT_TRUE(
-      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_pointer_id_1.png")));
+  base::FilePath expected_result =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_pointer_id_1.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // Then send metadata that matches the first point of the other pointer id.
   // These points should not have been erased, so all 3 points should be drawn.
   CreateAndSendMetadata(kPointerId2StartPoint, 2.4f, SkColors::kRed,
                         kPointerId2StartTime, kPresentationArea);
-  EXPECT_TRUE(
-      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_pointer_id_2.png")));
+  base::FilePath expected_result_second =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_pointer_id_2.png"));
+  if (is_skia_graphite()) {
+    expected_result_second =
+        expected_result_second.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result_second));
 
   // The metadata should have been cleared after drawing, so confirm that there
   // is no trail after another draw.
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+  EXPECT_TRUE(DrawAndTestTrail(base::FilePath(FILE_PATH_LITERAL("white.png"))));
 }
 
 // Draw a single trail and erase it, making sure that no bits of trail are left
@@ -6066,18 +6212,21 @@ TEST_P(DelegatedInkWithPredictionTest,
                         gfx::RectF(0, 0, 175, 172));
   // Confirm that the trail was drawn. Test three times as
   // the trail will persist for two more frames before being erased.
-  EXPECT_TRUE(
-      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_one_trail.png")));
+  base::FilePath expected_result =
+      base::FilePath(FILE_PATH_LITERAL("delegated_ink_one_trail.png"));
+  if (is_skia_graphite()) {
+    expected_result = expected_result.InsertBeforeExtensionASCII("_graphite");
+  }
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // Send metadata again and expect the same trail to be drawn.
   CreateAndSendMetadata(kFirstPoint, 3.5f, SkColors::kBlack, kFirstTimestamp,
                         gfx::RectF(0, 0, 175, 172));
-  EXPECT_TRUE(
-      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_one_trail.png")));
+  EXPECT_TRUE(DrawAndTestTrail(expected_result));
 
   // The metadata should have been cleared after drawing, so confirm that there
   // is no trail after another draw.
-  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+  EXPECT_TRUE(DrawAndTestTrail(base::FilePath(FILE_PATH_LITERAL("white.png"))));
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)

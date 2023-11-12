@@ -726,8 +726,16 @@ bool HTMLMediaElement::SupportsFocus() const {
   return ShouldShowControls() || HTMLElement::SupportsFocus();
 }
 
-bool HTMLMediaElement::IsMouseFocusable() const {
-  return !IsFullscreen() && SupportsFocus();
+bool HTMLMediaElement::IsFocusable() const {
+  if (!SupportsFocus()) {
+    return false;
+  }
+  return !IsFullscreen() || HTMLElement::IsFocusable();
+}
+
+bool HTMLMediaElement::IsKeyboardFocusable() const {
+  // Media elements are keyboard focusable if they are focusable at all.
+  return IsFocusable();
 }
 
 void HTMLMediaElement::ParseAttribute(
@@ -793,8 +801,8 @@ void HTMLMediaElement::ParserDidSetAttributes() {
 // operation. Indeed, it is required per spec to set the muted state based on
 // the content attribute when the object is created.
 void HTMLMediaElement::CloneNonAttributePropertiesFrom(const Element& other,
-                                                       CloneChildrenFlag flag) {
-  HTMLElement::CloneNonAttributePropertiesFrom(other, flag);
+                                                       NodeCloningData& data) {
+  HTMLElement::CloneNonAttributePropertiesFrom(other, data);
 
   if (FastHasAttribute(html_names::kMutedAttr))
     muted_ = true;

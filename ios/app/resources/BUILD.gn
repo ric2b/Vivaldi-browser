@@ -2,32 +2,11 @@
 
 import("//build/config/ios/asset_catalog.gni")
 
-appiconset("vivaldi_icons") {
-  sources = [
-    "AppIcon.appiconset/Contents.json",
-    "AppIcon.appiconset/AppIcon-1024px.png",
-    "AppIcon.appiconset/AppIcon-120px-40pt@3x.png",
-    "AppIcon.appiconset/AppIcon-120px-60pt@2x.png",
-    "AppIcon.appiconset/AppIcon-152px-76pt@2x.png",
-    "AppIcon.appiconset/AppIcon-167px-83.5pt@2x.png",
-    "AppIcon.appiconset/AppIcon-180px-60pt@3x.png",
-    "AppIcon.appiconset/AppIcon-20px-20pt@1x.png",
-    "AppIcon.appiconset/AppIcon-29px-29pt@1x.png",
-    "AppIcon.appiconset/AppIcon-40px-20pt@2x.png",
-    "AppIcon.appiconset/AppIcon-40px-40pt@1x.png",
-    "AppIcon.appiconset/AppIcon-58px-29pt@2x.png",
-    "AppIcon.appiconset/AppIcon-60px-20pt@3x.png",
-    "AppIcon.appiconset/AppIcon-80px-40pt@2x.png",
-    "AppIcon.appiconset/AppIcon-87px-29pt@3x.png",
-  ]
-}
 
 imageset("launchscreen_app_logo") {
   sources = [
     "launchscreen_app_logo.imageset/Contents.json",
-    "launchscreen_app_logo.imageset/launch_screen_icon_vivaldi.png",
-    "launchscreen_app_logo.imageset/launch_screen_icon_vivaldi@2x.png",
-    "launchscreen_app_logo.imageset/launch_screen_icon_vivaldi@3x.png",
+    "launchscreen_app_logo.imageset/launch_screen_icon_vivaldi.pdf",
   ]
 }
 

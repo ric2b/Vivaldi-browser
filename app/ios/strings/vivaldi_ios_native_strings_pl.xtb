@@ -23,6 +23,8 @@
 <translation id="1379470994139227452">Ustaw Vivaldi jako domyślną przeglądarkę</translation>
 <translation id="1381484244248892686">Możesz używać zapisanych haseł na dowolnym urządzeniu. Są one zapisywane w menedżerze haseł Vivaldi dla <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Szukaj</translation>
+<translation id="1397515084080510783">Brak synchronizowanych kart</translation>
+<translation id="1410197035576869800">Ikona aplikacji</translation>
 <translation id="1430638949087011281">Bez blokowania</translation>
 <translation id="1446108955355168157">Aby zaszyfrować i chronić Twoje dane synchronizacji (hasła, zakładki, notatki itp.), utwórz hasło szyfrowania. To hasło nigdy nie zostanie do nas wysłane.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> notatek</translation>
@@ -67,6 +69,7 @@
 <translation id="2391028308389203648">Turecka (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktywuj</translation>
 <translation id="2434910957904013691">Synchronizuj wszystko</translation>
+<translation id="2448144008809286557">Zapomniałeś/aś <ph name="BEGIN_LINK" />nazwy użytkownika<ph name="END_LINK" /> lub <ph name="BEGIN_LINK" />hasła<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">WYJĄTKI</translation>
 <translation id="2558801801411970131">Blokowanie trackerów</translation>
 <translation id="2577446409661931381">Nowa notatka</translation>
@@ -82,6 +85,7 @@ reklama</translation>
 <translation id="2842985007712546952">Folder nadrzędny</translation>
 <translation id="2843343418360315034">Węgierska (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Inicjowanie synchronizacji...</translation>
+<translation id="2874111661876416905">Szukaj w Vivaldi</translation>
 <translation id="2874121295511641364">Synchronizuj wpisane adresy URL i otwarte karty</translation>
 <translation id="2898963176829412617">Nowy folder…</translation>
 <translation id="2961573414320947355">Chcesz otwierać wszystkie linki w przeglądarce Vivaldi? Pamiętaj, aby ustawić ją, jako domyślną przeglądarkę.</translation>
@@ -115,7 +119,7 @@ reklama</translation>
 <translation id="3607176258839749451">Rejestracja nie powiodła się z powodu błędu. Spróbuj ponownie później.</translation>
 <translation id="3646647753063635401">Synchronizuj wszystkie dane i automatycznie włączaj synchronizację nowych typów danych</translation>
 <translation id="3682791711395736890">Wyświetl wersję strony na komputery</translation>
-<translation id="3692650606013198282">Otwórz w karcie prywatnej</translation>
+<translation id="3692650606013198282">Otwórz w trybie prywatnym</translation>
 <translation id="3699026013955941879">Kod wygasł. Poproś o nowy kod aktywacyjny.</translation>
 <translation id="3700829948786686853">Witaj w przeglądarce Vivaldi</translation>
 <translation id="3766350025418769949">Możesz używać haseł zapisanych w menedżerze haseł Vivaldi w innych aplikacjach na iPadzie.</translation>
@@ -146,12 +150,14 @@ reklama</translation>
 trackerów</translation>
 <translation id="4299298331965375737">Ustawić Vivaldi jako domyślną przeglądarkę?</translation>
 <translation id="4304224509867189079">Zaloguj się</translation>
+<translation id="4316955624679873896">Dodane do zakładek</translation>
 <translation id="432696242656678770">Rosyjska (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Hiszpańska (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Wietnamska (<ph name="ORIGIN" />)</translation>
 <translation id="4394049700291259645">Wyłącz</translation>
 <translation id="4413780690230851155">Usuń historię przeglądania</translation>
 <translation id="4452878871193896747">Indonezyjska (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Obecnie nie masz zsynchronizowanych kart z innych urządzeń.</translation>
 <translation id="4493850495402472953">i</translation>
 <translation id="4497115807425788318">Lokalizacja</translation>
 <translation id="4507213865286211606">Rozmiar podglądu</translation>
@@ -184,10 +190,12 @@ tracker</translation>
 <translation id="497942794017668482">Blokowanie trackerów i reklam</translation>
 <translation id="5037761343305489956">Skopiowano do notatki</translation>
 <translation id="504986598654589766">Przeglądanie w karcie prywatnej oznacza, że wyszukiwania, odwiedzone strony, ciasteczka i pliki tymczasowe nie będą przechowywane przez Vivaldi. Nie szyfruje to ani nie modyfikuje twojego połączenia.</translation>
+<translation id="5094376253685335202">Włącz synchronizację</translation>
 <translation id="5116316489033177455">Synchronizuj zakładki i szybkie wybieranie</translation>
 <translation id="5122095890854520072">Łotewska (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Logowanie nie powiodło się</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Wyślij kod ponownie<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Pobieranie kart i historii...</translation>
 <translation id="5238642303473095117">Usuń dane</translation>
 <translation id="5245732982828228444">Tutaj znajdziesz swoje notatki</translation>
 <translation id="5249199221558969362">Podaj realistyczny wiek.</translation>
@@ -214,6 +222,7 @@ tracker</translation>
 <translation id="5857090052475505287">Nowy folder</translation>
 <translation id="5859825823508296659">Edytuj domenę</translation>
 <translation id="5867841422488265304">Wyszukaj lub wpisz adres internetowy</translation>
+<translation id="5869217094746242845">Dowiedz się więcej o prywatności i bezpieczeństwie</translation>
 <translation id="5871497086027727873">1 notatka została przeniesiona</translation>
 <translation id="5898502570200301364">Możesz używać haseł zapisanych w menedżerze haseł Vivaldi w innych aplikacjach na iPhonie.</translation>
 <translation id="5900160494089383343">Ta nazwa użytkownika jest niedostępna.</translation>
@@ -255,8 +264,10 @@ tracker</translation>
 <translation id="6946395294519639514">Dzięki panelom możesz mieć łatwo dostępne narzędzia na pasku bocznym przeglądarki.</translation>
 <translation id="6967884871145366229">Zarządzaj ustawieniami prywatności</translation>
 <translation id="6973630695168034713">Foldery</translation>
+<translation id="7006864796794806241">Odzyskaj hasło</translation>
 <translation id="7029809446516969842">Hasła</translation>
 <translation id="7041964446309059643">Ręcznie</translation>
+<translation id="7110758301321962823">Odzyskaj nazwę użytkownika</translation>
 <translation id="7194677467200983873">Ostatnia synchronizacja:</translation>
 <translation id="7196846668589096106">Karty pulpitu</translation>
 <translation id="7210372243397300116">Folder wyszukiwania</translation>
@@ -266,6 +277,7 @@ tracker</translation>
 <translation id="7311118006561484338">Wg tytułu</translation>
 <translation id="7325310788570036874">Przeglądaj internet mądrzej, płynniej i szybciej dzięki przeglądarce Vivaldi.</translation>
 <translation id="734110743815267231">Hebrajska (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Otworzyć w trybie prywatnym?</translation>
 <translation id="7362952245780030555">Wybierz pomiędzy klasycznym paskiem kart lub uproszczonym przełącznikiem kart.</translation>
 <translation id="7379938540614588640">Niderlandzki (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Dodaj nowe źródło</translation>
@@ -305,8 +317,10 @@ tracker</translation>
 <translation id="8275038454117074363">Importuj</translation>
 <translation id="8329813750766387010">Zaktualizowano: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Usuwaj ostrzeżenia dotyczące ciasteczek (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Aby zobaczyć karty z innych urządzeń, musisz włączyć synchronizację.</translation>
 <translation id="8366175803122817174">Otwórz wszystkie linki z notatek</translation>
 <translation id="8384409685584033392">Informacje o stronie</translation>
+<translation id="839736845446313156">Zarejestruj się</translation>
 <translation id="8414685983518053656">Notatki</translation>
 <translation id="8423076545503792640">Żądanie nie powiodło się z powodu błędu. Spróbuj ponownie później.</translation>
 <translation id="8428213095426709021">Ustawienia</translation>
@@ -322,6 +336,7 @@ tracker</translation>
 <translation id="8677007239430848917">Dodaj swoją pierwszą notatkę przy użyciu ikony plusa poniżej</translation>
 <translation id="8684294196284714094">Gotowy, aby ustawić Vivaldi jako domyślną przeglądarkę?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> notatek zostało usuniętych</translation>
+<translation id="8763006697839582351">Otwórz w trybie prywatnym Vivaldi</translation>
 <translation id="8804164990146287819">Polityka prywatności</translation>
 <translation id="8819841443522803117">Czas zmienić domyślną przeglądarkę? Wybierz przeglądarkę Vivaldi.</translation>
 <translation id="8820817407110198400">Zakładki</translation>
@@ -333,7 +348,6 @@ tracker</translation>
 <translation id="9043882097999887291">Zablokowanych
 reklam</translation>
 <translation id="9065203028668620118">Edytuj</translation>
-<translation id="9078193189520575214">Stosowanie zmian...</translation>
 <translation id="9079251484401922158">Fińska (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 notatka</translation>
 <translation id="9091665118798175641">Synchronizuj informacje o autouzupełnianiu formularzy</translation>

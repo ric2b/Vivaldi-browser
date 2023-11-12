@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/allocator/partition_allocator/pointers/raw_ptr.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
@@ -225,9 +224,9 @@ class PreinstalledWebAppWindowExperimentBrowserTest
     auto provider = std::make_unique<FakeWebAppProvider>(profile);
 
     // Use default fakes for fake working sync system.
-    provider->SetDefaultFakeSubsystems();
+    provider->CreateFakeSubsystems();
 
-    // Added by `SetDefaultFakeSubsystems`. Re-enable default apps as
+    // Added by `CreateFakeSubsystems`. Re-enable default apps as
     // we wish to test effects on them.
     base::CommandLine::ForCurrentProcess()->RemoveSwitch(
         switches::kDisableDefaultApps);

@@ -2,7 +2,7 @@
 
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/text_view_util.h"
@@ -38,7 +38,7 @@ const CGFloat kImageViewHeight = 80.0;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewIllustratedCell* cell =
-      base::mac::ObjCCastStrict<VivaldiTableViewIllustratedCell>(tableCell);
+      base::apple::ObjCCastStrict<VivaldiTableViewIllustratedCell>(tableCell);
   if ([self.accessibilityIdentifier length]) {
     cell.accessibilityIdentifier = self.accessibilityIdentifier;
   }

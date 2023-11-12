@@ -6,9 +6,9 @@
 
 #import <Cocoa/Cocoa.h>
 
+#import "base/apple/foundation_util.h"
+#import "base/apple/scoped_objc_class_swizzler.h"
 #include "base/command_line.h"
-#import "base/mac/foundation_util.h"
-#import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -26,10 +26,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
 #import "ui/base/test/scoped_fake_nswindow_focus.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -136,9 +132,12 @@ class AppShimMenuControllerBrowserTest
     return window_list.front();
   }
 
-  raw_ptr<const extensions::Extension, DanglingUntriaged> app_1_ = nullptr;
-  raw_ptr<const extensions::Extension, DanglingUntriaged> app_2_ = nullptr;
-  raw_ptr<const extensions::Extension, DanglingUntriaged> hosted_app_ = nullptr;
+  raw_ptr<const extensions::Extension, AcrossTasksDanglingUntriaged> app_1_ =
+      nullptr;
+  raw_ptr<const extensions::Extension, AcrossTasksDanglingUntriaged> app_2_ =
+      nullptr;
+  raw_ptr<const extensions::Extension, AcrossTasksDanglingUntriaged>
+      hosted_app_ = nullptr;
   NSUInteger initial_menu_item_count_ = 0;
 };
 

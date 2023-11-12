@@ -186,6 +186,10 @@ content_settings::PatternPair GetPatternsFromScopingType(
       patterns.second =
           content_settings::URLToSchemefulSitePattern(secondary_url);
       break;
+    case WebsiteSettingsInfo::REQUESTING_SCHEMEFUL_SITE_ONLY_SCOPE:
+      patterns.first = content_settings::URLToSchemefulSitePattern(primary_url);
+      patterns.second = ContentSettingsPattern::Wildcard();
+      break;
     case WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE:
     case WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE:
     case WebsiteSettingsInfo::GENERIC_SINGLE_ORIGIN_SCOPE:
@@ -443,24 +447,23 @@ ContentSetting HostContentSettingsMap::GetUserModifiableContentSetting(
   return content_settings::ValueToContentSetting(value);
 }
 
-void HostContentSettingsMap::GetSettingsForOneType(
+ContentSettingsForOneType HostContentSettingsMap::GetSettingsForOneType(
     ContentSettingsType content_type,
-    ContentSettingsForOneType* settings,
     absl::optional<content_settings::SessionModel> session_model) const {
-  DCHECK(settings);
+  ContentSettingsForOneType settings;
   UsedContentSettingsProviders();
 
-  settings->clear();
   for (const auto& provider_pair : content_settings_providers_) {
     // For each provider, iterate first the incognito-specific rules, then the
     // normal rules.
     if (is_off_the_record_) {
       AddSettingsForOneType(provider_pair.second.get(), provider_pair.first,
-                            content_type, settings, true, session_model);
+                            content_type, &settings, true, session_model);
     }
     AddSettingsForOneType(provider_pair.second.get(), provider_pair.first,
-                          content_type, settings, false, session_model);
+                          content_type, &settings, false, session_model);
   }
+  return settings;
 }
 
 void HostContentSettingsMap::SetDefaultContentSetting(
@@ -665,13 +668,12 @@ void HostContentSettingsMap::RecordExceptionMetrics() {
     ContentSettingsType content_type = info->type();
     const std::string type_name = info->name();
 
-    ContentSettingsForOneType settings;
-    GetSettingsForOneType(content_type, &settings);
     size_t num_exceptions = 0;
     size_t num_third_party_cookie_allow_exceptions = 0;
     base::flat_map<ContentSetting, size_t> num_exceptions_with_setting;
     const content_settings::ContentSettingsInfo* content_info =
         content_setting_registry->Get(content_type);
+    ContentSettingsForOneType settings = GetSettingsForOneType(content_type);
     for (const ContentSettingPatternSource& setting_entry : settings) {
       // Skip default settings.
       if (setting_entry.primary_pattern == ContentSettingsPattern::Wildcard() &&
@@ -759,6 +761,15 @@ void HostContentSettingsMap::FlushLossyWebsiteSettings() {
   prefs_->SchedulePendingLossyWrites();
 }
 
+void HostContentSettingsMap::UpdateLastUsedTime(const GURL& primary_url,
+                                                const GURL& secondary_url,
+                                                ContentSettingsType type,
+                                                const base::Time time) {
+  for (auto* provider : user_modifiable_providers_) {
+    provider->UpdateLastUsedTime(primary_url, secondary_url, type, time);
+  }
+}
+
 void HostContentSettingsMap::ResetLastVisitedTime(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
@@ -775,6 +786,20 @@ void HostContentSettingsMap::UpdateLastVisitedTime(
   for (auto* provider : user_modifiable_providers_) {
     provider->UpdateLastVisitTime(primary_pattern, secondary_pattern, type);
   }
+}
+
+bool HostContentSettingsMap::RenewContentSetting(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType type,
+    absl::optional<ContentSetting> setting_to_match) {
+  bool any_updated = false;
+  for (auto* provider : user_modifiable_providers_) {
+    any_updated = provider->RenewContentSetting(primary_url, secondary_url,
+                                                type, setting_to_match) ||
+                  any_updated;
+  }
+  return any_updated;
 }
 
 void HostContentSettingsMap::ClearSettingsForOneType(
@@ -812,9 +837,8 @@ void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
     ContentSettingsType content_type,
     base::FunctionRef<bool(const ContentSettingPatternSource&)> predicate) {
   UsedContentSettingsProviders();
-  ContentSettingsForOneType settings;
-  GetSettingsForOneType(content_type, &settings);
-  for (const ContentSettingPatternSource& setting : settings) {
+  for (const ContentSettingPatternSource& setting :
+       GetSettingsForOneType(content_type)) {
     if (predicate(setting)) {
       for (auto* provider : user_modifiable_providers_) {
         provider->SetWebsiteSetting(setting.primary_pattern,
@@ -1109,9 +1133,7 @@ void HostContentSettingsMap::
 
   ContentSettingsType type = info->type();
 
-  ContentSettingsForOneType host_settings;
-  GetSettingsForOneType(type, &host_settings);
-  for (ContentSettingPatternSource pattern : host_settings) {
+  for (ContentSettingPatternSource pattern : GetSettingsForOneType(type)) {
     if (pattern.source != "preference" ||
         pattern.secondary_pattern == ContentSettingsPattern::Wildcard()) {
       continue;
@@ -1210,8 +1232,7 @@ void HostContentSettingsMap::DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(
   std::vector<ContentSettingPatternSource> expired_entries;
   // Get content settings from all providers, so content setting expirations are
   // enforced at across all providers.
-  ContentSettingsForOneType settings;
-  GetSettingsForOneType(content_setting_type, &settings);
+  auto settings = GetSettingsForOneType(content_setting_type);
 
   for (const ContentSettingPatternSource& setting : settings) {
     if (setting.metadata.expiration().is_null()) {

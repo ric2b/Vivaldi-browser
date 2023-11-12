@@ -25,6 +25,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/test/to_vector.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "components/metrics/cloned_install_detector.h"
@@ -1655,11 +1656,9 @@ TEST_P(UkmServiceTest, FilterRejectsEvent) {
       if (entry->event_hash == kTestEvent1EntryNameHash)
         return true;
 
-      std::vector<uint64_t> filtered_metrics;
-      filtered_metrics.resize(entry->metrics.size());
-      base::ranges::transform(entry->metrics, filtered_metrics.begin(),
-                              &decltype(entry->metrics)::value_type::first);
-      filtered_metric_hashes->replace(std::move(filtered_metrics));
+      filtered_metric_hashes->replace(base::test::ToVector(
+          entry->metrics, &decltype(entry->metrics)::value_type::first));
+
       // Note that the event still contains metrics.
       return false;
     }
@@ -1979,8 +1978,6 @@ class UkmServiceTestWithIndependentAppKM
     prefs_.ClearPref(prefs::kUkmClientId);
     prefs_.ClearPref(prefs::kUkmSessionId);
     prefs_.ClearPref(prefs::kUkmUnsentLogStore);
-
-    scoped_feature_list_.InitAndEnableFeature({kAppMetricsOnlyRelyOnAppSync});
   }
 
   int GetPersistedLogCount() { return ukm::GetPersistedLogCount(prefs_); }
@@ -1993,7 +1990,6 @@ class UkmServiceTestWithIndependentAppKM
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::SingleThreadTaskRunner::CurrentDefaultHandle
       task_runner_current_default_handle_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace
@@ -2074,8 +2070,6 @@ class UkmServiceTestWithIndependentAppKMFullConsent
     prefs_.ClearPref(prefs::kUkmClientId);
     prefs_.ClearPref(prefs::kUkmSessionId);
     prefs_.ClearPref(prefs::kUkmUnsentLogStore);
-
-    scoped_feature_list_.InitAndEnableFeature({kAppMetricsOnlyRelyOnAppSync});
   }
 
   int GetPersistedLogCount() { return ukm::GetPersistedLogCount(prefs_); }
@@ -2088,7 +2082,6 @@ class UkmServiceTestWithIndependentAppKMFullConsent
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::SingleThreadTaskRunner::CurrentDefaultHandle
       task_runner_current_default_handle_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace

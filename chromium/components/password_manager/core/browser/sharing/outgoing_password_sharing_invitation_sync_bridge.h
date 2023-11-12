@@ -5,9 +5,16 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_SHARING_OUTGOING_PASSWORD_SHARING_INVITATION_SYNC_BRIDGE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_SHARING_OUTGOING_PASSWORD_SHARING_INVITATION_SYNC_BRIDGE_H_
 
+#include <map>
 #include <memory>
+#include <string>
+
 #include "base/sequence_checker.h"
+#include "components/password_manager/core/browser/sharing/recipient_info.h"
+#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/protocol/entity_data.h"
+#include "components/sync/protocol/password_sharing_invitation_specifics.pb.h"
 
 namespace syncer {
 class MetadataChangeList;
@@ -15,6 +22,9 @@ class ModelTypeChangeProcessor;
 }  // namespace syncer
 
 namespace password_manager {
+
+struct PasswordForm;
+struct PasswordRecipient;
 
 // Sync bridge implementation for OUTGOING_PASSWORD_SHARING_INVITATION model
 // type.
@@ -28,6 +38,10 @@ class OutgoingPasswordSharingInvitationSyncBridge
   OutgoingPasswordSharingInvitationSyncBridge& operator=(
       const OutgoingPasswordSharingInvitationSyncBridge&) = delete;
   ~OutgoingPasswordSharingInvitationSyncBridge() override;
+
+  // Sends `password` to the corresponding `recipient`.
+  void SendPassword(const PasswordForm& password,
+                    const PasswordRecipient& recipient);
 
   // ModelTypeSyncBridge implementation.
   std::unique_ptr<syncer::MetadataChangeList> CreateMetadataChangeList()
@@ -46,11 +60,32 @@ class OutgoingPasswordSharingInvitationSyncBridge
   bool SupportsGetStorageKey() const override;
   void ApplyDisableSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
                                    delete_metadata_change_list) override;
-  sync_pb::EntitySpecifics TrimAllSupportedFieldsFromRemoteSpecifics(
-      const sync_pb::EntitySpecifics& entity_specifics) const override;
+  void OnCommitAttemptErrors(
+      const syncer::FailedCommitResponseDataList& error_response_list) override;
+  CommitAttemptFailedBehavior OnCommitAttemptFailed(
+      syncer::SyncCommitError commit_error) override;
+
+  static syncer::ClientTagHash GetClientTagHashFromStorageKeyForTest(
+      const std::string& storage_key);
 
  private:
   SEQUENCE_CHECKER(sequence_checker_);
+
+  // Contains data which is sufficient for creating `EntityData` for an outgoing
+  // invitation.
+  struct OutgoingInvitationWithEncryptionKey {
+    sync_pb::OutgoingPasswordSharingInvitationSpecifics specifics;
+    PublicKey recipient_public_key;
+  };
+
+  static std::unique_ptr<syncer::EntityData> ConvertToEntityData(
+      const OutgoingInvitationWithEncryptionKey&
+          invitation_with_encryption_key);
+
+  // Last sent passwords are cached until they are committed to the server. This
+  // is required to keep data in case of retries.
+  std::map<syncer::ClientTagHash, OutgoingInvitationWithEncryptionKey>
+      outgoing_invitations_in_flight_;
 };
 
 }  // namespace password_manager

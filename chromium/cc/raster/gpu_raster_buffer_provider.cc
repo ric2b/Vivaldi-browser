@@ -137,7 +137,6 @@ bool GpuRasterBufferProvider::RasterBufferImpl::
 GpuRasterBufferProvider::GpuRasterBufferProvider(
     viz::RasterContextProvider* compositor_context_provider,
     viz::RasterContextProvider* worker_context_provider,
-    bool use_gpu_memory_buffer_resources,
     const RasterCapabilities& raster_caps,
     const gfx::Size& max_tile_size,
     bool unpremultiply_and_dither_low_bit_depth_tiles,
@@ -145,8 +144,9 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
     float raster_metric_probability)
     : compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
-      use_gpu_memory_buffer_resources_(use_gpu_memory_buffer_resources),
       tile_format_(raster_caps.tile_format),
+      tile_overlay_candidate_(raster_caps.tile_overlay_candidate),
+      tile_texture_target_(raster_caps.tile_texture_target),
       max_tile_size_(max_tile_size),
       pending_raster_queries_(pending_raster_queries),
       raster_metric_probability_(raster_metric_probability),
@@ -158,13 +158,20 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
   CHECK(worker_context_provider);
 
 #if BUILDFLAG(IS_ANDROID)
-  // On Android, DMSAA is currently only enabled for vulkan until GL
-  // regressions are fixed.
   {
     absl::optional<viz::RasterContextProvider::ScopedRasterContextLock> lock;
     lock.emplace(worker_context_provider);
-    is_using_dmsaa_ &=
+    auto is_using_vulkan =
         worker_context_provider->ContextCapabilities().using_vulkan_context;
+
+    // On Android, DMSAA on vulkan backend launch is controlled by
+    // kUseDMSAAForTiles whereas GL backend launch is controlled by
+    // kUseDMSAAForTilesAndroidGL.
+    is_using_dmsaa_ =
+        (base::FeatureList::IsEnabled(features::kUseDMSAAForTiles) &&
+         is_using_vulkan) ||
+        (base::FeatureList::IsEnabled(features::kUseDMSAAForTilesAndroidGL) &&
+         !is_using_vulkan);
   }
 #endif
 }
@@ -181,9 +188,8 @@ std::unique_ptr<RasterBuffer> GpuRasterBufferProvider::AcquireBufferForRaster(
   if (!resource.gpu_backing()) {
     auto backing = std::make_unique<GpuRasterBacking>();
     backing->worker_context_provider = worker_context_provider_;
-    backing->InitOverlayCandidateAndTextureTarget(
-        resource.format(), compositor_context_provider_->ContextCapabilities(),
-        use_gpu_memory_buffer_resources_);
+    backing->overlay_candidate = tile_overlay_candidate_;
+    backing->texture_target = tile_texture_target_;
     backing->is_using_raw_draw =
         !backing->overlay_candidate && is_using_raw_draw_;
     resource.set_gpu_backing(std::move(backing));
@@ -212,7 +218,8 @@ bool GpuRasterBufferProvider::IsResourcePremultiplied() const {
 }
 
 bool GpuRasterBufferProvider::IsResourceReadyToDraw(
-    const ResourcePool::InUsePoolResource& resource) const {
+    const ResourcePool::InUsePoolResource& resource) {
+  FlushIfNeeded();
   const gpu::SyncToken& sync_token = resource.gpu_backing()->mailbox_sync_token;
   // This SyncToken() should have been set by calling OrderingBarrier() before
   // calling this.
@@ -230,7 +237,8 @@ bool GpuRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
 uint64_t GpuRasterBufferProvider::SetReadyToDrawCallback(
     const std::vector<const ResourcePool::InUsePoolResource*>& resources,
     base::OnceClosure callback,
-    uint64_t pending_callback_id) const {
+    uint64_t pending_callback_id) {
+  FlushIfNeeded();
   gpu::SyncToken latest_sync_token;
   for (const auto* in_use : resources) {
     const gpu::SyncToken& sync_token =

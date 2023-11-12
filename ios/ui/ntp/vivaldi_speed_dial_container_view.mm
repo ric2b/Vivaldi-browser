@@ -201,8 +201,7 @@ NSString* cellIdList = @"cellIdList";
                                                     forIndexPath:indexPath];
         [largeCell configureCellWith:item layoutStyle:self.selectedLayout];
         [self loadFaviconForItem:item
-                         forCell:largeCell
-          fallbackToGoogleServer:NO];
+                         forCell:largeCell];
         return largeCell;
       }
       case VivaldiStartPageLayoutStyleSmall: {
@@ -212,8 +211,7 @@ NSString* cellIdList = @"cellIdList";
         [smallCell configureCellWith:item
                             isTablet:self.isCurrentDeviceTablet];
         [self loadFaviconForItem:item
-                         forCell:smallCell
-          fallbackToGoogleServer:NO];
+                         forCell:smallCell];
         return smallCell;
       }
       case VivaldiStartPageLayoutStyleList: {
@@ -222,8 +220,7 @@ NSString* cellIdList = @"cellIdList";
                                                       forIndexPath:indexPath];
         [listCell configureCellWith:item];
         [self loadFaviconForItem:item
-                         forCell:listCell
-          fallbackToGoogleServer:NO];
+                         forCell:listCell];
         return listCell;
       }
     }
@@ -231,15 +228,12 @@ NSString* cellIdList = @"cellIdList";
 }
 
 // Asynchronously loads favicon for given index path. The loads are cancelled
-// upon cell reuse automatically.  When the favicon is not found in cache, try
-// loading it from a Google server if `fallbackToGoogleServer` is YES,
-// otherwise, use the fall back icon style.
+// upon cell reuse automatically.  When the favicon is not found in cache,
+// use the fall back icon style.
 - (void)loadFaviconForItem:(VivaldiSpeedDialItem*)item
-                   forCell:(UICollectionViewCell*)cell
-    fallbackToGoogleServer:(BOOL)fallbackToGoogleServer {
+                   forCell:(UICollectionViewCell*)cell {
 
   CGFloat desiredFaviconSizeInPoints;
-  CGFloat minFaviconSizeInPoints = kMinFaviconSizePt;
 
   switch (_selectedLayout) {
     case VivaldiStartPageLayoutStyleLarge:
@@ -285,9 +279,8 @@ NSString* cellIdList = @"cellIdList";
     }
   };
 
-  self.faviconLoader->FaviconForPageUrl(
-      blockURL, desiredFaviconSizeInPoints, minFaviconSizeInPoints,
-      /*fallback_to_google_server=*/fallbackToGoogleServer, faviconLoadedBlock);
+  self.faviconLoader->FaviconForPageUrlOrHost(
+      blockURL, desiredFaviconSizeInPoints, faviconLoadedBlock);
 }
 
 #pragma mark - COLLECTIONVIEW DELEGATE

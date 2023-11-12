@@ -86,9 +86,12 @@ VivaldiSpatialNavigationController::~VivaldiSpatialNavigationController() {}
 
 void VivaldiSpatialNavigationController::HideIndicator() {
   blink::Node* indicator_node = indicator_;
-  blink::ComputedStyleBuilder builder(*(indicator_node->GetComputedStyle()));
-  builder.SetVisibility(blink::EVisibility::kHidden);
-  indicator_node->GetLayoutObject()->SetStyle(builder.TakeStyle());
+  const blink::ComputedStyle* style = indicator_node->GetComputedStyle();
+  if (style) {
+    blink::ComputedStyleBuilder builder(*style);
+    builder.SetVisibility(blink::EVisibility::kHidden);
+    indicator_node->GetLayoutObject()->SetStyle(builder.TakeStyle());
+  }
 }
 
 void VivaldiSpatialNavigationController::CloseSpatnavOrCurrentOpenMenu(
@@ -197,20 +200,15 @@ vivaldi::QuadPtr VivaldiSpatialNavigationController::NextQuadInDirection(
 void VivaldiSpatialNavigationController::ActivateElement(int modifiers) {
   blink::WebKeyboardEvent web_keyboard_event(
     blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
+
   blink::KeyboardEvent* key_evt =
       blink::KeyboardEvent::Create(web_keyboard_event, nullptr);
 
   blink::Element* elm = current_quad_ ? current_quad_->GetElement() : nullptr;
   if (elm) {
-    elm->DispatchSimulatedClick(key_evt);
-    elm->SetActive(true);
-
-    // When opening menus, Focus() sometimes functions as another click,
-    // closing them right after opening. In case of input fields however,
-    // we must focus.
-    if (elm->IsFormControlElement()) {
-      elm->Focus();
-    }
+    elm->Focus();
+    elm->DispatchSimulatedClick(
+        key_evt, blink::SimulatedClickCreationScope::kFromAccessibility);
   }
   HideIndicator();
 }
@@ -324,8 +322,19 @@ VivaldiSpatialNavigationController::GetScrollContainerForCurrentElement() {
 void VivaldiSpatialNavigationController::MoveRect(
     vivaldi::mojom::SpatnavDirection direction,
     blink::DOMRect* new_rect) {
-
   blink::Element* old_container = GetScrollContainerForCurrentElement();
+  blink::Element* old_element =
+      current_quad_ ? current_quad_->GetElement() : nullptr;
+
+  // In case we have a previously focused element on the page, we unfocus it.
+  // It can mess up element activation and looks confusing if it persists while
+  // using spatnav.
+  if (old_element) {
+    blink::Document* old_document = old_element ? old_element->ownerDocument()
+                                                : GetDocumentFromRenderFrame();
+    if (old_document && old_document->FocusedElement())
+      old_document->FocusedElement()->blur();
+  }
 
   // Set this to true if we want quads to update at the end, which is AFTER
   // indicator has moved and current element updated.
@@ -346,10 +355,10 @@ void VivaldiSpatialNavigationController::MoveRect(
     }
   } else {
     vivaldi::QuadPtr next_quad;
-
     next_quad = current_quad_ ? NextQuadInDirection(direction): nullptr;
 
     if (next_quad != nullptr) {
+
       current_quad_ = next_quad;
       blink::Element* elm = current_quad_->GetElement();
       if (elm) {
@@ -440,25 +449,36 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
     return;
   }
 
-  int xoffset = 0;
-  int yoffset = 0;
+  float xoffset = 0;
+  float yoffset = 0;
   if (container == document->documentElement()) {
     xoffset += window->scrollX();
     yoffset += window->scrollY();
   }
 
   blink::DOMRect* cr = container->getBoundingClientRect();
-
   blink::Node* container_node = container;
 
-  // Any parent of our container node will add its own offset is the position
+  blink::Node* indicator_node = indicator_;
+  const blink::ComputedStyle* indicator_style =
+      indicator_node->GetComputedStyle();
+  if (!indicator_style) {
+    return;
+  }
+
+  // Update for zoom.
+  float effective_zoom = indicator_style->EffectiveZoom();
+  xoffset *= effective_zoom;
+  yoffset *= effective_zoom;
+
+  // Any parent of our container node will add its own offset if the position
   // is set to fixed.
   while (container_node->parentElement()) {
-    gfx::Rect cnr = container_node->PixelSnappedBoundingBox();
+    blink::PhysicalRect cnr = container_node->BoundingBox();
     if (container_node->GetComputedStyle()->GetPosition() ==
         blink::EPosition::kFixed) {
-      xoffset -= cnr.x();
-      yoffset -= cnr.y();
+      xoffset -= cnr.X().ToDouble() * effective_zoom;
+      yoffset -= cnr.Y().ToDouble() * effective_zoom;
     }
     container_node = container_node->parentElement();
   }
@@ -467,36 +487,29 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
       container->GetComputedStyle()->Display() != blink::EDisplay::kBlock) {
     xoffset += -cr->x();
     yoffset += -cr->y();
-    xoffset += layout_box->PixelSnappedScrolledContentOffset().x();
-    yoffset += layout_box->PixelSnappedScrolledContentOffset().y();
+    xoffset += layout_box->ScrolledContentOffset().left.ToDouble();
+    yoffset += layout_box->ScrolledContentOffset().top.ToDouble();
   }
 
-  blink::Node* indicator_node = indicator_;
-  if (!indicator_node->GetComputedStyle()) {
-    return;
-  }
   blink::ComputedStyleBuilder builder(*(indicator_node->GetComputedStyle()));
 
   // When updating because of scrolling we already have the right size,
   // so we use this to skip some work.
   if (!resize) {
-    blink::DOMRect* r = elm->getBoundingClientRect();
-    builder.SetWidth(blink::Length::Fixed(r->width()));
-    builder.SetHeight(blink::Length::Fixed(r->height()));
-    builder.SetLeft(blink::Length::Fixed(xoffset + (int)r->x()));
-    builder.SetTop(blink::Length::Fixed(yoffset + (int)r->y()));
+    blink::WebElement web_element = current_quad_->GetWebElement();
+    gfx::Rect wr = web_element.BoundsInWidget();
+    builder.SetWidth(blink::Length::Fixed(wr.width()));
+    builder.SetHeight(blink::Length::Fixed(wr.height()));
+    builder.SetLeft(blink::Length::Fixed(static_cast<int>(xoffset + wr.x())));
+    builder.SetTop(blink::Length::Fixed(static_cast<int>(yoffset + wr.y())));
 
     if (new_rect) {
-      new_rect->setX(r->x());
-      new_rect->setY(r->y());
+      new_rect->setX(wr.x());
+      new_rect->setY(wr.y());
     }
   }
 
   else {
-    // TODO(daniel@vivaldi.com): We are getting the rect twice now,
-    // once from Element and once from WebElement. This is confusing
-    // and is only done to meet requirements of FindImageElementRect.
-    // Could we get rid of all usages of WebElement in the code?
     blink::WebElement web_element = current_quad_->GetWebElement();
     gfx::Rect wr = web_element.BoundsInWidget();
     if (web_element.IsLink()) {
@@ -507,8 +520,9 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
     }
     builder.SetWidth(blink::Length::Fixed(wr.width()));
     builder.SetHeight(blink::Length::Fixed(wr.height()));
-    builder.SetLeft(blink::Length::Fixed(xoffset + (int)wr.x()));
-    builder.SetTop(blink::Length::Fixed(yoffset + (int)wr.y()));
+    builder.SetLeft(
+        blink::Length::Fixed(static_cast<int>(xoffset + (int)wr.x())));
+    builder.SetTop(blink::Length::Fixed(static_cast<int>(yoffset + wr.y())));
     if (new_rect) {
       new_rect->setX(wr.x());
       new_rect->setY(wr.y());

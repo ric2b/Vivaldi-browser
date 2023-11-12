@@ -7,7 +7,6 @@
 #import "ios/chrome/browser/feature_engagement/tracker_util.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -18,6 +17,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/tabs/switch_to_tab_animation_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_snapshot_providing.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/browser/url_loading/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_observer_bridge.h"
@@ -25,10 +25,6 @@
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface TabEventsMediator () <CRWWebStateObserver,
                                  WebStateListObserving,
@@ -53,15 +49,12 @@
 
   WebStateList* _webStateList;
   __weak NewTabPageCoordinator* _ntpCoordinator;
-  SessionRestorationBrowserAgent* _sessionRestorationBrowserAgent;
   UrlLoadingNotifierBrowserAgent* _loadingNotifier;
   ChromeBrowserState* _browserState;
 }
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
                       ntpCoordinator:(NewTabPageCoordinator*)ntpCoordinator
-                    restorationAgent:(SessionRestorationBrowserAgent*)
-                                         sessionRestorationBrowserAgent
                         browserState:(ChromeBrowserState*)browserState
                      loadingNotifier:
                          (UrlLoadingNotifierBrowserAgent*)urlLoadingNotifier {
@@ -70,7 +63,6 @@
     // TODO(crbug.com/1348459): Stop lazy loading in NTPCoordinator and remove
     // this dependency.
     _ntpCoordinator = ntpCoordinator;
-    _sessionRestorationBrowserAgent = sessionRestorationBrowserAgent;
     _browserState = browserState;
 
     _webStateObserverBridge =
@@ -127,20 +119,47 @@
 
 #pragma mark - WebStateListObserving methods
 
+- (void)willChangeWebStateList:(WebStateList*)webStateList
+                        change:(const WebStateListChangeDetach&)detachChange
+                        status:(const WebStateListStatus&)status {
+  // When the active webState is detached, the view should be reset.
+  if (detachChange.detached_web_state() == _webStateList->GetActiveWebState()) {
+    [self.consumer resetTab];
+  }
+}
+
 - (void)didChangeWebStateList:(WebStateList*)webStateList
                        change:(const WebStateListChange&)change
-                    selection:(const WebStateSelection&)selection {
+                       status:(const WebStateListStatus&)status {
+  BOOL isActivationHandled = NO;
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
-      // TODO(crbug.com/1442546): Move the implementation from
-      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason to
-      // here. Note that here is reachable only when `reason` ==
-      // ActiveWebStateChangeReason::Activated.
+    case WebStateListChange::Type::kStatusOnly:
+      // The activation is handled after this switch statement.
       break;
-    case WebStateListChange::Type::kDetach:
-      // TODO(crbug.com/1442546): Move the implementation from
-      // webStateList:didDetachWebState:atIndex: to here.
+    case WebStateListChange::Type::kDetach: {
+      // When an NTP web state is closed, check if the coordinator should be
+      // stopped.
+      const WebStateListChangeDetach& detachChange =
+          change.As<WebStateListChangeDetach>();
+      if (detachChange.is_closing()) {
+        NewTabPageTabHelper* NTPTabHelper = NewTabPageTabHelper::FromWebState(
+            detachChange.detached_web_state());
+        if (status.active_web_state_change()) {
+          // The active WebState can be updated when multiple WebStates are
+          // closed by `CloseAllWebStates()` or `CloseAllNonPinnedWebStates()`.
+          // Call `-didNavigateAwayFromNTP:` to update NTP and record metrics
+          // before stopping NTP.
+          [self didChangeActiveWebState:status.new_active_web_state
+                      oldActiveWebState:status.old_active_web_state
+                             isInserted:NO];
+          isActivationHandled = YES;
+        }
+        if (NTPTabHelper->IsActive()) {
+          [self stopNTPIfNeeded];
+        }
+      }
       break;
+    }
     case WebStateListChange::Type::kMove:
       // Do nothing when a WebState is moved.
       break;
@@ -168,82 +187,66 @@
       // If a tab is inserted in the background (not activating), trigger an
       // animation. (The animation for foreground tab insertion is handled in
       // `didChangeActiveWebState`).
-      if (!selection.activating) {
+      if (!status.active_web_state_change()) {
         [self.consumer initiateNewTabBackgroundAnimation];
       }
       break;
     }
   }
-}
 
-- (void)webStateList:(WebStateList*)webStateList
-    willDetachWebState:(web::WebState*)webState
-               atIndex:(int)atIndex {
-  // When the active webState is detached, the view should be reset.
-  web::WebState* currentWebState = _webStateList->GetActiveWebState();
-  if (webState == currentWebState) {
-    [self.consumer resetTab];
+  if (!isActivationHandled && status.active_web_state_change()) {
+    [self didChangeActiveWebState:status.new_active_web_state
+                oldActiveWebState:status.old_active_web_state
+                       isInserted:change.type() ==
+                                  WebStateListChange::Type::kInsert];
   }
 }
 
-- (void)webStateList:(WebStateList*)webStateList
-    willCloseWebState:(web::WebState*)webState
-              atIndex:(int)atIndex
-           userAction:(BOOL)userAction {
-  // When an NTP web state is closed, check if the coordinator should be
-  // stopped.
-  NewTabPageTabHelper* NTPTabHelper =
-      NewTabPageTabHelper::FromWebState(webState);
-  if (NTPTabHelper->IsActive()) {
-    [self stopNTPIfNeeded];
-  }
-}
+#pragma mark - WebStateListObserving helpers (Private)
 
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
+- (void)didChangeActiveWebState:(web::WebState*)newActiveWebState
+              oldActiveWebState:(web::WebState*)oldActiveWebState
+                     isInserted:(bool)isInserted {
   // If the user is leaving an NTP web state, trigger a visibility change.
-  if (oldWebState && _ntpCoordinator.started) {
+  if (oldActiveWebState && _ntpCoordinator.started) {
     NewTabPageTabHelper* NTPHelper =
-        NewTabPageTabHelper::FromWebState(oldWebState);
+        NewTabPageTabHelper::FromWebState(oldActiveWebState);
     if (NTPHelper->IsActive()) {
       [_ntpCoordinator didNavigateAwayFromNTP];
     }
   }
 
-  if (oldWebState) {
+  if (oldActiveWebState) {
     [self.consumer prepareForNewTabAnimation];
   }
-  if (newWebState) {
+  if (newActiveWebState) {
     // Activating without inserting an NTP requires starting it in two
     // scenarios: 1) After doing a batch tab restore (i.e. undo tab removals,
     // initial startup). 2) After re-activating the Browser and a non-active
     // WebState is showing the NTP. BrowserCoordinator's -setActive: only starts
     // the NTP if it is the active view.
-    [self startNTPIfNeededForActiveWebState:newWebState];
+    [self startNTPIfNeededForActiveWebState:newActiveWebState];
 
     // If the user is entering an NTP web state, trigger a visibility change.
     NewTabPageTabHelper* NTPHelper =
-        NewTabPageTabHelper::FromWebState(newWebState);
+        NewTabPageTabHelper::FromWebState(newActiveWebState);
     if (NTPHelper->IsActive()) {
-      [_ntpCoordinator didNavigateToNTPInWebState:newWebState];
+      [_ntpCoordinator didNavigateToNTPInWebState:newActiveWebState];
     }
 
-    if (reason == ActiveWebStateChangeReason::Inserted) {
+    if (isInserted) {
       // This starts the new tab animation. It is important for the
       // NTPCoordinator to know about the new web state
       // (via the call to `-didNavigateToNTPInWebState:` above) before this is
       // called.
-      [self didInsertActiveWebState:newWebState];
+      if (!_webStateList->IsBatchInProgress()) {
+        [self didInsertActiveWebState:newActiveWebState];
+      }
     }
 
     [self.consumer webStateSelected];
   }
 }
-
-#pragma mark - WebStateListObserving helpers (Private)
 
 - (void)startNTPIfNeededForActiveWebState:(web::WebState*)webState {
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
@@ -265,9 +268,6 @@
 
 - (void)didInsertActiveWebState:(web::WebState*)newWebState {
   DCHECK(newWebState);
-  if (_sessionRestorationBrowserAgent->IsRestoringSession()) {
-    return;
-  }
   auto* animationTabHelper =
       NewTabAnimationTabHelper::FromWebState(newWebState);
   BOOL animated =
@@ -324,10 +324,12 @@
           ->will_add_placeholder_for_next_navigation();
   NewTabPageTabHelper* NTPHelper =
       NewTabPageTabHelper::FromWebState(webStateBeingActivated);
-  UIImage* topToolbarImage = [self.primaryToolbarSnapshotProvider
-      toolbarSideSwipeSnapshotForWebState:webStateBeingActivated];
-  UIImage* bottomToolbarImage = [self.secondaryToolbarSnapshotProvider
-      toolbarSideSwipeSnapshotForWebState:webStateBeingActivated];
+  UIImage* topToolbarImage = [self.toolbarSnapshotProvider
+      toolbarSideSwipeSnapshotForWebState:webStateBeingActivated
+                          withToolbarType:ToolbarType::kPrimary];
+  UIImage* bottomToolbarImage = [self.toolbarSnapshotProvider
+      toolbarSideSwipeSnapshotForWebState:webStateBeingActivated
+                          withToolbarType:ToolbarType::kSecondary];
   SwitchToTabAnimationPosition position =
       newWebStateIndex > _webStateList->active_index()
           ? SwitchToTabAnimationPositionAfter
@@ -339,6 +341,28 @@
                           newTabPageTabHelper:NTPHelper
                               topToolbarImage:topToolbarImage
                            bottomToolbarImage:bottomToolbarImage];
+}
+
+#pragma mark - NewTabPageTabHelperDelegate
+
+- (void)newTabPageHelperDidChangeVisibility:(NewTabPageTabHelper*)NTPHelper
+                                forWebState:(web::WebState*)webState {
+  if (webState != _webStateList->GetActiveWebState()) {
+    // In the instance that a pageload starts while the WebState is not the
+    // active WebState anymore, do nothing.
+    return;
+  }
+  // Handle NTP visibility changes within a web state.
+  if (NTPHelper->IsActive()) {
+    if (!_ntpCoordinator.started) {
+      [_ntpCoordinator start];
+    }
+    [_ntpCoordinator didNavigateToNTPInWebState:webState];
+  } else {
+    [_ntpCoordinator didNavigateAwayFromNTP];
+    [_ntpCoordinator stopIfNeeded];
+  }
+  [self.consumer displayTabViewIfActive];
 }
 
 @end

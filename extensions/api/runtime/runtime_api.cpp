@@ -32,7 +32,7 @@
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/profile_picker.h"
+#include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/background_download_service.h"
@@ -54,6 +54,7 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/vivaldi_rootdocument_handler.h"
 #include "ui/vivaldi_ui_utils.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -421,7 +422,7 @@ void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
     std::string image_data;
     base::StringPiece base64_input(
         reinterpret_cast<const char*>(&buffer.data()[0]), buffer.size());
-    Base64Encode(base64_input, &image_data);
+    base::Base64Encode(base64_input, &image_data);
 
     // Mime type does not matter
     image_data.insert(0, base::StringPrintf("data:image/png;base64,"));
@@ -650,6 +651,9 @@ RuntimePrivateGetProfileStatisticsFunction::Run() {
   if (profile) {
     GatherStatistics(profile);
   } else {
+    // Mark the profile to be a gather-profile that does not need a
+    // vivaldirootdocumenthandler.
+    MarkProfileForNoVivaldiClient(profile_path);
     g_browser_process->profile_manager()->LoadProfileByPath(
         profile_path, false,
         base::BindOnce(
@@ -713,8 +717,8 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
   bool delete_profile_allowed = signin_util::IsProfileDeletionAllowed(profile);
 
   if (delete_profile_allowed) {
-      webui::DeleteProfileAtPath(profile_path,
-                                 ProfileMetrics::DELETE_PROFILE_SETTINGS);
+    webui::DeleteProfileAtPath(profile_path,
+                               ProfileMetrics::DELETE_PROFILE_SETTINGS);
   }
 
   return RespondNow(ArgumentList(Results::Create(delete_profile_allowed)));

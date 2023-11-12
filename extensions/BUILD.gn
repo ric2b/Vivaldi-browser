@@ -13,6 +13,7 @@ static_library("extensions") {
     "permissions",
     "//base:base",
     "//chrome/browser/extensions:extensions",
+    "//vivaldi/extensions/schema:generated_api_registration",
     "//skia",
   ]
   sources = [

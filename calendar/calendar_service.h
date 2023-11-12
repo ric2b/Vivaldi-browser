@@ -65,6 +65,9 @@ class CalendarService : public KeyedService {
   // event_type.h.
   typedef base::OnceCallback<void(EventResultCB)> EventResultCallback;
 
+  typedef base::OnceCallback<void(EventTemplateResultCB)>
+      EventTemplateResultCallback;
+
   // Provides the results of multiple event create. See CreateEventsResult in
   // event_type.h.
   typedef base::OnceCallback<void(CreateEventsResult)> CreateEventsCallback;
@@ -233,8 +236,24 @@ class CalendarService : public KeyedService {
       GetALLAccounsCallback callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId CreateEventTemplate(
+      EventTemplateRow event_template,
+      EventTemplateResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
   base::CancelableTaskTracker::TaskId GetAllEventTemplates(
-      base::OnceCallback<void(std::vector<calendar::EventRow>)> callback,
+      base::OnceCallback<void(EventTemplateRows)> callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateEventTemplate(
+      EventTemplateID event_template_id,
+      EventTemplateRow event_template,
+      EventTemplateResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteEventTemplate(
+      EventTemplateID event_template_id,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
  private:

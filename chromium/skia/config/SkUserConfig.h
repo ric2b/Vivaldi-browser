@@ -233,19 +233,7 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 #define SK_ENABLE_SKSL_IN_RASTER_PIPELINE
 
-#define SK_USE_LEGACY_DROPSHADOW_IMAGEFILTER
-
-#define SK_USE_LEGACY_LIGHTING_IMAGEFILTER
-
-#define SK_USE_LEGACY_TILE_IMAGEFILTER
-
-#define SK_USE_LEGACY_CONVOLUTION_IMAGEFILTER
-
 #define SK_USE_LEGACY_BLUR_IMAGEFILTER
-
-// Use the original std::vector based serializer
-// Remove when new streaming support operations has been verified.
-// #define SK_SUPPORT_LEGACY_STRIKE_SERIALIZATION
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 

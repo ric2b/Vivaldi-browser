@@ -11,6 +11,7 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.IS_SHOWING_OVERVIEW;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.RESET_FEED_SURFACE_SCROLL_POSITION;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.TOP_MARGIN;
+import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.BACKGROUND_COLOR;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.FAKE_SEARCH_BOX_CLICK_LISTENER;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.FAKE_SEARCH_BOX_TEXT_WATCHER;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_FAKE_SEARCH_BOX_VISIBLE;
@@ -42,6 +43,7 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -70,6 +72,8 @@ import org.chromium.chrome.browser.lens.LensMetrics;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
+import org.chromium.chrome.browser.logo.LogoUtils;
+import org.chromium.chrome.browser.logo.LogoView;
 import org.chromium.chrome.browser.ntp.NewTabPageLaunchOrigin;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
@@ -96,6 +100,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.Controller;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.features.start_surface.StartSurface.TabSwitcherViewObserver;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.prefs.PrefService;
@@ -149,9 +154,11 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     private final CallbackController mCallbackController = new CallbackController();
     private final View mLogoContainerView;
     private final boolean mIsFeedGoneImprovementEnabled;
+    private final boolean mMoveDownLogo;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final TabCreatorManager mTabCreatorManager;
     private final boolean mUseMagicSpace;
+    private final boolean mIsSurfacePolishEnabled;
 
     // Boolean histogram used to record whether cached
     // ChromePreferenceKeys.FEED_ARTICLES_LIST_VISIBLE is consistent with
@@ -253,6 +260,8 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         mTabSwitcherContainer = tabSwitcherContainer;
         mTabSwitcherModule = tabSwitcherModule;
         mController = mTabSwitcherModule != null ? mTabSwitcherModule.getController() : controller;
+        mIsSurfacePolishEnabled =
+                isStartSurfaceEnabled && ChromeFeatureList.sSurfacePolish.isEnabled();
         mUseMagicSpace = isStartSurfaceEnabled && StartSurfaceConfiguration.useMagicSpace();
         // When a magic space is enabled on Start surface, it doesn't need a controller to handle
         // its showing and hiding.
@@ -281,6 +290,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         // causes inconsistency with toolbar's check.
         mIsFeedGoneImprovementEnabled =
                 ReturnToChromeUtil.shouldImproveStartWhenFeedIsDisabled(context);
+        mMoveDownLogo = ReturnToChromeUtil.moveDownLogo();
         mIsStartSurfaceRefactorEnabled = ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context);
         mTabSwitcherClickHandler = tabSwitcherClickHandler;
         mProfileSupplier = profileSupplier;
@@ -323,6 +333,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 }
             };
             mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
+            updateBackgroundColor(mPropertyModel);
 
             mPropertyModel.set(MORE_TABS_CLICK_LISTENER, this);
 
@@ -675,6 +686,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
         mIsIncognito = mTabModelSelector.isIncognitoSelected();
         mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
+        updateBackgroundColor(mPropertyModel);
         setMVTilesVisibility(!mIsIncognito);
         setLogoVisibility(!mIsIncognito);
         setTabCarouselVisibility(getNormalTabCount() > 0 && !mIsIncognito);
@@ -741,6 +753,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
     void setSecondaryTasksSurfacePropertyModel(PropertyModel propertyModel) {
         mSecondaryTasksSurfacePropertyModel = propertyModel;
         mSecondaryTasksSurfacePropertyModel.set(IS_INCOGNITO, mIsIncognito);
+        updateBackgroundColor(mSecondaryTasksSurfacePropertyModel);
 
         // Secondary tasks surface is used for more Tabs or incognito mode single pane, where MV
         // tiles and voice recognition button should be invisible.
@@ -956,6 +969,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             // update incognito
             mIsIncognito = mTabModelSelector.isIncognitoSelected();
             mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
+            updateBackgroundColor(mPropertyModel);
 
             // if OverviewModeState is NOT_SHOWN, default to SHOWING_TABSWITCHER. This should only
             // happen when entering Start through SwipeDown gesture on URL bar.
@@ -1299,6 +1313,7 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
         mIsIncognito = isIncognito;
 
         mPropertyModel.set(IS_INCOGNITO, mIsIncognito);
+        updateBackgroundColor(mPropertyModel);
         setOverviewStateInternal();
 
         // TODO(crbug.com/1021399): This looks not needed since there is no way to change incognito
@@ -1325,8 +1340,14 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
             if (mSecondaryTasksSurfacePropertyModel != null) {
                 mSecondaryTasksSurfacePropertyModel.set(IS_FAKE_SEARCH_BOX_VISIBLE, false);
                 mSecondaryTasksSurfacePropertyModel.set(IS_INCOGNITO, mIsIncognito);
+                updateBackgroundColor(mSecondaryTasksSurfacePropertyModel);
             }
             if (mSecondaryTasksSurfaceController != null && !skipUpdateController) {
+                // Ensure the layout change listener and tabs are properly registered before
+                // showing.
+                if (mStartSurfaceSupplier.get() != null) {
+                    mStartSurfaceSupplier.get().getGridTabListDelegate().prepareTabGridView();
+                }
                 mSecondaryTasksSurfaceController.showTabSwitcherView(/* animate = */ true);
             }
         } else {
@@ -1423,12 +1444,12 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
     private void setMVTilesVisibility(boolean isVisible) {
         if (mInitializeMVTilesRunnable == null) return;
-        if (isVisible && mInitializeMVTilesRunnable != null) mInitializeMVTilesRunnable.run();
         mPropertyModel.set(MV_TILES_VISIBLE, isVisible);
+        if (isVisible && mInitializeMVTilesRunnable != null) mInitializeMVTilesRunnable.run();
     }
 
     private void setLogoVisibility(boolean isVisible) {
-        if (!mIsFeedGoneImprovementEnabled) return;
+        if (!mIsFeedGoneImprovementEnabled && !mMoveDownLogo) return;
 
         if (isVisible && mLogoCoordinator == null) {
             mLogoCoordinator = initializeLogo();
@@ -1636,10 +1657,14 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                             urlParams, /*incognito=*/false, mParentTabSupplier.get());
                 });
         mLogoContainerView.setVisibility(View.VISIBLE);
+        LogoView logoView = mLogoContainerView.findViewById(R.id.search_provider_logo);
+        if (mIsSurfacePolishEnabled) {
+            LogoUtils.setLogoViewLayoutParams(logoView, mContext.getResources(), false,
+                    StartSurfaceConfiguration.SURFACE_POLISH_LESS_BRAND_SPACE.getValue());
+        }
 
-        mLogoCoordinator = new LogoCoordinator(mContext, logoClickedCallback,
-                mLogoContainerView.findViewById(R.id.search_provider_logo), true, null, null,
-                isHomepageShown(), this);
+        mLogoCoordinator = new LogoCoordinator(
+                mContext, logoClickedCallback, logoView, true, null, null, isHomepageShown(), this);
         return mLogoCoordinator;
     }
 
@@ -1651,12 +1676,18 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
     private void tweakMarginsBetweenSections() {
         Resources resources = mContext.getResources();
-        mPropertyModel.set(TASKS_SURFACE_BODY_TOP_MARGIN,
-                resources.getDimensionPixelSize(R.dimen.tasks_surface_body_top_margin));
-        mPropertyModel.set(MV_TILES_CONTAINER_TOP_MARGIN,
-                resources.getDimensionPixelSize(R.dimen.mv_tiles_container_top_margin));
+        if (!mIsSurfacePolishEnabled) {
+            mPropertyModel.set(TASKS_SURFACE_BODY_TOP_MARGIN,
+                    resources.getDimensionPixelSize(R.dimen.tasks_surface_body_top_margin));
+        }
         mPropertyModel.set(TAB_SWITCHER_TITLE_TOP_MARGIN,
                 resources.getDimensionPixelSize(R.dimen.tab_switcher_title_top_margin));
+
+        if (mIsSurfacePolishEnabled && !mIsFeedGoneImprovementEnabled) return;
+
+        // TODO(crbug.com/1315676): Clean up this code when the refactor is enabled.
+        mPropertyModel.set(MV_TILES_CONTAINER_TOP_MARGIN,
+                resources.getDimensionPixelSize(R.dimen.mv_tiles_container_top_margin));
 
         // If improving Start surface when Feed is disabled is needed, mvt grid layout (two row) is
         // shown.
@@ -1729,7 +1760,6 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
                 : mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE;
     }
 
-    @VisibleForTesting
     public FeedActionDelegate getFeedActionDelegateForTesting() {
         assert mPropertyModel.get(EXPLORE_SURFACE_COORDINATOR) != null;
         return mPropertyModel.get(EXPLORE_SURFACE_COORDINATOR)
@@ -1746,5 +1776,26 @@ class StartSurfaceMediator implements TabSwitcher.TabSwitcherViewObserver, View.
 
     Runnable getInitializeMVTilesRunnableForTesting() {
         return mInitializeMVTilesRunnable;
+    }
+
+    /**
+     * Update the background color of the start surface based on whether it is polished or not ,
+     * in the incognito mode or non-incognito mode.
+     */
+    @VisibleForTesting
+    void updateBackgroundColor(PropertyModel propertyModel) {
+        @ColorInt
+        int surfaceBackgroundColor;
+        if (mIsSurfacePolishEnabled && !mIsIncognito) {
+            surfaceBackgroundColor = ChromeColors.getSurfaceColor(
+                    mContext, R.dimen.home_surface_background_color_elevation);
+        } else {
+            surfaceBackgroundColor = ChromeColors.getPrimaryBackgroundColor(mContext, mIsIncognito);
+        }
+        propertyModel.set(BACKGROUND_COLOR, surfaceBackgroundColor);
+    }
+
+    void setIsIncognitoForTesting(boolean isIncognito) {
+        mIsIncognito = isIncognito;
     }
 }

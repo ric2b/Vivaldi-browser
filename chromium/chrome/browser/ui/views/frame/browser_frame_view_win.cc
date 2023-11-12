@@ -33,6 +33,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/win/hwnd_metrics.h"
 #include "ui/display/win/dpi.h"
 #include "ui/display/win/screen_win.h"
@@ -176,10 +177,6 @@ int BrowserFrameViewWin::GetTopInset(bool restored) const {
   return ShouldBrowserCustomDrawTitlebar(browser_view())
              ? TitlebarHeight(restored)
              : 0;
-}
-
-int BrowserFrameViewWin::GetThemeBackgroundXInset() const {
-  return 0;
 }
 
 bool BrowserFrameViewWin::HasVisibleBackgroundTabShapes(
@@ -381,8 +378,14 @@ int BrowserFrameViewWin::NonClientHitTest(const gfx::Point& point) {
       point, gfx::Insets::TLBR(top_border_thickness, 0, 0, 0),
       top_border_thickness, kResizeCornerWidth - FrameBorderThickness(),
       frame()->widget_delegate()->CanResize());
+
+  if (window_component != HTNOWHERE) {
+    return window_component;
+  }
+
   // Fall back to the caption if no other component matches.
-  return (window_component == HTNOWHERE) ? HTCAPTION : window_component;
+  TabStripRegionView::ReportCaptionHitTestInReservedGrabHandleSpace(false);
+  return HTCAPTION;
 }
 
 void BrowserFrameViewWin::UpdateWindowIcon() {
@@ -466,12 +469,12 @@ int BrowserFrameViewWin::FrameTopBorderThickness(bool restored) const {
   const bool is_fullscreen =
       (frame()->IsFullscreen() || IsMaximized()) && !restored;
   if (!is_fullscreen) {
-    // Restored windows have a smaller top resize handle than the system
-    // default. When maximized, the OS sizes the window such that the border
-    // extends beyond the screen edges. In that case, we must return the default
-    // value.
-    constexpr int kTopResizeFrameArea = 5;
     if (browser_view()->GetTabStripVisible()) {
+      // Restored windows have a smaller top resize handle than the system
+      // default. When maximized, the OS sizes the window such that the border
+      // extends beyond the screen edges. In that case, we must return the
+      // default value.
+      const int kTopResizeFrameArea = features::IsChromeRefresh2023() ? 1 : 5;
       return kTopResizeFrameArea;
     }
 
@@ -531,6 +534,11 @@ int BrowserFrameViewWin::TopAreaHeight(bool restored) const {
     return top;
   }
 
+  // In Refresh, the tabstrip controls its own top padding.
+  if (features::IsChromeRefresh2023()) {
+    return top;
+  }
+
   // In maximized mode, we do not add any additional thickness to the grab
   // handle above the tabs; just return the frame thickness.
   if (maximized) {
@@ -575,6 +583,15 @@ int BrowserFrameViewWin::TitlebarHeight(bool restored) const {
               ? caption_button_container_->GetPreferredSize().height()
               : TitlebarMaximizedVisualHeight()) +
          FrameTopBorderThickness(false);
+}
+
+int BrowserFrameViewWin::GetFrameHeight() const {
+  if (browser_view()->GetTabStripVisible()) {
+    return browser_view()->tab_strip_region_view()->GetMinimumSize().height() -
+           WindowTopY() - GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP);
+  }
+  return IsMaximized() ? TitlebarMaximizedVisualHeight()
+                       : TitlebarHeight(false);
 }
 
 int BrowserFrameViewWin::WindowTopY() const {
@@ -798,6 +815,9 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
       ShouldBrowserCustomDrawTitlebar(browser_view())
           ? 0
           : width() - frame()->GetMinimizeButtonOffset();
+
+  height = features::IsChromeRefresh2023() ? GetFrameHeight()
+                                           : std::min(GetFrameHeight(), height);
 
   caption_button_container_->SetBounds(
       CaptionButtonsOnLeadingEdge()

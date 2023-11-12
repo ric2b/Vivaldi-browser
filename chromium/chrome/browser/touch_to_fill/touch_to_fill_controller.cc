@@ -5,15 +5,14 @@
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller.h"
 
 #include "base/functional/bind.h"
-#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/password_manager/android/password_manager_launcher_android.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller_delegate.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_view.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_view_factory.h"
+#include "components/password_manager/content/browser/keyboard_replacing_surface_visibility_controller.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/url_formatter/elide_url.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "url/gurl.h"
@@ -41,21 +40,22 @@ std::vector<UiCredential> SortCredentials(
 
 }  // namespace
 
-TouchToFillController::TouchToFillController() = default;
+TouchToFillController::TouchToFillController(
+    base::WeakPtr<
+        password_manager::KeyboardReplacingSurfaceVisibilityController>
+        visibility_controller)
+    : visibility_controller_(visibility_controller) {}
 TouchToFillController::~TouchToFillController() = default;
 
 void TouchToFillController::Show(
     base::span<const UiCredential> credentials,
     base::span<PasskeyCredential> passkey_credentials,
-    std::unique_ptr<TouchToFillControllerDelegate> delegate) {
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordSuggestionBottomSheetV2) &&
-      touch_to_fill_state_ != TouchToFillState::kNone) {
-    return;
-  }
-
+    std::unique_ptr<TouchToFillControllerDelegate> delegate,
+    base::WeakPtr<password_manager::ContentPasswordManagerDriver>
+        frame_driver) {
   DCHECK(!delegate_);
   delegate_ = std::move(delegate);
+  visibility_controller_->SetVisible(std::move(frame_driver));
 
   delegate_->OnShow(credentials, passkey_credentials);
   if (credentials.empty() && passkey_credentials.empty()) {
@@ -86,7 +86,6 @@ void TouchToFillController::Show(
       TouchToFillView::IsOriginSecure(
           network::IsOriginPotentiallyTrustworthy(url::Origin::Create(url))),
       SortCredentials(credentials), passkey_credentials, flags);
-  touch_to_fill_state_ = TouchToFillState::kIsShowing;
 }
 
 void TouchToFillController::OnCredentialSelected(
@@ -138,20 +137,24 @@ gfx::NativeView TouchToFillController::GetNativeView() {
 }
 
 void TouchToFillController::Close() {
-  view_.reset();
-  // Unretained is safe here because TouchToFillController owns the delegate.
-  delegate_->OnDismiss(base::BindOnce(&TouchToFillController::ActionCompleted,
-                                      base::Unretained(this)));
+  // TODO(crbug/1468487). This is a duplicate of `OnDismiss`. Merge the two
+  // functions.
+  OnDismiss();
 }
 
 void TouchToFillController::Reset() {
-  if (touch_to_fill_state_ == TouchToFillState::kIsShowing) {
+  if (!visibility_controller_) {
+    return;
+  }
+  if (visibility_controller_->IsVisible()) {
     Close();
   }
-  touch_to_fill_state_ = TouchToFillState::kNone;
+  visibility_controller_->Reset();
 }
 
 void TouchToFillController::ActionCompleted() {
-  touch_to_fill_state_ = TouchToFillState::kWasShown;
+  if (visibility_controller_) {
+    visibility_controller_->SetShown();
+  }
   delegate_.reset();
 }

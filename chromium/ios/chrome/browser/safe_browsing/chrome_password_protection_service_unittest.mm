@@ -42,10 +42,6 @@
 #import "ui/base/page_transition_types.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using ::testing::_;
 using password_manager::metrics_util::PasswordType;
 using safe_browsing::LoginReputationClientRequest;
@@ -205,7 +201,7 @@ class ChromePasswordProtectionServiceTest : public PlatformTest {
   CoreAccountInfo SetPrimaryAccount(const std::string& email) {
     identity_test_env_.MakeAccountAvailable(email);
     return identity_test_env_.SetPrimaryAccount(email,
-                                                signin::ConsentLevel::kSync);
+                                                signin::ConsentLevel::kSignin);
   }
 
   void SetUpSyncAccount(const std::string& hosted_domain,

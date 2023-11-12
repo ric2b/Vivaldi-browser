@@ -518,7 +518,7 @@ TYPED_TEST(CommonStringPieceTest, CheckCustom) {
   std::basic_string<TypeParam> s1(TestFixture::as_string("123"));
   s1 += static_cast<TypeParam>('\0');
   s1 += TestFixture::as_string("456");
-  BasicStringPiece<TypeParam> b(s1);
+  [[maybe_unused]] BasicStringPiece<TypeParam> b(s1);
   BasicStringPiece<TypeParam> e;
   std::basic_string<TypeParam> s2;
 
@@ -565,7 +565,7 @@ TEST(StringPieceTest, CheckCustom) {
   std::string s1("123");
   s1 += '\0';
   s1 += "456";
-  StringPiece b(s1);
+  [[maybe_unused]] StringPiece b(s1);
   StringPiece e;
   std::string s2;
 
@@ -684,6 +684,7 @@ TEST(StringPieceTest, ConstexprCtor) {
   }
 }
 
+#if defined(_LIBCPP_ENABLE_ASSERTIONS)
 TEST(StringPieceTest, OutOfBoundsDeath) {
   {
     constexpr StringPiece piece;
@@ -725,6 +726,7 @@ TEST(StringPieceTest, InvalidLengthDeath) {
   int length = -1;
   ASSERT_DEATH_IF_SUPPORTED({ StringPiece piece("hello", length); }, "");
 }
+#endif  // defined(_LIBCPP_ENABLE_ASSERTIONS)
 
 TEST(StringPieceTest, ConstexprData) {
   {

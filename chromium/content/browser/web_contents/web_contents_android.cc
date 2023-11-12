@@ -888,4 +888,9 @@ bool WebContentsAndroid::NeedToFireBeforeUnloadOrUnloadEvents(JNIEnv* env) {
   return web_contents_->NeedToFireBeforeUnloadOrUnloadEvents();
 }
 
+// Vivaldi
+bool WebContentsAndroid::IsScreenLockActive() {
+  return Java_WebContentsImpl_isScreenLockActive(AttachCurrentThread(), obj_);
+}
+
 }  // namespace content

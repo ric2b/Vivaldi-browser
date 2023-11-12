@@ -6,13 +6,15 @@
 
 #import <CommonCrypto/CommonDigest.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/task/thread_pool.h"
 #import "base/threading/scoped_blocking_call.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/common/app_group/app_group_constants.h"
 #import "ios/chrome/common/credential_provider/archivable_credential.h"
 #import "ios/chrome/common/credential_provider/archivable_credential_store.h"
@@ -21,10 +23,6 @@
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "net/base/mac/url_conversions.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using base::SysUTF16ToNSString;
 using base::UTF8ToUTF16;
@@ -63,16 +61,16 @@ NSString* GetFaviconFileKey(const GURL& url) {
 
 void SaveFaviconToSharedAppContainer(FaviconAttributes* attributes,
                                      NSString* filename) {
-  NSError* error = nil;
-  NSData* data = [NSKeyedArchiver archivedDataWithRootObject:attributes
-                                       requiringSecureCoding:NO
-                                                       error:&error];
-  if (!data || error) {
-    DLOG(WARNING) << base::SysNSStringToUTF8([error description]);
-    return;
-  }
-
   base::OnceCallback<void()> write_image = base::BindOnce(^{
+    NSError* error = nil;
+    NSData* data = [NSKeyedArchiver archivedDataWithRootObject:attributes
+                                         requiringSecureCoding:NO
+                                                         error:&error];
+    if (!data || error) {
+      DLOG(WARNING) << base::SysNSStringToUTF8([error description]);
+      return;
+    }
+
     base::ScopedBlockingCall scoped_blocking_call(
         FROM_HERE, base::BlockingType::WILL_BLOCK);
     NSURL* shared_favicon_attributes_folder_url =
@@ -95,7 +93,9 @@ void SaveFaviconToSharedAppContainer(FaviconAttributes* attributes,
     [data writeToURL:file_url atomically:YES];
   });
   base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      FROM_HERE,
+      {base::MayBlock(), base::ThreadPolicy::PREFER_BACKGROUND,
+       base::TaskPriority::BEST_EFFORT},
       std::move(write_image));
 }
 
@@ -116,7 +116,7 @@ bool ShouldContinueFetchingFavicon() {
 void ContinueFetchingFavicon(base::WeakPtr<FaviconLoader> weak_favicon_loader,
                              const GURL& site_url,
                              NSString* filename,
-                             bool sync_enabled,
+                             bool fallback_to_google_server,
                              bool continue_fetching) {
   FaviconLoader* favicon_loader = weak_favicon_loader.get();
   if (!continue_fetching || !favicon_loader) {
@@ -125,8 +125,8 @@ void ContinueFetchingFavicon(base::WeakPtr<FaviconLoader> weak_favicon_loader,
   }
   // Fallback to Google server for synced user only.
   favicon_loader->FaviconForPageUrl(
-      site_url, kDesiredMediumFaviconSizePt, kMinFaviconSizePt, sync_enabled,
-      ^(FaviconAttributes* attributes) {
+      site_url, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
+      fallback_to_google_server, ^(FaviconAttributes* attributes) {
         SaveFaviconToSharedAppContainer(attributes, filename);
       });
 }
@@ -135,25 +135,26 @@ void FetchFaviconForURLToPath(FaviconLoader* favicon_loader,
                               const GURL& site_url,
                               NSString* filename,
                               bool skip_max_verification,
-                              bool sync_enabled) {
+                              bool fallback_to_google_server) {
   DCHECK(favicon_loader);
   DCHECK(filename);
   if (skip_max_verification) {
     ContinueFetchingFavicon(favicon_loader->AsWeakPtr(), site_url, filename,
-                            sync_enabled, /* continue_fetching */ YES);
+                            fallback_to_google_server,
+                            /* continue_fetching */ YES);
   } else {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock()},
         base::BindOnce(&ShouldContinueFetchingFavicon),
         base::BindOnce(&ContinueFetchingFavicon, favicon_loader->AsWeakPtr(),
-                       site_url, filename, sync_enabled));
+                       site_url, filename, fallback_to_google_server));
   }
 }
 
 // Gets the last sync date for favicons in the app group storage.
 base::Time GetFaviconsLastSyncDate() {
   NSDate* last_sync_date =
-      base::mac::ObjCCast<NSDate>([[NSUserDefaults standardUserDefaults]
+      base::apple::ObjCCast<NSDate>([[NSUserDefaults standardUserDefaults]
           objectForKey:kFaviconsLastSyncDatePrefKey]);
   // If no value stored in the NSUserDefaults, consider that the last sync
   // happened forever ago.
@@ -212,7 +213,8 @@ void CleanUpFavicons(NSSet* excess_favicons_filenames) {
   SetFaviconsLastSyncDate(base::Time::Now());
 }
 
-void UpdateFaviconsStorage(FaviconLoader* favicon_loader, bool sync_enabled) {
+void UpdateFaviconsStorage(FaviconLoader* favicon_loader,
+                           bool fallback_to_google_server) {
   // Verify if the app group storage for favicons needs to be synced and
   // cleaned up by checking the last sync date.
   const base::TimeDelta time_elapsed_since_last_sync =
@@ -252,6 +254,10 @@ void UpdateFaviconsStorage(FaviconLoader* favicon_loader, bool sync_enabled) {
 
   for (id<Credential> credential : all_credentials_rank) {
     GURL url = GURL(base::SysNSStringToUTF8(credential.serviceIdentifier));
+    if (!url.is_valid()) {
+      // Skip fetching the favicon for credential with invalid URL.
+      continue;
+    }
     NSString* filename = credential.favicon;
     if (!credential.favicon) {
       // Add favicon name to the credential and update the store.
@@ -276,7 +282,8 @@ void UpdateFaviconsStorage(FaviconLoader* favicon_loader, bool sync_enabled) {
     // Fetch the favicon and save it to the app group storage.
     if (filename) {
       FetchFaviconForURLToPath(favicon_loader, url, filename,
-                               /*skip_max_verification=*/YES, sync_enabled);
+                               /*skip_max_verification=*/YES,
+                               fallback_to_google_server);
 
       // Remove file name duplicate because it is part of the top
       // `kMaxNumberOfFavicons` credentials used by the user.
@@ -293,4 +300,16 @@ void UpdateFaviconsStorage(FaviconLoader* favicon_loader, bool sync_enabled) {
         FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(&CleanUpFavicons, excess_favicons_filenames));
   }];
+}
+
+void UpdateFaviconsStorageForBrowserState(
+    base::WeakPtr<ChromeBrowserState> weak_browser_state,
+    bool fallback_to_google_server) {
+  ChromeBrowserState* browser_state = weak_browser_state.get();
+  if (!browser_state) {
+    return;
+  }
+  UpdateFaviconsStorage(
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(browser_state),
+      fallback_to_google_server);
 }

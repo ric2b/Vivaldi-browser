@@ -23,6 +23,8 @@
 #include "ash/shell.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/window_state.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -42,6 +44,7 @@
 #include "components/exo/wayland/wayland_display_observer.h"
 #include "components/exo/wayland/wl_output.h"
 #include "components/exo/wayland/xdg_shell.h"
+#include "components/version_info/version_info.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
@@ -931,6 +934,14 @@ void AuraToplevel::AckRotateFocus(uint32_t serial, uint32_t h) {
   shell_surface_->AckRotateFocus(serial, handled);
 }
 
+void AuraToplevel::SetCanMaximize(bool can_maximize) {
+  shell_surface_->SetCanMaximize(can_maximize);
+}
+
+void AuraToplevel::SetCanFullscreen(bool can_fullscreen) {
+  shell_surface_->SetCanFullscreen(can_fullscreen);
+}
+
 void AuraToplevel::IntentToSnap(uint32_t snap_direction) {
   switch (snap_direction) {
     case ZAURA_SURFACE_SNAP_DIRECTION_NONE:
@@ -1155,6 +1166,7 @@ const uint32_t kFixedBugIds[] = {
 // for the aura shell interface.
 class WaylandAuraShell : public ash::DesksController::Observer,
                          public ash::TabletModeObserver,
+                         public ash::OverviewObserver,
                          public SeatObserver {
  public:
   WaylandAuraShell(wl_resource* aura_shell_resource, Display* display)
@@ -1162,12 +1174,19 @@ class WaylandAuraShell : public ash::DesksController::Observer,
     WMHelper* helper = WMHelper::GetInstance();
     helper->AddTabletModeObserver(this);
     ash::DesksController::Get()->AddObserver(this);
+    ash::Shell::Get()->overview_controller()->AddObserver(this);
     if (wl_resource_get_version(aura_shell_resource_) >=
         ZAURA_SHELL_LAYOUT_MODE_SINCE_VERSION) {
       auto layout_mode = helper->InTabletMode()
                              ? ZAURA_SHELL_LAYOUT_MODE_TABLET
                              : ZAURA_SHELL_LAYOUT_MODE_WINDOWED;
       zaura_shell_send_layout_mode(aura_shell_resource_, layout_mode);
+    }
+    if (wl_resource_get_version(aura_shell_resource_) >=
+        ZAURA_SHELL_COMPOSITOR_VERSION_SINCE_VERSION) {
+      const base::StringPiece ash_version = version_info::GetVersionNumber();
+      zaura_shell_send_compositor_version(aura_shell_resource_,
+                                          ash_version.data());
     }
     if (wl_resource_get_version(aura_shell_resource_) >=
         ZAURA_SHELL_BUG_FIX_SINCE_VERSION) {
@@ -1179,12 +1198,14 @@ class WaylandAuraShell : public ash::DesksController::Observer,
 
     OnDesksChanged();
     OnDeskActivationChanged();
+    OnOverviewModeChanged();
   }
   WaylandAuraShell(const WaylandAuraShell&) = delete;
   WaylandAuraShell& operator=(const WaylandAuraShell&) = delete;
   ~WaylandAuraShell() override {
     WMHelper* helper = WMHelper::GetInstance();
     helper->RemoveTabletModeObserver(this);
+    ash::Shell::Get()->overview_controller()->RemoveObserver(this);
     ash::DesksController::Get()->RemoveObserver(this);
     if (seat_)
       seat_->RemoveObserver(this);
@@ -1193,27 +1214,26 @@ class WaylandAuraShell : public ash::DesksController::Observer,
   // Overridden from ash::TabletModeObserver:
   void OnTabletModeStarted() override {
     if (wl_resource_get_version(aura_shell_resource_) >=
-        ZAURA_SHELL_LAYOUT_MODE_SINCE_VERSION)
+        ZAURA_SHELL_LAYOUT_MODE_SINCE_VERSION) {
       zaura_shell_send_layout_mode(aura_shell_resource_,
                                    ZAURA_SHELL_LAYOUT_MODE_TABLET);
+      wl_client_flush(wl_resource_get_client(aura_shell_resource_));
+    }
   }
   void OnTabletModeEnding() override {
     if (wl_resource_get_version(aura_shell_resource_) >=
-        ZAURA_SHELL_LAYOUT_MODE_SINCE_VERSION)
+        ZAURA_SHELL_LAYOUT_MODE_SINCE_VERSION) {
       zaura_shell_send_layout_mode(aura_shell_resource_,
                                    ZAURA_SHELL_LAYOUT_MODE_WINDOWED);
+      wl_client_flush(wl_resource_get_client(aura_shell_resource_));
+    }
   }
   void OnTabletModeEnded() override {}
 
-  // Overridden from SeatObserver:
-  void OnSurfaceFocused(Surface* gained_focus,
-                        Surface* lost_focus,
-                        bool has_focused_surface) override {
-    FocusedSurfaceChanged(gained_focus, lost_focus, has_focused_surface);
-  }
-
   // ash::DesksController::Observer:
-  void OnDeskAdded(const ash::Desk* desk) override { OnDesksChanged(); }
+  void OnDeskAdded(const ash::Desk* desk, bool from_undo) override {
+    OnDesksChanged();
+  }
   void OnDeskRemoved(const ash::Desk* desk) override { OnDesksChanged(); }
   void OnDeskReordered(int old_index, int new_index) override {
     OnDesksChanged();
@@ -1227,6 +1247,25 @@ class WaylandAuraShell : public ash::DesksController::Observer,
   void OnDeskNameChanged(const ash::Desk* desk,
                          const std::u16string& new_name) override {
     OnDesksChanged();
+  }
+
+  // ash::OverviewObserver:
+  void OnOverviewModeStartingAnimationComplete(bool canceled) override {
+    if (!canceled) {
+      OnOverviewModeChanged();
+    }
+  }
+  void OnOverviewModeEndingAnimationComplete(bool canceled) override {
+    if (!canceled) {
+      OnOverviewModeChanged();
+    }
+  }
+
+  // SeatObserver:
+  void OnSurfaceFocused(Surface* gained_focus,
+                        Surface* lost_focus,
+                        bool has_focused_surface) override {
+    FocusedSurfaceChanged(gained_focus, lost_focus, has_focused_surface);
   }
 
  private:
@@ -1259,6 +1298,21 @@ class WaylandAuraShell : public ash::DesksController::Observer,
     zaura_shell_send_desk_activation_changed(
         aura_shell_resource_,
         ash::DesksController::Get()->GetActiveDeskIndex());
+  }
+
+  void OnOverviewModeChanged() {
+    if (wl_resource_get_version(aura_shell_resource_) <
+        ZAURA_SHELL_SET_OVERVIEW_MODE_SINCE_VERSION) {
+      return;
+    }
+
+    const bool in_overview =
+        ash::Shell::Get()->overview_controller()->InOverviewSession();
+    if (in_overview) {
+      zaura_shell_send_set_overview_mode(aura_shell_resource_);
+    } else {
+      zaura_shell_send_unset_overview_mode(aura_shell_resource_);
+    }
   }
 
   void FocusedSurfaceChanged(Surface* gained_active_surface,
@@ -1304,7 +1358,7 @@ class WaylandAuraShell : public ash::DesksController::Observer,
   }
 
   // The aura shell resource associated with observer.
-  const raw_ptr<wl_resource, ExperimentalAsh> aura_shell_resource_;
+  const raw_ptr<wl_resource, DanglingUntriaged> aura_shell_resource_;
   const raw_ptr<Seat, ExperimentalAsh> seat_;
 
   bool last_has_focused_client_ = false;
@@ -1511,6 +1565,25 @@ void aura_toplevel_ack_rotate_focus(wl_client* client,
   GetUserDataAs<AuraToplevel>(resource)->AckRotateFocus(serial, handled);
 }
 
+void aura_toplevel_set_can_maximize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->SetCanMaximize(true);
+}
+
+void aura_toplevel_unset_can_maximize(wl_client* client,
+                                      wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->SetCanMaximize(false);
+}
+
+void aura_toplevel_set_can_fullscreen(wl_client* client,
+                                      wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->SetCanFullscreen(true);
+}
+
+void aura_toplevel_unset_can_fullscreen(wl_client* client,
+                                        wl_resource* resource) {
+  GetUserDataAs<AuraToplevel>(resource)->SetCanFullscreen(false);
+}
+
 const struct zaura_toplevel_interface aura_toplevel_implementation = {
     aura_toplevel_set_orientation_lock,
     aura_toplevel_surface_submission_in_pixel_coordinates,
@@ -1538,6 +1611,10 @@ const struct zaura_toplevel_interface aura_toplevel_implementation = {
     aura_toplevel_set_shape,
     aura_toplevel_set_top_inset,
     aura_toplevel_ack_rotate_focus,
+    aura_toplevel_set_can_maximize,
+    aura_toplevel_unset_can_maximize,
+    aura_toplevel_set_can_fullscreen,
+    aura_toplevel_unset_can_fullscreen,
 };
 
 void aura_popup_surface_submission_in_pixel_coordinates(wl_client* client,

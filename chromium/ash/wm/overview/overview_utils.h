@@ -8,15 +8,11 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/wm/overview/overview_highlightable_view.h"
+#include "ash/wm/overview/overview_focusable_view.h"
 #include "ash/wm/overview/overview_types.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "ui/compositor/layer_type.h"
-#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 
 namespace aura {
@@ -28,6 +24,13 @@ class Widget;
 }  // namespace views
 
 namespace ash {
+
+// Returns true if an overview session is active.
+bool IsInOverviewSession();
+
+// Returns the overview session if overview mode is active, otherwise returns
+// nullptr.
+ASH_EXPORT OverviewSession* GetOverviewSession();
 
 // Returns true if `window` can cover available workspace.
 bool CanCoverAvailableWorkspace(aura::Window* window);
@@ -91,10 +94,7 @@ bool ShouldUseTabletModeGridLayout();
 // returns the same size for SizeF regardless of its origin.
 ASH_EXPORT gfx::Rect ToStableSizeRoundedRect(const gfx::RectF& rect);
 
-void UpdateOverviewHighlightForFocus(OverviewHighlightableView* target_view);
-
-void UpdateOverviewHighlightForFocusAndSpokenFeedback(
-    OverviewHighlightableView* target_view);
+void MoveFocusToView(OverviewFocusableView* target_view);
 
 }  // namespace ash
 

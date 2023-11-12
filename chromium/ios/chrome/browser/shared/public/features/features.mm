@@ -10,10 +10,6 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 BASE_FEATURE(kDefaultBrowserBlueDotPromo,
              "DefaultBrowserBlueDotPromo",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -33,11 +29,11 @@ BASE_FEATURE(kIOSPaymentsBottomSheet,
              "IOSPaymentsBottomSheet",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kExpandedTabStrip,
-             "ExpandedTabStrip",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kTestFeature, "TestFeature", base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSafetyCheckMagicStack,
+             "SafetyCheckMagicStack",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSharedHighlightingIOS,
              "SharedHighlightingIOS",
@@ -61,6 +57,31 @@ BASE_FEATURE(kIOSBrowserEditMenuMetrics,
              "IOSBrowserEditMenuMetrics",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kNonModalDefaultBrowserPromoCooldownRefactor,
+             "NonModalDefaultBrowserPromoCooldownRefactor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<int>
+    kNonModalDefaultBrowserPromoCooldownRefactorParam{
+        &kNonModalDefaultBrowserPromoCooldownRefactor,
+        /*name=*/"cooldown-days", /*default_value=*/14};
+
+BASE_FEATURE(kDefaultBrowserGenericTailoredPromoTrain,
+             "DefaultBrowserGenericTailoredPromoTrain",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<DefaultBrowserPromoGenericTailoredArm>::Option
+    kDefaultBrowserPromoGenericTailoredArmOptions[] = {
+        {DefaultBrowserPromoGenericTailoredArm::kOnlyGeneric, "only-generic"},
+        {DefaultBrowserPromoGenericTailoredArm::kOnlyTailored,
+         "only-tailored"}};
+
+const base::FeatureParam<DefaultBrowserPromoGenericTailoredArm>
+    kDefaultBrowserPromoGenericTailoredParam{
+        &kDefaultBrowserGenericTailoredPromoTrain, "experiment-arm",
+        DefaultBrowserPromoGenericTailoredArm::kOnlyGeneric,
+        &kDefaultBrowserPromoGenericTailoredArmOptions};
+
 BASE_FEATURE(kDefaultBrowserRefactoringPromoManager,
              "DefaultBrowserRefactoringPromoManager",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -68,10 +89,6 @@ BASE_FEATURE(kDefaultBrowserRefactoringPromoManager,
 BASE_FEATURE(kDefaultBrowserVideoPromo,
              "DefaultBrowserVideoPromo",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kIOSCustomBrowserEditMenu,
-             "IOSCustomBrowserEditMenu",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kIOSEditMenuPartialTranslateNoIncognitoParam[] =
     "IOSEditMenuPartialTranslateNoIncognitoParam";
@@ -107,8 +124,7 @@ BASE_FEATURE(kIOSEditMenuSearchWith,
 
 bool IsSearchWithEnabled() {
   if (@available(iOS 16, *)) {
-    return base::FeatureList::IsEnabled(kIOSEditMenuSearchWith) &&
-           base::FeatureList::IsEnabled(kIOSCustomBrowserEditMenu);
+    return base::FeatureList::IsEnabled(kIOSEditMenuSearchWith);
   }
   return false;
 }
@@ -121,21 +137,21 @@ BASE_FEATURE(kIOSNewOmniboxImplementation,
              "kIOSNewOmniboxImplementation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kIOSLocationBarUseNativeContextMenu,
-             "IOSLocationBarUseNativeContextMenu",
+BASE_FEATURE(kIOSLensUseDirectUpload,
+             "IOSLensUseDirectUpload",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInHomeScreenWidget,
              "EnableLensInHomeScreenWidget",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInKeyboard,
              "EnableLensInKeyboard",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInNTP,
              "EnableLensInNTP",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensContextMenuAltText,
              "EnableLensContextMenuAltText",
@@ -145,9 +161,13 @@ BASE_FEATURE(kEnableLensInOmniboxCopiedImage,
              "EnableLensInOmniboxCopiedImage",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableTraitCollectionWorkAround,
+             "EnableTraitCollectionWorkAround",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnableUIButtonConfiguration,
              "EnableUIButtonConfiguration",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsUIButtonConfigurationEnabled() {
   return base::FeatureList::IsEnabled(kEnableUIButtonConfiguration);
@@ -161,25 +181,9 @@ BASE_FEATURE(kEnableShortenedPasswordAutoFillInstruction,
              "EnableShortenedPasswordAutoFillInstruction",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSFSymbolsFollowUp,
-             "SFSymbolsFollowUp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableExpKitAppleCalendar,
              "EnableExpKitAppleCalendar",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kTabGridRecencySort,
-             "TabGridRecencySort",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool IsTabGridSortedByRecency() {
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    return false;
-  }
-
-  return base::FeatureList::IsEnabled(kTabGridRecencySort);
-}
 
 BASE_FEATURE(kTabGridNewTransitions,
              "TabGridNewTransitions",
@@ -193,9 +197,18 @@ BASE_FEATURE(kMultilineFadeTruncatingLabel,
              "MultilineFadeTruncatingLabel",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kNonModalDefaultBrowserPromoImpressionLimit,
+             "NonModalDefaultBrowserPromoImpressionLimit",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<int>
+    kNonModalDefaultBrowserPromoImpressionLimitParam{
+        &kNonModalDefaultBrowserPromoImpressionLimit,
+        /*name=*/"impression-limit", /*default_value=*/3};
+
 BASE_FEATURE(kNotificationSettingsMenuItem,
              "NotificationSettingsMenuItem",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSpotlightOpenTabsSource,
              "SpotlightOpenTabsSource",
@@ -213,42 +226,22 @@ bool IsConsistencyNewAccountInterfaceEnabled() {
   return base::FeatureList::IsEnabled(kConsistencyNewAccountInterface);
 }
 
-BASE_FEATURE(kAddToHomeScreen,
-             "AddToHomeScreen",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-const char kAddToHomeScreenDisableIncognitoParam[] =
-    "AddToHomeScreenDisableIncognitoParam";
-
-bool ShouldAddToHomeScreen(bool in_incognito) {
-  if (!base::FeatureList::IsEnabled(kAddToHomeScreen)) {
-    return false;
-  }
-  if (!in_incognito) {
-    return true;
-  }
-  return !base::GetFieldTrialParamByFeatureAsBool(
-      kAddToHomeScreen, kAddToHomeScreenDisableIncognitoParam, true);
-}
-
 BASE_FEATURE(kNewNTPOmniboxLayout,
              "kNewNTPOmniboxLayout",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableEmailInBookmarksReadingListSnackbar,
-             "EnableEmailInBookmarksReadingListSnackbar",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kIndicateSyncErrorInOverflowMenu,
-             "IndicateSyncErrorInOverflowMenu",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsIndicateSyncErrorInOverflowMenuEnabled() {
-  return base::FeatureList::IsEnabled(kIndicateSyncErrorInOverflowMenu);
-}
 
 BASE_FEATURE(kBottomOmniboxSteadyState,
              "BottomOmniboxSteadyState",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kBottomOmniboxDefaultSettingParam[] =
+    "BottomOmniboxDefaultSettingParam";
+const char kBottomOmniboxDefaultSettingParamTop[] = "Top";
+const char kBottomOmniboxDefaultSettingParamBottom[] = "Bottom";
+const char kBottomOmniboxDefaultSettingParamSafariSwitcher[] =
+    "BottomSafariSwitcher";
+BASE_FEATURE(kBottomOmniboxDefaultSetting,
+             "BottomOmniboxDefaultSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsBottomOmniboxSteadyStateEnabled() {
@@ -271,14 +264,15 @@ BASE_FEATURE(kOnlyAccessClipboardAsync,
 
 BASE_FEATURE(kHideSettingsSyncPromo,
              "HideSettingsSyncPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment,
              "DefaultBrowserTriggerCriteriaExperiment",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const char kDefaultBrowserTriggerOnOmniboxCopyPaste[] =
-    "trigger_on_omnibox_copy_paste";
+BASE_FEATURE(kFullScreenPromoOnOmniboxCopyPaste,
+             "FullScreenPromoOnOmniboxCopyPaste",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kThemeColorInToolbar,
              "ThemeColorInToolbar",
@@ -286,4 +280,20 @@ BASE_FEATURE(kThemeColorInToolbar,
 
 BASE_FEATURE(kTabGridRefactoring,
              "TabGridRefactoring",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsSafetyCheckMagicStackEnabled() {
+  return base::FeatureList::IsEnabled(kSafetyCheckMagicStack);
+}
+
+BASE_FEATURE(kBlockSimultaneousCellSelectionKillSwitch,
+             "BlockSimultaneousCellSelectionKillSwitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIOSSaveToPhotos,
+             "IOSSaveToPhotos",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSettingsWillBeDismissedBugFixKillSwitch,
+             "SettingsWillBeDismissedBugFixKillSwitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);

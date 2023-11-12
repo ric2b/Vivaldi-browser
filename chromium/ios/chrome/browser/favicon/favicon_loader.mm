@@ -6,8 +6,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/favicon/core/fallback_url_util.h"
 #import "components/favicon/core/large_icon_service.h"
@@ -24,10 +24,6 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 const CGFloat kFallbackIconDefaultTextColor = 0xAAAAAA;

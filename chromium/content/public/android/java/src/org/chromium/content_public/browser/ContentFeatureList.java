@@ -15,16 +15,21 @@ public class ContentFeatureList {
 
     // Alphabetical:
     public static final String ACCESSIBILITY_PAGE_ZOOM = "AccessibilityPageZoom";
+    // Field trial param associated with the Page Zoom feature.
+    public static final String ACCESSIBILITY_PAGE_ZOOM_PARAM = "AdjustForOSLevel";
 
     public static final String ACCESSIBILITY_PERFORMANCE_FILTERING =
             "AccessibilityPerformanceFiltering";
+
+    public static final String ACCESSIBILITY_PERFORMANCE_TESTING =
+            "AccessibilityPerformanceTesting";
 
     public static final String AUTO_DISABLE_ACCESSIBILITY_V2 = "AutoDisableAccessibilityV2";
 
     public static final String BACKGROUND_MEDIA_RENDERER_HAS_MODERATE_BINDING =
             "BackgroundMediaRendererHasModerateBinding";
 
-    public static final String ON_DEMAND_ACCESSIBILITY_EVENTS = "OnDemandAccessibilityEvents";
+    public static final String MOUSE_AND_TRACKPAD_DROPDOWN_MENU = "MouseAndTrackpadDropdownMenu";
 
     public static final String OPTIMIZE_IMM_HIDE_CALLS = "OptimizeImmHideCalls";
 
@@ -33,7 +38,10 @@ public class ContentFeatureList {
 
     public static final String REQUEST_DESKTOP_SITE_ADDITIONS = "RequestDesktopSiteAdditions";
 
-    public static final String REQUEST_DESKTOP_SITE_EXCEPTIONS = "RequestDesktopSiteExceptions";
+    public static final String REQUEST_DESKTOP_SITE_WINDOW_SETTING =
+            "RequestDesktopSiteWindowSetting";
+
+    public static final String SMART_ZOOM = "SmartZoom";
 
     public static final String WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND =
             "WebBluetoothNewPermissionsBackend";

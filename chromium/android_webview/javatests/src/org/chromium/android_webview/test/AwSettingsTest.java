@@ -59,6 +59,7 @@ import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
 import org.chromium.net.test.util.TestWebServer;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 
@@ -1334,7 +1335,10 @@ public class AwSettingsTest {
 
         @Override
         protected void setCurrentValue(Boolean value) {
-            mExpectScaleChange = mAwSettings.getLoadWithOverviewMode() != value;
+            // On tablets, viewport width will default to device width without viewport tag; so the
+            // page will not have any overflowing content to zoom out.
+            mExpectScaleChange = mAwSettings.getLoadWithOverviewMode() != value
+                    && (!isTablet() || mWithViewPortTag);
             if (mExpectScaleChange) {
                 mOnScaleChangedCallCount =
                         mContentViewClient.getOnScaleChangedHelper().getCallCount();
@@ -1351,7 +1355,9 @@ public class AwSettingsTest {
                 mExpectScaleChange = false;
             }
             float currentScale = mActivityTestRule.getScaleOnUiThread(mAwContents);
-            if (value) {
+            // On tablets, viewport width will default to device width without viewport tag; so the
+            // page will not have any overflowing content to zoom out.
+            if (value && (!isTablet() || mWithViewPortTag)) {
                 Assert.assertTrue("Expected: " + currentScale + " < " + DEFAULT_PAGE_SCALE,
                         currentScale < DEFAULT_PAGE_SCALE);
             } else {
@@ -1942,17 +1948,13 @@ public class AwSettingsTest {
 
         AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
 
-        try {
-            // Create url with echoheader echoing the User-Agent header in the the html body.
-            String url = testServer.getURL("/echoheader?User-Agent");
-            settings.setUserAgentString(customUserAgentString);
-            mActivityTestRule.loadUrlSync(awContents, contentClient.getOnPageFinishedHelper(), url);
-            String userAgent =
-                    mActivityTestRule.getJavaScriptResultBodyTextContent(awContents, contentClient);
-            Assert.assertEquals(customUserAgentString, userAgent);
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        // Create url with echoheader echoing the User-Agent header in the the html body.
+        String url = testServer.getURL("/echoheader?User-Agent");
+        settings.setUserAgentString(customUserAgentString);
+        mActivityTestRule.loadUrlSync(awContents, contentClient.getOnPageFinishedHelper(), url);
+        String userAgent =
+                mActivityTestRule.getJavaScriptResultBodyTextContent(awContents, contentClient);
+        Assert.assertEquals(customUserAgentString, userAgent);
     }
 
     @Test
@@ -1974,19 +1976,21 @@ public class AwSettingsTest {
 
         AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
 
-        try {
-            String targetUrl = testServer.getURL("/android_webview/test/data/fetch-echo.html")
-                    + "?url="
-                    + URLEncoder.encode("/echoheader?Sec-CH-UA&Sec-CH-UA-Mobile&User-Agent");
-            mActivityTestRule.loadUrlSync(
-                    awContents, contentClient.getOnPageFinishedHelper(), targetUrl);
-            AwActivityTestRule.pollInstrumentationThread(
-                    () -> !"running".equals(mActivityTestRule.getTitleOnUiThread(awContents)));
-            Assert.assertEquals("?0 " + customUserAgentString,
-                    mActivityTestRule.getTitleOnUiThread(awContents));
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        String targetUrl = testServer.getURL("/android_webview/test/data/fetch-echo.html") + "?url="
+                + URLEncoder.encode("/echoheader?Sec-CH-UA&Sec-CH-UA-Platform&User-Agent");
+        mActivityTestRule.loadUrlSync(
+                awContents, contentClient.getOnPageFinishedHelper(), targetUrl);
+        AwActivityTestRule.pollInstrumentationThread(
+                () -> !"running".equals(mActivityTestRule.getTitleOnUiThread(awContents)));
+
+        String actualTitleContent = mActivityTestRule.getTitleOnUiThread(awContents);
+        // Here we can't directly validate the exact value for the client hints: Sec-CH-UA and
+        // Sec-CH-UA-Platform since they change over release version. Try best to validate the value
+        // ends with platform string and user-agent string.
+        Assert.assertTrue(actualTitleContent.endsWith(
+                /*sec-ch-ua-platform=*/"\"Android\" " + /*user-agent=*/customUserAgentString));
+        // Sec-ch-ua value has brand AndroidWebview.
+        Assert.assertTrue(actualTitleContent.indexOf("\"Android WebView\";v=\"") != -1);
     }
 
     @Test
@@ -2009,27 +2013,21 @@ public class AwSettingsTest {
 
         AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
 
-        try {
-            String targetUrl = testServer.getURL("/android_webview/test/data/fetch-echo.html")
-                    + "?url="
-                    + URLEncoder.encode(
-                            "/echoheader?Sec-CH-UA-Mobile&Sec-CH-UA-Platform&User-Agent");
-            mActivityTestRule.loadUrlSync(
-                    awContents, contentClient.getOnPageFinishedHelper(), targetUrl);
-            AwActivityTestRule.pollInstrumentationThread(
-                    () -> !"running".equals(mActivityTestRule.getTitleOnUiThread(awContents)));
-            // Make sure the Sec-CH-UA-Mobile, Sec-CH-UA-Platform client hint returns the correct
-            // value. If use the mobile user agent, Sec-CH-UA-Mobile should return true, otherwise
-            // false.
-            if (customUserAgentString.indexOf(" Mobile") != -1) {
-                Assert.assertEquals("?1 \"Android\" " + customUserAgentString,
-                        mActivityTestRule.getTitleOnUiThread(awContents));
-            } else {
-                Assert.assertEquals("?0 \"Android\" " + customUserAgentString,
-                        mActivityTestRule.getTitleOnUiThread(awContents));
-            }
-        } finally {
-            testServer.stopAndDestroyServer();
+        String targetUrl = testServer.getURL("/android_webview/test/data/fetch-echo.html") + "?url="
+                + URLEncoder.encode("/echoheader?Sec-CH-UA-Mobile&Sec-CH-UA-Platform&User-Agent");
+        mActivityTestRule.loadUrlSync(
+                awContents, contentClient.getOnPageFinishedHelper(), targetUrl);
+        AwActivityTestRule.pollInstrumentationThread(
+                () -> !"running".equals(mActivityTestRule.getTitleOnUiThread(awContents)));
+        // Make sure the Sec-CH-UA-Mobile, Sec-CH-UA-Platform client hint returns the correct
+        // value. If use the mobile user agent, Sec-CH-UA-Mobile should return true, otherwise
+        // false.
+        if (customUserAgentString.indexOf(" Mobile") != -1) {
+            Assert.assertEquals("?1 \"Android\" " + customUserAgentString,
+                    mActivityTestRule.getTitleOnUiThread(awContents));
+        } else {
+            Assert.assertEquals("?0 \"Android\" " + customUserAgentString,
+                    mActivityTestRule.getTitleOnUiThread(awContents));
         }
     }
 
@@ -3032,7 +3030,13 @@ public class AwSettingsTest {
         mActivityTestRule.loadDataSync(
                 awContents, onPageFinishedHelper, pageNoViewport, "text/html", false);
         actualWidth = Integer.parseInt(mActivityTestRule.getTitleOnUiThread(awContents));
-        Assert.assertTrue("Expected: >= 980 , Actual: " + actualWidth, actualWidth >= 980);
+        if (isTablet()) {
+            // On tablets, viewport width will default to device width without viewport tag.
+            Assert.assertTrue("Expected: " + displayWidth + ", Actual: " + actualWidth,
+                    Math.abs(displayWidth - actualWidth) <= 1);
+        } else {
+            Assert.assertTrue("Expected: >= 980 , Actual: " + actualWidth, actualWidth >= 980);
+        }
         mActivityTestRule.loadDataSync(
                 awContents, onPageFinishedHelper, pageViewportDeviceWidth, "text/html", false);
         actualWidth = Integer.parseInt(mActivityTestRule.getTitleOnUiThread(awContents));
@@ -3218,7 +3222,7 @@ public class AwSettingsTest {
     }
 
     @Test
-    @DisableHardwareAccelerationForTest
+    @DisableHardwareAcceleration
     @LargeTest
     @Feature({"AndroidWebView", "Preferences"})
     public void testMediaPlaybackWithoutUserGesture() throws Throwable {
@@ -3227,7 +3231,7 @@ public class AwSettingsTest {
     }
 
     @Test
-    @DisableHardwareAccelerationForTest
+    @DisableHardwareAcceleration
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
     public void testMediaPlaybackWithUserGesture() throws Throwable {
@@ -3784,5 +3788,9 @@ public class AwSettingsTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> awContents.getWebContents().getEventForwarder().doubleTapForTest(
                                 SystemClock.uptimeMillis(), x, y));
+    }
+
+    private boolean isTablet() {
+        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivityTestRule.getActivity());
     }
 }

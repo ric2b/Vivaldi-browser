@@ -520,6 +520,9 @@ struct AutocompleteMatch {
   // providers.
   bool IsOnDeviceSearchSuggestion() const;
 
+  // Returns true if the match is eligible to be re-scored by ML Url scoring.
+  bool IsUrlScoringEligible() const;
+
   // Filter OmniboxActions based on the supplied qualifiers.
   // The order of the supplied qualifiers determines the preference.
   void FilterOmniboxActions(
@@ -619,6 +622,10 @@ struct AutocompleteMatch {
     return it != actions.end() ? it->get() : nullptr;
   }
 
+  // Change this match's `contents` and other members to more accurately
+  // represent the `takeover_action` on this match.
+  void ConvertFromTakeoverAction();
+
   // The provider of this match, used to remember which provider the user had
   // selected when the input changes. This may be NULL, in which case there is
   // no provider (or memory of the user's selection).
@@ -637,10 +644,6 @@ struct AutocompleteMatch {
   // its value is -1.  At the time of writing this comment, it is only
   // set for matches from HistoryURL and HistoryQuickProvider.
   int typed_count = -1;
-
-  // The percentage deducted from the relevance score by the history fuzzy
-  // provider.  This is currently used to re-apply the penalty after ML scoring.
-  int fuzzy_match_penalty = 0;
 
   // True if the user should be able to delete this match.
   bool deletable = false;
@@ -869,6 +872,12 @@ struct AutocompleteMatch {
   // this flag is true, this match is an "extra" suggestion that would've
   // originally been culled by the provider.
   bool culled_by_provider = false;
+
+  // True for shortcut suggestions that were boosted. Used for grouping logic.
+  // TODO(manukh): Remove this field and use `suggestion_group_id` once grouping
+  //   launches. In the meantime, shortcut grouping won't work for users in the
+  //   grouping experiments.
+  bool shortcut_boosted = false;
 
   // So users of AutocompleteMatch can use the same ellipsis that it uses.
   static const char16_t kEllipsis[];

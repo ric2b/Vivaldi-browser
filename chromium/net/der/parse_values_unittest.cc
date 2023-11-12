@@ -190,7 +190,7 @@ struct Uint64TestData {
   bool should_pass;
   const uint8_t input[9];
   size_t length;
-  uint64_t expected_value;
+  uint64_t expected_value = 0;
 };
 
 const Uint64TestData kUint64TestData[] = {
@@ -230,7 +230,7 @@ struct Uint8TestData {
   bool should_pass;
   const uint8_t input[9];
   size_t length;
-  uint8_t expected_value;
+  uint8_t expected_value = 0;
 };
 
 const Uint8TestData kUint8TestData[] = {
@@ -267,7 +267,7 @@ struct IsValidIntegerTestData {
   bool should_pass;
   const uint8_t input[2];
   size_t length;
-  bool negative;
+  bool negative = false;
 };
 
 const IsValidIntegerTestData kIsValidIntegerTestData[] = {
@@ -351,7 +351,7 @@ TEST(ParseValuesTest, ParseBitStringSevenOneBits) {
 
   EXPECT_EQ(1u, bit_string->unused_bits());
   EXPECT_EQ(1u, bit_string->bytes().Length());
-  EXPECT_EQ(0xFE, bit_string->bytes().UnsafeData()[0]);
+  EXPECT_EQ(0xFE, bit_string->bytes()[0]);
 
   EXPECT_TRUE(bit_string->AssertsBit(0));
   EXPECT_TRUE(bit_string->AssertsBit(1));

@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">페이지를 불러오기 위해 필요한 데이터를 다시 제출하려면 새로고침 버튼을 누르세요.</translation>
 <translation id="3234666976984236645">이 사이트에서 중요한 콘텐츠 항상 감지</translation>
 <translation id="3308738399950580893">광고</translation>
+<translation id="3384522979010096022">조직에서 이 사이트를 보도록 허용하지 않음</translation>
 <translation id="3422472998109090673">현재 <ph name="HOST_NAME" />에 연결할 수 없습니다.</translation>
 <translation id="3427092606871434483">허용(기본값)</translation>
 <translation id="3447661539832366887">이 기기의 소유자가 공룡 게임을 사용 중지했습니다.</translation>
@@ -153,6 +154,7 @@
 <translation id="6657585470893396449">비밀번호</translation>
 <translation id="6711464428925977395">프록시 서버에 문제가 발생했거나 주소가 잘못되었습니다.</translation>
 <translation id="6757797048963528358">컴퓨터가 절전 모드 상태입니다.</translation>
+<translation id="6890956352250146925">쿠키 및 사이트 데이터 옵션</translation>
 <translation id="6897140037006041989">사용자 에이전트</translation>
 <translation id="7053983685419859001">차단</translation>
 <translation id="7079718277001814089">이 사이트에 멀웨어가 있습니다</translation>
@@ -163,7 +165,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" />에서 보안 기준을 준수하지 않습니다.</translation>
 <translation id="7219179957768738017"><ph name="SSL_VERSION" /> 연결입니다.</translation>
 <translation id="7221855153210829124">알림 표시</translation>
-<translation id="7260504762447901703">액세스 취소</translation>
 <translation id="7353601530677266744">명령줄</translation>
 <translation id="7364115444476960850">접근하려는 페이지는 Vivaldi의 <ph name="BLOCKER_NAME" />에 의해 차단되었습니다</translation>
 <translation id="7419106976560586862">프로필 경로</translation>

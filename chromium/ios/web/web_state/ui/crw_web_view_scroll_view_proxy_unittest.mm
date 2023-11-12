@@ -14,10 +14,6 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // TODO(crbug.com/1030168): Rewrite tests Delegate, MultipleScrollView,
 // DelegateClearingUp not to depend on this, and delete this.
 @interface CRWWebViewScrollViewProxy (Testing)
@@ -554,7 +550,8 @@ TEST_F(CRWWebViewScrollViewProxyTest,
 
 // Verifies that adding a key-value observer to a CRWWebViewScrollViewProxy
 // works as expected.
-TEST_F(CRWWebViewScrollViewProxyTest, AddKVObserver) {
+// TODO(crbug.com/1478243): reenable this test
+TEST_F(CRWWebViewScrollViewProxyTest, DISABLED_AddKVObserver) {
   UIScrollView* underlying_scroll_view = [[UIScrollView alloc] init];
   underlying_scroll_view.contentOffset = CGPointZero;
   [web_view_scroll_view_proxy_ setScrollView:underlying_scroll_view];
@@ -590,8 +587,9 @@ TEST_F(CRWWebViewScrollViewProxyTest, AddKVObserver) {
 
 // Verifies that a key-value observer is kept after the underlying scroll view
 // is set.
+// TODO(crbug.com/1478243): reenable this test
 TEST_F(CRWWebViewScrollViewProxyTest,
-       KVObserversAreKeptAfterSettingUnderlyingScrollView) {
+       DISABLED_KVObserversAreKeptAfterSettingUnderlyingScrollView) {
   // Add a key-value observer to a CRWWebViewScrollViewProxy.
   NSObject* observer = OCMClassMock([NSObject class]);
   int context = 0;
@@ -626,7 +624,8 @@ TEST_F(CRWWebViewScrollViewProxyTest,
 
 // Verifies that removing a key-value observer from a CRWWebViewScrollViewProxy
 // works as expected.
-TEST_F(CRWWebViewScrollViewProxyTest, RemoveKVObserver) {
+// TODO(crbug.com/1478243): reenable this test
+TEST_F(CRWWebViewScrollViewProxyTest, DISABLED_RemoveKVObserver) {
   UIScrollView* underlying_scroll_view = [[UIScrollView alloc] init];
   underlying_scroll_view.contentOffset = CGPointZero;
   [web_view_scroll_view_proxy_ setScrollView:underlying_scroll_view];

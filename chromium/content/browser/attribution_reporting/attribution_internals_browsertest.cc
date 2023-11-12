@@ -15,13 +15,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
-#include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
@@ -65,9 +65,9 @@ namespace content {
 
 namespace {
 
+using ::attribution_reporting::FilterConfig;
 using ::attribution_reporting::FilterPair;
 using ::attribution_reporting::SuitableOrigin;
-using ::attribution_reporting::mojom::SourceRegistrationError;
 using ::attribution_reporting::mojom::SourceType;
 
 using ::base::test::RunOnceCallback;
@@ -337,24 +337,24 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           table.children[0].children[3]?.children[0]?.children[1]?.innerText === 'https://b.test' &&
           table.children[1].children[3]?.innerText === 'https://conversion.test' &&
           table.children[0].children[0]?.innerText === $1 &&
-          table.children[0].children[9]?.innerText === 'Navigation' &&
-          table.children[1].children[9]?.innerText === 'Event' &&
-          table.children[0].children[10]?.innerText === '0' &&
-          table.children[1].children[10]?.innerText === $2 &&
+          table.children[0].children[8]?.innerText === 'Navigation' &&
+          table.children[1].children[8]?.innerText === 'Event' &&
+          table.children[0].children[9]?.innerText === '0' &&
+          table.children[1].children[9]?.innerText === $2 &&
+          table.children[0].children[10]?.innerText === '{}' &&
+          table.children[1].children[10]?.innerText === '{\n "a": [\n  "b",\n  "c"\n ]\n}' &&
           table.children[0].children[11]?.innerText === '{}' &&
-          table.children[1].children[11]?.innerText === '{\n "a": [\n  "b",\n  "c"\n ]\n}' &&
-          table.children[0].children[12]?.innerText === '{}' &&
-          table.children[1].children[12]?.innerText === '{\n "a": "0x1"\n}' &&
-          table.children[0].children[13]?.innerText === '0 / 65536' &&
-          table.children[1].children[13]?.innerText === '1300 / 65536' &&
-          table.children[0].children[14]?.innerText === '19' &&
-          table.children[1].children[14]?.innerText === '' &&
+          table.children[1].children[11]?.innerText === '{\n "a": "0x1"\n}' &&
+          table.children[0].children[12]?.innerText === '0 / 65536' &&
+          table.children[1].children[12]?.innerText === '1300 / 65536' &&
+          table.children[0].children[13]?.innerText === '19' &&
+          table.children[1].children[13]?.innerText === '' &&
+          table.children[0].children[14]?.innerText === '' &&
+          table.children[1].children[14]?.children[0]?.children[0]?.innerText === '13' &&
+          table.children[1].children[14]?.children[0]?.children[1]?.innerText === '17' &&
           table.children[0].children[15]?.innerText === '' &&
-          table.children[1].children[15]?.children[0]?.children[0]?.innerText === '13' &&
-          table.children[1].children[15]?.children[0]?.children[1]?.innerText === '17' &&
-          table.children[0].children[16]?.innerText === '' &&
-          table.children[1].children[16]?.children[0]?.children[0]?.innerText === '14' &&
-          table.children[1].children[16]?.children[0]?.children[1]?.innerText === '18' &&
+          table.children[1].children[15]?.children[0]?.children[0]?.innerText === '14' &&
+          table.children[1].children[15]?.children[0]?.children[1]?.innerText === '18' &&
           table.children[0].children[1]?.innerText === 'Unattributable: noised with no reports' &&
           table.children[1].children[1]?.innerText === 'Attributable' &&
           table.children[2].children[1]?.innerText === 'Attributable: reached event-level attribution limit' &&
@@ -379,39 +379,6 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
 
   TitleWatcher title_watcher(shell()->web_contents(), kCompleteTitle);
   ClickRefreshButton();
-  EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
-}
-
-IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
-                       FailedSourceRegistrationLogShown) {
-  ASSERT_TRUE(NavigateToURL(shell(), GURL(kAttributionInternalsUrl)));
-
-  static constexpr char kScript[] = R"(
-    const table = document.querySelector('#sourceRegistrationTable')
-        .shadowRoot.querySelector('tbody');
-
-    const obs = new MutationObserver((_, obs) => {
-      if (table.children.length === 1 &&
-          table.children[0].children[1]?.innerText === 'https://b.test' &&
-          table.children[0].children[2]?.innerText === 'https://a.test' &&
-          table.children[0].children[3]?.innerText === '!' &&
-          table.children[0].children[4]?.innerText === '' &&
-          table.children[0].children[5]?.innerText === 'Event' &&
-          table.children[0].children[6]?.innerText === 'Rejected: invalid JSON: invalid syntax') {
-        obs.disconnect();
-        document.title = $1;
-      }
-    });
-    obs.observe(table, {childList: true, subtree: true, characterData: true});
-  )";
-  ASSERT_TRUE(ExecJsInWebUI(JsReplace(kScript, kCompleteTitle)));
-
-  TitleWatcher title_watcher(shell()->web_contents(), kCompleteTitle);
-
-  manager()->NotifySourceRegistrationFailure(
-      "!", *SuitableOrigin::Deserialize("https://b.test"),
-      *SuitableOrigin::Deserialize("https://a.test"), SourceType::kEvent,
-      SourceRegistrationError::kInvalidJson);
   EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
 }
 
@@ -468,14 +435,17 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   // Waiting on calls to `MockAttributionManager` is not sufficient because the
   // results are returned in promises.
   static constexpr char kScript[] = R"(
-    const status = document.getElementById('debug-mode-content');
+    const reportDelays = document.getElementById('report-delays');
+    const noise = document.getElementById('noise');
     const obs = new MutationObserver((_, obs) => {
-      if (status.innerText.trim() === '') {
+      if (reportDelays.innerText === 'enabled' &&
+          noise.innerText === 'enabled') {
         obs.disconnect();
         document.title = $1;
       }
     });
-    obs.observe(status, {childList: true, subtree: true, characterData: true});
+    obs.observe(reportDelays, {childList: true, subtree: true, characterData: true});
+    obs.observe(noise, {childList: true, subtree: true, characterData: true});
   )";
   ASSERT_TRUE(ExecJsInWebUI(JsReplace(kScript, kCompleteTitle)));
 
@@ -495,14 +465,17 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   // Waiting on calls to `MockAttributionManager` is not sufficient because the
   // results are returned in promises.
   static constexpr char kScript[] = R"(
-    const status = document.getElementById('debug-mode-content');
+    const reportDelays = document.getElementById('report-delays');
+    const noise = document.getElementById('noise');
     const obs = new MutationObserver((_, obs) => {
-      if (status.innerText.trim() !== '') {
+      if (reportDelays.innerText === 'disabled' &&
+          noise.innerText === 'disabled') {
         obs.disconnect();
         document.title = $1;
       }
     });
-    obs.observe(status, {childList: true, subtree: true, characterData: true});
+    obs.observe(reportDelays, {childList: true, subtree: true, characterData: true});
+    obs.observe(noise, {childList: true, subtree: true, characterData: true});
   )";
   ASSERT_TRUE(ExecJsInWebUI(JsReplace(kScript, kCompleteTitle)));
 
@@ -1104,52 +1077,57 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        TriggersDisplayed) {
   ASSERT_TRUE(NavigateToURL(shell(), GURL(kAttributionInternalsUrl)));
 
-  const auto create_trigger =
-      [](std::vector<network::TriggerVerification> verifications) {
-        return AttributionTrigger(
-            /*reporting_origin=*/*SuitableOrigin::Deserialize("https://r.test"),
-            attribution_reporting::TriggerRegistration(
-                FilterPair(/*positive=*/{{{"a", {"b"}}}},
-                           /*negative=*/{{{"g", {"h"}}}}),
-                /*debug_key=*/1,
-                {attribution_reporting::AggregatableDedupKey(
-                    /*dedup_key=*/18, FilterPair())},
-                {
-                    attribution_reporting::EventTriggerData(
-                        /*data=*/2,
-                        /*priority=*/3,
-                        /*dedup_key=*/absl::nullopt,
-                        FilterPair(
-                            /*positive=*/{{{"c", {"d"}}}},
-                            /*negative=*/{})),
-                    attribution_reporting::EventTriggerData(
-                        /*data=*/4,
-                        /*priority=*/5,
-                        /*dedup_key=*/6,
-                        FilterPair(/*positive=*/{},
-                                   /*negative=*/{{{"e", {"f"}}}})),
-                },
-                {*attribution_reporting::AggregatableTriggerData::Create(
-                     /*key_piece=*/345,
-                     /*source_keys=*/{"a"},
-                     FilterPair(/*positive=*/{},
-                                /*negative=*/{{{"c", {"d"}}}})),
-                 *attribution_reporting::AggregatableTriggerData::Create(
-                     /*key_piece=*/678,
-                     /*source_keys=*/{"b"},
-                     FilterPair(/*positive=*/{},
-                                /*negative=*/{{{"e", {"f"}}}}))},
-                /*aggregatable_values=*/
-                *attribution_reporting::AggregatableValues::Create(
-                    {{"a", 123}, {"b", 456}}),
-                /*debug_reporting=*/false,
-                /*aggregation_coordinator_origin=*/absl::nullopt,
-                attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                    kInclude),
-            *SuitableOrigin::Deserialize("https://d.test"),
-            std::move(verifications),
-            /*is_within_fenced_frame=*/false);
-      };
+  const auto create_trigger = [](std::vector<network::TriggerVerification>
+                                     verifications) {
+    return AttributionTrigger(
+        /*reporting_origin=*/*SuitableOrigin::Deserialize("https://r.test"),
+        attribution_reporting::TriggerRegistration(
+            FilterPair(
+                /*positive=*/{*FilterConfig::Create({{"a", {"b"}}})},
+                /*negative=*/{*FilterConfig::Create(
+                    {{"g", {"h"}}}, /*lookback_window=*/base::Seconds(2))}),
+            /*debug_key=*/1,
+            {attribution_reporting::AggregatableDedupKey(
+                /*dedup_key=*/18, FilterPair())},
+            {
+                attribution_reporting::EventTriggerData(
+                    /*data=*/2,
+                    /*priority=*/3,
+                    /*dedup_key=*/absl::nullopt,
+                    FilterPair(
+                        /*positive=*/{*FilterConfig::Create({{"c", {"d"}}})},
+                        /*negative=*/{})),
+                attribution_reporting::EventTriggerData(
+                    /*data=*/4,
+                    /*priority=*/5,
+                    /*dedup_key=*/6,
+                    FilterPair(
+                        /*positive=*/{},
+                        /*negative=*/{*FilterConfig::Create({{"e", {"f"}}})})),
+            },
+            {*attribution_reporting::AggregatableTriggerData::Create(
+                 /*key_piece=*/345,
+                 /*source_keys=*/{"a"},
+                 FilterPair(
+                     /*positive=*/{},
+                     /*negative=*/{*FilterConfig::Create({{"c", {"d"}}})})),
+             *attribution_reporting::AggregatableTriggerData::Create(
+                 /*key_piece=*/678,
+                 /*source_keys=*/{"b"},
+                 FilterPair(
+                     /*positive=*/{},
+                     /*negative=*/{*FilterConfig::Create({{"e", {"f"}}})}))},
+            /*aggregatable_values=*/
+            *attribution_reporting::AggregatableValues::Create(
+                {{"a", 123}, {"b", 456}}),
+            /*debug_reporting=*/false,
+            /*aggregation_coordinator_origin=*/absl::nullopt,
+            attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                kInclude),
+        *SuitableOrigin::Deserialize("https://d.test"),
+        std::move(verifications),
+        /*is_within_fenced_frame=*/false);
+  };
 
   static constexpr char kScript[] = R"(
     const expectedVerification =
@@ -1204,9 +1182,11 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
 
   std::vector<network::TriggerVerification> verifications;
   verifications.push_back(*network::TriggerVerification::Create(
-      "abc", "aaab30b9-d664-4dfc-a9db-85f9729b9a30"));
+      "abc",
+      base::Uuid::ParseLowercase("aaab30b9-d664-4dfc-a9db-85f9729b9a30")));
   verifications.push_back(*network::TriggerVerification::Create(
-      "def", "bbab30b9-d664-4dfc-a9db-85f9729b9a30"));
+      "def",
+      base::Uuid::ParseLowercase("bbab30b9-d664-4dfc-a9db-85f9729b9a30")));
   notify_trigger_handled(create_trigger(std::move(verifications)),
                          AttributionTrigger::EventLevelResult::kSuccess,
                          AttributionTrigger::AggregatableResult::kSuccess,

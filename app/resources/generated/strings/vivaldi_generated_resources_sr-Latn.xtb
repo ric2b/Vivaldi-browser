@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Vrati podešavanja</translation>
 <translation id="4478664379124702289">Sačuvaj &amp;vezu kao...</translation>
 <translation id="4520385623207007473">Kolačići u upotrebi</translation>
+<translation id="456449593072900590">Izbriši pri izlazu</translation>
 <translation id="4580596421317071374">Lozinke se čuvaju u <ph name="GOOGLE_PASSWORD_MANAGER" /> na ovom uređaju.</translation>
 <translation id="4593021220803146968">&amp;Idi na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacije i proširenja može da menja samo menadžer (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Boja</translation>
 <translation id="5485102783864353244">Dodaj aplikaciju</translation>
 <translation id="5486561344817861625">Simuliraj ponovno pokretanje pregledača</translation>
-<translation id="5487521232677179737">Obriši podatke</translation>
 <translation id="5509693895992845810">Sačuvaj &amp;kao...</translation>
 <translation id="5521078259930077036">Da li je ovo matična stranica koju ste očekivali?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Nepoznato</translation>
 <translation id="5851868085455377790">Izdavalac</translation>
 <translation id="5860491529813859533">Uključi</translation>
-<translation id="5867841422488265304">Pretražite ili unesite adresu</translation>
 <translation id="5910363049092958439">Sa&amp;čuvaj sliku kao...</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> bit(ov)a):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> tpi</translation>
 <translation id="7339785458027436441">Proveri pravopis tokom kucanja</translation>
-<translation id="73786666777299047">Otvori Chrome veb prodavnicu</translation>
 <translation id="7385854874724088939">Došlo je do greške pri pokušaju štampanja. Proverite štampač i pokušajte ponovo.</translation>
 <translation id="7412226954991670867">GPU memorija</translation>
 <translation id="7421925624202799674">&amp;Prikaži izvor stranice</translation>
@@ -442,6 +440,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="8382913212082956454">Kopiraj adresu &amp;e-pošte</translation>
 <translation id="8434480141477525001">NaCl port za otklanjanje grešaka</translation>
 <translation id="8449008133205184768">Nalepi sa podudaranjem stila</translation>
+<translation id="8477178913400731244">Izbriši podatke</translation>
 <translation id="8477384620836102176">&amp;Opšte</translation>
 <translation id="8496717697661868878">Pokreni ovu dodatnu komponentu</translation>
 <translation id="8512476990829870887">Završi proces</translation>

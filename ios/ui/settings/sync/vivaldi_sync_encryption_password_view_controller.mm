@@ -4,7 +4,7 @@
 
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -111,7 +111,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.encryptionPasswordItem.textFieldPlaceholder =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE);
   self.encryptionPasswordItem.identifyingIcon =
-      [UIImage imageNamed:kShowPasswordIcon];
+      [UIImage systemImageNamed:kShowPasswordIcon];
   self.encryptionPasswordItem.identifyingIconEnabled = YES;
   self.encryptionPasswordItem.hideIcon = YES;
   self.encryptionPasswordItem.textFieldEnabled = YES;
@@ -207,7 +207,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   switch (itemType) {
     case ItemTypeDecryptButton: {
       VivaldiTableViewLinkAndButtonCell* editCell =
-          base::mac::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
+          base::apple::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
       [editCell.button addTarget:self
                           action:@selector(decryptButtonPressed:)
                 forControlEvents:UIControlEventTouchUpInside];
@@ -216,7 +216,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
     case ItemTypeLogOutButton: {
       VivaldiTableViewLinkAndButtonCell* editCell =
-          base::mac::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
+          base::apple::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
       [editCell.button addTarget:self
                           action:@selector(logOutButtonPressed:)
                 forControlEvents:UIControlEventTouchUpInside];
@@ -224,7 +224,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
     case ItemTypePassword: {
       VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
@@ -272,6 +272,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if ([urls count] < 1)
     return;
   NSURL* fileSelected = [urls objectAtIndex:0];
+
+  if (![fileSelected startAccessingSecurityScopedResource]) {
+    [self showErrorCellWithMessage:l10n_util::GetNSString(
+      IDS_VIVALDI_SYNC_ENCRYPTION_FILE_PERMISSION_ERROR)
+                           section:SectionIdentifierEncryptionPassword
+                          itemType:ItemTypeError];
+    [fileSelected stopAccessingSecurityScopedResource];
+    return;
+  }
 
   __weak __typeof__(self) weakSelf = self;
   [self.delegate importPasskey:fileSelected

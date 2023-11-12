@@ -117,6 +117,8 @@ class FailedCameraHalServerCallbacks final
   void CameraSWPrivacySwitchStateChange(
       cros::mojom::CameraPrivacySwitchState state) override;
 
+  void Reset();
+
   mojo::Receiver<cros::mojom::CameraHalServerCallbacks> callbacks_;
 };
 
@@ -403,13 +405,16 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   base::flat_set<std::string> GetDeviceIdsFromCameraIds(
       base::flat_set<int32_t> camera_ids);
 
-  void BindToMojoServiceManagerOnUIThread(
-      const std::string service_name,
-      mojo::ScopedMessagePipeHandle receiver);
-
   void StopOnProxyThread();
 
   TokenManager* GetTokenManagerForTesting();
+
+  // Functions to get/set the status of the service loop.
+  bool IsServiceLoopRunning();
+  void SetServiceLoopStatus(bool is_running);
+
+  base::Lock service_loop_status_lock_;
+  bool is_service_loop_running_ GUARDED_BY(service_loop_status_lock_);
 
   base::ScopedFD proxy_fd_;
   base::ScopedFD cancel_pipe_;

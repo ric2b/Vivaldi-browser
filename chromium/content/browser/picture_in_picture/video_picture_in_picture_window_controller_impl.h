@@ -140,6 +140,10 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
   void SetVivaldiDelegate(
       base::WeakPtr<vivaldi_content::TabActivationDelegate> delegate) override;
 
+  PictureInPictureSession* active_session_for_vivaldi() const {
+    return active_session_.get();
+  }
+
  private:
   friend class WebContentsUserData<VideoPictureInPictureWindowControllerImpl>;
 

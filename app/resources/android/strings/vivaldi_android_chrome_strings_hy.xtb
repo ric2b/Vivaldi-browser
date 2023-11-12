@@ -10,7 +10,7 @@
 <translation id="1910514478706885609">Բացել ներդիրների նոր խմբում</translation>
 <translation id="1925021887439448749">Մուտքագրեք այլ հասցե</translation>
 <translation id="2038563949887743358">Միացնել համակարգչային տարբերակի հայցումը</translation>
-<translation id="2139186145475833000">Ավելացնել սկզբնական էկրանին</translation>
+<translation id="2139186145475833000">Հավելել սկզբնական էկրանին</translation>
 <translation id="2149973817440762519">Խմբագրել էջանիշը</translation>
 <translation id="2306442503286132111">Էջանիշը պահպանված է <ph name="FOLDER_NAME" /> պանակում</translation>
 <translation id="2433507940547922241">Արտաքին տեսք</translation>
@@ -33,7 +33,9 @@
 <translation id="4121750346708795461">Օգտագործելով այս հավելվածը՝ Դուք համաձայնում եք Vivaldi-ի <ph name="BEGIN_LINK1" />Օգտագործման պայմաններին<ph name="END_LINK1" /> ու <ph name="BEGIN_LINK2" />Գաղտնիության դրույթներին<ph name="END_LINK2" />։</translation>
 <translation id="4137746084635924146">Սարքի ընթացիկ լեզուն</translation>
 <translation id="4167670741834902166">Նոր գաղտնի ներդիր</translation>
+<translation id="4195643157523330669">Բացել նոր ներդիրում</translation>
 <translation id="4243710787042215766">Բացել գաղտնի ներդիրում</translation>
+<translation id="451872707440238414">Որոնել էջանիշներում</translation>
 <translation id="4526803704855831732">Գաղտնի ներդիրներ</translation>
 <translation id="4719086422742491124">Ստացեք հավելյալ տեղեկույթ՝ առանց էջը լքելու։ Ընտրեք մեկ կամ մի քանի բառ էջի վրա, որպեսզի որոնեք դրանք։
 
@@ -52,7 +54,6 @@
 Որոնելու համար երկար հպեք տեքստին ու նշեք այն։ Ձեր որոնումը ճշգրտելու համար սահեցրեք վահանակը լրիվ վերև ու հպեք որոնման դաշտին։</translation>
 <translation id="572328651809341494">Վերջին ներդիրներ</translation>
 <translation id="6150320133806434356">Էջանիշը պահպանված է</translation>
-<translation id="6301525844455696527">Մի՛ մոռացեք Ձեր ընթերցման ցանկի մասին</translation>
 <translation id="6336451774241870485">Նոր գաղտնի ներդիր</translation>
 <translation id="6404511346730675251">Խմբագրել էջանիշը</translation>
 <translation id="6585139692466700358">Առաջարկել թարգմանել էջերն այլ լեզուների՝ օգտագործելով Vivaldi-ի թարգմանության ծառայությունը</translation>

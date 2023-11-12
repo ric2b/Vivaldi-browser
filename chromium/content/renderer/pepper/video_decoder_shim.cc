@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/containers/queue.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -469,23 +470,18 @@ VideoDecoderShim::~VideoDecoderShim() {
                                 base::Owned(decoder_impl_.release())));
 }
 
-bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
-  DCHECK_EQ(client, host_);
+bool VideoDecoderShim::Initialize(media::VideoCodecProfile profile) {
   DCHECK(RenderThreadImpl::current());
   DCHECK_EQ(state_, UNINITIALIZED);
 
-  if (vda_config.is_encrypted()) {
-    NOTREACHED() << "Encrypted streams are not supported";
-    return false;
-  }
-
   media::VideoCodec codec = media::VideoCodec::kUnknown;
-  if (vda_config.profile <= media::H264PROFILE_MAX)
+  if (profile <= media::H264PROFILE_MAX) {
     codec = media::VideoCodec::kH264;
-  else if (vda_config.profile <= media::VP8PROFILE_MAX)
+  } else if (profile <= media::VP8PROFILE_MAX) {
     codec = media::VideoCodec::kVP8;
-  else if (vda_config.profile <= media::VP9PROFILE_MAX)
+  } else if (profile <= media::VP9PROFILE_MAX) {
     codec = media::VideoCodec::kVP9;
+  }
   DCHECK_NE(codec, media::VideoCodec::kUnknown);
 
   // For hardware decoding, an unsupported codec is expected to manifest in an
@@ -494,10 +490,9 @@ bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
     return false;
 
   media::VideoDecoderConfig video_decoder_config(
-      codec, vda_config.profile,
-      media::VideoDecoderConfig::AlphaMode::kIsOpaque, media::VideoColorSpace(),
-      media::kNoTransformation, kDefaultSize, gfx::Rect(kDefaultSize),
-      kDefaultSize,
+      codec, profile, media::VideoDecoderConfig::AlphaMode::kIsOpaque,
+      media::VideoColorSpace(), media::kNoTransformation, kDefaultSize,
+      gfx::Rect(kDefaultSize), kDefaultSize,
       // TODO(bbudge): Verify extra data isn't needed.
       media::EmptyExtraData(), media::EncryptionScheme::kUnencrypted);
 
@@ -575,15 +570,16 @@ void VideoDecoderShim::AssignPictureBuffers(
 void VideoDecoderShim::ReusePictureBuffer(int32_t picture_buffer_id) {
   DCHECK(RenderThreadImpl::current());
   uint32_t texture_id = static_cast<uint32_t>(picture_buffer_id);
-  if (textures_to_dismiss_.find(texture_id) != textures_to_dismiss_.end()) {
+  if (base::Contains(textures_to_dismiss_, texture_id)) {
     DismissTexture(texture_id);
-  } else if (texture_mailbox_map_.find(texture_id) !=
-             texture_mailbox_map_.end()) {
+    return;
+  }
+  if (base::Contains(texture_mailbox_map_, texture_id)) {
     available_textures_.insert(texture_id);
     SendPictures();
-  } else {
-    NOTREACHED();
+    return;
   }
+  NOTREACHED();
 }
 
 void VideoDecoderShim::Flush() {
@@ -815,7 +811,7 @@ void VideoDecoderShim::NotifyCompletedDecodes() {
 void VideoDecoderShim::DismissTexture(uint32_t texture_id) {
   DCHECK(host_);
   textures_to_dismiss_.erase(texture_id);
-  DCHECK(texture_mailbox_map_.find(texture_id) != texture_mailbox_map_.end());
+  DCHECK(base::Contains(texture_mailbox_map_, texture_id));
   texture_mailbox_map_.erase(texture_id);
   host_->DismissPictureBuffer(texture_id);
 }

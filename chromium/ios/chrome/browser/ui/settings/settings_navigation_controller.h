@@ -100,16 +100,25 @@ extern NSString* const kSettingsDoneButtonId;
                                   (id<SettingsNavigationControllerDelegate>)
                                       delegate;
 
-// Creates a new SavePasswordsCollectionViewController and the chrome around it.
-// `browser` is the browser where settings are being displayed and should not be
-// nil. `delegate` may be nil. `showCancelButton` indicates whether a cancel
-// button should be shown in the upper left corner if the navigation stack is
-// empty.
+// Creates a new view controller presenting the saved passwords list and the
+// chrome around it. `browser` is the browser where settings are being displayed
+// and should not be nil. `delegate` may be nil. `showCancelButton` indicates
+// whether a cancel button should be shown in the upper left corner if the
+// navigation stack is empty.
 + (instancetype)
     savePasswordsControllerForBrowser:(Browser*)browser
                              delegate:(id<SettingsNavigationControllerDelegate>)
                                           delegate
                      showCancelButton:(BOOL)showCancelButton;
+
+// Creates a new PasswordManagerViewController in search mode and the chrome
+// around it. `browser` is the browser where settings are being displayed and
+// should not be nil. `delegate` may be nil.
++ (instancetype)
+    passwordManagerSearchControllerForBrowser:(Browser*)browser
+                                     delegate:
+                                         (id<SettingsNavigationControllerDelegate>)
+                                             delegate;
 
 // Creates a new PasswordDetailsViewController and the chrome around it.
 // `browser` is the browser where the view is being displayed and should not be
@@ -205,11 +214,14 @@ extern NSString* const kSettingsDoneButtonId;
 
 // Creates a new SafetyCheckTableViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and
-// should not be nil. `delegate` may be nil.
+// should not be nil. `delegate` may be nil. `displayAsHalfSheet` determines
+// whether the Safety Check will be displayed as a half-sheet, or full-page
+// modal.
 + (instancetype)
     safetyCheckControllerForBrowser:(Browser*)browser
                            delegate:(id<SettingsNavigationControllerDelegate>)
-                                        delegate;
+                                        delegate
+                 displayAsHalfSheet:(BOOL)displayAsHalfSheet;
 
 // Creates a new PrivacySafeBrowsingViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and
@@ -226,6 +238,15 @@ extern NSString* const kSettingsDoneButtonId;
     inactiveTabsControllerForBrowser:(Browser*)browser
                             delegate:(id<SettingsNavigationControllerDelegate>)
                                          delegate;
+
+// Creates a new ContentSettingTableViewController and the chrome
+// around it. `browser` is the browser where settings are being displayed and
+// should not be nil. `delegate` may be nil.
++ (instancetype)
+    contentSettingsControllerForBrowser:(Browser*)browser
+                               delegate:
+                                   (id<SettingsNavigationControllerDelegate>)
+                                       delegate;
 
 // Initializes the UINavigationController with `rootViewController`.
 - (instancetype)initWithRootViewController:(UIViewController*)rootViewController
@@ -258,6 +279,18 @@ extern NSString* const kSettingsDoneButtonId;
 // the navigation stack. Closes the settings if the top view controller is the
 // only view controller in the navigation stack.
 - (void)popViewControllerOrCloseSettingsAnimated:(BOOL)animated;
+
+// Vivaldi
+// Creates a new SettingsNavigationController that displays the Vivaldi sync
+// management UI. `browser` is the browser where settings are being displayed
+// and should not be nil. `delegate` may be nil.
++ (instancetype)
+    vivaldiSyncViewControllerForBrowser:(Browser*)browser
+                  showCreateAccountFlow:(BOOL)showCreateAccountFlow
+                               delegate:
+                                  (id<SettingsNavigationControllerDelegate>)
+                                      delegate;
+// End Vivaldi
 
 @end
 

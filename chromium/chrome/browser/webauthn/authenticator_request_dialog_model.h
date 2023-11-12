@@ -11,12 +11,11 @@
 
 #include "base/containers/span.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "base/strings/string_piece.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
@@ -25,10 +24,10 @@
 #include "chrome/browser/webauthn/observable_authenticator_list.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/global_routing_id.h"
+#include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/cable/v2_constants.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
-#include "device/fido/fido_transport_protocol.h"
 #include "device/fido/fido_types.h"
 #include "device/fido/pin.h"
 #include "device/fido/public_key_credential_user_entity.h"
@@ -139,8 +138,14 @@ class AuthenticatorRequestDialogModel {
     // available credential and choosing one from a list of multiple options.
     kSelectAccount,
     kSelectSingleAccount,
+
+    // TODO(crbug.com/1459273): Remove after new passkey selection UI launches.
     kPreSelectAccount,
     kPreSelectSingleAccount,
+
+    // kSelectPriorityPasskey lets the user confirm a single "priority"
+    // mechanism.
+    kSelectPriorityMechanism,
 
     // Attestation permission requests.
     kAttestationPermissionRequest,
@@ -178,12 +183,30 @@ class AuthenticatorRequestDialogModel {
     virtual void OnManageDevicesClicked() {}
   };
 
-  // A Mechanism is a user-visable method of authenticating. It might be a
+  // A Mechanism is a user-visible method of authenticating. It might be a
   // transport (such as USB), a platform authenticator, a phone, or even a
-  // delegation to a platform API. Mechanisms are listed in the UI for the
-  // user to select between.
+  // delegation to a platform API. Selecting a mechanism starts the flow for the
+  // user to authenticate with it (e.g. by showing a QR code or dispatching to a
+  // platform authenticator).
+  //
+  // On get assertion requests, mechanisms can also represent credentials for
+  // authenticators that support silent discovery. In this case, the |type| is
+  // |Credential| and it is annotated with the source of the credential (phone,
+  // icloud, etc). Selecting such a mechanism dispatches a request narrowed down
+  // to the specific credential to an authenticator that can fulfill it.
   struct Mechanism {
     // These types describe the type of Mechanism.
+    struct CredentialInfo {
+      CredentialInfo(device::AuthenticatorType source_in,
+                     std::vector<uint8_t> user_id_in);
+      CredentialInfo(const CredentialInfo&);
+      ~CredentialInfo();
+      bool operator==(const CredentialInfo&) const;
+
+      const device::AuthenticatorType source;
+      const std::vector<uint8_t> user_id;
+    };
+    using Credential = base::StrongAlias<class CredentialTag, CredentialInfo>;
     using Transport =
         base::StrongAlias<class TransportTag, AuthenticatorTransport>;
     using WindowsAPI = base::StrongAlias<class WindowsAPITag, absl::monostate>;
@@ -191,8 +214,12 @@ class AuthenticatorRequestDialogModel {
         base::StrongAlias<class iCloudKeychainTag, absl::monostate>;
     using Phone = base::StrongAlias<class PhoneTag, std::string>;
     using AddPhone = base::StrongAlias<class AddPhoneTag, absl::monostate>;
-    using Type =
-        absl::variant<Transport, WindowsAPI, Phone, AddPhone, ICloudKeychain>;
+    using Type = absl::variant<Credential,
+                               Transport,
+                               WindowsAPI,
+                               Phone,
+                               AddPhone,
+                               ICloudKeychain>;
 
     Mechanism(Type type,
               std::u16string name,
@@ -207,33 +234,9 @@ class AuthenticatorRequestDialogModel {
     const Type type;
     const std::u16string name;
     const std::u16string short_name;
+    std::u16string description;
     const raw_ref<const gfx::VectorIcon> icon;
     const base::RepeatingClosure callback;
-  };
-
-  // PairedPhone represents a paired caBLEv2 device.
-  struct PairedPhone {
-    PairedPhone() = delete;
-    PairedPhone(const PairedPhone&);
-    PairedPhone(
-        const std::string& name,
-        size_t contact_id,
-        const std::array<uint8_t, device::kP256X962Length> public_key_x962);
-    ~PairedPhone();
-
-    PairedPhone& operator=(const PairedPhone&);
-
-    static bool CompareByName(const PairedPhone& a, const PairedPhone& b);
-
-    // name is the human-friendly name of the phone. It may be unreasonably
-    // long, however, and should be elided to fit within UIs.
-    std::string name;
-    // contact_id is an ID that can be passed to the FidoDiscoveryFactory's
-    // |get_cable_contact_callback| callback in order to trigger a notification
-    // to this phone.
-    size_t contact_id;
-    // public_key_x962 is the phone's public key.
-    std::array<uint8_t, device::kP256X962Length> public_key_x962;
   };
 
   // CableUIType enumerates the different types of caBLE UI that we've ended
@@ -468,6 +471,12 @@ class AuthenticatorRequestDialogModel {
   // was handled.
   bool OnHybridTransportError();
 
+  // To be called when there are no passkeys from an internal authenticator.
+  // This is a rare case but can happen when the user grants passkeys permission
+  // on macOS as part of a request flow and then Chromium realises that the
+  // request should never have been sent to iCloud Keychain in the first place.
+  bool OnNoPasskeys();
+
   // To be called when the Bluetooth adapter powered state changes.
   void OnBluetoothPoweredStateChanged(bool powered);
 
@@ -509,13 +518,13 @@ class AuthenticatorRequestDialogModel {
 
   // OnAccountSelected is called when one of the accounts from |SelectAccount|
   // has been picked. |index| is the index of the selected account in
-  // |responses()|.
+  // |creds()|.
   void OnAccountSelected(size_t index);
 
   // OnAccountPreselected is called when the user selects a discoverable
   // credential from a platform authenticator prior to providing user
   // authentication. `crededential_id` must match one of the credentials in
-  // `creds()`.
+  // `transport_availability_.recognized_credentials`.
   void OnAccountPreselected(const std::vector<uint8_t>& credential_id);
 
   // Like `OnAccountPreselected()`, but this takes an index into `creds()`
@@ -525,10 +534,9 @@ class AuthenticatorRequestDialogModel {
   void SetSelectedAuthenticatorForTesting(AuthenticatorReference authenticator);
 
   virtual base::span<const Mechanism> mechanisms() const;
-
-  // current_mechanism returns the index into |mechanisms| of the most recently
-  // activated mechanism, or nullopt if there isn't one.
-  absl::optional<size_t> current_mechanism() const;
+  absl::optional<int> priority_mechanism_index() const {
+    return ephemeral_state_.priority_mechanism_index_;
+  }
 
   // Contacts the "priority" paired phone. This is only valid to call when there
   // is a single phone paired.
@@ -538,6 +546,11 @@ class AuthenticatorRequestDialogModel {
   // Only for unittests. UI should use |mechanisms()| to enumerate the
   // user-visible mechanisms and use the callbacks therein.
   void ContactPhoneForTesting(const std::string& name);
+
+  // Returns the name of the phone from sync that will be dispatched to when a
+  // user selects a Mechanism::Credential corresponding to a phone credential,
+  // or absl::nullopt if there isn't one.
+  virtual absl::optional<std::u16string> GetPrioritySyncedPhoneName() const;
 
   // StartTransportFlowForTesting moves the UI to focus on the given transport.
   // UI should use |mechanisms()| to enumerate the user-visible mechanisms and
@@ -550,9 +563,6 @@ class AuthenticatorRequestDialogModel {
   TransportAvailabilityInfo& transport_availability_for_testing() {
     return transport_availability_;
   }
-
-  void ReplaceCredListForTesting(
-      std::vector<device::DiscoverableCredentialMetadata> creds);
 
   ObservableAuthenticatorList& saved_authenticators() {
     return ephemeral_state_.saved_authenticators_;
@@ -599,10 +609,15 @@ class AuthenticatorRequestDialogModel {
     return transport_availability_.resident_key_requirement;
   }
 
+  void set_is_non_webauthn_request(bool is_non_webauthn_request) {
+    is_non_webauthn_request_ = is_non_webauthn_request;
+  }
+
   void set_cable_transport_info(
       absl::optional<bool> extension_is_v2,
-      std::vector<PairedPhone> paired_phones,
-      base::RepeatingCallback<void(size_t)> contact_phone_callback,
+      std::vector<std::unique_ptr<device::cablev2::Pairing>> paired_phones,
+      base::RepeatingCallback<void(std::unique_ptr<device::cablev2::Pairing>)>
+          contact_phone_callback,
       const absl::optional<std::string>& cable_qr_string);
 
   bool win_native_api_enabled() const {
@@ -627,9 +642,24 @@ class AuthenticatorRequestDialogModel {
 
   bool offer_try_again_in_ui() const { return offer_try_again_in_ui_; }
 
+  void set_allow_icloud_keychain(bool);
+  void set_should_create_in_icloud_keychain(bool);
+
+#if BUILDFLAG(IS_MAC)
+  void RecordMacOsStartedHistogram();
+  void RecordMacOsSuccessHistogram(device::FidoRequestType,
+                                   device::AuthenticatorType);
+  void set_is_active_profile_authenticator_user(bool);
+  void set_has_icloud_drive_enabled(bool);
+  void set_local_biometrics_override_for_testing(bool);
+#endif
+
   base::WeakPtr<AuthenticatorRequestDialogModel> GetWeakPtr();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(MultiplePlatformAuthenticatorsTest,
+                           DeduplicateAccounts);
+
   // Contains the state that will be reset when calling StartOver(). StartOver()
   // might be called at an arbitrary point of execution.
   struct EphemeralState {
@@ -637,6 +667,10 @@ class AuthenticatorRequestDialogModel {
     EphemeralState(EphemeralState&&);
     EphemeralState& operator=(EphemeralState&&);
     ~EphemeralState();
+
+    // priority_mechanism_index_ contains an index in `mechanisms_` for the
+    // mechanism that should immediately be triggered, if any.
+    absl::optional<size_t> priority_mechanism_index_;
 
     // Represents the id of the Bluetooth authenticator that the user is trying
     // to connect to or conduct WebAuthN request to via the WebAuthN UI.
@@ -660,6 +694,16 @@ class AuthenticatorRequestDialogModel {
     // creds_ contains possible credentials to select between before or after an
     // authenticator has responded to a request.
     std::vector<device::DiscoverableCredentialMetadata> creds_;
+
+    // did_dispatch_to_icloud_keychain_ is true if iCloud Keychain has been
+    // triggered.
+    bool did_dispatch_to_icloud_keychain_ = false;
+
+    // did_invoke_platform_despite_no_priority_mechanism_ is true if a platform
+    // authenticator was triggered despite there not being a
+    // `priority_mechanism_index_` set. For example, this can happen if there's
+    // an allowlist match.
+    bool did_invoke_platform_despite_no_priority_mechanism_ = false;
   };
 
   void ResetEphemeralState();
@@ -675,20 +719,23 @@ class AuthenticatorRequestDialogModel {
   // Valid action when at step: kNotStarted. kMechanismSelection, and steps
   // where the other transports menu is shown, namely, kUsbInsertAndActivate,
   // kCableActivate.
-  void StartGuidedFlowForTransport(AuthenticatorTransport transport,
-                                   size_t mechanism_index);
+  void StartGuidedFlowForTransport(AuthenticatorTransport transport);
 
   // Starts the flow for adding an unlisted phone by showing a QR code.
-  void StartGuidedFlowForAddPhone(size_t mechanism_index);
+  void StartGuidedFlowForAddPhone();
 
   // Displays a resident-key warning if needed and then calls
   // |HideDialogAndDispatchToNativeWindowsApi|.
-  void StartWinNativeApi(size_t mechanism_index);
+  void StartWinNativeApi();
 
-  void StartICloudKeychain(size_t mechanism_index);
+  void StartICloudKeychain();
+
+  // Contacts the "priority" paired phone from sync. At least one sync phone
+  // must be available to call this.
+  void ContactPrioritySyncedPhone();
 
   // Contacts a paired phone. The phone is specified by name.
-  void ContactPhone(const std::string& name, size_t mechanism_index);
+  void ContactPhone(const std::string& name);
   void ContactPhoneAfterOffTheRecordInterstitial(std::string name);
   void ContactPhoneAfterBleIsPowered(std::string name);
 
@@ -698,12 +745,27 @@ class AuthenticatorRequestDialogModel {
 
   void ContactNextPhoneByName(const std::string& name);
 
+  // Returns the index (into `paired_phones_`) of a phone that has been paired
+  // through Chrome Sync, or absl::nullopt if there isn't one.
+  absl::optional<size_t> GetPrioritySyncedPhoneIndex() const;
+
+  // SortRecognizedCredentials sorts
+  // `transport_availability_.recognized_credentials` into username order.
+  void SortRecognizedCredentials();
+
   // PopulateMechanisms fills in |mechanisms_|.
   void PopulateMechanisms();
+
+  // Adds a button that triggers Windows Hello with the specified string ID and
+  // transport icon.
+  void AddWindowsButton(int label, AuthenticatorTransport transport);
 
   // IndexOfPriorityMechanism returns the index, in |mechanisms_|, of the
   // Mechanism that should be triggered immediately, if any.
   absl::optional<size_t> IndexOfPriorityMechanism();
+
+  std::vector<device::DiscoverableCredentialMetadata> RecognizedCredentialsFor(
+      device::AuthenticatorType source);
 
   // Identifier for the RenderFrameHost of the frame that initiated the current
   // request.
@@ -716,6 +778,10 @@ class AuthenticatorRequestDialogModel {
 
   // The current step of the request UX flow that is currently shown.
   Step current_step_ = Step::kNotStarted;
+
+  // is_non_webauthn_request_ is true if the current request came from Secure
+  // Payment Confirmation, or from credit-card autofill.
+  bool is_non_webauthn_request_ = false;
 
   // started_ records whether |StartFlow| has been called.
   bool started_ = false;
@@ -775,37 +841,25 @@ class AuthenticatorRequestDialogModel {
   // extension.
   bool cable_extension_provided_ = false;
 
-  // have_restarted_due_to_windows_cancel_ is set to true if the request was
-  // restarted because the UI jumped directly to the Windows UI but the user
-  // hit cancel.
-  bool have_restarted_due_to_windows_cancel_ = false;
-
   // mechanisms contains the entries that appear in the "transport" selection
   // sheet and the drop-down menu.
   std::vector<Mechanism> mechanisms_;
-
-  // priority_mechanism_index_ contains an index in `mechanisms_` for the
-  // mechanism that should immediately be triggered, if any.
-  absl::optional<size_t> priority_mechanism_index_;
-
-  // current_mechanism_ contains the index of the most recently activated
-  // mechanism.
-  absl::optional<size_t> current_mechanism_;
 
   // cable_ui_type_ contains the type of UI to display for a caBLE transaction.
   absl::optional<CableUIType> cable_ui_type_;
 
   // paired_phones_ contains details of caBLEv2-paired phones from both Sync and
   // QR-based pairing. The entries are sorted by name.
-  std::vector<PairedPhone> paired_phones_;
+  std::vector<std::unique_ptr<device::cablev2::Pairing>> paired_phones_;
 
   // paired_phones_contacted_ is the same length as |paired_phones_| and
   // contains true whenever the corresponding phone as already been contacted.
   std::vector<bool> paired_phones_contacted_;
 
-  // contact_phone_callback can be run with a |PairedPhone::contact_id| in order
-  // to contact the indicated phone.
-  base::RepeatingCallback<void(size_t)> contact_phone_callback_;
+  // contact_phone_callback can be run with a pairing in order to contact the
+  // indicated phone.
+  base::RepeatingCallback<void(std::unique_ptr<device::cablev2::Pairing>)>
+      contact_phone_callback_;
 
   // cable_device_ready_ is true if a CTAP-level request has been sent to a
   // caBLE device. At this point we assume that any transport errors are
@@ -827,6 +881,39 @@ class AuthenticatorRequestDialogModel {
   // For MakeCredential requests, the PublicKeyCredentialUserEntity associated
   // with the request.
   device::PublicKeyCredentialUserEntity user_entity_;
+
+  // allow_icloud_keychain_ is true if iCloud Keychain can be used for this
+  // request. It is disabled for Secure Payment Confirmation and other non-
+  // WebAuthn cases, for example.
+  bool allow_icloud_keychain_ = false;
+
+  // should_create_in_icloud_keychain is true if creation requests with
+  // attachment=platform should default to iCloud Keychain rather than the
+  // profile authenticator.
+  bool should_create_in_icloud_keychain_ = false;
+
+#if BUILDFLAG(IS_MAC)
+  // did_record_macos_start_histogram_ is set to true if a histogram record of
+  // starting the current request was made. Any later successful completion will
+  // only be recorded if a start event was recorded first.
+  bool did_record_macos_start_histogram_ = false;
+
+  // is_active_profile_authenticator_user_ is true if the current profile has
+  // recently used the platform authenticator on macOS that saves credentials
+  // into the profile.
+  bool is_active_profile_authenticator_user_ = false;
+
+  // has_icloud_drive_enabled_ is true if the current system has iCloud Drive
+  // enabled. This is used as an approximation for whether iCloud Keychain
+  // syncing is enabled.
+  bool has_icloud_drive_enabled_ = false;
+
+  // local_biometrics_override_for_testing_ can be set in tests to override
+  // whether or not the this model should consider local biometrics to be
+  // available. Biometrics can be unavailable on Macs because they're not
+  // present (e.g. a Mac Mini) or because it's a laptop in clamshell mode.
+  absl::optional<bool> local_biometrics_override_for_testing_;
+#endif
 
   base::WeakPtrFactory<AuthenticatorRequestDialogModel> weak_factory_{this};
 };

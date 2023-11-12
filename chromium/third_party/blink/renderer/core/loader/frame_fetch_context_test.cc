@@ -581,6 +581,7 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest,
   FrameFetchContextHintsTest() {
     std::vector<base::test::FeatureRef> enabled_features = {
         blink::features::kUserAgentClientHint,
+        blink::features::kClientHintsPrefersReducedTransparency,
     };
     std::vector<base::test::FeatureRef> disabled_features = {};
     if (GetParam()) {
@@ -620,7 +621,8 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest,
                                                  resource_request);
 
     String expected = is_present ? String(header_value) : String();
-    EXPECT_EQ(expected, resource_request.HttpHeaderField(header_name));
+    EXPECT_EQ(expected,
+              resource_request.HttpHeaderField(AtomicString(header_name)));
   }
 
   // Returns the expected value for a header containing an empty string. This
@@ -640,7 +642,7 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest,
     ResourceRequest resource_request(input_url);
     GetFetchContext()->AddClientHintsIfNecessary(
         absl::nullopt /* resource_width */, resource_request);
-    return resource_request.HttpHeaderField(header_name);
+    return resource_request.HttpHeaderField(AtomicString(header_name));
   }
 
  private:
@@ -837,6 +839,9 @@ TEST_P(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
 }
 
 TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kClientHintsFormFactor);
+
   // `Sec-CH-UA` is always sent for secure requests
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA", true, "");
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA", false, "");
@@ -849,7 +854,11 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
   ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                false, "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
-  ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+  ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+               "");
+  ExpectHeader("http://www.example.com/0.gif", "Sec-CH-UA-Model", false, "");
+  ExpectHeader("http://www.example.com/0.gif", "Sec-CH-UA-Form-Factor", false,
+               "");
 
   {
     ClientHintsPreferences preferences;
@@ -861,11 +870,15 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor",
+                 false, "");
 
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+                 "");
   }
 
   {
@@ -878,11 +891,15 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor",
+                 false, "");
 
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+                 "");
   }
 
   {
@@ -895,11 +912,15 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  true, EmptyString());
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor",
+                 false, "");
 
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+                 "");
   }
 
   {
@@ -912,11 +933,36 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
                  false, "");
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", true,
                  EmptyString());
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor",
+                 false, "");
 
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                  false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+                 "");
+  }
+
+  {
+    ClientHintsPreferences preferences;
+    preferences.SetShouldSend(
+        network::mojom::WebClientHintsType::kUAFormFactor);
+    document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
+
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
+                 false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", true,
+                 EmptyString());
+
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
+                 false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+    ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+                 "");
   }
 }
 
@@ -967,7 +1013,33 @@ TEST_P(FrameFetchContextHintsTest, MonitorPrefersReducedMotionHint) {
                false, "");
 }
 
+TEST_P(FrameFetchContextHintsTest, MonitorPrefersReducedTransparencyHint) {
+  ExpectHeader("https://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
+  ExpectHeader("http://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
+
+  ClientHintsPreferences preferences;
+  preferences.SetShouldSend(
+      network::mojom::WebClientHintsType::kPrefersReducedTransparency);
+  document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
+
+  ExpectHeader("https://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", true, "no-preference");
+  ExpectHeader("http://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
+
+  document->GetSettings()->SetPrefersReducedTransparency(true);
+  ExpectHeader("https://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", true, "reduce");
+  ExpectHeader("http://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
+}
+
 TEST_P(FrameFetchContextHintsTest, MonitorAllHints) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kClientHintsFormFactor);
+
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", false, "");
   ExpectHeader("https://www.example.com/1.gif", "DPR", false, "");
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", false, "");
@@ -979,10 +1051,14 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHints) {
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
                false, "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
+  ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", false,
+               "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Color-Scheme",
                false, "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Reduced-Motion",
                false, "");
+  ExpectHeader("https://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
 
   // `Sec-CH-UA` is special.
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA", true, "");
@@ -1011,10 +1087,13 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHints) {
   preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kUAPlatformVersion);
   preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAModel);
+  preferences.SetShouldSend(network::mojom::WebClientHintsType::kUAFormFactor);
   preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kPrefersColorScheme);
   preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kPrefersReducedMotion);
+  preferences.SetShouldSend(
+      network::mojom::WebClientHintsType::kPrefersReducedTransparency);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("https://www.example.com/1.gif", "Device-Memory", true, "4");
@@ -1038,10 +1117,14 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHints) {
                true, EmptyString());
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", true,
                EmptyString());
+  ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", true,
+               EmptyString());
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Color-Scheme",
                true, "light");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Reduced-Motion",
                true, "no-preference");
+  ExpectHeader("https://www.example.com/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", true, "no-preference");
 
   // Value of network quality client hints may vary, so only check if the
   // header is present and the values are non-negative/non-empty.
@@ -1071,7 +1154,7 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHintsPermissionsPolicy) {
       "ch-dpr *; ch-device-memory *; ch-downlink *; ch-ect *; ch-rtt *; ch-ua "
       "*; ch-ua-arch *; ch-ua-platform *; ch-ua-platform-version *; "
       "ch-ua-model *; ch-viewport-width *; ch-width *; ch-prefers-color-scheme "
-      "*; ch-prefers-reduced-motion *");
+      "*; ch-prefers-reduced-motion *; ch-prefers-reduced-transparency *");
   document->GetSettings()->SetScriptEnabled(true);
   ClientHintsPreferences preferences;
   preferences.SetShouldSend(
@@ -1101,6 +1184,8 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHintsPermissionsPolicy) {
       network::mojom::WebClientHintsType::kPrefersColorScheme);
   preferences.SetShouldSend(
       network::mojom::WebClientHintsType::kPrefersReducedMotion);
+  preferences.SetShouldSend(
+      network::mojom::WebClientHintsType::kPrefersReducedTransparency);
   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(4096);
   document->GetFrame()->GetClientHintsPreferences().UpdateFrom(preferences);
 
@@ -1131,6 +1216,8 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHintsPermissionsPolicy) {
                true, "light");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-Prefers-Reduced-Motion",
                true, "no-preference");
+  ExpectHeader("https://www.example.net/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", true, "no-preference");
 
   // Value of network quality client hints may vary, so only check if the
   // header is present and the values are non-negative/non-empty.
@@ -1196,6 +1283,8 @@ TEST_P(FrameFetchContextHintsTest, MonitorSomeHintsPermissionsPolicy) {
                false, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-Prefers-Reduced-Motion",
                false, "");
+  ExpectHeader("https://www.example.net/1.gif",
+               "Sec-CH-Prefers-Reduced-Transparency", false, "");
 }
 
 // Verify that the client hints are not attached for third-party subresources
@@ -1242,7 +1331,8 @@ TEST_F(FrameFetchContextTest, SubResourceCachePolicy) {
   // Conditional request
   document->Loader()->SetLoadType(WebFrameLoadType::kStandard);
   ResourceRequest conditional("http://www.example.com/mock");
-  conditional.SetHttpHeaderField(http_names::kIfModifiedSince, "foo");
+  conditional.SetHttpHeaderField(http_names::kIfModifiedSince,
+                                 AtomicString("foo"));
   EXPECT_EQ(mojom::FetchCacheMode::kValidateCache,
             GetFetchContext()->ResourceRequestCachePolicy(
                 conditional, ResourceType::kMock, FetchParameters::kNoDefer));
@@ -1374,7 +1464,7 @@ TEST_F(FrameFetchContextTest, AddAdditionalRequestHeadersWhenDetached) {
   const KURL document_url("https://www2.example.com/fuga/hoge.html");
   const String origin = "https://www2.example.com";
   ResourceRequest request(KURL("https://localhost/"));
-  request.SetHttpMethod("PUT");
+  request.SetHttpMethod(http_names::kPUT);
 
   GetNetworkStateNotifier().SetSaveDataEnabledOverride(true);
 
@@ -1382,7 +1472,7 @@ TEST_F(FrameFetchContextTest, AddAdditionalRequestHeadersWhenDetached) {
 
   GetFetchContext()->AddAdditionalRequestHeaders(request);
 
-  EXPECT_EQ(String(), request.HttpHeaderField("Save-Data"));
+  EXPECT_EQ(String(), request.HttpHeaderField(http_names::kSaveData));
 }
 
 TEST_F(FrameFetchContextTest, ResourceRequestCachePolicyWhenDetached) {
@@ -1434,7 +1524,7 @@ TEST_F(FrameFetchContextTest, AddResourceTimingWhenDetached) {
 
   dummy_page_holder = nullptr;
 
-  GetFetchContext()->AddResourceTiming(std::move(info), "type");
+  GetFetchContext()->AddResourceTiming(std::move(info), AtomicString("type"));
   // Should not crash.
 }
 
@@ -1591,7 +1681,7 @@ class FrameFetchContextDisableReduceAcceptLanguageTest
   void SetupForAcceptLanguageTest(bool is_detached, ResourceRequest& request) {
     ResourceLoaderOptions options(/*world=*/nullptr);
 
-    document->GetFrame()->SetReducedAcceptLanguage("en-GB");
+    document->GetFrame()->SetReducedAcceptLanguage(AtomicString("en-GB"));
 
     if (is_detached)
       dummy_page_holder = nullptr;
@@ -1615,7 +1705,7 @@ TEST_P(FrameFetchContextDisableReduceAcceptLanguageTest,
   ResourceRequest request(url);
   SetupForAcceptLanguageTest(/*is_detached=*/GetParam(), request);
   // Expect no Accept-Language header set when feature is disabled.
-  EXPECT_EQ(nullptr, request.HttpHeaderField("Accept-Language"));
+  EXPECT_EQ(nullptr, request.HttpHeaderField(http_names::kAcceptLanguage));
 }
 
 class FrameFetchContextReduceAcceptLanguageTest
@@ -1642,14 +1732,14 @@ TEST_P(FrameFetchContextReduceAcceptLanguageTest, VerifyReduceAcceptLanguage) {
   const KURL url("https://www.example.com/");
   ResourceRequest request(url);
   SetupForAcceptLanguageTest(/*is_detached=*/GetParam(), request);
-  EXPECT_EQ("en-GB", request.HttpHeaderField("Accept-Language"));
+  EXPECT_EQ("en-GB", request.HttpHeaderField(http_names::kAcceptLanguage));
 }
 
 TEST_P(FrameFetchContextReduceAcceptLanguageTest, NonHttpFamilyUrl) {
   const KURL url("ws://www.example.com/");
   ResourceRequest request(url);
   SetupForAcceptLanguageTest(/*is_detached=*/GetParam(), request);
-  EXPECT_EQ(nullptr, request.HttpHeaderField("Accept-Language"));
+  EXPECT_EQ(nullptr, request.HttpHeaderField(http_names::kAcceptLanguage));
 }
 
 }  // namespace blink

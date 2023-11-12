@@ -134,9 +134,11 @@ std::string GetConfigurationType(const Target* target, Err* err) {
       return "Application";
     case Target::SHARED_LIBRARY:
     case Target::LOADABLE_MODULE:
+    case Target::RUST_PROC_MACRO:
       return "DynamicLibrary";
     case Target::STATIC_LIBRARY:
     case Target::SOURCE_SET:
+    case Target::RUST_LIBRARY:
       return "StaticLibrary";
     case Target::GROUP:
       return "Utility";

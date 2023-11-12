@@ -14,6 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_files_utils.h"
@@ -39,11 +40,13 @@ class Widget;
 namespace policy {
 
 class DlpFilesEventStorage;
+class DlpExtractIOTaskObserver;
 
 // DlpFilesControllerAsh is responsible for deciding whether file transfers are
 // allowed according to the files sources saved in the DLP daemon and the rules
 // of the Data leak prevention policy set by the admin.
-class DlpFilesControllerAsh : public DlpFilesController {
+class DlpFilesControllerAsh : public DlpFilesController,
+                              public file_manager::VolumeManagerObserver {
  public:
   // Returns the instance if it exists.
   static DlpFilesControllerAsh* GetForPrimaryProfile();
@@ -53,13 +56,15 @@ class DlpFilesControllerAsh : public DlpFilesController {
   struct DlpFileMetadata {
     DlpFileMetadata() = delete;
     DlpFileMetadata(const std::string& source_url,
+                    const std::string& referrer_url,
                     bool is_dlp_restricted,
                     bool is_restricted_for_destination);
 
     friend bool operator==(const DlpFileMetadata& a, const DlpFileMetadata& b) {
       return a.is_dlp_restricted == b.is_dlp_restricted &&
-             a.source_url == b.source_url &&
-             a.is_restricted_for_destination == b.is_restricted_for_destination;
+             a.is_restricted_for_destination ==
+                 b.is_restricted_for_destination &&
+             a.source_url == b.source_url && a.referrer_url == b.referrer_url;
     }
     friend bool operator!=(const DlpFileMetadata& a, const DlpFileMetadata& b) {
       return !(a == b);
@@ -67,6 +72,8 @@ class DlpFilesControllerAsh : public DlpFilesController {
 
     // Source URL from which the file was downloaded.
     std::string source_url;
+    // Referrer URL from which the download process was initiated.
+    std::string referrer_url;
     // Whether the file is under any DLP rule or not.
     bool is_dlp_restricted;
     // Whether the file is restricted by DLP for a specific destination.
@@ -184,6 +191,9 @@ class DlpFilesControllerAsh : public DlpFilesController {
       const ui::DataTransferEndpoint* data_dst,
       CheckIfDlpAllowedCallback result_callback);
 
+  //  VolumeManagerObserver overrides:
+  void OnShutdownStart(file_manager::VolumeManager* volume_manager) override;
+
   DlpFilesEventStorage* GetEventStorageForTesting();
 
   void SetFileSystemContextForTesting(
@@ -191,13 +201,13 @@ class DlpFilesControllerAsh : public DlpFilesController {
 
  protected:
   // Maps |file_path| to data_controls::Component if possible.
-  absl::optional<data_controls::Component> MapFilePathtoPolicyComponent(
+  absl::optional<data_controls::Component> MapFilePathToPolicyComponent(
       Profile* profile,
       const base::FilePath& file_path) override;
 
   // TODO(b/284122497): Cleanup friend for testing.
   FRIEND_TEST_ALL_PREFIXES(DlpFilesControllerAshComponentsTest,
-                           MapFilePathtoPolicyComponentTest);
+                           MapFilePathToPolicyComponentTest);
 
  private:
   // Called back from warning dialog. Passes blocked files sources along
@@ -226,7 +236,7 @@ class DlpFilesControllerAsh : public DlpFilesController {
                             FilterDisallowedUploadsCallback result_callback,
                             ::dlp::CheckFilesTransferResponse response);
 
-  void ReturnDlpMetadata(std::vector<absl::optional<ino64_t>> inodes,
+  void ReturnDlpMetadata(const std::vector<storage::FileSystemURL>& files,
                          absl::optional<DlpFileDestination> destination,
                          GetDlpMetadataCallback result_callback,
                          const ::dlp::GetFilesSourcesResponse response);
@@ -241,6 +251,7 @@ class DlpFilesControllerAsh : public DlpFilesController {
   // `dst_pattern` is missing, we report `dst.component.value()` instead. When
   // `level` is missing, we report a warning proceeded event.
   void MaybeReportEvent(ino64_t inode,
+                        time_t crtime,
                         const base::FilePath& path,
                         const std::string& source_pattern,
                         const DlpFileDestination& dst,
@@ -272,14 +283,13 @@ class DlpFilesControllerAsh : public DlpFilesController {
       CheckIfDlpAllowedCallback result_callback,
       std::vector<storage::FileSystemURL> dropped_files);
 
-  // Gets the component out of |destination| if possible.
-  absl::optional<data_controls::Component> MaybeGetComponent(
-      Profile* profile,
-      const DlpFileDestination& destination);
-
   // Keeps track of events and detects duplicate ones using time based
   // approach.
   std::unique_ptr<DlpFilesEventStorage> event_storage_;
+
+  // Gets notified when an archive is extracted, and notifies the DLP daemon
+  // about newly extracted files.
+  std::unique_ptr<DlpExtractIOTaskObserver> extract_io_task_observer_;
 
   base::WeakPtrFactory<DlpFilesControllerAsh> weak_ptr_factory_{this};
 };

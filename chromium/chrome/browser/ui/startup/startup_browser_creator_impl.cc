@@ -284,6 +284,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
   }
 
   bool first_tab = true;
+  bool process_headless_commands = headless::ShouldProcessHeadlessCommands();
   custom_handlers::ProtocolHandlerRegistry* registry =
       profile_ ? ProtocolHandlerRegistryFactory::GetForBrowserContext(profile_)
                : nullptr;
@@ -306,6 +307,22 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     // tab after opening it in the case where What's New does not load.
     if (tab.url == whats_new::GetWebUIStartupURL()) {
       whats_new::StartWhatsNewFetch(browser);
+      continue;
+    }
+
+    // Headless mode is restricted to only one url in the command line, so
+    // just grab the first one assuming it's the target.
+    if (first_tab && process_headless_commands) {
+      headless::ProcessHeadlessCommands(
+          profile_, tab.url,
+          base::BindOnce(
+              [](base::WeakPtr<Browser> browser,
+                 headless::HeadlessCommandHandler::Result result) {
+                if (browser && browser->window()) {
+                  browser->window()->Close();
+                }
+              },
+              browser->AsWeakPtr()));
       continue;
     }
 
@@ -378,30 +395,14 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
   // NOTE(andre@vivaldi.com) : We need to do the tab-activation after we know
   // that everything is set up.
   if (!browser->is_vivaldi()) {
-  if (!browser->tab_strip_model()->GetActiveWebContents()) {
+  if (!browser->tab_strip_model()->GetActiveWebContents() &&
+      !process_headless_commands) {
     // TODO(sky): this is a work around for 110909. Figure out why it's needed.
     if (!browser->tab_strip_model()->count())
       chrome::AddTabAt(browser, GURL(), -1, true);
     else
       browser->tab_strip_model()->ActivateTabAt(0);
   }
-  }
-
-  if (headless::ShouldProcessHeadlessCommands()) {
-    // Headless mode is restricted to only one url in the command line, so
-    // just grab the actave tab assuming it's the target.
-    content::WebContents* web_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
-    if (web_contents) {
-      headless::ProcessHeadlessCommands(profile_, web_contents->GetVisibleURL(),
-                                        base::BindOnce(
-                                            [](base::WeakPtr<Browser> browser) {
-                                              if (browser->window()) {
-                                                browser->window()->Close();
-                                              }
-                                            },
-                                            browser->AsWeakPtr()));
-    }
   }
 
   browser->window()->Show();

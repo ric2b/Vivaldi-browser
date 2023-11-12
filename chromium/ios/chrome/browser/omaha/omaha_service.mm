@@ -44,10 +44,6 @@
 #import "third_party/libxml/chromium/xml_writer.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // Number of hours to wait between successful requests.
 const int kHoursBetweenRequests = 5;
@@ -382,6 +378,10 @@ void OmahaService::CheckNow(OneOffCallback callback) {
 
   if (OmahaService::IsEnabled()) {
     OmahaService* service = GetInstance();
+    // TODO(crbug.com/1476112): Remove when early callers are removed.
+    if (!service->started_) {
+      return;
+    }
     web::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&OmahaService::CheckNowOnIOThread,

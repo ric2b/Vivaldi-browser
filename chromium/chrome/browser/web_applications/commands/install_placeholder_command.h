@@ -11,8 +11,8 @@
 #include "base/values.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/external_install_options.h"
+#include "chrome/browser/web_applications/jobs/uninstall/web_app_uninstall_and_replace_job.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
-#include "chrome/browser/web_applications/web_app_uninstall_and_replace_job.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
@@ -73,7 +73,7 @@ class InstallPlaceholderCommand : public WebAppCommandTemplate<AppLock> {
                               webapps::InstallResultCode code,
                               bool did_uninstall_and_replace);
 
-  const raw_ptr<Profile> profile_;
+  const raw_ptr<Profile> profile_ = nullptr;
   const AppId app_id_;
   std::unique_ptr<AppLockDescription> lock_description_;
   std::unique_ptr<AppLock> lock_;

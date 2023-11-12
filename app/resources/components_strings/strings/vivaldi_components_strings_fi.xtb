@@ -66,7 +66,7 @@
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
 <translation id="3447884698081792621">Näytä varmenne (myöntänyt <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Piilota lisäasetukset</translation>
-<translation id="3484560055331845446">Saatat menettää pääsyn Google-tiliisi. Vivaldi suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
+<translation id="3484560055331845446">Voit menettää pääsyn Google-tilillesi. Vivaldi suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="3566021033012934673">Yhteytesi ei ole yksityinen</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Piilota lisätiedot</translation>
@@ -165,7 +165,6 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
-<translation id="7260504762447901703">Peru käyttöoikeus</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7364115444476960850">Vivaldin <ph name="BLOCKER_NAME" /> on estänyt sivun, jolle yrität päästä</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>

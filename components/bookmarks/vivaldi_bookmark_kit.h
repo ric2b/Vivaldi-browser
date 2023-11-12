@@ -10,6 +10,7 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace bookmarks {
 class BookmarkModel;
@@ -65,6 +66,8 @@ const base::Uuid GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
 const base::Uuid GetPartner(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode::MetaInfoMap& meta_info_map);
+SkColor GetThemeColor(const BookmarkNode* node);
+std::string GetThemeColorForCSS(const BookmarkNode* node);
 
 bool IsSeparator(const BookmarkNode* node);
 bool IsTrash(const BookmarkNode* node);
@@ -98,6 +101,9 @@ void SetNodeSpeeddial(BookmarkModel* model,
 void SetNodeThumbnail(BookmarkModel* model,
                       const BookmarkNode* node,
                       const std::string& path);
+void SetNodeThemeColor(BookmarkModel* model,
+                       const BookmarkNode* node,
+                       SkColor theme_color);
 
 typedef base::RepeatingCallback<bool(const std::string&)> BookmarkWriteFunc;
 bool WriteBookmarkData(const base::Value::Dict& value,

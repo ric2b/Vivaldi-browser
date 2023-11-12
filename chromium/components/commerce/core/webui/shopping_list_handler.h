@@ -88,6 +88,8 @@ class ShoppingListHandler : public shopping_list::mojom::ShoppingListHandler,
       GetPriceInsightsInfoForCurrentUrlCallback callback) override;
   void ShowInsightsSidePanelUI() override;
   void IsShoppingListEligible(IsShoppingListEligibleCallback callback) override;
+  void GetShoppingCollectionBookmarkFolderId(
+      GetShoppingCollectionBookmarkFolderIdCallback callback) override;
   void GetPriceTrackingStatusForCurrentUrl(
       GetPriceTrackingStatusForCurrentUrlCallback callback) override;
   void SetPriceTrackingStatusForCurrentUrl(bool track) override;
@@ -125,7 +127,7 @@ class ShoppingListHandler : public shopping_list::mojom::ShoppingListHandler,
   void OnFetchProductInfoForCurrentUrl(
       GetProductInfoForCurrentUrlCallback callback,
       const GURL& url,
-      const absl::optional<ProductInfo>& info);
+      const absl::optional<const ProductInfo>& info);
 
   void OnFetchPriceInsightsInfoForCurrentUrl(
       GetPriceInsightsInfoForCurrentUrlCallback callback,

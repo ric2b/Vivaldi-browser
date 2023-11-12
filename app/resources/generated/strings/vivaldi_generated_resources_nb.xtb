@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Gjenopprett innstillingene</translation>
 <translation id="4478664379124702289">Lagre len&amp;ken som...</translation>
 <translation id="4520385623207007473">Informasjonskapsler i bruk</translation>
+<translation id="456449593072900590">Slett ved avslutning</translation>
 <translation id="4580596421317071374">Passord lagres i <ph name="GOOGLE_PASSWORD_MANAGER" /> på denne enheten.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apper og utvidelser kan bare bli endret av administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Farge</translation>
 <translation id="5485102783864353244">Legg til app</translation>
 <translation id="5486561344817861625">Simuler omstart av nettleseren</translation>
-<translation id="5487521232677179737">Fjern data</translation>
 <translation id="5509693895992845810">L&amp;agre som...</translation>
 <translation id="5521078259930077036">Er dette hjemmesiden du forventet?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Ukjent</translation>
 <translation id="5851868085455377790">Utsteder</translation>
 <translation id="5860491529813859533">Slå på</translation>
-<translation id="5867841422488265304">Søk eller skriv inn en nettadresse</translation>
 <translation id="5910363049092958439">Lagre &amp;bildet som...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" />-bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Ingen tilgang.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontroller stavemåte mens du skriver</translation>
-<translation id="73786666777299047">Åpne Chrome Nettmarked</translation>
 <translation id="7385854874724088939">Noe gikk galt under utskriften.  Sjekk printeren og prøv igjen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Vis sidekilde</translation>
@@ -442,6 +440,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8382913212082956454">Kopier &amp;e-postadresse</translation>
 <translation id="8434480141477525001">NaCl-feilsøkingsport</translation>
 <translation id="8449008133205184768">Lim inn og tilpass til stil</translation>
+<translation id="8477178913400731244">Slett data</translation>
 <translation id="8477384620836102176">&amp;Generelt</translation>
 <translation id="8496717697661868878">Kjør dette programtillegget</translation>
 <translation id="8512476990829870887">Avslutt prosess</translation>

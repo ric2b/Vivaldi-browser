@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/sharing/activity_services/activity_service_coordinator.h"
 
 #import "components/bookmarks/browser/bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_browser_agent.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
@@ -41,10 +41,6 @@
 // End Vivaldi
 
 #import <LinkPresentation/LinkPresentation.h>
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -282,9 +278,7 @@ constexpr CGFloat kAppIconPointSize = 80;
 
   id extraItem = nil;
   if (@available(iOS 16.4, *)) {
-    if (ShouldAddToHomeScreen(self.incognito)) {
-      extraItem = webState->GetActivityItem();
-    }
+    extraItem = webState->GetActivityItem();
   }
   [self shareItems:items activities:activities extraItem:extraItem];
 }
@@ -377,9 +371,7 @@ constexpr CGFloat kAppIconPointSize = 80;
       [self.mediator applicationActivitiesForDataItems:@[ URLData ]];
   id extraItem = nil;
   if (@available(iOS 16.4, *)) {
-    if (ShouldAddToHomeScreen(self.incognito)) {
-      extraItem = webState->GetActivityItem();
-    }
+    extraItem = webState->GetActivityItem();
   }
   [self shareItems:items activities:activities extraItem:extraItem];
 }

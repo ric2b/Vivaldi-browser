@@ -80,6 +80,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
@@ -528,7 +529,8 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
   const bool tablet_mode_;
 
   std::unique_ptr<test::AppsGridViewTestApi> grid_test_api_;
-  raw_ptr<AppsGridView, ExperimentalAsh> apps_grid_view_ = nullptr;
+  raw_ptr<AppsGridView, DanglingUntriaged | ExperimentalAsh> apps_grid_view_ =
+      nullptr;
 };
 
 // Parameterized by tablet/clamshell mode.
@@ -701,10 +703,10 @@ class PopulatedAppListTest : public AshTestBase,
   }
 
   std::unique_ptr<test::AppsGridViewTestApi> apps_grid_test_api_;
-  raw_ptr<AppListView, ExperimentalAsh> app_list_view_ =
+  raw_ptr<AppListView, DanglingUntriaged | ExperimentalAsh> app_list_view_ =
       nullptr;  // Owned by native widget.
-  raw_ptr<PagedAppsGridView, ExperimentalAsh> apps_grid_view_ =
-      nullptr;  // Owned by |app_list_view_|.
+  raw_ptr<PagedAppsGridView, DanglingUntriaged | ExperimentalAsh>
+      apps_grid_view_ = nullptr;  // Owned by |app_list_view_|.
   base::test::ScopedFeatureList scoped_feature_list_;
   const bool is_drag_drop_refactor_enabled_;
 };
@@ -1678,6 +1680,7 @@ TEST_P(AppListBubbleAndTabletTest, ClearSearchButtonClearsSearch) {
             client->GetAndResetPastSearchQueries());
 
   SearchBoxView* search_box_view = GetSearchBoxView();
+  search_box_view->GetWidget()->LayoutRootViewIfNecessary();
   EXPECT_TRUE(search_box_view->close_button()->GetVisible());
   LeftClickOn(search_box_view->close_button());
 
@@ -3746,13 +3749,13 @@ TEST_F(AppListPresenterTest, TapAppListThenShelfHidesAutoHiddenShelf) {
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 }
 
-// TODO(b/283753290): Deflake and re-enable the test.
-TEST_F(AppListPresenterTest, DISABLED_ClickingShelfArrowDoesNotHideAppList) {
+TEST_F(AppListPresenterTest, ClickingShelfArrowDoesNotHideAppList) {
+  SetShelfAnimationDuration(base::Milliseconds(1));
+
   // Add enough shelf items for the shelf to enter overflow.
   Shelf* const shelf = GetPrimaryShelf();
   ScrollableShelfView* const scrollable_shelf_view =
       shelf->hotseat_widget()->scrollable_shelf_view();
-  ShelfView* const shelf_view = shelf->GetShelfViewForTesting();
   int index = 0;
   while (scrollable_shelf_view->layout_strategy_for_test() ==
          ScrollableShelfView::kNotShowArrowButtons) {
@@ -3760,8 +3763,7 @@ TEST_F(AppListPresenterTest, DISABLED_ClickingShelfArrowDoesNotHideAppList) {
         base::NumberToString(index++), TYPE_PINNED_APP);
   }
 
-  ShelfViewTestAPI shelf_view_test_api(shelf_view);
-  shelf_view_test_api.RunMessageLoopUntilAnimationsDone();
+  WaitForShelfAnimation();
 
   shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
 
@@ -4211,9 +4213,9 @@ TEST_F(AppListPresenterHomeLauncherTest, GoingHomeMinimizesAllWindows) {
   std::unique_ptr<aura::Window> window1(CreateTestWindowInShellWithId(0)),
       window2(CreateTestWindowInShellWithId(1)),
       window3(CreateTestWindowInShellWithId(2));
-  WindowState *state1 = WindowState::Get(window1.get()),
-              *state2 = WindowState::Get(window2.get()),
-              *state3 = WindowState::Get(window3.get());
+  WindowState* state1 = WindowState::Get(window1.get());
+  WindowState* state2 = WindowState::Get(window2.get());
+  WindowState* state3 = WindowState::Get(window3.get());
   state1->Maximize();
   state2->Maximize();
   state3->Maximize();

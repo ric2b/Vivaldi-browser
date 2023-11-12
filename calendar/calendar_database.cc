@@ -135,7 +135,7 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   if (!CreateCalendarTable() || !CreateEventTable() ||
       !CreateEventTypeTable() || !CreateRecurringExceptionTable() ||
       !CreateNotificationTable() || !CreateInviteTable() ||
-      !CreateAccountTable())
+      !CreateAccountTable() || !CreateEventTemplateTable())
     return sql::INIT_FAILURE;
 
   // Version check.

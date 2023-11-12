@@ -64,8 +64,7 @@ void CardboardImageTransport::DoRuntimeInitialization() {
 void CardboardImageTransport::UpdateDistortionMesh() {
   // TODO(https://crbug.com/1429088): Move this into helper classes rather than
   // directly using the cardboard types here.
-  // TODO(https://crbug.com/1429091): Actually query for saved params.
-  auto params = CardboardDeviceParams::GetV1DeviceParams();
+  auto params = CardboardDeviceParams::GetDeviceParams();
   CHECK(params.IsValid());
 
   lens_distortion_ = internal::ScopedCardboardObject<CardboardLensDistortion*>(
@@ -101,11 +100,20 @@ void CardboardImageTransport::Render(WebXrPresentationState* webxr,
   // Mojo (and by extension RectF and the frame bounds), use a convention that
   // the origin is the top left; while OpenGL/Cardboard use the convention that
   // the origin for textures should be at the bottom left, so the top/bottom are
-  // intentionally inverted here.
-  left_eye_description_.top_v = left_bounds.bottom();
-  left_eye_description_.bottom_v = left_bounds.y();
-  right_eye_description_.top_v = right_bounds.bottom();
-  right_eye_description_.bottom_v = right_bounds.y();
+  // intentionally inverted here. However, this inversion is already accounted
+  // for in the non-shared buffer mode where we swap the texture to a surface
+  // beforehand.
+  if (UseSharedBuffer()) {
+    left_eye_description_.top_v = left_bounds.bottom();
+    left_eye_description_.bottom_v = left_bounds.y();
+    right_eye_description_.top_v = right_bounds.bottom();
+    right_eye_description_.bottom_v = right_bounds.y();
+  } else {
+    left_eye_description_.bottom_v = left_bounds.bottom();
+    left_eye_description_.top_v = left_bounds.y();
+    right_eye_description_.bottom_v = right_bounds.bottom();
+    right_eye_description_.top_v = right_bounds.y();
+  }
 
   GLuint texture = GetRenderingTextureId(webxr);
 

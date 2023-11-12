@@ -63,7 +63,6 @@
 
 namespace blink {
 
-class AnchorSpecifierValue;
 class ClipPathOperation;
 class CSSToLengthConversionData;
 class Font;
@@ -100,7 +99,8 @@ class StyleBuilderConverterBase {
       const CSSToLengthConversionData&,
       FontDescription::Size parent_size,
       const Document*);
-  static FontSizeAdjust ConvertFontSizeAdjust(const CSSValue&);
+  static FontSizeAdjust ConvertFontSizeAdjust(const StyleResolverState&,
+                                              const CSSValue&);
   static scoped_refptr<FontPalette> ConvertFontPalette(const CSSValue&);
   static scoped_refptr<FontPalette> ConvertPaletteMix(const CSSValue&);
 };
@@ -115,11 +115,10 @@ class StyleBuilderConverter {
   template <typename T>
   static T ConvertComputedLength(const StyleResolverState&, const CSSValue&);
   static LengthBox ConvertClip(StyleResolverState&, const CSSValue&);
-  static scoped_refptr<ClipPathOperation> ConvertClipPath(StyleResolverState&,
-                                                          const CSSValue&);
-  static scoped_refptr<StyleSVGResource> ConvertElementReference(
-      StyleResolverState&,
-      const CSSValue&);
+  static ClipPathOperation* ConvertClipPath(StyleResolverState&,
+                                            const CSSValue&);
+  static StyleSVGResource* ConvertElementReference(StyleResolverState&,
+                                                   const CSSValue&);
   static FilterOperations ConvertFilterOperations(StyleResolverState&,
                                                   const CSSValue&,
                                                   CSSPropertyID);
@@ -181,6 +180,9 @@ class StyleBuilderConverter {
       const CSSValue&);
   static GridAutoFlow ConvertGridAutoFlow(StyleResolverState&, const CSSValue&);
   static GridPosition ConvertGridPosition(StyleResolverState&, const CSSValue&);
+  static ComputedGridTemplateAreas* ConvertGridTemplateAreas(
+      StyleResolverState&,
+      const CSSValue&);
   static GridTrackSize ConvertGridTrackSize(StyleResolverState&,
                                             const CSSValue&);
   static NGGridTrackList ConvertGridTrackSizeList(StyleResolverState&,
@@ -208,18 +210,21 @@ class StyleBuilderConverter {
   static TabSize ConvertLengthOrTabSpaces(StyleResolverState&, const CSSValue&);
   static Length ConvertLineHeight(StyleResolverState&, const CSSValue&);
   static float ConvertNumberOrPercentage(StyleResolverState&, const CSSValue&);
+  static int ConvertInteger(StyleResolverState&, const CSSValue&);
   static ScrollStartData ConvertScrollStart(const StyleResolverState&,
                                             const CSSValue&);
   static float ConvertAlpha(StyleResolverState&,
                             const CSSValue&);  // clamps to [0,1]
   static ScopedCSSName* ConvertNoneOrCustomIdent(StyleResolverState&,
                                                  const CSSValue&);
+  static ScopedCSSName* ConvertNormalOrCustomIdent(StyleResolverState&,
+                                                   const CSSValue&);
   static ScopedCSSName* ConvertCustomIdent(StyleResolverState&,
                                            const CSSValue&);
   static ScopedCSSName* ConvertAnchorDefault(StyleResolverState&,
                                              const CSSValue&);
-  static AnchorSpecifierValue* ConvertAnchorScroll(StyleResolverState&,
-                                                   const CSSValue&);
+  static ScopedCSSNameList* ConvertAnchorName(StyleResolverState&,
+                                              const CSSValue&);
   static StyleInitialLetter ConvertInitialLetter(StyleResolverState&,
                                                  const CSSValue&);
   static StyleOffsetRotation ConvertOffsetRotate(StyleResolverState&,
@@ -277,10 +282,6 @@ class StyleBuilderConverter {
   static void ConvertGridTrackList(const CSSValue&,
                                    ComputedGridTrackList&,
                                    StyleResolverState&);
-  static void CreateImplicitNamedGridLinesFromGridArea(
-      const NamedGridAreaMap&,
-      NamedGridLinesMap&,
-      GridTrackSizingDirection);
 
   static cc::ScrollSnapType ConvertSnapType(StyleResolverState&,
                                             const CSSValue&);
@@ -302,9 +303,8 @@ class StyleBuilderConverter {
                                                     const CSSValue&);
   static scoped_refptr<BasicShape> ConvertObjectViewBox(StyleResolverState&,
                                                         const CSSValue&);
-  static scoped_refptr<OffsetPathOperation> ConvertOffsetPath(
-      StyleResolverState&,
-      const CSSValue&);
+  static OffsetPathOperation* ConvertOffsetPath(StyleResolverState&,
+                                                const CSSValue&);
   static StyleOffsetRotation ConvertOffsetRotate(const CSSValue&);
   template <CSSValueID cssValueFor0, CSSValueID cssValueFor100>
   static Length ConvertPositionLength(StyleResolverState&, const CSSValue&);

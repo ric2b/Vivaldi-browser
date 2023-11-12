@@ -188,6 +188,13 @@ TEST_P(TrayEventFilterTest, ClickingOnMenuContainerDoesNotCloseBubble) {
 }
 
 TEST_P(TrayEventFilterTest, ClickingOnPopupWhenBubbleOpen) {
+  // Update display so that the screen is height enough and expand/collapse
+  // notification is allowed on top of the tray bubble.
+  UpdateDisplay("901x900");
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kNotifierCollision);
+
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
@@ -209,11 +216,15 @@ TEST_P(TrayEventFilterTest, ClickingOnPopupWhenBubbleOpen) {
 
   // Collapsing the popup should not close the bubble.
   LeftClickOn(ash_notification_popup->expand_button_for_test());
+  // Wait until the animation is complete.
+  AnimatePopupAnimationUntilIdle();
   EXPECT_FALSE(ash_notification_popup->IsExpanded());
   EXPECT_TRUE(IsBubbleShown());
 
   // Expanding the popup should not close the bubble.
   LeftClickOn(ash_notification_popup->expand_button_for_test());
+  // Wait until the animation is complete.
+  AnimatePopupAnimationUntilIdle();
   EXPECT_TRUE(ash_notification_popup->IsExpanded());
   EXPECT_TRUE(IsBubbleShown());
 }

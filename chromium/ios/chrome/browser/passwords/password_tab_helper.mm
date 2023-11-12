@@ -7,6 +7,7 @@
 #import "base/check.h"
 #import "base/memory/ptr_util.h"
 #import "base/metrics/histogram_macros.h"
+#import "base/metrics/user_metrics.h"
 #import "components/password_manager/core/browser/manage_passwords_referrer.h"
 #import "components/password_manager/core/browser/password_manager_constants.h"
 #import "ios/chrome/browser/passwords/password_controller.h"
@@ -14,16 +15,7 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "net/base/mac/url_conversions.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 PasswordTabHelper::~PasswordTabHelper() = default;
-
-void PasswordTabHelper::SetBaseViewController(
-    UIViewController* baseViewController) {
-  controller_.baseViewController = baseViewController;
-}
 
 void PasswordTabHelper::SetPasswordControllerDelegate(
     id<PasswordControllerDelegate> delegate) {
@@ -41,11 +33,6 @@ id<FormSuggestionProvider> PasswordTabHelper::GetSuggestionProvider() {
 id<PasswordsAccountStorageNoticeHandler>
 PasswordTabHelper::GetPasswordsAccountStorageNoticeHandler() {
   return controller_;
-}
-
-password_manager::PasswordGenerationFrameHelper*
-PasswordTabHelper::GetGenerationHelper() {
-  return controller_.passwordManagerDriver->GetPasswordGenerationHelper();
 }
 
 password_manager::PasswordManager* PasswordTabHelper::GetPasswordManager() {
@@ -93,6 +80,8 @@ void PasswordTabHelper::ShouldAllowRequest(
     UMA_HISTOGRAM_ENUMERATION(
         "PasswordManager.ManagePasswordsReferrer",
         password_manager::ManagePasswordsReferrer::kPasswordsGoogleWebsite);
+    base::RecordAction(
+        base::UserMetricsAction("MobileWebsiteOpenPasswordManager"));
     return;
   }
   std::move(callback).Run(web::WebStatePolicyDecider::PolicyDecision::Allow());

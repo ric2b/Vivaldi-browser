@@ -65,11 +65,6 @@ if (ozone_platform_x11) {
   ozone_platform_ui_test_support_deps += [ "platform/x11:test_support" ]
 }
 
-if (ozone_platform_scenic) {
-  ozone_platforms += [ "scenic" ]
-  ozone_platform_deps += [ "platform/scenic" ]
-}
-
 if (ozone_platform_flatland) {
   ozone_platforms += [ "flatland" ]
   ozone_platform_deps += [ "platform/flatland" ]
@@ -125,6 +120,13 @@ component("ozone_base") {
     "public/system_input_injector.h",
   ]
 
+  if (is_chromeos_ash) {
+    sources += [
+      "public/palm_detector.cc",
+      "public/palm_detector.h",
+    ]
+  }
+
   defines = [ "IS_OZONE_BASE_IMPL" ]
 
   public_deps = [
@@ -134,6 +136,7 @@ component("ozone_base") {
     "//gpu/vulkan:buildflags",
     "//ipc",
     "//skia",
+    "//ui/base:types",
     "//ui/base/clipboard:clipboard_types",
     "//ui/display",
     "//ui/display/types",
@@ -159,6 +162,10 @@ component("ozone_base") {
     public_deps += [
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.images:fuchsia.images_hlcpp",
     ]
+  }
+
+  if (is_linux) {
+    public_deps += [ "//ui/linux:linux_ui" ]
   }
 
   visibility += [

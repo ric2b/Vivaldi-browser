@@ -132,6 +132,13 @@ class ProxyDeviceEventDispatcher : public DeviceEventDispatcherEvdev {
         base::BindOnce(&EventFactoryEvdev::DispatchTouchpadDevicesUpdated,
                        event_factory_evdev_, devices, has_haptic_touchpad));
   }
+  void DispatchGraphicsTabletDevicesUpdated(
+      const std::vector<InputDevice>& devices) override {
+    ui_thread_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&EventFactoryEvdev::DispatchGraphicsTabletDevicesUpdated,
+                       event_factory_evdev_, devices));
+  }
   void DispatchDeviceListsComplete() override {
     ui_thread_runner_->PostTask(
         FROM_HERE,
@@ -172,6 +179,13 @@ class ProxyDeviceEventDispatcher : public DeviceEventDispatcherEvdev {
                        event_factory_evdev_, devices));
   }
 
+  void DispatchAnyKeysPressedUpdated(bool any) override {
+    ui_thread_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&EventFactoryEvdev::DispatchAnyKeysPressedUpdated,
+                       event_factory_evdev_, any));
+  }
+
  private:
   scoped_refptr<base::SingleThreadTaskRunner> ui_thread_runner_;
   base::WeakPtr<EventFactoryEvdev> event_factory_evdev_;
@@ -210,10 +224,13 @@ EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
                                      KeyboardLayoutEngine* keyboard_layout)
     : device_manager_(device_manager),
       gamepad_provider_(GamepadProviderOzone::GetInstance()),
-      keyboard_(&modifiers_,
-                keyboard_layout,
-                base::BindRepeating(&EventFactoryEvdev::DispatchUiEvent,
-                                    base::Unretained(this))),
+      keyboard_(
+          &modifiers_,
+          keyboard_layout,
+          base::BindRepeating(&EventFactoryEvdev::DispatchUiEvent,
+                              base::Unretained(this)),
+          base::BindRepeating(&EventFactoryEvdev::DispatchAnyKeysPressedUpdated,
+                              base::Unretained(this))),
       cursor_(cursor),
       input_controller_(&keyboard_,
                         &mouse_button_map_,
@@ -479,6 +496,14 @@ void EventFactoryEvdev::DispatchMicrophoneMuteSwitchValueChanged(bool muted) {
   MicrophoneMuteSwitchMonitor::Get()->SetMicrophoneMuteSwitchValue(muted);
 }
 
+void EventFactoryEvdev::DispatchGraphicsTabletDevicesUpdated(
+    const std::vector<InputDevice>& devices) {
+  TRACE_EVENT0("evdev",
+               "EventFactoryEvdev::DispatchGraphicsTabletDevicesUpdated");
+  DeviceHotplugEventObserver* observer = DeviceDataManager::GetInstance();
+  observer->OnGraphicsTabletDevicesUpdated(devices);
+}
+
 void EventFactoryEvdev::DispatchUncategorizedDevicesUpdated(
     const std::vector<InputDevice>& devices) {
   TRACE_EVENT0("evdev",
@@ -493,6 +518,11 @@ void EventFactoryEvdev::DispatchGamepadDevicesUpdated(
   TRACE_EVENT0("evdev", "EventFactoryEvdev::DispatchGamepadDevicesUpdated");
   input_controller_.SetGamepadKeyBitsMapping(std::move(key_bits_mapping));
   gamepad_provider_->DispatchGamepadDevicesUpdated(devices);
+}
+
+void EventFactoryEvdev::DispatchAnyKeysPressedUpdated(bool any) {
+  TRACE_EVENT0("evdev", "EventFactoryEvdev::DispatchAnyKeysPressedUpdated");
+  input_controller_.set_any_keys_pressed(any);
 }
 
 void EventFactoryEvdev::OnDeviceEvent(const DeviceEvent& event) {

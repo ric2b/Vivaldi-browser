@@ -5,15 +5,11 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_ACCESSORY_CONTROLLER_IMPL_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_ACCESSORY_CONTROLLER_IMPL_H_
 
-#include <map>
 #include <memory>
-#include <utility>
-#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/password_manager/android/all_passwords_bottom_sheet_helper.h"
 #include "chrome/browser/password_manager/android/password_accessory_controller.h"
 #include "components/autofill/core/browser/ui/accessory_sheet_data.h"
@@ -25,9 +21,9 @@
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/gfx/native_widget_types.h"
-#include "url/gurl.h"
 
 class ManualFillingController;
 class AllPasswordsBottomSheetController;
@@ -39,6 +35,7 @@ class Profile;
 // contents of one of its frames. This can cause cross-origin hazards.
 class PasswordAccessoryControllerImpl
     : public PasswordAccessoryController,
+      public content::WebContentsObserver,
       public content::WebContentsUserData<PasswordAccessoryControllerImpl> {
  public:
   using PasswordDriverSupplierForFocusedFrame =
@@ -62,6 +59,7 @@ class PasswordAccessoryControllerImpl
   void OnFillingTriggered(
       autofill::FieldGlobalId focused_field_id,
       const autofill::AccessorySheetField& selection) override;
+  void OnPasskeySelected(const std::vector<uint8_t>& passkey_id) override;
   void OnOptionSelected(autofill::AccessoryAction selected_action) override;
   void OnToggleChanged(autofill::AccessoryAction toggled_action,
                        bool enabled) override;
@@ -139,6 +137,9 @@ class PasswordAccessoryControllerImpl
     bool is_manual_generation_available = false;
   };
 
+  // WebContentsObserver:
+  void WebContentsDestroyed() override;
+
   // Enables or disables saving for the focused origin. This involves removing
   // or adding blocklisted entry in the |PasswordStore|.
   void ChangeCurrentOriginSavePasswordsStatus(bool enabled);
@@ -182,16 +183,14 @@ class PasswordAccessoryControllerImpl
   content::WebContents& GetWebContents() const;
 
   // Keeps track of credentials which are stored for all origins in this tab.
-  raw_ptr<password_manager::CredentialCache, DanglingUntriaged>
-      credential_cache_ = nullptr;
+  const raw_ptr<password_manager::CredentialCache> credential_cache_;
 
   // The password accessory controller object to forward client requests to.
   base::WeakPtr<ManualFillingController> manual_filling_controller_;
 
   // The password manager client is used to update the save passwords status
   // for the currently focused origin.
-  raw_ptr<password_manager::PasswordManagerClient, DanglingUntriaged>
-      password_client_ = nullptr;
+  const raw_ptr<password_manager::PasswordManagerClient> password_client_;
 
   // The authenticator used to trigger a biometric re-auth before filling.
   // null, if there is no ongoing authentication.

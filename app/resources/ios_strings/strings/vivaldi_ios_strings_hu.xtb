@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
 <translation id="1063263220330818888">Privát keresés</translation>
+<translation id="1137850887415122856">A privát lapok zárolásához állíts be Touch ID, Face ID vagy jelszavas védelmet.</translation>
+<translation id="1310184829257917508">Rákérdezés más alkalmazásokból származó hivatkozások privát módú megnyitásához</translation>
 <translation id="1512201558627495343">Új privát lap</translation>
+<translation id="1786453623676543866">Keresés indítása új Vivaldi lapon.</translation>
+<translation id="207677936531967364">Új privát lapoldal</translation>
+<translation id="2899836479226240291">Automatikusan megnyithatod a hivatkozásokat Vivaldiban, ha alapértelmezett böngészővé teszed.</translation>
+<translation id="3171582312249481866">Vivaldi beállítások megnyitása</translation>
+<translation id="3372807273343182542">Hivatkozás privát megnyitása Vivaldiban</translation>
+<translation id="3379322781901918214">1. Vivaldi beállítások megnyitása</translation>
+<translation id="3473652525653758699">Új privát ablak</translation>
+<translation id="3501504415290398157"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> használata a privát lapjaid feloldásához.</translation>
+<translation id="3692650606013198282">Megnyitás privátban</translation>
+<translation id="3709782636417497984">Megnyitás új privát lapon</translation>
+<translation id="3981599532037327317">${url} privát megnyitása</translation>
+<translation id="4755216899422789286">Hivatkozás megnyitása Vivaldiban</translation>
+<translation id="6233792867654386826">A megadott hivatkozás megnyitása Vivaldiban.</translation>
 <translation id="6827597288286078054">Privát keresés</translation>
+<translation id="7175743738896712454">A megadott hivatkozás megnyitása a Vivaldi privát módjában.</translation>
+<translation id="7307970171564921489">Privát lapok feloldása <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> használatával</translation>
+<translation id="7347289093190902150">Megnyitás privátban?</translation>
+<translation id="7549299604720382000">Új privát lap</translation>
+<translation id="8326104954595890674">Új privát lap</translation>
+<translation id="8763006697839582351">Privát megnyitás Vivaldiban</translation>
+<translation id="9060728682512999830">Keresés Vivaldiban</translation>
 </translationbundle>

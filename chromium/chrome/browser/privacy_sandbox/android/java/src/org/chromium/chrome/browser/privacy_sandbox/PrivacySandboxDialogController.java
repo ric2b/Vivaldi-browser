@@ -9,8 +9,8 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.privacy_sandbox.v4.PrivacySandboxDialogConsentEEAV4;
 import org.chromium.chrome.browser.privacy_sandbox.v4.PrivacySandboxDialogNoticeEEAV4;
 import org.chromium.chrome.browser.privacy_sandbox.v4.PrivacySandboxDialogNoticeROWV4;
@@ -35,6 +35,7 @@ public class PrivacySandboxDialogController {
     public static boolean maybeLaunchPrivacySandboxDialog(Context context,
             @NonNull SettingsLauncher settingsLauncher, boolean isIncognito,
             @Nullable BottomSheetController bottomSheetController) {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         if (isIncognito) {
             return false;
         }
@@ -100,27 +101,24 @@ public class PrivacySandboxDialogController {
         return (sShowNew != null) ? sShowNew : true;
     }
 
-    @VisibleForTesting
     static Dialog getDialogForTesting() {
         return sDialog != null ? sDialog.get() : null;
     }
 
-    @VisibleForTesting
     static void resetShowNewNoticeForTesting() {
         sShowNew = null;
     }
 
-    @VisibleForTesting
     static void setShowNewNoticeForTesting(boolean showNew) {
+        var oldValue = sShowNew;
         sShowNew = showNew;
+        ResettersForTesting.register(() -> sShowNew = oldValue);
     }
 
-    @VisibleForTesting
     static void disableAnimationsForTesting(boolean disable) {
         sDisableAnimations = disable;
     }
 
-    @VisibleForTesting
     static void disableEEANoticeForTesting(boolean disable) {
         sDisableEEANoticeForTesting = disable;
     }

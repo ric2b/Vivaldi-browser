@@ -4,16 +4,12 @@
 
 #import "ios/chrome/browser/ui/autofill/branding/branding_mediator.h"
 
-#import "base/allocator/partition_allocator/pointers/raw_ptr.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/autofill/branding/branding_consumer.h"
 #import "ios/chrome/browser/ui/autofill/features.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using autofill::features::AutofillBrandingFrequencyType;
 using autofill::features::GetAutofillBrandingFrequencyType;

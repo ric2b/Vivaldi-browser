@@ -13,6 +13,8 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/commerce/shopping_insights_side_panel_ui.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/price_tracking_utils.h"
 #include "components/commerce/core/webui/shopping_list_handler.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/page_navigator.h"
@@ -38,7 +40,7 @@ ShoppingUiHandlerDelegate::ShoppingUiHandlerDelegate(
 ShoppingUiHandlerDelegate::~ShoppingUiHandlerDelegate() = default;
 
 absl::optional<GURL> ShoppingUiHandlerDelegate::GetCurrentTabUrl() {
-  auto* browser = chrome::FindLastActive();
+  auto* browser = chrome::FindTabbedBrowser(profile_, false);
   if (!browser) {
     return absl::nullopt;
   }
@@ -81,9 +83,16 @@ ShoppingUiHandlerDelegate::GetOrAddBookmarkForCurrentUrl() {
   GURL url;
   std::u16string title;
   if (chrome::GetURLAndTitleToBookmark(web_contents, &url, &title)) {
-    const bookmarks::BookmarkNode* other_node = bookmark_model_->other_node();
-    return bookmark_model_->AddNewURL(other_node, other_node->children().size(),
-                                      title, url);
+    const bookmarks::BookmarkNode* parent = bookmark_model_->other_node();
+
+    // Automatically add the bookmark to the shopping collection if enabled.
+    if (base::FeatureList::IsEnabled(commerce::kShoppingCollection)) {
+      parent =
+          commerce::GetShoppingCollectionBookmarkFolder(bookmark_model_, true);
+    }
+
+    return bookmark_model_->AddNewURL(parent, parent->children().size(), title,
+                                      url);
   }
   return nullptr;
 }

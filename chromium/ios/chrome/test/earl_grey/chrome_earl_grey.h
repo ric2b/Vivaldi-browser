@@ -293,6 +293,9 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // server.
 - (void)waitForSyncInvalidationFields;
 
+// Returns whether UserSelectableType::kHistory is among the selected types.
+- (BOOL)isSyncHistoryDataTypeSelected;
+
 #pragma mark - Tab Utilities (EG2)
 
 // Opens a new tab and waits for the new tab animation to complete within a
@@ -307,6 +310,9 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Closes the current tab and waits for the UI to complete.
 - (void)closeCurrentTab;
+
+// Pins the current tab and waits for the UI to complete.
+- (void)pinCurrentTab;
 
 // Opens a new incognito tab and waits for the new tab animation to complete.
 - (void)openNewIncognitoTab;
@@ -384,6 +390,11 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Returns a unique identifier for the next Tab.
 - (NSString*)nextTabID;
+
+// Perform a tap with a timeout, or a GREYAssert is induced. Occasionally EG
+// doesn't sync up properly to the animations of tab switcher, so it is
+// necessary to poll.
+- (void)waitForAndTapButton:(id<GREYMatcher>)button;
 
 // Shows the tab switcher by tapping the switcher button.  Works on both phone
 // and tablet.
@@ -625,16 +636,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // `ForceRelaunchByKilling.
 - (void)clearAllWebStateBrowsingData:(AppLaunchConfiguration)config;
 
-#pragma mark - Bookmarks Utilities (EG2)
-
-// Waits for the bookmark internal state to be done loading.
-// If the condition is not met within a timeout a GREYAssert is induced.
-- (void)waitForBookmarksToFinishLoading;
-
-// Clears bookmarks if any bookmark still presents. A GREYAssert is induced if
-// bookmarks can not be cleared.
-- (void)clearBookmarks;
-
 #pragma mark - URL Utilities (EG2)
 
 // Returns the title string to be used for a page with `URL` if that page
@@ -694,6 +695,9 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Returns YES if the SyncEnableHistoryDataType feature is enabled.
 - (BOOL)isSyncHistoryDataTypeEnabled [[nodiscard]];
 
+// Returns YES if the ReplaceSyncPromosWithSignInPromos feature is enabled.
+- (BOOL)isReplaceSyncWithSigninEnabled [[nodiscard]];
+
 // Returns YES if the `launchSwitch` is found in host app launch switches.
 - (BOOL)appHasLaunchSwitch:(const std::string&)launchSwitch;
 
@@ -718,18 +722,17 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Returns whether the UseLensToSearchForImage feature is enabled;
 - (BOOL)isUseLensToSearchForImageEnabled;
 
-// Returns whether the Thumbstrip feature is enabled for window with given
-// number.
-- (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber;
-
 // Returns whether the Web Channels feature is enabled.
 - (BOOL)isWebChannelsEnabled;
 
 // Returns whether UIButtonConfiguration changes are enabled.
 - (BOOL)isUIButtonConfigurationEnabled;
 
-// Returns whether TabGrid is sorted by recency (#tab-grid-recency-sort).
-- (BOOL)isSortingTabsByRecency;
+// Returns whether the bottom omnibox steady state feature is enabled.
+- (BOOL)isBottomOmniboxSteadyStateEnabled;
+
+// Returns whether the unfocused omnibox is at the bottom.
+- (BOOL)isUnfocusedOmniboxAtBottom;
 
 #pragma mark - ContentSettings
 
@@ -772,11 +775,21 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 - (int)localStateIntegerPref:(const std::string&)prefName;
 - (std::string)localStateStringPref:(const std::string&)prefName;
 
-// Sets the integer values for the local state pref with `prefName`. `value`
+// Sets the integer value for the local state pref with `prefName`. `value`
 // can be either a casted enum or any other numerical value. Local State
 // contains the preferences that are shared between all browser states.
 - (void)setIntegerValue:(int)value
       forLocalStatePref:(const std::string&)prefName;
+
+// Sets the time value for the local state pref with `prefName`. `value` Local
+// State contains the preferences that are shared between all browser states.
+- (void)setTimeValue:(base::Time)value
+    forLocalStatePref:(const std::string&)prefName;
+
+// Sets the string value for the local state pref with `prefName`. `value` Local
+// State contains the preferences that are shared between all browser states.
+- (void)setStringValue:(const std::string&)value
+     forLocalStatePref:(const std::string&)prefName;
 
 // Gets the value of a user pref in the original browser state.
 - (bool)userBooleanPref:(const std::string&)prefName;
@@ -857,6 +870,29 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Clear the watcher list, stopping monitoring.
 - (void)stopWatcher;
+
+#pragma mark - ActivitySheet utilities
+
+// Induces a GREYAssert if the activity sheet is not visible.
+- (void)verifyActivitySheetVisible;
+
+// Induces a GREYAssert if the activity sheet is visible.
+- (void)verifyActivitySheetNotVisible;
+
+// Induces a GREYAssert if `text` is visible the activity sheet.
+- (void)verifyTextNotVisibleInActivitySheetWithID:(NSString*)text;
+
+// Induces a GREYAssert if `text` is not visible the activity sheet.
+- (void)verifyTextVisibleInActivitySheetWithID:(NSString*)text;
+
+// Closes the activity sheet. Induces a GREYAssert if the activity sheet cannot
+// be closed, either if the 'Close' button is not visible on a phone, or if the
+// share button cannot be tapped on a tablet.
+- (void)closeActivitySheet;
+
+// Taps the element with `buttonText` within the activity sheet. A GREYAssert
+// is induced on failure.
+- (void)tapButtonInActivitySheetWithID:(NSString*)buttonText;
 
 @end
 

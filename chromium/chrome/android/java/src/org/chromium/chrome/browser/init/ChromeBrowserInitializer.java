@@ -15,6 +15,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
@@ -26,7 +27,6 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.ChainedTasks;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.build.NativeLibraries;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeStrictMode;
 import org.chromium.chrome.browser.FileProviderHelper;
@@ -160,13 +160,6 @@ public class ChromeBrowserInitializer {
         }
         if (parts.isActivityFinishingOrDestroyed()) return;
         preInflationStartupDone();
-        // This should be called before calling into LibraryLoader.
-        if (Process.is64Bit() && !canBeLoadedIn64Bit()) {
-            throw new RuntimeException(
-                    "Starting in 64-bit mode requires the 64-bit native library. If the "
-                    + "device is 64-bit only, see alternatives here: "
-                    + "https://crbug.com/1303857#c7.");
-        }
         parts.setContentViewAndLoadLibrary(() -> this.onInflationComplete(parts));
     }
 
@@ -208,7 +201,7 @@ public class ChromeBrowserInitializer {
         ThreadUtils.assertOnUiThread();
         if (mPreInflationStartupComplete) return;
 
-        new Thread(SafeBrowsingApiBridge::ensureInitialized).start();
+        new Thread(SafeBrowsingApiBridge::ensureSafetyNetApiInitialized).start();
 
         // Ensure critical files are available, so they aren't blocked on the file-system
         // behind long-running accesses in next phase.
@@ -223,6 +216,9 @@ public class ChromeBrowserInitializer {
 
         DeviceUtils.addDeviceSpecificUserAgentSwitch();
         ApplicationStatus.registerStateListenerForAllActivities(createActivityStateListener());
+
+        ChromeStartupDelegate startupDelegate = AppHooks.get().createChromeStartupDelegate();
+        startupDelegate.initGlobals();
 
         mPreInflationStartupComplete = true;
     }
@@ -318,20 +314,6 @@ public class ChromeBrowserInitializer {
             startChromeBrowserProcessesSync(delegate.shouldStartGpuProcess());
             tasks.start(true);
         }
-    }
-
-    public static boolean canBeLoadedIn64Bit() {
-        // Fail here before loading libmonochrome.so on 64-bit platforms, otherwise the failing
-        // native stacktrace will not make it obvious that this is a bitness issue. See this bug
-        // for context: https://crbug.com/1303857 While non-component builds has only one library,
-        // monochrome may not be the first in the list for component builds.
-
-        for (String libraryName : NativeLibraries.LIBRARIES) {
-            if (libraryName.equals("monochrome") || libraryName.equals("monochrome.cr")) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private void startChromeBrowserProcessesAsync(boolean startGpuProcess,
@@ -463,17 +445,21 @@ public class ChromeBrowserInitializer {
 
     /**
      * For unit testing of clients.
-     * @param initializer The (dummy or mocked) initializer to use.
+     * @param initializer The (placeholder or mocked) initializer to use.
      */
     public static void setForTesting(ChromeBrowserInitializer initializer) {
+        var oldValue = sChromeBrowserInitializer;
         sChromeBrowserInitializer = initializer;
+        ResettersForTesting.register(() -> sChromeBrowserInitializer = oldValue);
     }
 
     /**
-     * Set {@link BrowserStartupController) to use for unit testing.
-     * @param controller The (dummy or mocked) {@link BrowserStartupController) instance.
+     * Set {@link BrowserStartupController ) to use for unit testing.
+     * @param controller The (placeholder or mocked) {@link BrowserStartupController) instance.
      */
     public static void setBrowserStartupControllerForTesting(BrowserStartupController controller) {
+        var oldValue = sBrowserStartupController;
         sBrowserStartupController = controller;
+        ResettersForTesting.register(() -> sBrowserStartupController = oldValue);
     }
 }

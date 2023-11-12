@@ -5,7 +5,6 @@
 import("//ios/build/chrome_build.gni")
 
 source_set("flags") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "about_flags.h",
     "about_flags.mm",
@@ -34,6 +33,7 @@ source_set("flags") {
     "//components/omnibox/common",
     "//components/optimization_guide/core",
     "//components/optimization_guide/core:features",
+    "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/common:features",
     "//components/payments/core",
     "//components/policy:generated",
@@ -42,11 +42,13 @@ source_set("flags") {
     "//components/safe_browsing/core/common",
     "//components/search_provider_logos",
     "//components/security_state/core",
+    "//components/segmentation_platform/public",
     "//components/send_tab_to_self",
     "//components/shared_highlighting/core/common",
     "//components/signin/core/browser",
     "//components/signin/ios/browser",
     "//components/strings:components_strings",
+    "//components/supervised_user/core/common:features",
     "//components/sync/service",
     "//components/translate/core/browser",
     "//components/translate/core/common",
@@ -61,10 +63,11 @@ source_set("flags") {
     "//ios/chrome/browser/credential_provider_promo:features",
     "//ios/chrome/browser/default_browser:utils",
     "//ios/chrome/browser/drag_and_drop",
-    "//ios/chrome/browser/find_in_page:features",
+    "//ios/chrome/browser/find_in_page:util",
     "//ios/chrome/browser/follow:feature_flags",
     "//ios/chrome/browser/iph_for_new_chrome_user",
     "//ios/chrome/browser/ntp:features",
+    "//ios/chrome/browser/parcel_tracking:util",
     "//ios/chrome/browser/policy",
     "//ios/chrome/browser/policy:constants",
     "//ios/chrome/browser/policy:policy_util",
@@ -74,6 +77,7 @@ source_set("flags") {
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/tabs:features",
     "//ios/chrome/browser/tabs/inactive_tabs:features",
+    "//ios/chrome/browser/tabs/tab_pickup:features",
     "//ios/chrome/browser/text_selection:text_selection_utils",
     "//ios/chrome/browser/ui/app_store_rating:features",
     "//ios/chrome/browser/ui/autofill:features",
@@ -85,6 +89,7 @@ source_set("flags") {
     "//ios/chrome/browser/ui/ntp:field_trial",
     "//ios/chrome/browser/ui/omnibox:features",
     "//ios/chrome/browser/ui/popup_menu/overflow_menu:feature_flags",
+    "//ios/chrome/browser/ui/settings/password:features",
     "//ios/chrome/browser/ui/start_surface:feature_flags",
     "//ios/chrome/browser/ui/whats_new:util",
     "//ios/chrome/browser/web:feature_flags",
@@ -102,7 +107,6 @@ source_set("flags") {
 }
 
 source_set("system_flags") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "chrome_switches.cc",
     "chrome_switches.h",
@@ -110,7 +114,6 @@ source_set("system_flags") {
 }
 
 source_set("client_side") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "ios_chrome_field_trials.h",
     "ios_chrome_field_trials.mm",
@@ -124,12 +127,12 @@ source_set("client_side") {
     "//ios/chrome/browser/shared/model/paths",
     "//ios/chrome/browser/ui/first_run:field_trial",
     "//ios/chrome/browser/ui/ntp:field_trial",
+    "//ios/chrome/browser/variations:store",
   ]
 }
 
 source_set("unit_tests") {
   testonly = true
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [ "about_flags_unittest.mm" ]
   deps = [
     ":flags",

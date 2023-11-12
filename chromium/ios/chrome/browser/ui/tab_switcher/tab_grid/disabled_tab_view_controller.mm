@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/disabled_tab_view_controller.h"
 
+#import "components/supervised_user/core/common/features.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
@@ -24,10 +25,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 const CGFloat kVerticalMargin = 16.0;
@@ -63,48 +60,8 @@ NSString* GetTitleString(TabGridPage page) {
       return l10n_util::GetNSString(
           IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_TITLE);
     // End Vivaldi
-
   }
 }
-
-// Creates an attribute string with link for the body message.
-NSAttributedString* GetBodyString(TabGridPage page) {
-  int messageID;
-  switch (page) {
-    case TabGridPageIncognitoTabs:
-      messageID = IDS_IOS_TAB_GRID_INCOGNITO_TABS_UNAVAILABLE_MESSAGE;
-      break;
-    case TabGridPageRegularTabs:
-      messageID = IDS_IOS_TAB_GRID_REGULAR_TABS_UNAVAILABLE_MESSAGE;
-      break;
-    case TabGridPageRemoteTabs:
-      messageID = IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_MESSAGE;
-      break;
-
-    // Vivaldi
-    case TabGridPageClosedTabs:
-      messageID =
-          IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_MESSAGE;
-      break;
-    // End Vivaldi
-
-  }
-
-  NSString* fullText = l10n_util::GetNSString(messageID);
-
-  // Sets the styling to mimic a link.
-  NSDictionary* linkAttributes = @{
-    NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor],
-    NSLinkAttributeName :
-        [NSString stringWithUTF8String:kChromeUIManagementURL],
-    NSFontAttributeName :
-        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote],
-    NSUnderlineStyleAttributeName : @(NSUnderlineStyleNone),
-  };
-
-  return AttributedStringFromStringWithLink(fullText, @{}, linkAttributes);
-}
-
 }  // namespace
 
 - (instancetype)initWithPage:(TabGridPage)page {
@@ -138,7 +95,7 @@ NSAttributedString* GetBodyString(TabGridPage page) {
 
   UITextView* bottomTextView = CreateUITextViewWithTextKit1();
   bottomTextView.translatesAutoresizingMaskIntoConstraints = NO;
-  bottomTextView.attributedText = GetBodyString(self.page);
+  bottomTextView.attributedText = self.messageBodyAttributedString;
   bottomTextView.scrollEnabled = NO;
   bottomTextView.editable = NO;
   bottomTextView.delegate = self;
@@ -219,6 +176,55 @@ NSAttributedString* GetBodyString(TabGridPage page) {
   self.scrollView.contentInset = scrollViewContentInsets;
   self.scrollViewHeight.constant =
       scrollViewContentInsets.top + scrollViewContentInsets.bottom;
+}
+
+// Creates an attribute string with link for the body message.
+- (NSAttributedString*)messageBodyAttributedString {
+  CHECK(self.delegate);
+  int messageID;
+
+  BOOL isSubjectToParentalControls =
+      self.delegate.isViewControllerSubjectToParentalControls;
+  switch (self.page) {
+    case TabGridPageIncognitoTabs:
+      if (isSubjectToParentalControls) {
+        messageID = IDS_IOS_TAB_GRID_SUPERVISED_INCOGNITO_MESSAGE;
+      } else {
+        messageID = IDS_IOS_TAB_GRID_INCOGNITO_TABS_UNAVAILABLE_MESSAGE;
+      }
+      break;
+    case TabGridPageRegularTabs:
+      messageID = IDS_IOS_TAB_GRID_REGULAR_TABS_UNAVAILABLE_MESSAGE;
+      break;
+    case TabGridPageRemoteTabs:
+      messageID = IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_MESSAGE;
+      break;
+
+    // Vivaldi
+    case TabGridPageClosedTabs:
+      messageID =
+          IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_MESSAGE;
+      break;
+    // End Vivaldi
+  }
+
+  const std::string learnMoreURL =
+      isSubjectToParentalControls
+          ? supervised_user::kManagedByParentUiMoreInfoUrl.Get()
+          : kChromeUIManagementURL;
+
+  NSString* fullText = l10n_util::GetNSString(messageID);
+
+  // Sets the styling to mimic a link.
+  NSDictionary* linkAttributes = @{
+    NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor],
+    NSLinkAttributeName : [NSString stringWithUTF8String:learnMoreURL.c_str()],
+    NSFontAttributeName :
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote],
+    NSUnderlineStyleAttributeName : @(NSUnderlineStyleNone),
+  };
+
+  return AttributedStringFromStringWithLink(fullText, @{}, linkAttributes);
 }
 
 @end

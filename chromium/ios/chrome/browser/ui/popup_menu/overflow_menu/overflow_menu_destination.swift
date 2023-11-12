@@ -18,9 +18,40 @@ import SwiftUI
     case new
   }
 
+  static func badgeTypeFrom(string: String) -> BadgeType {
+    switch string {
+    case "none":
+      return .none
+    case "error":
+      return .error
+    case "promo":
+      return .promo
+    case "new":
+      return .new
+    default:
+      return .none
+    }
+  }
+
+  static func stringFrom(badgeType: BadgeType) -> String {
+    switch badgeType {
+    case .none:
+      return "none"
+    case .error:
+      return "error"
+    case .promo:
+      return "promo"
+    case .new:
+      return "new"
+    }
+  }
+
   public var badge: BadgeType = .none
 
-  /// The uniquely-identifying overflow_menu::Destination of the destination.
+  /// Whether this destination can be hidden, or if it must always be shown.
+  @Published public var canBeHidden = true
+
+  /// The uniquely-identifying `overflow_menu::Destination` of the destination.
   public var destination: Int = 0
 
   // Vivaldi

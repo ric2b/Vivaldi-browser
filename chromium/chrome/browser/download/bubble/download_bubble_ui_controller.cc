@@ -21,6 +21,7 @@
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_item_warning_data.h"
+#include "chrome/browser/download/download_item_web_app_data.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/download/offline_item_model_manager.h"
 #include "chrome/browser/download/offline_item_model_manager_factory.h"
@@ -32,12 +33,16 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_stats.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/offline_items_collection/core/offline_content_aggregator.h"
+#include "components/safe_browsing/core/common/features.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
 
 namespace {
@@ -50,7 +55,39 @@ using DownloadUIModelPtr = DownloadUIModel::DownloadUIModelPtr;
 // user clicks on the button to open the main view.
 constexpr base::TimeDelta kShowPartialViewMinInterval = base::Seconds(15);
 
+bool IsForDownload(Browser* browser, download::DownloadItem* item) {
+  Profile* profile = Profile::FromBrowserContext(
+      content::DownloadItemUtils::GetBrowserContext(item));
+  // An off-the-record `profile` should match only the off-the-record browsers,
+  // but a regular `profile` should match both the regular and off-the-record
+  // browsers.
+  if (browser->profile() != profile &&
+      browser->profile()->GetOriginalProfile() != profile) {
+    return false;
+  }
+
+  if (DownloadItemWebAppData* web_app_data = DownloadItemWebAppData::Get(item);
+      web_app_data) {
+    return web_app::AppBrowserController::IsForWebApp(browser,
+                                                      web_app_data->id());
+  } else {
+    return !web_app::AppBrowserController::IsWebApp(browser);
+  }
+}
+
 }  // namespace
+
+// static
+DownloadBubbleUIController* DownloadBubbleUIController::GetForDownload(
+    download::DownloadItem* item) {
+  for (auto* browser : BrowserList::GetInstance()->OrderedByActivation()) {
+    if (IsForDownload(browser, item) && browser->window() &&
+        browser->window()->GetDownloadBubbleUIController()) {
+      return browser->window()->GetDownloadBubbleUIController();
+    }
+  }
+  return nullptr;
+}
 
 DownloadBubbleUIController::DownloadBubbleUIController(Browser* browser)
     : DownloadBubbleUIController(
@@ -202,11 +239,14 @@ std::vector<DownloadUIModelPtr> DownloadBubbleUIController::GetPartialView() {
 }
 
 void DownloadBubbleUIController::ProcessDownloadButtonPress(
-    DownloadUIModel* model,
+    base::WeakPtr<DownloadUIModel> model,
     DownloadCommands::Command command,
     bool is_main_view) {
   RecordDownloadBubbleInteraction();
-  DownloadCommands commands(model->GetWeakPtr());
+  if (!model) {
+    return;
+  }
+  DownloadCommands commands(model);
   base::UmaHistogramExactLinear("Download.Bubble.ProcessedCommand", command,
                                 DownloadCommands::MAX + 1);
   switch (command) {
@@ -227,7 +267,7 @@ void DownloadBubbleUIController::ProcessDownloadButtonPress(
           browser_->tab_strip_model()->GetActiveWebContents());
       break;
     case DownloadCommands::RETRY:
-      RetryDownload(model, command);
+      RetryDownload(model.get(), command);
       break;
     case DownloadCommands::CANCEL:
       model->SetActionedOn(true);
@@ -240,6 +280,9 @@ void DownloadBubbleUIController::ProcessDownloadButtonPress(
     case DownloadCommands::SHOW_IN_FOLDER:
     case DownloadCommands::ALWAYS_OPEN_TYPE:
     case DownloadCommands::CANCEL_DEEP_SCAN:
+    case DownloadCommands::LEARN_MORE_SCANNING:
+    case DownloadCommands::LEARN_MORE_DOWNLOAD_BLOCKED:
+    case DownloadCommands::OPEN_SAFE_BROWSING_SETTING:
       commands.ExecuteCommand(command);
       break;
     default:

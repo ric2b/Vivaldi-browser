@@ -13,6 +13,7 @@
 
 namespace views {
 class FlexLayout;
+class Button;
 }
 
 class NewTabButton;
@@ -40,7 +41,7 @@ class TabStripRegionView final : public views::AccessiblePaneView {
   // of |this|.
   bool IsPositionInWindowCaption(const gfx::Point& point);
 
-  NewTabButton* new_tab_button() { return new_tab_button_; }
+  views::Button* new_tab_button() { return new_tab_button_; }
 
   TabSearchButton* tab_search_button() { return tab_search_button_; }
 
@@ -76,21 +77,29 @@ class TabStripRegionView final : public views::AccessiblePaneView {
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   views::View* GetDefaultFocusableChild() override;
 
+  // Reports to UMA if a HTCAPTION hit test was in the grab handle or other
+  // location. The location of this function is temporary to allow for easy
+  // merging.
+  static void ReportCaptionHitTestInReservedGrabHandleSpace(
+      bool in_reserved_grab_handle_space);
+
   views::FlexLayout* layout_manager_for_testing() { return layout_manager_; }
   views::View* GetTabStripContainerForTesting() { return tab_strip_container_; }
 
  private:
-  // Updates the border padding for |new_tab_button_|.  This should be called
-  // whenever any input of the computation of the border's sizing changes.
-  void UpdateNewTabButtonBorder();
+  // Updates the border padding for `new_tab_button_` and `tab_search_button_`,
+  // if present.  This should be called whenever any input of the computation of
+  // the border's sizing changes.
+  void UpdateButtonBorders();
 
   raw_ptr<views::FlexLayout, DanglingUntriaged> layout_manager_ = nullptr;
-  raw_ptr<views::View, DanglingUntriaged> tab_strip_container_ = nullptr;
+  raw_ptr<views::View, AcrossTasksDanglingUntriaged> tab_strip_container_ =
+      nullptr;
   raw_ptr<views::View, DanglingUntriaged> reserved_grab_handle_space_ = nullptr;
-  raw_ptr<TabStrip, DanglingUntriaged> tab_strip_ = nullptr;
+  raw_ptr<TabStrip, AcrossTasksDanglingUntriaged> tab_strip_ = nullptr;
   raw_ptr<TabStripScrollContainer, DanglingUntriaged>
       tab_strip_scroll_container_ = nullptr;
-  raw_ptr<NewTabButton, DanglingUntriaged> new_tab_button_ = nullptr;
+  raw_ptr<views::Button, DanglingUntriaged> new_tab_button_ = nullptr;
   raw_ptr<TabSearchButton, DanglingUntriaged> tab_search_button_ = nullptr;
 
   // On some platforms for Chrome Refresh, the TabSearchButton should be
@@ -106,7 +115,7 @@ class TabStripRegionView final : public views::AccessiblePaneView {
 
   const base::CallbackListSubscription subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
-          base::BindRepeating(&TabStripRegionView::UpdateNewTabButtonBorder,
+          base::BindRepeating(&TabStripRegionView::UpdateButtonBorders,
                               base::Unretained(this)));
 };
 

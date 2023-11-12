@@ -80,7 +80,7 @@ class AppMenuModelInteractiveTest : public InteractiveBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, PerformanceNavigation) {
   RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
-                  PressButton(kAppMenuButtonElementId),
+                  PressButton(kToolbarAppMenuButtonElementId),
                   SelectMenuItem(AppMenuModel::kMoreToolsMenuItem),
                   SelectMenuItem(ToolsMenuModel::kPerformanceMenuItem),
                   WaitForWebContentsNavigation(
@@ -89,7 +89,7 @@ IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, PerformanceNavigation) {
 }
 
 IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, IncognitoMenuItem) {
-  RunTestSequence(PressButton(kAppMenuButtonElementId),
+  RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
                   SelectMenuItem(AppMenuModel::kIncognitoMenuItem),
                   CheckInconitoWindowOpened());
 }
@@ -100,7 +100,7 @@ IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest, IncognitoAccelerator) {
       IDC_NEW_INCOGNITO_WINDOW, &incognito_accelerator);
 
   RunTestSequence(
-      SendAccelerator(kAppMenuButtonElementId, incognito_accelerator),
+      SendAccelerator(kToolbarAppMenuButtonElementId, incognito_accelerator),
       CheckInconitoWindowOpened());
 }
 
@@ -157,14 +157,14 @@ IN_PROC_BROWSER_TEST_P(ExtensionsMenuModelPresenceTest, MenuPresence) {
   if (GetParam()) {  // Menu enabled
     RunTestSequence(
         InstrumentTab(kPrimaryTabPageElementId),
-        PressButton(kAppMenuButtonElementId),
+        PressButton(kToolbarAppMenuButtonElementId),
         EnsurePresent(AppMenuModel::kExtensionsMenuItem),
         SelectMenuItem(AppMenuModel::kExtensionsMenuItem),
         EnsurePresent(ExtensionsMenuModel::kManageExtensionsMenuItem),
         EnsurePresent(ExtensionsMenuModel::kVisitChromeWebStoreMenuItem));
   } else {
     RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
-                    PressButton(kAppMenuButtonElementId),
+                    PressButton(kToolbarAppMenuButtonElementId),
                     EnsureNotPresent(AppMenuModel::kExtensionsMenuItem));
   }
 
@@ -181,7 +181,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionsMenuModelPresenceTest, MenuPresence) {
 IN_PROC_BROWSER_TEST_F(ExtensionsMenuModelInteractiveTest, ManageExtensions) {
   RunTestSequence(
       InstrumentTab(kPrimaryTabPageElementId),
-      PressButton(kAppMenuButtonElementId),
+      PressButton(kToolbarAppMenuButtonElementId),
       SelectMenuItem(AppMenuModel::kExtensionsMenuItem),
       SelectMenuItem(ExtensionsMenuModel::kManageExtensionsMenuItem),
       WaitForWebContentsNavigation(kPrimaryTabPageElementId,
@@ -201,7 +201,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuModelInteractiveTest,
                        VisitChromeWebStore) {
   RunTestSequence(
       InstrumentTab(kPrimaryTabPageElementId),
-      PressButton(kAppMenuButtonElementId),
+      PressButton(kToolbarAppMenuButtonElementId),
       SelectMenuItem(AppMenuModel::kExtensionsMenuItem),
       SelectMenuItem(ExtensionsMenuModel::kVisitChromeWebStoreMenuItem),
       WaitForWebContentsNavigation(kPrimaryTabPageElementId,
@@ -222,8 +222,9 @@ class PasswordManagerMenuItemInteractiveTest
       public testing::WithParamInterface<bool> {
  public:
   PasswordManagerMenuItemInteractiveTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        password_manager::features::kPasswordManagerRedesign, GetParam());
+    scoped_feature_list_.InitWithFeatureStates(
+        {{features::kChromeRefresh2023, false},
+         {features::kChromeRefreshSecondary2023, false}});
   }
   PasswordManagerMenuItemInteractiveTest(
       const PasswordManagerMenuItemInteractiveTest&) = delete;
@@ -232,39 +233,29 @@ class PasswordManagerMenuItemInteractiveTest
   ~PasswordManagerMenuItemInteractiveTest() override = default;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PasswordManagerMenuItemInteractiveTest,
-    /* features::kPasswordManagerRedesign status */ testing::Bool());
-
-IN_PROC_BROWSER_TEST_P(PasswordManagerMenuItemInteractiveTest,
+IN_PROC_BROWSER_TEST_F(PasswordManagerMenuItemInteractiveTest,
                        PasswordManagerMenuItem) {
   base::HistogramTester histograms;
 
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordManagerRedesign)) {
-    RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
-                    PressButton(kAppMenuButtonElementId),
-                    SelectMenuItem(AppMenuModel::kPasswordManagerMenuItem),
-                    WaitForWebContentsNavigation(
-                        kPrimaryTabPageElementId,
-                        GURL("chrome://password-manager/passwords")));
+  RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
+                  PressButton(kToolbarAppMenuButtonElementId),
+                  SelectMenuItem(AppMenuModel::kPasswordManagerMenuItem),
+                  WaitForWebContentsNavigation(
+                      kPrimaryTabPageElementId,
+                      GURL("chrome://password-manager/passwords")));
 
-    histograms.ExpectTotalCount("WrenchMenu.TimeToAction.PasswordManager", 1);
-    histograms.ExpectBucketCount("WrenchMenu.MenuAction",
-                                 MENU_ACTION_PASSWORD_MANAGER, 1);
-  } else {
-    RunTestSequence(InstrumentTab(kPrimaryTabPageElementId),
-                    PressButton(kAppMenuButtonElementId),
-                    EnsureNotPresent(AppMenuModel::kPasswordManagerMenuItem));
-  }
+  histograms.ExpectTotalCount("WrenchMenu.TimeToAction.PasswordManager", 1);
+  histograms.ExpectBucketCount("WrenchMenu.MenuAction",
+                               MENU_ACTION_PASSWORD_MANAGER, 1);
 }
 
-IN_PROC_BROWSER_TEST_P(PasswordManagerMenuItemInteractiveTest,
+IN_PROC_BROWSER_TEST_F(PasswordManagerMenuItemInteractiveTest,
                        NoMenuItemOnPasswordManagerPage) {
   RunTestSequence(
       AddInstrumentedTab(kPrimaryTabPageElementId,
                          GURL("chrome://password-manager/passwords")),
-      PressButton(kAppMenuButtonElementId),
+      WaitForWebContentsReady(kPrimaryTabPageElementId,
+                              GURL("chrome://password-manager/passwords")),
+      PressButton(kToolbarAppMenuButtonElementId),
       EnsureNotPresent(AppMenuModel::kPasswordManagerMenuItem));
 }

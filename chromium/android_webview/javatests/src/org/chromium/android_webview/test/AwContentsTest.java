@@ -51,7 +51,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.FakeTimeTestRule;
 import org.chromium.base.Log;
 import org.chromium.base.TimeUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -104,7 +103,6 @@ public class AwContentsTest {
     public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     private TestAwContentsClient mContentsClient = new TestAwContentsClient();
-    private volatile Integer mHistogramTotalCount = 0;
 
     @Test
     @SmallTest
@@ -155,7 +153,7 @@ public class AwContentsTest {
     @Feature({"AndroidWebView"})
     public void testCreateLoadDestroyManyAtOnce() throws Throwable {
         mActivityTestRule.startBrowserProcess();
-        AwTestContainerView views[] = new AwTestContainerView[10];
+        AwTestContainerView[] views = new AwTestContainerView[10];
 
         for (int i = 0; i < views.length; ++i) {
             views[i] = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
@@ -592,34 +590,25 @@ public class AwContentsTest {
         EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
 
-        try {
-            String url = testServer.getURL("/echoheader?X-foo");
-
-            final Map<String, String> extraHeaders = new HashMap<String, String>();
-            extraHeaders.put("X-foo", "bar");
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), url, extraHeaders);
-
-            String xfoo = mActivityTestRule.getJavaScriptResultBodyTextContent(
-                    awContents, mContentsClient);
-            Assert.assertEquals("bar", xfoo);
-
-            url = testServer.getURL("/echoheader?Referer");
-
-            mActivityTestRule.loadUrlSync(awContents, mContentsClient.getOnPageFinishedHelper(),
-                    url, ImmutableMap.of("Referer", "http://www.example.com/"));
-
-            String referer = mActivityTestRule.getJavaScriptResultBodyTextContent(
-                    awContents, mContentsClient);
-            Assert.assertEquals("http://www.example.com/", referer);
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        String url = testServer.getURL("/echoheader?X-foo");
+        final Map<String, String> extraHeaders = new HashMap<String, String>();
+        extraHeaders.put("X-foo", "bar");
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), url, extraHeaders);
+        String xfoo =
+                mActivityTestRule.getJavaScriptResultBodyTextContent(awContents, mContentsClient);
+        Assert.assertEquals("bar", xfoo);
+        url = testServer.getURL("/echoheader?Referer");
+        mActivityTestRule.loadUrlSync(awContents, mContentsClient.getOnPageFinishedHelper(), url,
+                ImmutableMap.of("Referer", "http://www.example.com/"));
+        String referer =
+                mActivityTestRule.getJavaScriptResultBodyTextContent(awContents, mContentsClient);
+        Assert.assertEquals("http://www.example.com/", referer);
     }
 
     // This is a meta test that we don't accidentally turn off hardware
     // acceleration in instrumentation tests without notice. Do not add the
-    // @DisableHardwareAccelerationForTest annotation for this test.
+    // @DisableHardwareAcceleration annotation for this test.
     @Test
     @Feature({"AndroidWebView"})
     @SmallTest
@@ -1017,7 +1006,7 @@ public class AwContentsTest {
                 mContentsClient.getOnPageFinishedHelper(), html, "text/html", false);
         mActivityTestRule.waitForVisualStateCallback(testView.getAwContents());
 
-        int expectedQuadrantColors[] = {Color.rgb(255, 0, 0), Color.rgb(0, 255, 0),
+        int[] expectedQuadrantColors = {Color.rgb(255, 0, 0), Color.rgb(0, 255, 0),
                 Color.rgb(0, 0, 255), Color.rgb(r, g, b)};
 
         GraphicsTestUtils.pollForQuadrantColors(testView, expectedQuadrantColors);
@@ -1037,7 +1026,7 @@ public class AwContentsTest {
     @MinAndroidSdkLevel(Build.VERSION_CODES.P)
     public void testHardwareRenderingSmokeTestVulkanWhereSupported() throws Throwable {
         // Manually curated list.
-        final String supportedModels[] = {
+        final String[] supportedModels = {
                 "Pixel",
                 "Pixel 2",
                 "Pixel 3",
@@ -1137,11 +1126,44 @@ public class AwContentsTest {
         }
     }
 
-    private int getHistogramSampleCount(String name) {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mHistogramTotalCount = RecordHistogram.getHistogramTotalCountForTesting(name);
-        });
-        return mHistogramTotalCount;
+    @Test
+    @Feature({"AndroidWebView"})
+    @MediumTest
+    public void testLoadsJsModule() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+        AwTestContainerView testView =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+        final AwContents awContents = testView.getAwContents();
+
+        AwSettings awSettings = mActivityTestRule.getAwSettingsOnUiThread(awContents);
+
+        // This test is specifically about relative file urls
+        awSettings.setAllowFileAccess(true);
+        awSettings.setAllowFileAccessFromFileURLs(true);
+
+        // This test runs some javascript to verify if it passes
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
+
+        // Using a future to wait to see if the js module was loaded or not.
+        // The page in the test will expect this object.
+        final SettableFuture<Boolean> fetchResultFuture = SettableFuture.create();
+        Object injectedObject = new Object() {
+            @JavascriptInterface
+            public void success() {
+                fetchResultFuture.set(true);
+            }
+            @JavascriptInterface
+            public void error() {
+                fetchResultFuture.set(false);
+            }
+        };
+        AwActivityTestRule.addJavascriptInterfaceOnUiThread(
+                awContents, injectedObject, "injectedObject");
+
+        final String url = "file:///android_asset/page_with_module.html";
+        mActivityTestRule.loadUrlAsync(awContents, url);
+
+        Assert.assertTrue(AwActivityTestRule.waitForFuture(fetchResultFuture));
     }
 
     @Test
@@ -1197,18 +1219,13 @@ public class AwContentsTest {
                 mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
         final AwContents awContents = testView.getAwContents();
 
-        Assert.assertEquals(0,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        AwContents.LOAD_URL_SCHEME_HISTOGRAM_NAME));
+        HistogramWatcher histogramExpectation = HistogramWatcher.newSingleRecordWatcher(
+                AwContents.LOAD_URL_SCHEME_HISTOGRAM_NAME, expectedSchemeEnum);
+
         // Note: we use async because not all loads emit onPageFinished. This relies on the UMA
         // metric being logged in the synchronous part of loadUrl().
         mActivityTestRule.loadUrlAsync(awContents, url);
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        AwContents.LOAD_URL_SCHEME_HISTOGRAM_NAME));
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        AwContents.LOAD_URL_SCHEME_HISTOGRAM_NAME, expectedSchemeEnum));
+        histogramExpectation.assertExpected();
     }
 
     @Test
@@ -1243,7 +1260,7 @@ public class AwContentsTest {
         }
     }
 
-    // This test verifies that Local Network Access' secure context
+    // This test verifies that Private Network Access' secure context
     // restriction (feature flag BlockInsecurePrivateNetworkRequests) does not
     // apply to Webview: insecure private network requests are allowed.
     //
@@ -1252,7 +1269,7 @@ public class AwContentsTest {
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add(ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1")
     @SmallTest
-    public void testInsecureLocalNetworkAccess() throws Throwable {
+    public void testInsecurePrivateNetworkAccess() throws Throwable {
         mActivityTestRule.startBrowserProcess();
         final AwTestContainerView testContainer =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
@@ -1327,47 +1344,34 @@ public class AwContentsTest {
 
         EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        try {
-            final String pageUrl = testServer.getURL(HELLO_WORLD_URL);
-
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
-            Assert.assertEquals(
-                    HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
-
-            final AwRenderProcess rendererProcess1 = getRenderProcessOnUiThread(awContents);
-            Assert.assertNotNull(rendererProcess1);
-
-            // Until AW gets site isolation, ordinary web content should not be
-            // locked to origin.
-            boolean isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> rendererProcess1.isProcessLockedToSiteForTesting());
-            Assert.assertFalse("Initial renderer process should not be locked", isLocked);
-
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), WEBUI_URL);
-            Assert.assertEquals(WEBUI_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
-
-            final AwRenderProcess webuiProcess = getRenderProcessOnUiThread(awContents);
-            Assert.assertNotEquals(rendererProcess1, webuiProcess);
-            // WebUI pages should be locked to origin even on AW.
-            isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> webuiProcess.isProcessLockedToSiteForTesting());
-            Assert.assertTrue("WebUI process should be locked", isLocked);
-
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
-
-            final AwRenderProcess rendererProcess2 = getRenderProcessOnUiThread(awContents);
-            Assert.assertEquals(
-                    HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
-            Assert.assertNotEquals(rendererProcess2, webuiProcess);
-            isLocked = TestThreadUtils.runOnUiThreadBlocking(
-                    () -> rendererProcess2.isProcessLockedToSiteForTesting());
-            Assert.assertFalse("Final renderer process should not be locked", isLocked);
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        final String pageUrl = testServer.getURL(HELLO_WORLD_URL);
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
+        Assert.assertEquals(HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
+        final AwRenderProcess rendererProcess1 = getRenderProcessOnUiThread(awContents);
+        Assert.assertNotNull(rendererProcess1);
+        // Until AW gets site isolation, ordinary web content should not be
+        // locked to origin.
+        boolean isLocked = TestThreadUtils.runOnUiThreadBlocking(
+                () -> rendererProcess1.isProcessLockedToSiteForTesting());
+        Assert.assertFalse("Initial renderer process should not be locked", isLocked);
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), WEBUI_URL);
+        Assert.assertEquals(WEBUI_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
+        final AwRenderProcess webuiProcess = getRenderProcessOnUiThread(awContents);
+        Assert.assertNotEquals(rendererProcess1, webuiProcess);
+        // WebUI pages should be locked to origin even on AW.
+        isLocked = TestThreadUtils.runOnUiThreadBlocking(
+                () -> webuiProcess.isProcessLockedToSiteForTesting());
+        Assert.assertTrue("WebUI process should be locked", isLocked);
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
+        final AwRenderProcess rendererProcess2 = getRenderProcessOnUiThread(awContents);
+        Assert.assertEquals(HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
+        Assert.assertNotEquals(rendererProcess2, webuiProcess);
+        isLocked = TestThreadUtils.runOnUiThreadBlocking(
+                () -> rendererProcess2.isProcessLockedToSiteForTesting());
+        Assert.assertFalse("Final renderer process should not be locked", isLocked);
     }
 
     // In single-process mode, navigations to WebUI should work, but WebUI does
@@ -1386,26 +1390,17 @@ public class AwContentsTest {
 
         EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        try {
-            final String pageUrl = testServer.getURL(HELLO_WORLD_URL);
-
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
-            Assert.assertEquals(
-                    HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
-
-            final AwRenderProcess rendererProcess1 = getRenderProcessOnUiThread(awContents);
-            Assert.assertNull(rendererProcess1);
-
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), WEBUI_URL);
-            Assert.assertEquals(WEBUI_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
-
-            final AwRenderProcess webuiProcess = getRenderProcessOnUiThread(awContents);
-            Assert.assertNull(webuiProcess);
-        } finally {
-            testServer.stopAndDestroyServer();
-        }
+        final String pageUrl = testServer.getURL(HELLO_WORLD_URL);
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), pageUrl);
+        Assert.assertEquals(HELLO_WORLD_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
+        final AwRenderProcess rendererProcess1 = getRenderProcessOnUiThread(awContents);
+        Assert.assertNull(rendererProcess1);
+        mActivityTestRule.loadUrlSync(
+                awContents, mContentsClient.getOnPageFinishedHelper(), WEBUI_URL);
+        Assert.assertEquals(WEBUI_TITLE, mActivityTestRule.getTitleOnUiThread(awContents));
+        final AwRenderProcess webuiProcess = getRenderProcessOnUiThread(awContents);
+        Assert.assertNull(webuiProcess);
     }
 
     @Test
@@ -1447,7 +1442,7 @@ public class AwContentsTest {
                     "http://foo.bar", null);
 
             // Check initial iframe is displayed.
-            int expectedQuadrantColors[] = {
+            int[] expectedQuadrantColors = {
                     Color.rgb(0, 255, 0),
                     Color.rgb(0, 255, 0),
                     Color.rgb(255, 0, 0),
@@ -1768,9 +1763,10 @@ public class AwContentsTest {
     // removes frame metrics listener. This code should do nothing when hardware acceleration is
     // disabled.
     @Test
-    @DisableHardwareAccelerationForTest
+    @DisableHardwareAcceleration
     @SmallTest
     @Feature({"AndroidWebView"})
+    @Features.EnableFeatures({AwFeatures.WEBVIEW_REPORT_FRAME_METRICS})
     public void testNoCrashWithoutHardwareAcceleration() throws Throwable {
         mActivityTestRule.startBrowserProcess();
         AwContents.resetRecordMemoryForTesting();

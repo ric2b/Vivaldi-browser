@@ -136,6 +136,13 @@ public class LayerTitleCache {
             boolean fetchFaviconFromHistory) {
         final int tabId = tab.getId();
         boolean isDarkTheme = tab.isIncognito();
+
+        // Note(david@vivaldi.com): We always use the dark theme but not for the selected tab.
+        isDarkTheme = true;
+        Tab currentTab = mTabModelSelector.getCurrentTab();
+        if (currentTab != null && currentTab.getId() == tab.getId() && !tab.isIncognito())
+            isDarkTheme = false;
+
         Bitmap originalFavicon = TabFavicon.getBitmap(tab);
         if (originalFavicon == null) {
             originalFavicon = mDefaultFaviconHelper.getDefaultFaviconBitmap(

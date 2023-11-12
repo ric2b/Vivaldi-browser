@@ -14,6 +14,28 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "url/origin.h"
 
+// The state of Safe Browsing settings.
+enum class SafeBrowsingState {
+  kEnabledEnhanced = 0,
+  kEnabledStandard = 1,
+  kDisabledByAdmin = 2,
+  kDisabledByExtension = 3,
+  kDisabledByUser = 4,
+  // New enum values must go above here.
+  kMaxValue = kDisabledByUser,
+};
+
+// State that a top card in the SafetyHub page can be in.
+// Should be kept in sync with the corresponding enum in
+// chrome/browser/resources/settings/safety_hub/safety_hub_browser_proxy.ts
+enum class SafetyHubCardState {
+  kWarning = 0,
+  kWeak = 1,
+  kInfo = 2,
+  kSafe = 3,
+  kMaxValue = kSafe,
+};
+
 /**
  * This handler deals with the permission-related operations on the site
  * settings page.
@@ -53,6 +75,10 @@ class SafetyHubHandler : public settings::SettingsPageUIHandler {
   FRIEND_TEST_ALL_PREFIXES(
       SafetyHubHandlerTest,
       SendNotificationPermissionReviewList_FeatureDisabled);
+  FRIEND_TEST_ALL_PREFIXES(SafetyHubHandlerTest, RevokeAllContentSettingTypes);
+  FRIEND_TEST_ALL_PREFIXES(SafetyHubHandlerParameterizedTest,
+                           PasswordCardState);
+  FRIEND_TEST_ALL_PREFIXES(SafetyHubHandlerTest, PasswordCardCheckTime);
 
   // SettingsPageUIHandler implementation.
   void OnJavascriptAllowed() override;
@@ -117,6 +143,18 @@ class SafetyHubHandler : public settings::SettingsPageUIHandler {
   // verification blocklist.
   void HandleUndoIgnoreOriginsForNotificationPermissionReview(
       const base::Value::List& args);
+
+  // Returns the Safe Browsing state.
+  void HandleGetSafeBrowsingState(const base::Value::List& args);
+
+  // Returns the data for the password card.
+  void HandleGetPasswordCardData(const base::Value::List& args);
+
+  // Helper function for determining password card strings and state.
+  base::Value::Dict GetPasswordCardData(int compromised_count,
+                                        int weak_count,
+                                        int reused_count,
+                                        base::Time last_check);
 
   // Sends the list of notification permissions to review to the WebUI.
   void SendNotificationPermissionReviewList();

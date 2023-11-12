@@ -8,8 +8,8 @@
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/notreached.h"
@@ -18,9 +18,9 @@
 #import "base/time/time.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_utils.h"
-#import "ios/chrome/browser/bookmarks/account_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -64,10 +64,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -145,7 +141,7 @@ enum class PresentedState {
   base::WeakPtr<ChromeBrowserState> _browserState;
 
   // Profile bookmark model.
-  base::WeakPtr<bookmarks::BookmarkModel> _profileBookmarkModel;
+  base::WeakPtr<bookmarks::BookmarkModel> _localOrSyncableBookmarkModel;
   // Account bookmark model.
   base::WeakPtr<bookmarks::BookmarkModel> _accountBookmarkModel;
 }
@@ -162,7 +158,7 @@ enum class PresentedState {
     _currentBrowserState = browser->GetBrowserState()->AsWeakPtr();
     _browserState =
         _currentBrowserState->GetOriginalChromeBrowserState()->AsWeakPtr();
-    _profileBookmarkModel =
+    _localOrSyncableBookmarkModel =
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
             _browserState.get())
             ->AsWeakPtr();
@@ -173,19 +169,21 @@ enum class PresentedState {
       _accountBookmarkModel = accountBookmarkModel->AsWeakPtr();
     }
     _mediator = [[BookmarkMediator alloc]
-        initWithWithProfileBookmarkModel:_profileBookmarkModel.get()
-                    accountBookmarkModel:_accountBookmarkModel.get()
-                                   prefs:_browserState->GetPrefs()
-                   authenticationService:AuthenticationServiceFactory::
-                                             GetForBrowserState(
-                                                 _browserState.get())
-                             syncService:SyncServiceFactory::GetForBrowserState(
-                                             _browserState.get())
-                        syncSetupService:SyncSetupServiceFactory::
-                                             GetForBrowserState(
-                                                 _browserState.get())];
+        initWithWithLocalOrSyncableBookmarkModel:_localOrSyncableBookmarkModel
+                                                     .get()
+                            accountBookmarkModel:_accountBookmarkModel.get()
+                                           prefs:_browserState->GetPrefs()
+                           authenticationService:AuthenticationServiceFactory::
+                                                     GetForBrowserState(
+                                                         _browserState.get())
+                                     syncService:SyncServiceFactory::
+                                                     GetForBrowserState(
+                                                         _browserState.get())
+                                syncSetupService:SyncSetupServiceFactory::
+                                                     GetForBrowserState(
+                                                         _browserState.get())];
     _currentPresentedState = PresentedState::NONE;
-    DCHECK(_profileBookmarkModel) << [self description];
+    DCHECK(_localOrSyncableBookmarkModel) << [self description];
   }
   return self;
 }
@@ -211,7 +209,7 @@ enum class PresentedState {
   }
   _browserState = nullptr;
   _currentBrowserState = nullptr;
-  _profileBookmarkModel = nullptr;
+  _localOrSyncableBookmarkModel = nullptr;
   _accountBookmarkModel = nullptr;
   _mediator = nil;
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
@@ -243,8 +241,7 @@ enum class PresentedState {
 }
 
 - (void)createBookmarkURL:(const GURL&)URL title:(NSString*)title {
-  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     return;
   }
 
@@ -264,14 +261,14 @@ enum class PresentedState {
 }
 
 - (void)presentBookmarkEditorForURL:(const GURL&)URL {
-  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     return;
   }
 
   const BookmarkNode* bookmark =
       bookmark_utils_ios::GetMostRecentlyAddedUserNodeForURL(
-          URL, _profileBookmarkModel.get(), _accountBookmarkModel.get());
+          URL, _localOrSyncableBookmarkModel.get(),
+          _accountBookmarkModel.get());
   if (!bookmark) {
     return;
   }
@@ -279,7 +276,8 @@ enum class PresentedState {
 }
 
 - (void)presentBookmarks {
-  [self presentBookmarksAtDisplayedFolderNode:_profileBookmarkModel->root_node()
+  [self presentBookmarksAtDisplayedFolderNode:_localOrSyncableBookmarkModel
+                                                  ->root_node()
                             selectingBookmark:nil];
 }
 
@@ -427,7 +425,7 @@ enum class PresentedState {
   for (UIViewController* controller in self.bookmarkNavigationController
            .viewControllers) {
     BookmarksHomeViewController* bookmarksHomeViewController =
-        base::mac::ObjCCastStrict<BookmarksHomeViewController>(controller);
+        base::apple::ObjCCastStrict<BookmarksHomeViewController>(controller);
     [bookmarksHomeViewController shutdown];
   }
   // TODO(crbug.com/940856): Make sure navigaton
@@ -527,7 +525,7 @@ enum class PresentedState {
   [self stopBookmarksFolderChooserCoordinator];
 
   bookmarks::StorageType type = bookmark_utils_ios::GetBookmarkModelType(
-      folder, _profileBookmarkModel.get(), _accountBookmarkModel.get());
+      folder, _localOrSyncableBookmarkModel.get(), _accountBookmarkModel.get());
   SetLastUsedBookmarkFolder(_browserState->GetPrefs(), folder, type);
   [self.snackbarCommandsHandler
       showSnackbarMessage:[self.mediator addBookmarks:_URLs toFolder:folder]];
@@ -584,7 +582,7 @@ enum class PresentedState {
                                      new_tab_page_uma::ACTION_OPENED_BOOKMARK);
       base::RecordAction(
           base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
-      LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeAllTabs);
+      LogBookmarkUseForDefaultBrowserPromo();
 
       if (newTab ||
           ((!!inIncognito) != _currentBrowserState->IsOffTheRecord())) {
@@ -611,18 +609,35 @@ enum class PresentedState {
                                                                 title:title]];
 }
 
+- (void)bulkCreateBookmarksWithURLs:(NSArray<NSURL*>*)URLs {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
+    return;
+  }
+
+  __weak BookmarksCoordinator* weakSelf = self;
+  void (^viewAction)() = ^{
+    base::RecordAction(base::UserMetricsAction(
+        "IOSBookmarksAddedInBulkSnackbarViewButtonClicked"));
+    [weakSelf presentBookmarks];
+  };
+
+  [self.snackbarCommandsHandler
+      showSnackbarMessage:[self.mediator bulkAddBookmarksWithURLs:URLs
+                                                       viewAction:viewAction]];
+}
+
 - (void)createOrEditBookmarkWithURL:(URLWithTitle*)URLWithTitle {
   DCHECK(URLWithTitle) << [self description];
   NSString* title = URLWithTitle.title;
   GURL URL = URLWithTitle.URL;
-  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     return;
   }
 
   const BookmarkNode* existingBookmark =
       bookmark_utils_ios::GetMostRecentlyAddedUserNodeForURL(
-          URL, _profileBookmarkModel.get(), _accountBookmarkModel.get());
+          URL, _localOrSyncableBookmarkModel.get(),
+          _accountBookmarkModel.get());
   if (existingBookmark) {
     if (IsVivaldiRunning()) {
       [self presentBookmarkEditorWithEditingNode:existingBookmark
@@ -640,8 +655,7 @@ enum class PresentedState {
 - (void)bookmarkWithFolderChooser:(NSArray<URLWithTitle*>*)URLs {
   DCHECK(URLs.count > 0) << "URLs are missing " << [self description];
 
-  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     return;
   }
 
@@ -650,17 +664,17 @@ enum class PresentedState {
 }
 
 - (void)openToExternalBookmark:(GURL)URL {
-  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (!AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     return;
   }
 
   const BookmarkNode* existingBookmark =
       bookmark_utils_ios::GetMostRecentlyAddedUserNodeForURL(
-          URL, _profileBookmarkModel.get(), _accountBookmarkModel.get());
-  [self
-      presentBookmarksAtDisplayedFolderNode:_profileBookmarkModel->mobile_node()
-                          selectingBookmark:existingBookmark];
+          URL, _localOrSyncableBookmarkModel.get(),
+          _accountBookmarkModel.get());
+  [self presentBookmarksAtDisplayedFolderNode:_localOrSyncableBookmarkModel
+                                                  ->mobile_node()
+                            selectingBookmark:existingBookmark];
 }
 
 #pragma mark - Private
@@ -792,14 +806,13 @@ enum class PresentedState {
   self.bookmarkBrowser.snackbarCommandsHandler = self.snackbarCommandsHandler;
 
   NSArray<BookmarksHomeViewController*>* replacementViewControllers = nil;
-  if (bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
-          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+  if (AreAllAvailableBookmarkModelsLoaded(_browserState.get())) {
     // Set the root node if the model has been loaded. If the model has not been
     // loaded yet, the root node will be set in BookmarksHomeViewController
     // after the model is finished loading.
     self.bookmarkBrowser.displayedFolderNode = displayedFolderNode;
     [self.bookmarkBrowser setExternalBookmark:bookmarkNode];
-    if (displayedFolderNode == _profileBookmarkModel->root_node()) {
+    if (displayedFolderNode == _localOrSyncableBookmarkModel->root_node()) {
       replacementViewControllers =
           [self.bookmarkBrowser cachedViewControllerStack];
     }
@@ -820,7 +833,7 @@ enum class PresentedState {
   for (UIViewController* controller in self.bookmarkNavigationController
            .viewControllers) {
     BookmarksHomeViewController* bookmarksHomeViewController =
-        base::mac::ObjCCastStrict<BookmarksHomeViewController>(controller);
+        base::apple::ObjCCastStrict<BookmarksHomeViewController>(controller);
     [bookmarksHomeViewController willDismissBySwipeDown];
   }
 }
@@ -847,7 +860,7 @@ enum class PresentedState {
                    toViewController:(UIViewController*)toVC {
   if (operation == UINavigationControllerOperationPop) {
     BookmarksHomeViewController* poppedHome =
-        base::mac::ObjCCastStrict<BookmarksHomeViewController>(fromVC);
+        base::apple::ObjCCastStrict<BookmarksHomeViewController>(fromVC);
     // `shutdown` must wait for the next run of the main loop, so that
     // methods such as `textFieldDidEndEditing` have time to be run.
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -865,12 +878,13 @@ enum class PresentedState {
           @"<%@: %p, state=%d bookmarkEditorCoordinator=%p, "
           @"bookmarkNavigationController=%p (presented: %@), "
           @"folderEditorCoordinator=%p, folderChooserCoordinator=%p "
-          @"profileBookmarkModel=%p, accountBookmarkModel=%p>",
-          NSStringFromClass([self class]), self, self.currentPresentedState,
+          @"localOrSyncableBookmarkModel=%p, accountBookmarkModel=%p>",
+          NSStringFromClass([self class]), self,
+          static_cast<int>(self.currentPresentedState),
           self.bookmarkEditorCoordinator, self.bookmarkNavigationController,
           self.bookmarkNavigationController ? @"YES" : @"NO",
           self.folderEditorCoordinator, self.folderChooserCoordinator,
-          _profileBookmarkModel.get(), _accountBookmarkModel.get()];
+          _localOrSyncableBookmarkModel.get(), _accountBookmarkModel.get()];
 }
 
 #pragma mark - Vivaldi

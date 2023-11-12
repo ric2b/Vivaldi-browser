@@ -168,7 +168,7 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, GoodResponse) {
       "id": "12345678-9abc-def0-1234-56789abcdef0"
       }]})"));
   run_loop.Run();
-  EXPECT_EQ('0', key.id);
+  EXPECT_EQ(0x12, key.id);
   EXPECT_EQ(std::string(32, '\0'), key.key);
 }
 
@@ -197,6 +197,7 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, RequestDuringSuccess) {
       "key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\u003d",
       "id": "12345678-9abc-def0-1234-56789abcdef0"
       }]})"));
+  run_loop.Run();
   EXPECT_EQ(2, completed);
 }
 
@@ -221,7 +222,7 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, CachesValue) {
         "id": "12345678-9abc-def0-1234-56789abcdef0"
         }]})"));
     run_loop.Run();
-    EXPECT_EQ('0', key.id);
+    EXPECT_EQ(0x12, key.id);
     EXPECT_EQ(std::string(32, '\0'), key.key);
   }
 
@@ -244,7 +245,7 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, CachesValue) {
         "id": "23456789-abcd-ef01-2345-6789abcdef01"
         }]})"));
     run_loop.Run();
-    EXPECT_EQ('0', key.id);
+    EXPECT_EQ(0x12, key.id);
     EXPECT_EQ(std::string(32, '\0'), key.key);
   }
 }
@@ -277,10 +278,10 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, CoalescesRequests) {
         "id": "12345678-9abc-def0-1234-56789abcdef0"
         }]})"));
     run_loop.Run();
-    EXPECT_EQ('0', key1.id);
+    EXPECT_EQ(0x12, key1.id);
     EXPECT_EQ(std::string(32, '\0'), key1.key);
 
-    EXPECT_EQ('0', key2.id);
+    EXPECT_EQ(0x12, key2.id);
     EXPECT_EQ(std::string(32, '\0'), key2.key);
   }
 }
@@ -326,7 +327,7 @@ TEST_F(BiddingAndAuctionServerKeyFetcherTest, ChoosesRandomKey) {
     run_loop.Run();
     ids.insert(key.id);
   }
-  EXPECT_THAT(ids, testing::ElementsAre('0', '1'));
+  EXPECT_THAT(ids, testing::ElementsAre(0x12, 0x23));
 }
 
 }  // namespace

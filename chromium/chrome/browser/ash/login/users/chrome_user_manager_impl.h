@@ -19,7 +19,7 @@
 #include "chrome/browser/ash/login/users/affiliation.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
-#include "chrome/browser/ash/login/users/multi_profile_user_controller_delegate.h"
+#include "chrome/browser/ash/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
 #include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler.h"
@@ -27,6 +27,7 @@
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
+#include "chrome/browser/profiles/profile_observer.h"
 #include "chromeos/ash/components/login/auth/mount_performer.h"
 #include "components/account_id/account_id.h"
 #include "components/session_manager/core/session_manager.h"
@@ -55,8 +56,8 @@ class ChromeUserManagerImpl
       public DeviceSettingsService::Observer,
       public policy::DeviceLocalAccountPolicyService::Observer,
       public policy::MinimumVersionPolicyHandler::Observer,
-      public ProfileManagerObserver,
-      public MultiProfileUserControllerDelegate {
+      public ProfileObserver,
+      public ProfileManagerObserver {
  public:
   ChromeUserManagerImpl(const ChromeUserManagerImpl&) = delete;
   ChromeUserManagerImpl& operator=(const ChromeUserManagerImpl&) = delete;
@@ -86,10 +87,7 @@ class ChromeUserManagerImpl
   bool IsGuestSessionAllowed() const override;
   bool IsGaiaUserAllowed(const user_manager::User& user) const override;
   bool IsUserAllowed(const user_manager::User& user) const override;
-  const AccountId& GetGuestAccountId() const override;
   void AsyncRemoveCryptohome(const AccountId& account_id) const override;
-  bool IsGuestAccountId(const AccountId& account_id) const override;
-  bool IsStubAccountId(const AccountId& account_id) const override;
   bool IsDeprecatedSupervisedAccountId(
       const AccountId& account_id) const override;
   const gfx::ImageSkia& GetResourceImagekiaNamed(int id) const override;
@@ -120,6 +118,9 @@ class ChromeUserManagerImpl
   // ProfileManagerObserver:
   void OnProfileAdded(Profile* profile) override;
   void OnProfileManagerDestroying() override;
+
+  // ProfileObserver:
+  void OnProfileWillBeDestroyed(Profile* profile) override;
 
   // ChromeUserManager:
   bool IsEnterpriseManaged() const override;
@@ -185,9 +186,6 @@ class ChromeUserManagerImpl
   // associated with that username.
   void UpdatePublicAccountDisplayName(const std::string& user_id);
 
-  // MultiProfileUserControllerDelegate implementation:
-  void OnUserNotAllowed(const std::string& user_email) override;
-
   // Update the number of users.
   void UpdateNumberOfUsers();
 
@@ -237,13 +235,17 @@ class ChromeUserManagerImpl
   base::CallbackListSubscription ephemeral_users_enabled_subscription_;
   base::CallbackListSubscription local_accounts_subscription_;
 
-  std::unique_ptr<MultiProfileUserController> multi_profile_user_controller_;
+  MultiProfileUserController multi_profile_user_controller_;
 
   std::vector<std::unique_ptr<policy::CloudExternalDataPolicyHandler>>
       cloud_external_data_policy_handlers_;
 
   base::ScopedObservation<ProfileManager, ProfileManagerObserver>
       profile_manager_observation_{this};
+
+  std::vector<
+      std::unique_ptr<base::ScopedObservation<Profile, ProfileObserver>>>
+      profile_observations_;
 
   base::RepeatingClosure remove_non_cryptohome_data_barrier_;
 

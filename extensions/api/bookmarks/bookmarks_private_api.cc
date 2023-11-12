@@ -45,6 +45,7 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "browser/vivaldi_browser_finder.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -122,6 +123,7 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
   change_info.description = vivaldi_bookmark_kit::GetDescription(node);
   change_info.thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
   change_info.nickname = vivaldi_bookmark_kit::GetNickname(node);
+  change_info.theme_color = vivaldi_bookmark_kit::GetThemeColorForCSS(node);
 
   ::vivaldi::BroadcastEvent(bookmarks_private::OnMetaInfoChanged::kEventName,
                             bookmarks_private::OnMetaInfoChanged::Create(
@@ -238,6 +240,7 @@ BookmarksPrivateIOFunction::~BookmarksPrivateIOFunction() {
 
 void BookmarksPrivateIOFunction::ShowSelectFileDialog(
     ui::SelectFileDialog::Type type,
+    int window_id,
     const base::FilePath& default_path) {
   if (!dispatcher())
     return;  // Extension was unloaded.
@@ -245,6 +248,14 @@ void BookmarksPrivateIOFunction::ShowSelectFileDialog(
   // Early return if the select file dialog is already active.
   if (select_file_dialog_)
     return;
+
+  // Fail if we can not locate owning window
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(window_id);
+  if (!browser || !browser->window()) {
+    NOTREACHED() << "No window found";
+    return;
+  }
+  gfx::NativeWindow owning_window = browser->window()->GetNativeWindow();
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -259,12 +270,7 @@ void BookmarksPrivateIOFunction::ShowSelectFileDialog(
   ui::SelectFileDialog::FileTypeInfo file_type_info;
   file_type_info.extensions.resize(1);
   file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("html"));
-  gfx::NativeWindow owning_window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : gfx::NativeWindow();
-  // |web_contents| can be nullptr (for background pages), which is fine. In
-  // such a case if file-selection dialogs are forbidden by policy, we will not
-  // show an InfoBar, which is better than letting one appear out of the blue.
+
   select_file_dialog_->SelectFile(
       type, std::u16string(), default_path, &file_type_info, 0,
       base::FilePath::StringType(), owning_window, nullptr);
@@ -283,40 +289,13 @@ void BookmarksPrivateIOFunction::MultiFilesSelected(
 }
 
 ExtensionFunction::ResponseValue
-BookmarksPrivateImportFunction::RunOnReady() {
-  if (!EditBookmarksEnabled())
-    return Error(bookmark_api_constants::kEditBookmarksDisabled);
-  ShowSelectFileDialog(ui::SelectFileDialog::SELECT_OPEN_FILE,
-                       base::FilePath());
-  // TODO(crbug.com/1073255): This will respond before a file is selected, which
-  // seems incorrect. Waiting and responding until after
-  // ui::SelectFileDialog::Listener is fired should be right thing to do, but
-  // that requires auditing bookmark page callsites.
-  return NoArguments();
-}
-
-void BookmarksPrivateImportFunction::FileSelected(
-    const base::FilePath& path,
-    int index,
-    void* params) {
-  // Deletes itself.
-  ExternalProcessImporterHost* importer_host = new ExternalProcessImporterHost;
-  importer::SourceProfile source_profile;
-  source_profile.importer_type = importer::TYPE_BOOKMARKS_FILE;
-  source_profile.source_path = path;
-  importer_host->StartImportSettings(source_profile,
-                                     GetProfile(),
-                                     importer::FAVORITES,
-                                     new ProfileWriter(GetProfile()));
-
-  importer::LogImporterUseToMetrics("BookmarksAPI",
-                                    importer::TYPE_BOOKMARKS_FILE);
-  select_file_dialog_.reset();
-  Release();  // Balanced in BookmarkManagerPrivateIOFunction::SelectFile()
-}
-
-ExtensionFunction::ResponseValue
 BookmarksPrivateExportFunction::RunOnReady() {
+  using vivaldi::bookmarks_private::Export::Params;
+
+  absl::optional<Params> params = Params::Create(args());
+  if (!params)
+    return BadMessage();
+
   // "bookmarks.export" is exposed to a small number of extensions. These
   // extensions use user gesture for export, so use USER_VISIBLE priority.
   // GetDefaultFilepathForBookmarkExport() might have to touch filesystem
@@ -327,7 +306,8 @@ BookmarksPrivateExportFunction::RunOnReady() {
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&GetDefaultFilepathForBookmarkExport),
       base::BindOnce(&BookmarksPrivateIOFunction::ShowSelectFileDialog,
-                     this, ui::SelectFileDialog::SELECT_SAVEAS_FILE));
+                     this, ui::SelectFileDialog::SELECT_SAVEAS_FILE,
+                     params->window_id));
   // TODO(crbug.com/1073255): This will respond before a file is selected, which
   // seems incorrect. Waiting and responding until after
   // ui::SelectFileDialog::Listener is fired should be right thing to do, but

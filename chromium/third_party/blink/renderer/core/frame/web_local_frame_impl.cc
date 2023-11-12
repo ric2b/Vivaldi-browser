@@ -227,6 +227,7 @@
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
@@ -274,6 +275,7 @@
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
+#include "ui/gfx/geometry/size_conversions.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "third_party/blink/public/web/win/web_font_family_names.h"
@@ -332,23 +334,11 @@ class DummyFrameOwner final : public GarbageCollected<DummyFrameOwner>,
 // made virtual so that they can be overridden by ChromePluginPrintContext.
 class ChromePrintContext : public PrintContext {
  public:
-  ChromePrintContext(LocalFrame* frame, bool use_printing_layout)
-      : PrintContext(frame, use_printing_layout), printed_page_width_(0) {}
+  explicit ChromePrintContext(LocalFrame* frame) : PrintContext(frame) {}
   ChromePrintContext(const ChromePrintContext&) = delete;
   ChromePrintContext& operator=(const ChromePrintContext&) = delete;
 
   ~ChromePrintContext() override = default;
-
-  void BeginPrintMode(float width, float height) override {
-    DCHECK(!printed_page_width_);
-    printed_page_width_ = width;
-    PrintContext::BeginPrintMode(printed_page_width_, height);
-  }
-
-  virtual float GetPageShrink(uint32_t page_number) const {
-    gfx::Rect page_rect = page_rects_[page_number];
-    return printed_page_width_ / page_rect.width();
-  }
 
   void SpoolSinglePage(cc::PaintCanvas* canvas, int page_number) {
     DispatchEventsForPrintingOnAllFrames();
@@ -374,11 +364,10 @@ class ChromePrintContext : public PrintContext {
     canvas->drawPicture(context.EndRecording());
   }
 
-  void SpoolPagesWithBoundariesForTesting(
-      cc::PaintCanvas* canvas,
-      const gfx::SizeF& page_size_in_pixels,
-      const gfx::SizeF& spool_size_in_pixels,
-      const WebVector<uint32_t>* pages) {
+  void SpoolPagesWithBoundariesForTesting(cc::PaintCanvas* canvas,
+                                          const WebPrintParams& print_params,
+                                          const gfx::Size& spool_size_in_pixels,
+                                          const WebVector<uint32_t>* pages) {
     DispatchEventsForPrintingOnAllFrames();
     if (!GetFrame()->GetDocument() ||
         !GetFrame()->GetDocument()->GetLayoutView())
@@ -389,7 +378,7 @@ class ChromePrintContext : public PrintContext {
         !GetFrame()->GetDocument()->GetLayoutView())
       return;
 
-    gfx::RectF all_pages_rect(spool_size_in_pixels);
+    gfx::Rect all_pages_rect(spool_size_in_pixels);
 
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
     GraphicsContext& context = builder->Context();
@@ -402,15 +391,15 @@ class ChromePrintContext : public PrintContext {
 
     WebVector<uint32_t> all_pages;
     if (!pages) {
-      all_pages.reserve(page_rects_.size());
-      all_pages.resize(page_rects_.size());
+      all_pages.reserve(PageCount());
+      all_pages.resize(PageCount());
       std::iota(all_pages.begin(), all_pages.end(), 0);
       pages = &all_pages;
     }
 
     int current_height = 0;
     for (uint32_t page_index : *pages) {
-      if (page_index >= page_rects_.size()) {
+      if (page_index >= PageCount()) {
         break;
       }
 
@@ -426,30 +415,28 @@ class ChromePrintContext : public PrintContext {
         context.Restore();
       }
 
-      AffineTransform transform;
-      transform.Translate(0, current_height);
-
-      WebPrintPageDescription description;
+      WebPrintPageDescription description =
+          print_params.default_page_description;
       GetFrame()->GetDocument()->GetPageDescription(page_index, &description);
+
+      AffineTransform transform;
+      transform.Translate(description.margin_left,
+                          current_height + description.margin_top);
+
       if (description.orientation == PageOrientation::kUpright) {
-        current_height += page_size_in_pixels.height() + 1;
+        current_height += description.size.height() + 1;
       } else {
         if (description.orientation == PageOrientation::kRotateRight) {
-          transform.Translate(page_size_in_pixels.height(), 0);
+          transform.Translate(description.size.height(), 0);
           transform.Rotate(90);
         } else {
           DCHECK_EQ(description.orientation, PageOrientation::kRotateLeft);
-          transform.Translate(0, page_size_in_pixels.width());
+          transform.Translate(0, description.size.width());
           transform.Rotate(-90);
         }
-        current_height += page_size_in_pixels.width() + 1;
+        current_height += description.size.width() + 1;
       }
 
-      // Account for the disabling of scaling in spoolPage. In the context of
-      // SpoolPagesWithBoundariesForTesting the scale HAS NOT been
-      // pre-applied.
-      float scale = GetPageShrink(page_index);
-      transform.Scale(scale, scale);
       context.Save();
       context.ConcatCTM(transform);
 
@@ -463,18 +450,27 @@ class ChromePrintContext : public PrintContext {
 
  protected:
   virtual void SpoolPage(GraphicsContext& context, int page_number) {
-    gfx::Rect page_rect = page_rects_[page_number];
+    gfx::Rect page_rect = PageRect(page_number);
     AffineTransform transform;
+
+    auto* frame_view = GetFrame()->View();
+    DCHECK(frame_view);
+    const LayoutView* layout_view = frame_view->GetLayoutView();
+
+    // Layout may have used a larger viewport size in order to fit more
+    // unbreakable content in the inline direction. Now we need to scale it down
+    // to fit on the actual pages.
+    float inverse_scale = 1.f / layout_view->PageScaleFactor();
+    transform.Scale(inverse_scale, inverse_scale);
+
     transform.Translate(static_cast<float>(-page_rect.x()),
                         static_cast<float>(-page_rect.y()));
     context.Save();
     context.ConcatCTM(transform);
     context.ClipRect(gfx::RectToSkRect(page_rect));
 
-    auto* frame_view = GetFrame()->View();
-    DCHECK(frame_view);
     auto property_tree_state =
-        frame_view->GetLayoutView()->FirstFragment().LocalBorderBoxProperties();
+        layout_view->FirstFragment().LocalBorderBoxProperties();
 
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>(context);
     frame_view->PaintOutsideOfLifecycle(
@@ -507,9 +503,6 @@ class ChromePrintContext : public PrintContext {
     for (auto& doc : documents)
       doc->DispatchEventsForPrinting();
   }
-
-  // Set when printing.
-  float printed_page_width_;
 };
 
 // Simple class to override some of PrintContext behavior. This is used when
@@ -517,12 +510,8 @@ class ChromePrintContext : public PrintContext {
 // want to delegate all printing related calls to the plugin.
 class ChromePluginPrintContext final : public ChromePrintContext {
  public:
-  ChromePluginPrintContext(LocalFrame* frame,
-                           WebPluginContainerImpl* plugin,
-                           const WebPrintParams& print_params)
-      : ChromePrintContext(frame, print_params.use_printing_layout),
-        plugin_(plugin),
-        print_params_(print_params) {}
+  ChromePluginPrintContext(LocalFrame* frame, WebPluginContainerImpl* plugin)
+      : ChromePrintContext(frame), plugin_(plugin) {}
 
   ~ChromePluginPrintContext() override = default;
 
@@ -531,10 +520,10 @@ class ChromePluginPrintContext final : public ChromePrintContext {
     ChromePrintContext::Trace(visitor);
   }
 
-  void BeginPrintMode(float width, float height) override {
-    gfx::Rect rect(gfx::ToFlooredSize(gfx::SizeF(width, height)));
-    print_params_.print_content_area = rect;
-    page_rects_.Fill(rect, plugin_->PrintBegin(print_params_));
+  const gfx::Rect& PageRect(wtf_size_t) const = delete;
+
+  void BeginPrintMode(const WebPrintParams& print_params) override {
+    page_count_ = plugin_->PrintBegin(print_params);
   }
 
   void EndPrintMode() override {
@@ -551,11 +540,6 @@ class ChromePluginPrintContext final : public ChromePrintContext {
       GetFrame()->GetDocument()->SetPrinting(Document::kNotPrinting);
   }
 
-  float GetPageShrink(uint32_t page_number) const override {
-    // We don't shrink the page (maybe we should ask the widget ??)
-    return 1.0;
-  }
-
  protected:
   void SpoolPage(GraphicsContext& context, int page_number) override {
     auto* builder = MakeGarbageCollected<PaintRecordBuilder>(context);
@@ -566,13 +550,13 @@ class ChromePluginPrintContext final : public ChromePrintContext {
  private:
   // Set when printing.
   Member<WebPluginContainerImpl> plugin_;
-  WebPrintParams print_params_;
 };
 
 class PaintPreviewContext : public PrintContext {
  public:
-  explicit PaintPreviewContext(LocalFrame* frame)
-      : PrintContext(frame, false) {}
+  explicit PaintPreviewContext(LocalFrame* frame) : PrintContext(frame) {
+    use_printing_layout_ = false;
+  }
   PaintPreviewContext(const PaintPreviewContext&) = delete;
   PaintPreviewContext& operator=(const PaintPreviewContext&) = delete;
   ~PaintPreviewContext() override = default;
@@ -673,7 +657,7 @@ class TouchStartEventListener : public NativeEventListener {
                 tap_event, HitTestRequest::kReadOnly | HitTestRequest::kActive)
             .GetHitTestResult();
 
-    result.SetToShadowHostIfInRestrictedShadowRoot();
+    result.SetToShadowHostIfInUAShadowRoot();
 
     callback_.Run(result);
   }
@@ -887,8 +871,10 @@ bool WebLocalFrameImpl::UsePrintingLayout() const {
 }
 
 void WebLocalFrameImpl::CopyToFindPboard() {
+#if BUILDFLAG(IS_MAC)
   if (HasSelection())
     GetFrame()->GetSystemClipboard()->CopyToFindPboard(SelectionAsText());
+#endif
 }
 
 void WebLocalFrameImpl::CenterSelection() {
@@ -1206,7 +1192,7 @@ void WebLocalFrameImpl::ReloadImage(const WebNode& web_node) {
   Node* node = web_node;  // Use implicit WebNode->Node* cast.
   HitTestResult hit_test_result;
   hit_test_result.SetInnerNode(node);
-  hit_test_result.SetToShadowHostIfInRestrictedShadowRoot();
+  hit_test_result.SetToShadowHostIfInUAShadowRoot();
   node = hit_test_result.InnerNodeOrImageMapImage();
   if (auto* image_element = DynamicTo<HTMLImageElement>(*node))
     image_element->ForceReload();
@@ -1898,21 +1884,14 @@ uint32_t WebLocalFrameImpl::PrintBegin(const WebPrintParams& print_params,
       GetPluginToPrintHelper(constrain_to_node);
   if (plugin_container && plugin_container->SupportsPaginatedPrint()) {
     print_context_ = MakeGarbageCollected<ChromePluginPrintContext>(
-        GetFrame(), plugin_container, print_params);
+        GetFrame(), plugin_container);
   } else {
-    print_context_ = MakeGarbageCollected<ChromePrintContext>(
-        GetFrame(), print_params.use_printing_layout);
+    print_context_ = MakeGarbageCollected<ChromePrintContext>(GetFrame());
   }
 
-  gfx::SizeF size(print_params.print_content_area.size());
-  print_context_->BeginPrintMode(size.width(), size.height());
+  print_context_->BeginPrintMode(print_params);
 
   return print_context_->PageCount();
-}
-
-float WebLocalFrameImpl::GetPrintPageShrink(uint32_t page) {
-  DCHECK(print_context_);
-  return print_context_->GetPageShrink(page);
 }
 
 void WebLocalFrameImpl::PrintPage(uint32_t page, cc::PaintCanvas* canvas) {
@@ -1976,9 +1955,9 @@ void WebLocalFrameImpl::GetPageDescription(
 }
 
 gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(
-    const gfx::Size& page_size_in_pixels,
+    const WebPrintParams& print_params,
     const WebVector<uint32_t>& pages) {
-  int spool_width = page_size_in_pixels.width();
+  int spool_width = 0;
   int spool_height = 0;
 
   for (uint32_t page_index : pages) {
@@ -1986,36 +1965,37 @@ gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(
     if (page_index != pages.front())
       spool_height++;
 
-    WebPrintPageDescription description;
+    WebPrintPageDescription description = print_params.default_page_description;
     GetFrame()->GetDocument()->GetPageDescription(page_index, &description);
+    gfx::Size page_size = gfx::ToCeiledSize(description.size);
     if (description.orientation == PageOrientation::kUpright) {
-      spool_height += page_size_in_pixels.height();
+      spool_width = std::max(spool_width, page_size.width());
+      spool_height += page_size.height();
     } else {
-      spool_height += page_size_in_pixels.width();
-      spool_width = std::max(spool_width, page_size_in_pixels.height());
+      spool_height += page_size.width();
+      spool_width = std::max(spool_width, page_size.height());
     }
   }
   return gfx::Size(spool_width, spool_height);
 }
 
 gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(
-    const gfx::Size& page_size_in_pixels,
+    const WebPrintParams& print_params,
     uint32_t page_count) {
   WebVector<uint32_t> pages(page_count);
   std::iota(pages.begin(), pages.end(), 0);
-  return SpoolSizeInPixelsForTesting(page_size_in_pixels, pages);
+  return SpoolSizeInPixelsForTesting(print_params, pages);
 }
 
 void WebLocalFrameImpl::PrintPagesForTesting(
     cc::PaintCanvas* canvas,
-    const gfx::Size& page_size_in_pixels,
+    const WebPrintParams& print_params,
     const gfx::Size& spool_size_in_pixels,
     const WebVector<uint32_t>* pages) {
   DCHECK(print_context_);
 
   print_context_->SpoolPagesWithBoundariesForTesting(
-      canvas, gfx::SizeF(page_size_in_pixels), gfx::SizeF(spool_size_in_pixels),
-      pages);
+      canvas, print_params, spool_size_in_pixels, pages);
 }
 
 gfx::Rect WebLocalFrameImpl::GetSelectionBoundsRectForTesting() const {
@@ -2249,6 +2229,7 @@ void WebLocalFrameImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_widget_);
   visitor->Trace(print_context_);
   visitor->Trace(input_method_controller_);
+  visitor->Trace(current_history_item_);
 }
 
 void WebLocalFrameImpl::SetCoreFrame(LocalFrame* frame) {
@@ -2380,13 +2361,6 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
   // No URL is associated with this frame, but we can still assign UKM events to
   // this identifier.
   ukm::SourceId document_ukm_source_id = ukm::NoURLSourceId();
-
-  // If the document creating a new iframe is a main frame, we only apply
-  // restriction when the document is an initial empty document.
-  if (GetFrame() == GetFrame()->Tree().Top() &&
-      !GetFrame()->Loader().IsOnInitialEmptyDocument()) {
-    policy_container_data->allow_cross_origin_isolation = true;
-  }
 
   auto complete_initialization = [this, owner_element, &policy_container_remote,
                                   &policy_container_data, &name,
@@ -2647,7 +2621,7 @@ HitTestResult WebLocalFrameImpl::HitTestResultForVisualViewportPos(
       GetFrame()->View()->ConvertFromRootFrame(root_frame_point));
   HitTestResult result = GetFrame()->GetEventHandler().HitTestResultAtLocation(
       location, HitTestRequest::kReadOnly | HitTestRequest::kActive);
-  result.SetToShadowHostIfInRestrictedShadowRoot();
+  result.SetToShadowHostIfInUAShadowRoot();
   return result;
 }
 
@@ -3190,8 +3164,8 @@ void WebLocalFrameImpl::SetAllowsCrossBrowsingInstanceFrameLookup() {
   window->GetMutableSecurityOrigin()->GrantCrossAgentClusterAccess();
 }
 
-const WebHistoryItem& WebLocalFrameImpl::GetCurrentHistoryItem() const {
-  return current_history_item_;
+WebHistoryItem WebLocalFrameImpl::GetCurrentHistoryItem() const {
+  return WebHistoryItem(current_history_item_);
 }
 
 void WebLocalFrameImpl::SetLocalStorageArea(
@@ -3253,13 +3227,42 @@ WebLocalFrameImpl::ConvertNotRestoredReasons(
 
 void WebLocalFrameImpl::SetLCPPHint(
     const mojom::LCPCriticalPathPredictorNavigationTimeHintPtr& hint) {
-  CHECK(hint);
-  CHECK(base::FeatureList::IsEnabled(features::kLCPCriticalPathPredictor));
-
-  if (LCPCriticalPathPredictor* lcpp = GetFrame()->GetLCPP()) {
-    // TODO(crbug.com/1419756): Consume hint.
-    NOTIMPLEMENTED();
+  LocalFrame* frame = GetFrame();
+  if (!frame) {
+    return;
   }
+
+  LCPCriticalPathPredictor* lcpp = frame->GetLCPP();
+  if (!lcpp) {
+    return;
+  }
+
+  if (!hint) {
+    lcpp->Reset();
+    return;
+  }
+
+  Vector<ElementLocator> lcp_element_locators;
+  lcp_element_locators.reserve(
+      base::checked_cast<wtf_size_t>(hint->lcp_element_locators.size()));
+  for (const std::string& serialized_locator : hint->lcp_element_locators) {
+    lcp_element_locators.push_back(ElementLocator());
+    bool result =
+        lcp_element_locators.back().ParseFromString(serialized_locator);
+    if (!result) {
+      // This can happen when the host LCPP database is corrupted or we
+      // updated the ElementLocator schema in an incompatible way.
+      LOG(INFO) << "Ignoring an invalid lcp_element_locator hint.";
+      lcp_element_locators.pop_back();
+    }
+  }
+  lcpp->set_lcp_element_locators(std::move(lcp_element_locators));
+
+  HashSet<KURL> lcp_influencer_scripts;
+  for (auto& url : hint->lcp_influencer_scripts) {
+    lcp_influencer_scripts.insert(KURL(url));
+  }
+  lcpp->set_lcp_influencer_scripts(std::move(lcp_influencer_scripts));
 }
 
 void WebLocalFrameImpl::AddHitTestOnTouchStartCallback(
@@ -3279,8 +3282,29 @@ void WebLocalFrameImpl::SetResourceCacheRemote(
   GetFrame()->SetResourceCacheRemote(std::move(remote));
 }
 
+void WebLocalFrameImpl::BlockParserForTesting() {
+  // Avoid blocking for MHTML tests since MHTML archives are loaded
+  // synchronously during commit. WebFrameTestProxy only has a chance to act at
+  // DidCommit after that's happened.
+  if (GetFrame()->Loader().GetDocumentLoader()->Archive()) {
+    return;
+  }
+  GetFrame()->Loader().GetDocumentLoader()->BlockParser();
+}
+
+void WebLocalFrameImpl::ResumeParserForTesting() {
+  if (GetFrame()->Loader().GetDocumentLoader()->Archive()) {
+    return;
+  }
+  GetFrame()->Loader().GetDocumentLoader()->ResumeParser();
+}
+
+void WebLocalFrameImpl::FlushInputForTesting(base::OnceClosure done_callback) {
+  frame_widget_->FlushInputForTesting(std::move(done_callback));
+}
+
 void WebLocalFrameImpl::SetTargetToCurrentHistoryItem(const WebString& target) {
-  current_history_item_.SetTarget(target);
+  current_history_item_->SetTarget(target);
 }
 
 void WebLocalFrameImpl::UpdateCurrentHistoryItem() {
@@ -3289,7 +3313,7 @@ void WebLocalFrameImpl::UpdateCurrentHistoryItem() {
 }
 
 PageState WebLocalFrameImpl::CurrentHistoryItemToPageState() {
-  return current_history_item_.ToPageState();
+  return current_history_item_->ToPageState();
 }
 
 void WebLocalFrameImpl::ScrollFocusedEditableElementIntoView() {

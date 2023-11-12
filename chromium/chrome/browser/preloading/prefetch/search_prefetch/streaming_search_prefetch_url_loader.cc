@@ -80,7 +80,7 @@ StreamingSearchPrefetchURLLoader::ResponseReader::ResponseReader(
     mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client,
     base::OnceCallback<void(ResponseReader*)> forwarding_disconnection_callback,
     absl::optional<network::URLLoaderCompletionStatus> status,
-    base::WeakPtr<StreamingSearchPrefetchURLLoader> loader)
+    scoped_refptr<StreamingSearchPrefetchURLLoader> loader)
     : disconnection_callback_(std::move(forwarding_disconnection_callback)),
       loader_(std::move(loader)),
       url_loader_completion_status_(status) {
@@ -96,6 +96,11 @@ StreamingSearchPrefetchURLLoader::ResponseReader::ResponseReader(
 StreamingSearchPrefetchURLLoader::ResponseReader::~ResponseReader() {
   // Always ensure we recorded something on destruction.
   OnDestroyed();
+  // It should be rare, but an edge case can be `loader_` is going to create
+  // another `ResponseReader`, in th is case `loader_` should not be deleted and
+  // it should be safe. But we'd better delete the reference asynchronously for
+  // safety consideration.
+  ReleaseSelfReference();
 
   // TODO(crbug.com/1400881): For now prerender is the only use case. After
   // refactoring it should specify the client type.
@@ -211,12 +216,14 @@ void StreamingSearchPrefetchURLLoader::ResponseReader::
   if (!disconnection_callback_) {
     return;
   }
-
   // If we receive the disconnection signal before completing serving, there
   // should be a serving error.
   if (status_ == ResponseDataReaderStatus::kCreated) {
     status_ = ResponseDataReaderStatus::kServingError;
   }
+  // Clear the reference before asking `loader` to delete `this`.
+  // See the comment on `loader_`.
+  ReleaseSelfReference();
   std::move(disconnection_callback_).Run(this);
 }
 
@@ -236,6 +243,11 @@ void StreamingSearchPrefetchURLLoader::ResponseReader::OnDestroyed() {
       status_ = ResponseDataReaderStatus::kCanceledByLoader;
       return;
   }
+}
+
+void StreamingSearchPrefetchURLLoader::ResponseReader::ReleaseSelfReference() {
+  base::SequencedTaskRunner::GetCurrentDefault()->ReleaseSoon(
+      FROM_HERE, std::move(loader_));
 }
 
 void StreamingSearchPrefetchURLLoader::ResponseReader::FollowRedirect(
@@ -323,7 +335,42 @@ StreamingSearchPrefetchURLLoader::StreamingSearchPrefetchURLLoader(
       base::Unretained(this)));
 }
 
-StreamingSearchPrefetchURLLoader::~StreamingSearchPrefetchURLLoader() = default;
+StreamingSearchPrefetchURLLoader::~StreamingSearchPrefetchURLLoader() {
+  network_url_loader_.reset();
+  url_loader_receiver_.reset();
+
+  // Record the times of serving to prerendering navigation. It should be a
+  // small number (0 or 1 in most cases), so cap it at 9.
+  int bucket_size = 10;
+  base::UmaHistogramCustomCounts(
+      "Prerender.Experimental.Search.ResponseReuseCount",
+      std::min(count_prerender_serving_times_, bucket_size - 1), /* min= */ 0,
+      /* exclusive_max= */ bucket_size, bucket_size);
+  if (on_destruction_callback_for_testing_) {
+    std::move(on_destruction_callback_for_testing_).Run();
+  }
+}
+
+// static
+SearchPrefetchURLLoader::RequestHandler
+StreamingSearchPrefetchURLLoader::GetCallbackForReadingViaResponseReader(
+    scoped_refptr<StreamingSearchPrefetchURLLoader> loader) {
+  return base::BindOnce(
+      &StreamingSearchPrefetchURLLoader::CreateResponseReaderForPrerender,
+      std::move(loader));
+}
+
+// static
+SearchPrefetchURLLoader::RequestHandler
+StreamingSearchPrefetchURLLoader::GetServingResponseHandler(
+    scoped_refptr<StreamingSearchPrefetchURLLoader> loader) {
+  DCHECK(!loader->streaming_prefetch_request_);
+  DCHECK(!loader->forwarding_client_);
+  loader->RecordInterceptionTime();
+  return base::BindOnce(
+      &StreamingSearchPrefetchURLLoader::SetUpForwardingClient,
+      std::move(loader));
+}
 
 void StreamingSearchPrefetchURLLoader::MarkPrefetchAsServable() {
   if (marked_as_servable_) {
@@ -343,19 +390,6 @@ void StreamingSearchPrefetchURLLoader::OnServableResponseCodeReceived() {
   streaming_prefetch_request_->OnServableResponseCodeReceived();
 }
 
-SearchPrefetchURLLoader::RequestHandler
-StreamingSearchPrefetchURLLoader::ServingResponseHandlerImpl(
-    std::unique_ptr<SearchPrefetchURLLoader> loader) {
-  DCHECK(!streaming_prefetch_request_);
-  DCHECK(!forwarding_client_);
-  std::unique_ptr<StreamingSearchPrefetchURLLoader> casted_loader =
-      std::unique_ptr<StreamingSearchPrefetchURLLoader>{
-          static_cast<StreamingSearchPrefetchURLLoader*>(loader.release())};
-  return base::BindOnce(
-      &StreamingSearchPrefetchURLLoader::SetUpForwardingClient,
-      weak_factory_.GetWeakPtr(), std::move(casted_loader));
-}
-
 void StreamingSearchPrefetchURLLoader::RecordNavigationURLHistogram(
     const GURL& navigation_url) {
   if (navigation_prefetch_) {
@@ -365,26 +399,7 @@ void StreamingSearchPrefetchURLLoader::RecordNavigationURLHistogram(
   }
 }
 
-SearchPrefetchURLLoader::RequestHandler
-StreamingSearchPrefetchURLLoader::GetCallbackForReadingViaResponseReader() {
-  return base::BindOnce(
-      &StreamingSearchPrefetchURLLoader::CreateResponseReaderForPrerender,
-      weak_factory_.GetWeakPtr());
-}
-
-std::unique_ptr<StreamingSearchPrefetchURLLoader>
-StreamingSearchPrefetchURLLoader::OwnItselfIfServing(
-    std::unique_ptr<StreamingSearchPrefetchURLLoader> self_loader) {
-  if (response_reader_for_prerender_) {
-    // It is still serving to a prerender. Keep it alive until finishing
-    // serving.
-    self_pointer_ = std::move(self_loader);
-  }
-  return self_loader;
-}
-
 void StreamingSearchPrefetchURLLoader::SetUpForwardingClient(
-    std::unique_ptr<StreamingSearchPrefetchURLLoader> loader,
     const network::ResourceRequest& resource_request,
     mojo::PendingReceiver<network::mojom::URLLoader> receiver,
     mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client) {
@@ -403,7 +418,7 @@ void StreamingSearchPrefetchURLLoader::SetUpForwardingClient(
   RecordNavigationURLHistogram(resource_request_->url);
 
   // Let `this` own itself, so that it can manage its lifetime properly.
-  self_pointer_ = std::move(loader);
+  self_pointer_ = WrapRefCounted(this);
   receiver_.Bind(std::move(receiver));
   receiver_.set_disconnect_handler(base::BindOnce(
       &StreamingSearchPrefetchURLLoader::OnURLLoaderClientMojoDisconnect,
@@ -414,7 +429,7 @@ void StreamingSearchPrefetchURLLoader::SetUpForwardingClient(
   // If the object previously encountered an error while still owned elsewhere,
   // schedule the delete for now.
   if (pending_delete_) {
-    PostTaskToDeleteSelf();
+    PostTaskToReleaseOwnership();
     return;
   }
 
@@ -444,14 +459,13 @@ void StreamingSearchPrefetchURLLoader::CreateResponseReaderForPrerender(
     mojo::PendingReceiver<network::mojom::URLLoader> receiver,
     mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client) {
   DCHECK(prerender_utils::SearchPreloadShareableCacheIsEnabled());
-  DCHECK(streaming_prefetch_request_);
-  was_served_to_prerender_reader_ = true;
+  count_prerender_serving_times_++;
   response_reader_for_prerender_ = std::make_unique<ResponseReader>(
       std::move(receiver), std::move(forwarding_client),
       base::BindOnce(
           &StreamingSearchPrefetchURLLoader::OnPrerenderForwardingDisconnect,
           weak_factory_.GetWeakPtr()),
-      status_, weak_factory_.GetWeakPtr());
+      status_, base::WrapRefCounted(this));
   response_reader_for_prerender_->StartReadingResponseFromData(
       resource_response_);
   response_reader_for_prerender_->PushData();
@@ -465,9 +479,6 @@ void StreamingSearchPrefetchURLLoader::OnPrerenderForwardingDisconnect(
   }
   base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
       FROM_HERE, std::move(response_reader_for_prerender_));
-  if (self_pointer_) {
-    MaybeDeleteItself();
-  }
 }
 
 void StreamingSearchPrefetchURLLoader::OnReceiveEarlyHints(
@@ -573,9 +584,10 @@ void StreamingSearchPrefetchURLLoader::OnReceiveRedirect(
   }
   if (streaming_prefetch_request_) {
     streaming_prefetch_request_->ErrorEncountered();
+    // Do nothing after this point, as `this` might be deleted.
   } else {
     forwarding_result_ = ForwardingResult::kFailed;
-    PostTaskToDeleteSelf();
+    PostTaskToReleaseOwnership();
   }
 }
 
@@ -607,7 +619,7 @@ void StreamingSearchPrefetchURLLoader::OnTransferSizeUpdated(
 
 void StreamingSearchPrefetchURLLoader::OnDataAvailable(const void* data,
                                                        size_t num_bytes) {
-  body_content_.append(std::string(static_cast<const char*>(data), num_bytes));
+  body_content_.append(static_cast<const char*>(data), num_bytes);
   bytes_of_raw_data_to_transfer_ += num_bytes;
 
   if (forwarding_client_) {
@@ -641,7 +653,7 @@ void StreamingSearchPrefetchURLLoader::OnStartLoadingResponseBodyFromData() {
 
   if (rv != MOJO_RESULT_OK) {
     forwarding_result_ = ForwardingResult::kFailed;
-    PostTaskToDeleteSelf();
+    PostTaskToReleaseOwnership();
     return;
   }
 
@@ -677,7 +689,7 @@ void StreamingSearchPrefetchURLLoader::OnHandleReady(
     return;
   }
   forwarding_result_ = ForwardingResult::kFailed;
-  PostTaskToDeleteSelf();
+  PostTaskToReleaseOwnership();
 }
 
 base::StringPiece StreamingSearchPrefetchURLLoader::GetMoreDataFromCache(
@@ -720,7 +732,7 @@ void StreamingSearchPrefetchURLLoader::PushData() {
 
     if (result != MOJO_RESULT_OK) {
       forwarding_result_ = ForwardingResult::kFailed;
-      PostTaskToDeleteSelf();
+      PostTaskToReleaseOwnership();
       return;
     }
 
@@ -766,6 +778,7 @@ void StreamingSearchPrefetchURLLoader::OnComplete(
       streaming_prefetch_request_->MarkPrefetchAsComplete();
     } else {
       streaming_prefetch_request_->ErrorEncountered();
+      // Not safe to do anything after this point.
       return;
     }
   }
@@ -825,7 +838,6 @@ void StreamingSearchPrefetchURLLoader::OnURLLoaderMojoDisconnect() {
     // The connection should close after complete.
     return;
   }
-
   if (is_in_fallback_) {
     // The connection should close after fallback to a different loader.
     return;
@@ -835,7 +847,7 @@ void StreamingSearchPrefetchURLLoader::OnURLLoaderMojoDisconnect() {
     DCHECK(!forwarding_client_);
     streaming_prefetch_request_->ErrorEncountered();
   } else {
-    MaybeDeleteItself();
+    PostTaskToReleaseOwnership();
   }
 }
 
@@ -844,29 +856,17 @@ void StreamingSearchPrefetchURLLoader::OnURLLoaderClientMojoDisconnect() {
   DCHECK(!streaming_prefetch_request_);
   forwarding_client_.reset();
   receiver_.reset();
-  MaybeDeleteItself();
+  // The forwarding logic has finished, so `this` does not need to keep the
+  // reference. For prerendering serving, `ResponseReader::loader_` keeps
+  // another reference pointer.
+  PostTaskToReleaseOwnership();
 }
 
 void StreamingSearchPrefetchURLLoader::ClearOwnerPointer() {
   streaming_prefetch_request_ = nullptr;
 }
 
-void StreamingSearchPrefetchURLLoader::MaybeDeleteItself() {
-  if (response_reader_for_prerender_) {
-    // If prerendering is still reading from the response, it will delete the
-    // response after it finishes reading..
-    return;
-  }
-  if (receiver_.is_bound()) {
-    return;
-  }
-  PostTaskToDeleteSelf();
-}
-
-void StreamingSearchPrefetchURLLoader::PostTaskToDeleteSelf() {
-  network_url_loader_.reset();
-  url_loader_receiver_.reset();
-
+void StreamingSearchPrefetchURLLoader::PostTaskToReleaseOwnership() {
   forwarding_client_.reset();
   receiver_.reset();
 
@@ -877,14 +877,14 @@ void StreamingSearchPrefetchURLLoader::PostTaskToDeleteSelf() {
 
   if (forwarding_result_ != ForwardingResult::kNotServed) {
     base::UmaHistogramEnumeration(
-        was_served_to_prerender_reader_
+        count_prerender_serving_times_
             ? "Omnibox.SearchPreload.ForwardingResult.WasServedToPrerender"
             : "Omnibox.SearchPreload.ForwardingResult.NotServedToPrerender",
         forwarding_result_);
   }
 
   // To avoid UAF bugs, post a separate task to delete this object.
-  base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+  base::SequencedTaskRunner::GetCurrentDefault()->ReleaseSoon(
       FROM_HERE, std::move(self_pointer_));
 }
 
@@ -926,5 +926,5 @@ void StreamingSearchPrefetchURLLoader::OnURLLoaderMojoDisconnectInFallback() {
     // forwarding bytes.
     return;
   }
-  MaybeDeleteItself();
+  PostTaskToReleaseOwnership();
 }

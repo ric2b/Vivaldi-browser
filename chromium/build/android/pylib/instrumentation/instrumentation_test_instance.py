@@ -9,7 +9,6 @@ import os
 import pickle
 import re
 
-import six
 from devil.android import apk_helper
 from pylib import constants
 from pylib.base import base_test_result
@@ -188,7 +187,7 @@ def GenerateTestResults(result_code, result_bundle, statuses, duration_ms,
   if current_result:
     if current_result.GetType() == base_test_result.ResultType.UNKNOWN:
       crashed = (result_code == _ACTIVITY_RESULT_CANCELED and any(
-          _NATIVE_CRASH_RE.search(l) for l in six.itervalues(result_bundle)))
+          _NATIVE_CRASH_RE.search(l) for l in result_bundle.values()))
       if crashed:
         current_result.SetType(base_test_result.ResultType.CRASH)
 
@@ -481,8 +480,8 @@ def _GetTestsFromDexdump(test_apk):
     return test_methods
 
   for dump in dex_dumps:
-    for package_name, package_info in six.iteritems(dump):
-      for class_name, class_info in six.iteritems(package_info['classes']):
+    for package_name, package_info in dump.items():
+      for class_name, class_info in package_info['classes'].items():
         if class_name.endswith('Test') and not class_info['is_abstract']:
           classAnnotations, methodsAnnotations = class_info['annotations']
           tests.append({
@@ -608,9 +607,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._data_deps = None
     self._data_deps_delegate = None
     self._runtime_deps_path = None
-    self._store_data_in_app_directory = False
+    self._variations_test_seed_path = args.variations_test_seed_path
+    self._webview_variations_test_seed_path = (
+        args.webview_variations_test_seed_path)
     self._initializeDataDependencyAttributes(args, data_deps_delegate)
-
     self._annotations = None
     self._excluded_annotations = None
     self._test_filters = None
@@ -622,6 +622,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._flags = None
     self._use_apk_under_test_flags_file = False
+    self._webview_flags = args.webview_command_line_arg
     self._initializeFlagAttributes(args)
 
     self._screenshot_dir = None
@@ -761,7 +762,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._package_info = None
     if self._apk_under_test:
       package_under_test = self._apk_under_test.GetPackageName()
-      for package_info in six.itervalues(constants.PACKAGE_INFO):
+      for package_info in constants.PACKAGE_INFO.values():
         if package_under_test == package_info.package:
           self._package_info = package_info
           break
@@ -791,7 +792,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._data_deps = []
     self._data_deps_delegate = data_deps_delegate
     self._runtime_deps_path = args.runtime_deps_path
-    self._store_data_in_app_directory = args.store_data_in_app_directory
+
     if not self._runtime_deps_path:
       logging.warning('No data dependencies will be pushed.')
 
@@ -972,7 +973,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
   @property
   def flags(self):
-    return self._flags
+    return self._flags[:]
 
   @property
   def is_unit_test(self):
@@ -1015,16 +1016,16 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._use_webview_provider
 
   @property
+  def webview_flags(self):
+    return self._webview_flags[:]
+
+  @property
   def screenshot_dir(self):
     return self._screenshot_dir
 
   @property
   def skia_gold_properties(self):
     return self._skia_gold_properties
-
-  @property
-  def store_data_in_app_directory(self):
-    return self._store_data_in_app_directory
 
   @property
   def store_tombstones(self):
@@ -1081,6 +1082,14 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def use_apk_under_test_flags_file(self):
     return self._use_apk_under_test_flags_file
+
+  @property
+  def variations_test_seed_path(self):
+    return self._variations_test_seed_path
+
+  @property
+  def webview_variations_test_seed_path(self):
+    return self._webview_variations_test_seed_path
 
   @property
   def wait_for_java_debugger(self):
@@ -1195,7 +1204,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       if clazz == _PARAMETERIZED_COMMAND_LINE_FLAGS:
         list_of_switches = []
         for annotation in methods['value']:
-          for c, m in six.iteritems(annotation):
+          for c, m in annotation.items():
             list_of_switches += _annotationToSwitches(c, m)
         return list_of_switches
       return []
@@ -1212,7 +1221,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       list_of_switches = []
       _checkParameterization(annotations)
       if _SKIP_PARAMETERIZATION not in annotations:
-        for clazz, methods in six.iteritems(annotations):
+        for clazz, methods in annotations.items():
           list_of_switches += _annotationToSwitches(clazz, methods)
       if list_of_switches:
         _setTestFlags(t, _switchesToFlags(list_of_switches[0]))

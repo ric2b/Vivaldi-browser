@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 source_set("activity_services") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "activity_service_coordinator.h",
     "activity_service_coordinator.mm",
@@ -23,7 +22,7 @@ source_set("activity_services") {
     "//components/bookmarks/common",
     "//components/prefs",
     "//components/ui_metrics",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/coordinator/default_browser_promo",
@@ -53,7 +52,6 @@ source_set("activity_services") {
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "activity_service_mediator_unittest.mm",
@@ -70,7 +68,7 @@ source_set("unit_tests") {
     "//components/send_tab_to_self",
     "//components/sync/service",
     "//components/ui_metrics",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
@@ -98,10 +96,7 @@ source_set("unit_tests") {
 }
 
 source_set("eg2_tests") {
-  configs += [
-    "//build/config/compiler:enable_arc",
-    "//build/config/ios:xctest_config",
-  ]
+  configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
 
   sources = [ "activity_service_controller_egtest.mm" ]

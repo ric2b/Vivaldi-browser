@@ -348,10 +348,14 @@ ExtensionFunction::ResponseAction MenuContentRemoveFunction::Run() {
   bool success = false;
   NodeModel pair = GetMenu(browser_context(), params->menu);
   if (pair.first && pair.first->parent()) {
-    success = true;
     for (auto& id : params->ids) {
       Menu_Node* node = pair.first->GetById(GetIdFromString(id));
-      pair.second->Remove(node);
+      if (node) {
+        pair.second->Remove(node);
+        success = true;
+      } else {
+        LOG(ERROR) << "Can not remove. Unknown menu item id.";
+      }
     }
   }
 
@@ -455,21 +459,21 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
       for (auto& id : *params->ids) {
         Menu_Node* node = pair.first->GetById(GetIdFromString(id));
         if (node) {
-          AddRef();  // Balanced in MenuModelChanged().
+          AddRef();  // Balanced in MenuModelReset().
           pair.second->AddObserver(this);
           pair.second->Reset(node);
           return RespondLater();
         }
       }
     } else {
-      AddRef();  // Balanced in MenuModelChanged().
+      AddRef();  // Balanced in MenuModelReset().
       pair.second->AddObserver(this);
       pair.second->Reset(pair.first);
       return RespondLater();
     }
   } else if (pair.first) {
     // Reset all and report back that name menu is to be used afterwards.
-    AddRef();  // Balanced in MenuModelChanged().
+    AddRef();  // Balanced in MenuModelReset().
     pair.second->AddObserver(this);
     pair.second->Reset(params->menu);
     return RespondLater();
@@ -478,7 +482,7 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
       ? ContextMenuServiceFactory::GetForBrowserContext(browser_context())
       : MainMenuServiceFactory::GetForBrowserContext(browser_context());
     if (model) {
-      AddRef();  // Balanced in MenuModelChanged().
+      AddRef();  // Balanced in MenuModelReset().
       model->AddObserver(this);
       model->Reset(params->menu);
       return RespondLater();

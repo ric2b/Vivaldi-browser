@@ -82,6 +82,7 @@
 <translation id="2842985007712546952">پوشه اصلی</translation>
 <translation id="2843343418360315034">مجارستانی (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">آغاز همگام‌سازی...</translation>
+<translation id="2874111661876416905">جستجو با ویوالدی</translation>
 <translation id="2874121295511641364">همگام‌سازی آدرس‌های تایپ شده و زبانه‌های باز</translation>
 <translation id="2898963176829412617">پوشه‌ی جدید…</translation>
 <translation id="2961573414320947355">آیا می‌خواهید همه‌ی لینک‌ها در ویوالدی باز شود؟ حتما ما را به‌عنوان مرورگر پیش‌فرض خود تنظیم کنید.</translation>
@@ -97,7 +98,6 @@
 <translation id="3229182533910980085">برای افزودن اولین نشانک خود، آیکون مثبت زیر را فشار دهید</translation>
 <translation id="3236835587712044564">از ویوالدی راضی هستید؟ آن را به‌عنوان مرورگر پیش‌فرض تنظیم کنید.</translation>
 <translation id="3270894089048358271">تنظیم ویوالدی به عنوان مرورگر پیش‌فرض شما</translation>
-<translation id="3270930591809084274">زبانه‌های همگام‌سازی شده</translation>
 <translation id="3335772982573114336">یادداشت جدید</translation>
 <translation id="33451081266695216">اتصال توسط سرور قطع شد.</translation>
 <translation id="3346386541263128307">آدرس‌های ایمیل باید باهم مطابقت داشته باشند.</translation>
@@ -130,7 +130,6 @@
 <translation id="3997823869212225788">کد ۶ رقمی را وارد کنید</translation>
 <translation id="4002066346123236978">عنوان</translation>
 <translation id="4032606071208172574">(پیش‌فرض)</translation>
-<translation id="4048057312173843244">زبانه‌های همگام‌سازی شده از سایر دستگاه‌ها در این‌جا نشان داده می‌شوند. برای استفاده از این سرویس، به بخش همگام‌سازی وارد شوید.</translation>
 <translation id="4073968054795398875">بروز خطا بر روی سرور همگام‌سازی. عملیات همگام‌سازی دوباره آغاز خواهد شد...</translation>
 <translation id="4096707694175478403">پنل</translation>
 <translation id="414098425907666915">جستجوی خصوصی</translation>
@@ -146,6 +145,7 @@
 مسدود شد</translation>
 <translation id="4299298331965375737">ویوالدی را به‌عنوان مرورگر پیش‌فرض خود تنظیم می‌کنید؟</translation>
 <translation id="4304224509867189079">ورود</translation>
+<translation id="4316955624679873896">نشانک ذخیره شد</translation>
 <translation id="432696242656678770">روسی (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">اسپانیایی (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">ویتنامی (<ph name="ORIGIN" />)</translation>
@@ -214,6 +214,7 @@
 <translation id="5857090052475505287">پوشه‌ی جدید</translation>
 <translation id="5859825823508296659">ویرایش دامنه</translation>
 <translation id="5867841422488265304">نشانی وب را جستجو ویا تایپ کنید</translation>
+<translation id="5869217094746242845">درباره امنیت و حریم خصوصی بیشتر بیاموزید</translation>
 <translation id="5871497086027727873">۱ مورد منتقل شد</translation>
 <translation id="5898502570200301364">از گذرواژه‌هایی که در قسمت مدیریت رمز عبور ویوالدی ذخیره کرده‌اید، می‌توانید در سایر برنامه‌های آیفون خود استفاده کنید.</translation>
 <translation id="5900160494089383343">این نام کاربری موجود نیست.</translation>
@@ -322,6 +323,7 @@
 <translation id="8677007239430848917">برای افزودن اولین یادداشت خود، آیکون مثبت زیر را فشار دهید</translation>
 <translation id="8684294196284714094">برای تنظیم ویوالدی به‌عنوان مرورگر پیش‌فرض خود آماده‌اید؟</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> مورد حذف شد</translation>
+<translation id="8763006697839582351">گشودن به‌صورت خصوصی در ویوالدی</translation>
 <translation id="8804164990146287819">سیاست حفظ حریم خصوصی</translation>
 <translation id="8819841443522803117">زمان آن است که مرورگر پیش‌فرض خود را تغییر دهید؟ ویوالدی را انتخاب کنید.</translation>
 <translation id="8820817407110198400">نشانک‌ها</translation>
@@ -333,7 +335,6 @@
 <translation id="9043882097999887291">تبلیغات
 مسدود شد</translation>
 <translation id="9065203028668620118">ویرایش</translation>
-<translation id="9078193189520575214">اعمال تغییرات...</translation>
 <translation id="9079251484401922158">فنلاندی (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">۱ مورد</translation>
 <translation id="9091665118798175641">همگام‌سازی اطلاعات تکمیل خودکار فرم</translation>

@@ -359,6 +359,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   return nil;
 }
 
+- (BOOL)isApplyingExceptionRules {
+  if (_ruleService && _ruleService->IsLoaded()) {
+    return _ruleService->IsApplyingIosRules(RuleGroup::kTrackingRules) ||
+        _ruleService->IsApplyingIosRules(RuleGroup::kAdBlockingRules);
+  }
+  return NO;
+}
+
 #pragma mark - SETTERS
 - (void)setExceptionFromBlockingType:(ATBSettingType)blockingType {
   switch (blockingType) {
@@ -654,10 +662,17 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   }
 }
 
-- (void)rulesListDidApply:(RuleGroup)group {
-  SEL selector = @selector(rulesListDidApply:);
+- (void)rulesListDidStartApplying:(RuleGroup)group {
+  SEL selector = @selector(rulesListDidStartApplying:);
   if ([self.consumer respondsToSelector:selector]) {
-    [self.consumer rulesListDidApply:group];
+    [self.consumer rulesListDidStartApplying:group];
+  }
+}
+
+- (void)rulesListDidEndApplying:(RuleGroup)group {
+  SEL selector = @selector(rulesListDidEndApplying:);
+  if ([self.consumer respondsToSelector:selector]) {
+    [self.consumer rulesListDidEndApplying:group];
   }
 }
 

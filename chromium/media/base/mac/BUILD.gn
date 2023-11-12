@@ -14,6 +14,7 @@ source_set("mac") {
     "//media/audio",
     "//media/device_monitors",
     "//media/filters",
+    "//media/video",
   ]
 
   sources = [
@@ -37,10 +38,7 @@ source_set("mac") {
       "VideoToolbox.framework",
     ]
   }
-  configs += [
-    "//media:subcomponent_config",
-    "//build/config/compiler:enable_arc",
-  ]
+  configs += [ "//media:subcomponent_config" ]
 
   deps = [
     "//media/base",

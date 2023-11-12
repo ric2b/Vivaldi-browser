@@ -69,7 +69,6 @@ absl::optional<net::FirstPartySetMetadata>
 FirstPartySetsAccessDelegate::ComputeMetadata(
     const net::SchemefulSite& site,
     const net::SchemefulSite* top_frame_site,
-    const std::set<net::SchemefulSite>& party_context,
     base::OnceCallback<void(net::FirstPartySetMetadata)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -86,12 +85,12 @@ FirstPartySetsAccessDelegate::ComputeMetadata(
     EnqueuePendingQuery(base::BindOnce(
         &FirstPartySetsAccessDelegate::ComputeMetadataAndInvoke,
         base::Unretained(this), site, base::OptionalFromPtr(top_frame_site),
-        party_context, std::move(callback)));
+        std::move(callback)));
     return absl::nullopt;
   }
 
-  return manager_->ComputeMetadata(site, top_frame_site, party_context,
-                                   *context_config(), std::move(callback));
+  return manager_->ComputeMetadata(site, top_frame_site, *context_config(),
+                                   std::move(callback));
 }
 
 absl::optional<FirstPartySetsAccessDelegate::EntriesResult>
@@ -149,7 +148,6 @@ FirstPartySetsAccessDelegate::GetCacheFilterMatchInfo(
 void FirstPartySetsAccessDelegate::ComputeMetadataAndInvoke(
     const net::SchemefulSite& site,
     const absl::optional<net::SchemefulSite> top_frame_site,
-    const std::set<net::SchemefulSite>& party_context,
     base::OnceCallback<void(net::FirstPartySetMetadata)> callback) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(context_config());
@@ -164,8 +162,7 @@ void FirstPartySetsAccessDelegate::ComputeMetadataAndInvoke(
 
   absl::optional<net::FirstPartySetMetadata> sync_result =
       manager_->ComputeMetadata(site, base::OptionalToPtr(top_frame_site),
-                                party_context, *context_config(),
-                                std::move(callbacks.first));
+                                *context_config(), std::move(callbacks.first));
 
   if (sync_result.has_value())
     std::move(callbacks.second).Run(std::move(sync_result.value()));
@@ -212,6 +209,10 @@ void FirstPartySetsAccessDelegate::GetCacheFilterMatchInfoAndInvoke(
 void FirstPartySetsAccessDelegate::InvokePendingQueries() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(ready_event_.has_value());
+  // !wait_for_init_ implies (pending_queries == nullptr).
+  CHECK(wait_for_init_ || pending_queries_ == nullptr);
+  // !wait_for_init_ implies !first_async_query_timer_.has_value().
+  CHECK(wait_for_init_ || !first_async_query_timer_.has_value());
 
   UmaHistogramTimes(
       "Cookie.FirstPartySets.InitializationDuration."
@@ -245,6 +246,7 @@ void FirstPartySetsAccessDelegate::EnqueuePendingQuery(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(pending_queries_);
   CHECK(!ready_event_.has_value());
+  CHECK(wait_for_init_);
 
   if (!first_async_query_timer_.has_value())
     first_async_query_timer_ = {base::ElapsedTimer()};

@@ -14,8 +14,10 @@ import org.chromium.ui.base.WindowAndroid;
 // Vivaldi
 import android.graphics.Bitmap;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Monitor changes that indicate a theme color change may be needed from tab contents.
@@ -24,10 +26,19 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     private final Tab mTab;
     private final Callback mUpdateCallback;
 
+    // Vivaldi
+    private final SharedPreferencesManager.Observer mPreferenceObserver;
+
     TabThemeColorHelper(Tab tab, Callback<Integer> updateCallback) {
         mTab = tab;
         mUpdateCallback = updateCallback;
         tab.addObserver(this);
+
+        // Vivaldi
+        mPreferenceObserver = key -> {
+            if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(mTab, false);
+        };
+        VivaldiPreferences.getSharedPreferencesManager().addObserver(mPreferenceObserver);
     }
 
     /**
@@ -66,6 +77,8 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     @Override
     public void onDestroyed(Tab tab) {
         tab.removeObserver(this);
+        // Vivaldi
+        VivaldiPreferences.getSharedPreferencesManager().removeObserver(mPreferenceObserver);
     }
 
     @Override

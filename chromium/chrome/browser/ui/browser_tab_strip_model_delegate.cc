@@ -128,8 +128,9 @@ void BrowserTabStripModelDelegate::DuplicateContentsAt(int index) {
 void BrowserTabStripModelDelegate::MoveToExistingWindow(
     const std::vector<int>& indices,
     int browser_index) {
-  auto existing_browsers =
-      browser_->tab_menu_model_delegate()->GetOtherTabbedBrowserWindows();
+  std::vector<Browser*> existing_browsers =
+      browser_->tab_menu_model_delegate()->GetOtherBrowserWindows(
+          web_app::AppBrowserController::IsWebApp(browser_));
   size_t existing_browser_count = existing_browsers.size();
   if (static_cast<size_t>(browser_index) < existing_browser_count &&
       existing_browsers[browser_index]) {
@@ -292,6 +293,15 @@ bool BrowserTabStripModelDelegate::IsForWebApp() {
 
 void BrowserTabStripModelDelegate::CopyURL(content::WebContents* web_contents) {
   chrome::CopyURL(web_contents);
+}
+
+void BrowserTabStripModelDelegate::GoBack(content::WebContents* web_contents) {
+  chrome::GoBack(web_contents);
+}
+
+bool BrowserTabStripModelDelegate::CanGoBack(
+    content::WebContents* web_contents) {
+  return chrome::CanGoBack(web_contents);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

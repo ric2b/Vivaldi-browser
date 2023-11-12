@@ -29,6 +29,11 @@ struct CONTENT_EXPORT ClientMetadata {
   GURL privacy_policy_url;
 };
 
+struct CONTENT_EXPORT IdentityCredentialTokenError {
+  int code;
+  GURL url;
+};
+
 struct CONTENT_EXPORT IdentityProviderMetadata {
   IdentityProviderMetadata();
   IdentityProviderMetadata(const IdentityProviderMetadata& other);
@@ -115,7 +120,6 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // is called with the selected account id or empty string otherwise.
   // |sign_in_mode| represents whether this is an auto re-authn flow.
   virtual void ShowAccountsDialog(
-      WebContents* rp_web_contents,
       const std::string& top_frame_for_display,
       const absl::optional<std::string>& iframe_for_display,
       const std::vector<IdentityProviderData>& identity_provider_data,
@@ -128,13 +132,23 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // observable by users. This could happen when an IDP claims that the user is
   // signed in but not respond with any user account during browser fetches.
   virtual void ShowFailureDialog(
-      WebContents* rp_web_contents,
       const std::string& top_frame_for_display,
       const absl::optional<std::string>& iframe_for_display,
       const std::string& idp_for_display,
+      const blink::mojom::RpContext& rp_context,
       const IdentityProviderMetadata& idp_metadata,
       DismissCallback dismiss_callback,
       SigninToIdPCallback signin_callback);
+
+  // Shows an error UI when the user's sign-in attempt failed.
+  virtual void ShowErrorDialog(
+      const std::string& top_frame_for_display,
+      const absl::optional<std::string>& iframe_for_display,
+      const std::string& idp_for_display,
+      const blink::mojom::RpContext& rp_context,
+      const IdentityProviderMetadata& idp_metadata,
+      const absl::optional<IdentityCredentialTokenError>& error,
+      DismissCallback dismiss_callback);
 
   // Only to be called after a dialog is shown.
   virtual std::string GetTitle() const;

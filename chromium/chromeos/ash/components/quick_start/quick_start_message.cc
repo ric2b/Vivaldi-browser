@@ -8,24 +8,28 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/types/expected.h"
 #include "chromeos/ash/components/quick_start/quick_start_message_type.h"
 #include "sandbox/policy/sandbox.h"
 
 namespace {
 
+constexpr char kSecondDeviceAuthPayloadKey[] = "secondDeviceAuthPayload";
+constexpr char kBootstrapConfigurationsPayloadKey[] = "bootstrapConfigurations";
+constexpr char kBootstrapOptionsPayloadKey[] = "bootstrapOptions";
+constexpr char kQuickStartPayloadKey[] = "quickStartPayload";
+
 std::string GetStringKeyForQuickStartMessageType(
     ash::quick_start::QuickStartMessageType message_type) {
   switch (message_type) {
     case ash::quick_start::QuickStartMessageType::kSecondDeviceAuthPayload:
-      return "secondDeviceAuthPayload";
+      return kSecondDeviceAuthPayloadKey;
     case ash::quick_start::QuickStartMessageType::kBootstrapConfigurations:
-      return "bootstrapConfigurations";
+      return kBootstrapConfigurationsPayloadKey;
     case ash::quick_start::QuickStartMessageType::kBootstrapOptions:
-      return "bootstrapOptions";
-    case ash::quick_start::QuickStartMessageType::kFidoMessage:
-      return "fidoMessage";
+      return kBootstrapOptionsPayloadKey;
     case ash::quick_start::QuickStartMessageType::kQuickStartPayload:
-      return "quickStartPayload";
+      return kQuickStartPayloadKey;
   }
 }
 
@@ -35,7 +39,6 @@ bool IsMessagePayloadBase64Encoded(
     case ash::quick_start::QuickStartMessageType::kSecondDeviceAuthPayload:
     case ash::quick_start::QuickStartMessageType::kBootstrapOptions:
     case ash::quick_start::QuickStartMessageType::kBootstrapConfigurations:
-    case ash::quick_start::QuickStartMessageType::kFidoMessage:
       return false;
     case ash::quick_start::QuickStartMessageType::kQuickStartPayload:
       return true;
@@ -55,9 +58,8 @@ void QuickStartMessage::DisableSandboxCheckForTesting() {
 }
 
 // static
-std::unique_ptr<QuickStartMessage> QuickStartMessage::ReadMessage(
-    std::vector<uint8_t> data,
-    QuickStartMessageType message_type) {
+base::expected<std::unique_ptr<QuickStartMessage>, QuickStartMessage::ReadError>
+QuickStartMessage::ReadMessage(std::vector<uint8_t> data) {
   /*
     Since this code could handle untrusted data, it is important this
     runs only from a strongly sandboxed process (i.e. not the browser process).
@@ -73,59 +75,80 @@ std::unique_ptr<QuickStartMessage> QuickStartMessage::ReadMessage(
   absl::optional<base::Value> data_value = base::JSONReader::Read(str_data);
   if (!data_value.has_value()) {
     LOG(ERROR) << "Message is not JSON";
-    return nullptr;
+    return base::unexpected(QuickStartMessage::ReadError::INVALID_JSON);
   }
 
   if (!data_value->is_dict()) {
     LOG(ERROR) << "Message is not a JSON dictionary";
-    return nullptr;
+    return base::unexpected(QuickStartMessage::ReadError::INVALID_JSON);
   }
-
-  std::string payload_key = GetStringKeyForQuickStartMessageType(message_type);
-  bool is_payload_base64_encoded = IsMessagePayloadBase64Encoded(message_type);
 
   base::Value::Dict& message = data_value.value().GetDict();
   base::Value::Dict* payload;
+  std::string* encoded_json_payload;
 
-  if (is_payload_base64_encoded) {
-    std::string* base64_encoded_payload = message.FindString(payload_key);
-    if (base64_encoded_payload == nullptr) {
-      LOG(ERROR) << "Message does not contain any payload";
-      return nullptr;
-    }
-
+  if ((encoded_json_payload = message.FindString(kQuickStartPayloadKey))) {
     std::string json_payload;
     bool base64_decoding_succeeded =
-        base::Base64Decode(*base64_encoded_payload, &json_payload,
+        base::Base64Decode(*encoded_json_payload, &json_payload,
                            base::Base64DecodePolicy::kForgiving);
     if (!base64_decoding_succeeded) {
-      LOG(ERROR) << "Message does not contain a valid base64 encoded payload";
-      return nullptr;
+      LOG(ERROR) << "quickStartPayload does not contain a valid base64 encoded "
+                    "payload";
+      return base::unexpected(
+          QuickStartMessage::ReadError::BASE64_DESERIALIZATION_FAILURE);
     }
 
     absl::optional<base::Value> json_reader_result =
         base::JSONReader::Read(json_payload);
     if (!json_reader_result.has_value()) {
       LOG(ERROR) << "Unable to decode base64 encoded payload into JSON";
-      return nullptr;
+      return base::unexpected(
+          QuickStartMessage::ReadError::BASE64_DESERIALIZATION_FAILURE);
     }
 
     payload = json_reader_result->GetIfDict();
 
     if (payload == nullptr) {
       LOG(ERROR) << "Payload is not a JSON dictionary";
-      return nullptr;
+      return base::unexpected(
+          QuickStartMessage::ReadError::BASE64_DESERIALIZATION_FAILURE);
     }
 
-    return std::make_unique<QuickStartMessage>(message_type, payload->Clone());
+    return std::make_unique<QuickStartMessage>(
+        ash::quick_start::QuickStartMessageType::kQuickStartPayload,
+        payload->Clone());
+  } else if ((payload = message.FindDict(kSecondDeviceAuthPayloadKey))) {
+    return std::make_unique<QuickStartMessage>(
+        ash::quick_start::QuickStartMessageType::kSecondDeviceAuthPayload,
+        payload->Clone());
+  } else if ((payload = message.FindDict(kBootstrapConfigurationsPayloadKey))) {
+    return std::make_unique<QuickStartMessage>(
+        ash::quick_start::QuickStartMessageType::kBootstrapConfigurations,
+        payload->Clone());
+  } else if ((payload = message.FindDict(kBootstrapOptionsPayloadKey))) {
+    return std::make_unique<QuickStartMessage>(
+        ash::quick_start::QuickStartMessageType::kBootstrapOptions,
+        payload->Clone());
   } else {
-    payload = message.FindDict(payload_key);
-    if (payload == nullptr) {
-      LOG(ERROR) << "Payload is not present in the message";
-      return nullptr;
-    }
-    return std::make_unique<QuickStartMessage>(message_type, payload->Clone());
+    LOG(ERROR) << "Message does not contain known payload.";
+    return base::unexpected(
+        QuickStartMessage::ReadError::MISSING_MESSAGE_PAYLOAD);
   }
+}
+
+// static
+base::expected<std::unique_ptr<QuickStartMessage>, QuickStartMessage::ReadError>
+QuickStartMessage::ReadMessage(std::vector<uint8_t> data,
+                               QuickStartMessageType message_type) {
+  auto result = ReadMessage(data);
+  if (result.has_value() && result.value()->get_type() != message_type) {
+    LOG(ERROR) << "Unexpected message type: received="
+               << result.value()->get_type() << ", expected=" << message_type;
+    return base::unexpected(
+        QuickStartMessage::ReadError::UNEXPECTED_MESSAGE_TYPE);
+  }
+  return result;
 }
 
 QuickStartMessage::QuickStartMessage(QuickStartMessageType message_type)

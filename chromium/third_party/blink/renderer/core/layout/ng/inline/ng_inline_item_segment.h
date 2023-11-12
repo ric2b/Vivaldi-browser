@@ -41,6 +41,10 @@ class CORE_EXPORT NGInlineItemSegment {
   RunSegmenter::RunSegmenterRange ToRunSegmenterRange(
       unsigned start_offset,
       unsigned end_offset) const;
+  RunSegmenter::RunSegmenterRange ToRunSegmenterRange(
+      unsigned start_offset) const {
+    return ToRunSegmenterRange(start_offset, end_offset_);
+  }
 
   unsigned EndOffset() const { return end_offset_; }
 
@@ -73,6 +77,8 @@ class CORE_EXPORT NGInlineItemSegments {
   USING_FAST_MALLOC(NGInlineItemSegments);
 
  public:
+  std::unique_ptr<NGInlineItemSegments> Clone() const;
+
   unsigned size() const { return segments_.size(); }
   bool IsEmpty() const { return segments_.empty(); }
 
@@ -102,6 +108,9 @@ class CORE_EXPORT NGInlineItemSegments {
 
   // Compute an internal items-to-segments index for faster access.
   void ComputeItemIndex(const HeapVector<NGInlineItem>& items);
+
+  using RunSegmenterRanges = Vector<RunSegmenter::RunSegmenterRange, 16>;
+  void ToRanges(RunSegmenterRanges& ranges) const;
 
   // Iterates |RunSegmenterRange| for the given offsets.
   class Iterator {

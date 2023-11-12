@@ -10,17 +10,6 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller_model_delegate.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller_service_delegate.h"
 
-typedef NS_ENUM(NSInteger, SimplifiedState) {
-  LOGGED_OUT = 0,
-  LOGGING_IN,
-  LOGGED_IN,
-  CREDENTIALS_MISSING,
-  LOGIN_FAILED,
-  NOT_ACTIVATED
-};
-
-class VivaldiAccountManagerObserverBridge;
-class VivaldiSyncServiceObserverBridge;
 class PrefService;
 
 namespace vivaldi {
@@ -28,18 +17,9 @@ namespace vivaldi {
   class VivaldiSyncServiceImpl;
 }
 
-namespace syncer {
-  class SyncSetupInProgressHandle;
-}
-
 @interface VivaldiSyncMediator
     : NSObject <VivaldiSyncSettingsViewControllerModelDelegate,
-                VivaldiSyncSettingsViewControllerServiceDelegate> {
-  @private
-  std::unique_ptr<VivaldiAccountManagerObserverBridge> _accountManagerObserver;
-  std::unique_ptr<VivaldiSyncServiceObserverBridge> _syncObserver;
-  std::unique_ptr<syncer::SyncSetupInProgressHandle> _syncSetupInProgressHandle;
-}
+                VivaldiSyncSettingsViewControllerServiceDelegate>
 
 - (instancetype)initWithAccountManager:
       (vivaldi::VivaldiAccountManager*)vivaldiAccountManager

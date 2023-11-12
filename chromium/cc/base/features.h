@@ -29,23 +29,33 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kRemoveMobileViewportDoubleTap);
 // https://docs.google.com/document/d/1smLAXs-DSLLmkEt4FIPP7PVglJXOcwRc7A5G0SEwxaY/edit
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollUnification);
 
-// Sets raster tree priority to NEW_CONTENT_TAKES_PRIORITY when performing a
-// unified scroll with main-thread repaint reasons.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMainRepaintScrollPrefersNewContent);
+// When enabled, scrolling within a covering snap area avoids or snaps to inner
+// nested areas, avoiding resting on positions which do not snap the inner area.
+// E.g. when scrolling within snap area A, it will stop either before/after
+// snap area B or with B snapped.
+//   --------
+//  | A      |
+//  |        |
+//  |  ---   |
+//  | | B |  |
+//  |  ---   |
+//  |        |
+//   --------
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollSnapCoveringAvoidNestedSnapAreas);
 
-// When enabled, wheel scrolls trigger smoothness mode. When disabled,
-// smoothness mode is limited to non-animated (precision) scrolls, such as
-// touch scrolling.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSchedulerSmoothnessForAnimatedScrolls);
+// When enabled, scrolling within a covering snap area uses the native fling,
+// allowing much more natural scrolling within these areas.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollSnapCoveringUseNativeFling);
+
+// When enabled, if a snap container is snapping to a large snap area, it will
+// snap to the closest covering position if it is closer than the aligned
+// position. This avoid unnecessary jumps that attempt to honor the
+// scroll-snap-align value.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollSnapPreferCloserCovering);
 
 // When enabled, cc will show blink's Web-Vital metrics inside its heads up
 // display.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kHudDisplayForPerformanceMetrics);
-
-// When enabled, scheduler tree priority will change to
-// NEW_CONTENT_TAKES_PRIORITY if during a scrollbar scroll, CC has to
-// checkerboard.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kPreferNewContentForCheckerboardedScrolls);
 
 // When enabled, CompositorTimingHistory will directly record the timing history
 // that is used to calculate main thread timing estimates, and use the
@@ -78,15 +88,15 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNormalPriorityImageDecoding);
 // Use DMSAA instead of MSAA for rastering tiles.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTiles);
 
+#if BUILDFLAG(IS_ANDROID)
+// Use DMSAA instead of MSAA for rastering tiles on Android GL backend. Note
+// that the above flag kUseDMSAAForTiles is used for Android Vulkan backend.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTilesAndroidGL);
+#endif
+
 // Updating browser controls state will IPC directly from browser main to the
 // compositor thread. Previously this proxied through the renderer main thread.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUpdateBrowserControlsWithoutProxy);
-
-// Fix the SMOOTHNESS_TAKES_PRIORITY queue priorities used in
-// RasterTilePriorityQueueAll::GetNextQueues(). By fixing the bug which fails to
-// schedule raster tasks for Pending SOON tiles, it reduces checkerboarding and
-// improves the rendering.desktop tough_scrolling benchmark.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kRasterTilePriorityQueue);
 
 // Enables shared image cache for gpu used by CC instances instantiated for UI.
 // TODO(https://crbug.com/c/1378251): this shall also be possible to use by
@@ -112,11 +122,26 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReducedFrameRateEstimation);
 // Use 4x MSAA (vs 8) on High DPI screens.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kDetectHiDpiForMsaa);
 
+// When no frames are produced in a certain time interval, reclaim prepaint
+// tiles.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimPrepaintTilesWhenIdle);
+
 // Feature to reduce the area in which invisible tiles are kept around.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSmallerInterestArea);
 
 constexpr static int kDefaultInterestAreaSizeInPixels = 3000;
 CC_BASE_EXPORT extern const base::FeatureParam<int> kInterestAreaSizeInPixels;
+
+// Whether images marked "no-cache" are cached. When disabled, they are.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kImageCacheNoCache);
+
+// When enabled, old prepaint tiles in the "eventually" region get reclaimed
+// after some time.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimOldPrepaintTiles);
+CC_BASE_EXPORT extern const base::FeatureParam<int> kReclaimDelayInSeconds;
+
+// Kill switch for using MapRect() to compute filter pixel movement.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseMapRectForPixelMovement);
 
 }  // namespace features
 

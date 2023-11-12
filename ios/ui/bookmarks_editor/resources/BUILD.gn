@@ -9,6 +9,7 @@ group("resources") {
     ":vivaldi_bookmark_folder_selection_chevron",
     ":vivaldi_bookmark_folder_selection_checkmark",
     ":vivaldi_bookmark_add_new_folder",
+    ":vivaldi_trash_folder",
   ]
 }
 
@@ -44,5 +45,12 @@ imageset("vivaldi_bookmark_add_new_folder") {
   sources = [
     "vivaldi_bookmark_add_new_folder.imageset/Contents.json",
     "vivaldi_bookmark_add_new_folder.imageset/vivaldi_bookmark_add_new_folder.pdf",
+  ]
+}
+
+imageset("vivaldi_trash_folder") {
+  sources = [
+    "vivaldi_trash_folder.imageset/Contents.json",
+    "vivaldi_trash_folder.imageset/vivaldi_trash_folder.pdf",
   ]
 }

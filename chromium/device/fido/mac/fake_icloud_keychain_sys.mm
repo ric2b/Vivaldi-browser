@@ -12,10 +12,6 @@
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/mac/fake_icloud_keychain_sys.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // A number of AuthenticationServices objects are subclassed so that the
 // values of readonly properties can be overridden in tests.
 
@@ -157,6 +153,10 @@ void FakeSystemInterface::SetGetAssertionResult(
   get_assertion_credential_id_ = fido_parsing_utils::Materialize(credential_id);
 }
 
+void FakeSystemInterface::SetGetAssertionError(int code, std::string msg) {
+  get_assertion_error_ = std::make_pair(code, std::move(msg));
+}
+
 void FakeSystemInterface::SetCredentials(
     std::vector<DiscoverableCredentialMetadata> creds) {
   creds_ = std::move(creds);
@@ -201,8 +201,7 @@ void FakeSystemInterface::GetPlatformCredentials(
 void FakeSystemInterface::MakeCredential(
     NSWindow* window,
     CtapMakeCredentialRequest request,
-    base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-        callback) {
+    base::OnceCallback<void(ASAuthorization*, NSError*)> callback) {
   auto attestation_object_bytes =
       std::move(make_credential_attestation_object_bytes_);
   make_credential_attestation_object_bytes_.reset();
@@ -238,8 +237,20 @@ void FakeSystemInterface::MakeCredential(
 void FakeSystemInterface::GetAssertion(
     NSWindow* window,
     CtapGetAssertionRequest request,
-    base::OnceCallback<void(ASAuthorization* __strong, NSError* __strong)>
-        callback) {
+    base::OnceCallback<void(ASAuthorization*, NSError*)> callback) {
+  if (get_assertion_error_) {
+    NSError* error = [[NSError alloc]
+        initWithDomain:@""
+                  code:get_assertion_error_->first
+              userInfo:@{
+                NSLocalizedDescriptionKey : base::SysUTF8ToNSString(
+                    get_assertion_error_->second.c_str())
+              }];
+    get_assertion_error_.reset();
+    std::move(callback).Run(nullptr, error);
+    return;
+  }
+
   if (!get_assertion_authenticator_data_) {
     std::move(callback).Run(nullptr, [[NSError alloc] initWithDomain:@""
                                                                 code:1001
@@ -263,6 +274,10 @@ void FakeSystemInterface::GetAssertion(
   authorization.credential = result;
 
   std::move(callback).Run(authorization, nullptr);
+}
+
+void FakeSystemInterface::Cancel() {
+  cancel_count_++;
 }
 
 FakeSystemInterface::~FakeSystemInterface() = default;

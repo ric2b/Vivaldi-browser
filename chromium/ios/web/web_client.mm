@@ -10,10 +10,6 @@
 #import "ios/web/public/init/web_main_parts.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace web {
 
 static WebClient* g_client;
@@ -94,6 +90,10 @@ UIView* WebClient::GetWindowedContainer() {
   return nullptr;
 }
 
+bool WebClient::EnableFullscreenAPI() const {
+  return false;
+}
+
 bool WebClient::EnableLongPressUIContextMenu() const {
   return false;
 }
@@ -122,23 +122,6 @@ void WebClient::LogDefaultUserAgent(web::WebState* web_state,
 bool WebClient::IsPointingToSameDocument(const GURL& url1,
                                          const GURL& url2) const {
   return url1 == url2;
-}
-
-id<CRWFindSession> WebClient::CreateFindSessionForWebState(
-    web::WebState* web_state) const API_AVAILABLE(ios(16)) {
-  // Subclasses need to provide their own implementation to use this method.
-  NOTREACHED();
-  return nil;
-}
-
-void WebClient::StartTextSearchInWebState(web::WebState* web_state) {
-  // Subclasses need to provide their own implementation to use this method.
-  NOTREACHED();
-}
-
-void WebClient::StopTextSearchInWebState(web::WebState* web_state) {
-  // Subclasses need to provide their own implementation to use this method.
-  NOTREACHED();
 }
 
 bool WebClient::IsMixedContentAutoupgradeEnabled(

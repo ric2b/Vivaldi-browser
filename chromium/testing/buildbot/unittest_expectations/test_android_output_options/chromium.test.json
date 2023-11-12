@@ -19,8 +19,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "foo_test",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "KTU84P",
             "device_os_type": "userdebug",
@@ -54,8 +54,8 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "foo_test",
         "swarming": {
-          "can_use_on_swarming_builders": true,
           "dimensions": {
             "device_os": "LMY41U",
             "device_os_type": "user",
@@ -72,6 +72,7 @@
   "Fake Android M Tester": {
     "gtest_tests": [
       {
+        "name": "foo_test",
         "test": "foo_test"
       }
     ]

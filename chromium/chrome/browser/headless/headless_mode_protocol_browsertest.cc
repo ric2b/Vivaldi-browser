@@ -245,12 +245,23 @@ class HeadlessModeInputSelectFileDialogTest
   bool select_file_dialog_has_run_ = false;
 };
 
+// TODO(crbug.com/1459246): flaky on Mac builders.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_InputSelectFileDialog DISABLED_InputSelectFileDialog
+#else
+#define MAYBE_InputSelectFileDialog InputSelectFileDialog
+#endif
 HEADLESS_MODE_PROTOCOL_TEST_F(HeadlessModeInputSelectFileDialogTest,
-                              InputSelectFileDialog,
+                              MAYBE_InputSelectFileDialog,
                               "input/input-select-file-dialog.js")
 
 // https://crbug.com/1411976
-HEADLESS_MODE_PROTOCOL_TEST(DISABLED_ScreencastBasics,
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_ScreencastBasics DISABLED_ScreencastBasics
+#else
+#define MAYBE_ScreencastBasics ScreencastBasics
+#endif
+HEADLESS_MODE_PROTOCOL_TEST(MAYBE_ScreencastBasics,
                             "sanity/screencast-basics.js")
 
 HEADLESS_MODE_PROTOCOL_TEST(LargeBrowserWindowSize,

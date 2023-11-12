@@ -15,10 +15,6 @@
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface OmniboxFocusOrchestrator ()
 
 @property(nonatomic, assign) BOOL isAnimating;

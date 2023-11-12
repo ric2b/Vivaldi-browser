@@ -14,16 +14,15 @@
 #import "ios/web/public/web_state.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace safe_browsing {
 
 ChromeTailoredSecurityService::ChromeTailoredSecurityService(
     ChromeBrowserState* browser_state,
-    signin::IdentityManager* identity_manager)
-    : TailoredSecurityService(identity_manager, browser_state->GetPrefs()),
+    signin::IdentityManager* identity_manager,
+    syncer::SyncService* sync_service)
+    : TailoredSecurityService(identity_manager,
+                              sync_service,
+                              browser_state->GetPrefs()),
       browser_state_(browser_state) {
   base::WeakPtr<ChromeTailoredSecurityService> weak_ptr =
       weak_ptr_factory_.GetWeakPtr();

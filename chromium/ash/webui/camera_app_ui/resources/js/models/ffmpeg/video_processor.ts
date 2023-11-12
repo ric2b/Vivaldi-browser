@@ -330,7 +330,15 @@ class FFMpegVideoProcessor {
       arguments: args,
       locateFile: (file: string) => {
         assert(file === 'ffmpeg.wasm');
-        return '/js/lib/ffmpeg.wasm';
+        // util.expandPath can't be used here since util includes
+        // load_time_data, which includes file under chrome://, but this file
+        // is in chrome-untrusted://.
+        // TODO(pihsun): Separate util into multiple files so we can include
+        // expandPath here.
+        // TODO(b/213408699): Separate files included in different scope
+        // (chrome://, chrome-untrusted://, worker) into different folder /
+        // tsconfig.json, so this can be caught at compile time.
+        return '../../../js/lib/ffmpeg.wasm';
       },
       noFSInit: true,  // It would be setup in preRun().
       preRun: [() => {
@@ -382,7 +390,7 @@ class FFMpegVideoProcessor {
   /**
    * Writes a blob with mkv data into the processor.
    */
-  async write(blob: Blob): Promise<void> {
+  write(blob: Blob): void {
     this.jobQueue.push(async () => {
       const buf = await blob.arrayBuffer();
       this.inputDevice.push(new Int8Array(buf));
@@ -396,7 +404,7 @@ class FFMpegVideoProcessor {
    */
   async close(): Promise<void> {
     // Flush and close the input device.
-    this.jobQueue.push(async () => {
+    this.jobQueue.push(() => {
       this.inputDevice.endPush();
     });
     await this.jobQueue.flush();
@@ -415,7 +423,7 @@ class FFMpegVideoProcessor {
   async cancel(): Promise<void> {
     // Clear and make sure there is no pending task.
     await this.jobQueue.clear();
-    this.jobQueue.push(async () => {
+    this.jobQueue.push(() => {
       this.inputDevice.cancel();
       // When input device is cancelled, for some reason calling
       // emscripten_force_exit() will not close the corresponding file

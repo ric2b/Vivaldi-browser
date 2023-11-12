@@ -30,6 +30,7 @@ import java.util.HashMap;
 
 // Vivaldi
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.screen_lock.ScreenLock;
 
 class ManualFillingComponentBridge {
     private final SparseArray<PropertyProvider<AccessorySheetData>> mProviders =
@@ -171,6 +172,15 @@ class ManualFillingComponentBridge {
                 assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
                 ManualFillingMetricsRecorder.recordSuggestionSelected(
                         sheetType, field.isObfuscated());
+                // Note(david@vivaldi.com): Before autofill trigger screen lock.
+                if (ScreenLock.getInstance().canReauthenticate()) {
+                    ScreenLock.getInstance().reauthenticate(succeed -> {
+                        if (succeed) {
+                            ManualFillingComponentBridgeJni.get().onFillingTriggered(mNativeView,
+                                    ManualFillingComponentBridge.this, sheetType, field);
+                        }
+                    });
+                } else
                 ManualFillingComponentBridgeJni.get().onFillingTriggered(
                         mNativeView, ManualFillingComponentBridge.this, sheetType, field);
             };
@@ -245,7 +255,6 @@ class ManualFillingComponentBridge {
                 webContents, available);
     }
 
-    @VisibleForTesting
     public static void disableServerPredictionsForTesting() {
         ManualFillingComponentBridgeJni.get().disableServerPredictionsForTesting();
     }

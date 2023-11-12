@@ -12,12 +12,10 @@
 
 #include "base/memory/singleton.h"
 #include "base/no_destructor.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
-#include "chrome/browser/profiles/profile_manager.h"
-
-#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/navigation_handle.h"
@@ -30,6 +28,9 @@ class VivaldiDocumentLoader;
 namespace extensions {
 
 class VivaldiRootDocumentHandler;
+
+void MarkProfileForNoVivaldiClient(const base::FilePath& path);
+bool ShouldProfileCreateVivaldiClient(const base::FilePath& path);
 
 class VivaldiRootDocumentHandlerObserver {
  public:
@@ -70,19 +71,11 @@ class VivaldiRootDocumentHandlerFactory
 class VivaldiRootDocumentHandler : public KeyedService,
                                    public extensions::ExtensionRegistryObserver,
                                    public ProfileObserver,
-                                   public ProfileManagerObserver,
                                    protected content::WebContentsObserver {
   friend base::DefaultSingletonTraits<VivaldiRootDocumentHandler>;
 
  public:
   explicit VivaldiRootDocumentHandler(content::BrowserContext*);
-
-  // ProfileObserver implementation.
-  void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
-  void OnProfileWillBeDestroyed(Profile* profile) override;
-
-  // ProfileManagerObserver implementation.
-  void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
 
   void AddObserver(VivaldiRootDocumentHandlerObserver* observer);
   void RemoveObserver(VivaldiRootDocumentHandlerObserver* observer);
@@ -92,6 +85,10 @@ class VivaldiRootDocumentHandler : public KeyedService,
 
  private:
   ~VivaldiRootDocumentHandler() override;
+
+  // ProfileObserver implementation.
+  void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
+  void OnProfileWillBeDestroyed(Profile* profile) override;
 
   class DocumentContentsObserver : public content::WebContentsObserver {
    public:
@@ -136,8 +133,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
   bool otr_document_loader_is_ready_ = false;
 
   base::ObserverList<VivaldiRootDocumentHandlerObserver>::Unchecked observers_;
-  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
-      profile_manager_observation_{this};
+
+  base::ScopedMultiSourceObservation<Profile, ProfileObserver>
+      observed_profiles_{this};
 
   raw_ptr<const Extension> vivaldi_extension_ = nullptr;
   // The profile we observe.

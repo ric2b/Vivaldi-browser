@@ -5,8 +5,8 @@
 
 #include "base/memory/weak_ptr.h"
 #include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_resources.h"
 #include "components/content_injection/content_injection_provider.h"
-#include "components/request_filter/adblock_filter/adblock_resources.h"
 
 namespace content {
 class BrowserContext;

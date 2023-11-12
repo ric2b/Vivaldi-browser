@@ -17,7 +17,7 @@ const CGFloat locationContainerVerticalPadding = 4;
 const CGFloat locationContainerHorizontalPadding = 12;
 const CGFloat locationImageViewWidth = 14;
 const CGFloat locationImageViewYOffset = 0.5;
-const UIEdgeInsets locationImageViewPadding = UIEdgeInsetsMake(0, 0, 0, 2);
+const CGFloat locationImageViewRightPadding = 2;
 }
 
 @interface VivaldiStickyToolbarView()
@@ -26,6 +26,13 @@ const UIEdgeInsets locationImageViewPadding = UIEdgeInsetsMake(0, 0, 0, 2);
 @property(nonatomic,weak) UILabel* locationLabel;
 @property(nonatomic,weak) UIImageView* locationIconImageView;
 @property(nonatomic,copy) NSString* securityLevelAccessibilityString;
+
+// Constraints to hide the location image view.
+@property(nonatomic, strong)
+    NSArray<NSLayoutConstraint*>* hideLocationImageConstraints;
+// Constraints to show the location image view.
+@property(nonatomic, strong)
+    NSArray<NSLayoutConstraint*>* showLocationImageConstraints;
 
 @end
 
@@ -98,15 +105,25 @@ const UIEdgeInsets locationImageViewPadding = UIEdgeInsetsMake(0, 0, 0, 2);
   locationIconImageView.tintColor = UIColor.labelColor;
 
   [locationContainer addSubview:locationIconImageView];
-  [locationIconImageView anchorTop:nil
-                           leading:locationContainer.leadingAnchor
-                            bottom:nil
-                          trailing:locationLabel.leadingAnchor
-                           padding:locationImageViewPadding];
   [locationIconImageView setWidthWithConstant:locationImageViewWidth];
   [locationIconImageView.centerYAnchor
     constraintEqualToAnchor:locationLabel.centerYAnchor
                    constant:locationImageViewYOffset].active = YES;
+
+  _showLocationImageConstraints = @[
+    [locationContainer.leadingAnchor
+        constraintEqualToAnchor:locationIconImageView.leadingAnchor],
+    [locationIconImageView.trailingAnchor
+        constraintEqualToAnchor:locationLabel.leadingAnchor
+                       constant:-locationImageViewRightPadding],
+  ];
+
+  _hideLocationImageConstraints = @[
+    [locationContainer.leadingAnchor
+        constraintEqualToAnchor:locationLabel.leadingAnchor],
+  ];
+
+  [NSLayoutConstraint activateConstraints:_showLocationImageConstraints];
 }
 
 - (void)updateAccessibility {
@@ -131,7 +148,22 @@ const UIEdgeInsets locationImageViewPadding = UIEdgeInsetsMake(0, 0, 0, 2);
 }
 
 - (void)setLocationImage:(UIImage*)locationImage {
+  BOOL hadImage = self.locationIconImageView.image != nil;
+  BOOL hasImage = locationImage != nil;
   self.locationIconImageView.image = locationImage;
+  if (hadImage == hasImage) {
+    return;
+  }
+
+  if (hasImage) {
+    [NSLayoutConstraint
+        deactivateConstraints:self.hideLocationImageConstraints];
+    [NSLayoutConstraint activateConstraints:self.showLocationImageConstraints];
+  } else {
+    [NSLayoutConstraint
+        deactivateConstraints:self.showLocationImageConstraints];
+    [NSLayoutConstraint activateConstraints:self.hideLocationImageConstraints];
+  }
 }
 
 - (void)setTintColor:(BOOL)isPrivateMode {

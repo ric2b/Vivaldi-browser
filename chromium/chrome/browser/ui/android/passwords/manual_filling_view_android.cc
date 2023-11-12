@@ -97,6 +97,8 @@ ScopedJavaGlobalRef<jobject> ConvertAccessorySheetDataToJavaObject(
         toggle.is_enabled(), static_cast<int>(toggle.accessory_action()));
   }
 
+  // TODO(crbug.com/1477267): Send passkeys to java side.
+
   for (const UserInfo& user_info : tab_data.user_info_list()) {
     ScopedJavaLocalRef<jobject> j_user_info =
         Java_ManualFillingComponentBridge_addUserInfoToAccessorySheetData(
@@ -157,20 +159,12 @@ ManualFillingViewAndroid::~ManualFillingViewAndroid() {
 void ManualFillingViewAndroid::OnItemsAvailable(AccessorySheetData data) {
   TRACE_EVENT0("passwords", "ManualFillingViewAndroid::OnItemsAvailable");
   if (auto obj = GetOrCreateJavaObject()) {
-    if (base::FeatureList::IsEnabled(
-            autofill::features::kAutofillKeyboardAccessory)) {
-      background_task_runner_->PostTaskAndReplyWithResult(
-          FROM_HERE,
-          base::BindOnce(&ConvertAccessorySheetDataToJavaObject, obj,
-                         std::move(data)),
-          base::BindOnce(&Java_ManualFillingComponentBridge_onItemsAvailable,
-                         base::android::AttachCurrentThread(), obj));
-    } else {
-      // Preserve legacy behavior for validation and to guard threading changes.
-      Java_ManualFillingComponentBridge_onItemsAvailable(
-          base::android::AttachCurrentThread(), obj,
-          ConvertAccessorySheetDataToJavaObject(obj, std::move(data)));
-    }
+    background_task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&ConvertAccessorySheetDataToJavaObject, obj,
+                       std::move(data)),
+        base::BindOnce(&Java_ManualFillingComponentBridge_onItemsAvailable,
+                       base::android::AttachCurrentThread(), obj));
   }
 }
 
@@ -231,6 +225,17 @@ void ManualFillingViewAndroid::OnFillingTriggered(
   controller_->OnFillingTriggered(
       static_cast<autofill::AccessoryTabType>(tab_type),
       ConvertJavaUserInfoField(env, j_user_info_field));
+}
+
+void ManualFillingViewAndroid::OnPasskeySelected(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jint tab_type,
+    const base::android::JavaParamRef<jbyteArray>& j_passkey_id) {
+  std::vector<uint8_t> passkey;
+  base::android::AppendJavaByteArrayToByteVector(env, j_passkey_id, &passkey);
+  controller_->OnPasskeySelected(
+      static_cast<autofill::AccessoryTabType>(tab_type), passkey);
 }
 
 void ManualFillingViewAndroid::OnOptionSelected(
@@ -307,6 +312,8 @@ void JNI_ManualFillingComponentBridge_CachePasswordSheetDataForTesting(
     password_forms[i].url = origin.GetURL();
     password_forms[i].username_value = base::ASCIIToUTF16(usernames[i]);
     password_forms[i].password_value = base::ASCIIToUTF16(passwords[i]);
+    password_forms[i].match_type =
+        password_manager::PasswordForm::MatchType::kExact;
     credentials.push_back(&password_forms[i]);
   }
   return ChromePasswordManagerClient::FromWebContents(web_contents)

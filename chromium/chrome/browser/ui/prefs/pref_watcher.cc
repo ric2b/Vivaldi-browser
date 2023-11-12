@@ -47,7 +47,9 @@ const char* const kWebPrefsToObserve[] = {
     prefs::kAccessibilityCaptionsBackgroundOpacity,
 #if BUILDFLAG(IS_ANDROID)
     browser_ui::prefs::kWebKitFontScaleFactor,
+    prefs::kAccessibilityTextSizeContrastFactor,
     browser_ui::prefs::kWebKitForceEnableZoom,
+    prefs::kAccessibilityFontWeightAdjustment,
     prefs::kWebKitPasswordEchoEnabled,
 #endif
     prefs::kWebKitForceDarkModeEnabled,
@@ -176,9 +178,11 @@ PrefWatcherFactory::PrefWatcherFactory()
 
 PrefWatcherFactory::~PrefWatcherFactory() = default;
 
-KeyedService* PrefWatcherFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+PrefWatcherFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* browser_context) const {
-  return new PrefWatcher(Profile::FromBrowserContext(browser_context));
+  return std::make_unique<PrefWatcher>(
+      Profile::FromBrowserContext(browser_context));
 }
 
 // static

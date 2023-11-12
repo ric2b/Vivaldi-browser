@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
@@ -101,6 +102,45 @@ std::pair<int, int> GetTilingInterestAreaSizes() {
   return {interest_area_size_in_pixels, (2 * interest_area_size_in_pixels) / 3};
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kIncreaseTileMemorySizeProportionally,
+             "IncreaseTileMemorySizeProportionally",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Adjusting tile memory size in case a lot more websites need more tile
+// memory than the current calculation.
+BASE_FEATURE(kAdjustTileGpuMemorySize,
+             "AdjustTileGpuMemorySize",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr size_t kLargeResolutionMemoryMB = 1152;
+constexpr size_t kDefaultMemoryMB = 512;
+
+constexpr base::FeatureParam<int> kNewLargeResolutionMemoryMB{
+    &kAdjustTileGpuMemorySize, "new_large_resolution_memory_mb",
+    /*default_value=*/kLargeResolutionMemoryMB};
+
+constexpr base::FeatureParam<int> kNewDefaultMemoryMB{
+    &kAdjustTileGpuMemorySize, "new_default_memory_mb",
+    /*default_value=*/kDefaultMemoryMB};
+
+size_t GetLargeResolutionMemoryMB() {
+  if (base::FeatureList::IsEnabled(kAdjustTileGpuMemorySize)) {
+    return kNewLargeResolutionMemoryMB.Get();
+  } else {
+    return kLargeResolutionMemoryMB;
+  }
+}
+
+size_t GetDefaultMemoryMB() {
+  if (base::FeatureList::IsEnabled(kAdjustTileGpuMemorySize)) {
+    return kNewDefaultMemoryMB.Get();
+  } else {
+    return kDefaultMemoryMB;
+  }
+}
+#endif
+
 }  // namespace
 
 // static
@@ -184,23 +224,70 @@ cc::ManagedMemoryPolicy GetGpuMemoryPolicy(
   }
   actual.priority_cutoff_when_visible =
       gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING;
-#else
-  // Ignore what the system said and give all clients the same maximum
-  // allocation on desktop platforms.
-  actual.bytes_limit_when_visible = 512 * 1024 * 1024;
-  actual.priority_cutoff_when_visible =
-      gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
 
-  // For large monitors (4k), double the tile memory to avoid frequent out of
-  // memory problems. 4k could mean a screen width of anywhere from 3840 to 4096
-  // (see https://en.wikipedia.org/wiki/4K_resolution). We use 3500 as a proxy
-  // for "large enough".
-  static const int kLargeDisplayThreshold = 3500;
-  int display_width =
-      std::round(initial_screen_size.width() * initial_device_scale_factor);
-  if (display_width >= kLargeDisplayThreshold)
-    actual.bytes_limit_when_visible *= 2;
+  static size_t previous_value = [](size_t bytes_limit) {
+    base::UmaHistogramMemoryKB("Blink.Compositor.MemoryLimitKb",
+                               static_cast<int>(bytes_limit / 1024));
+
+    return bytes_limit;
+  }(actual.bytes_limit_when_visible);
+  DCHECK_EQ(actual.bytes_limit_when_visible, previous_value);
+
+#else
+  if (base::FeatureList::IsEnabled(kIncreaseTileMemorySizeProportionally)) {
+    // This calculation will increase the tile memory size. It should apply to
+    // the other plateforms if no regression on Mac.
+    actual.priority_cutoff_when_visible =
+        gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+
+    // For large monitors with high resolution, increase the tile memory to
+    // avoid frequent out of memory problems. With Mac M1 on
+    // https://www.334-28th.com/, it seems 512 MB works fine on 1920x1080 * 2
+    // (scale) and 1152 MB on 2056x1329 * 2 (scale). Use this ratio for the
+    // formula to increase |bytes_limit_when_visible| proportionally.
+    // For mobile platforms with small display (roughly less than 3k x 1.6k),
+    // mb_limit will still be 512 MB.
+    constexpr size_t kLargeResolution = 2056 * 1329 * 2 * 2;
+    size_t display_size =
+        std::round(initial_screen_size.width() * initial_device_scale_factor *
+                   initial_screen_size.height() * initial_device_scale_factor);
+
+    size_t large_resolution_memory_mb = GetLargeResolutionMemoryMB();
+    size_t mb_limit_when_visible =
+        large_resolution_memory_mb * (display_size * 1.0 / kLargeResolution);
+
+    // Cap the memory size to one fourth of the total system memory so it won't
+    // consume too much of the system memory. Still keep the minimum to the
+    // default of 512MB.
+    size_t default_memory_mb = GetDefaultMemoryMB();
+    size_t memory_cap_mb = base::SysInfo::AmountOfPhysicalMemoryMB() / 4;
+    if (mb_limit_when_visible > memory_cap_mb) {
+      mb_limit_when_visible = memory_cap_mb;
+    } else if (mb_limit_when_visible < default_memory_mb) {
+      mb_limit_when_visible = default_memory_mb;
+    }
+
+    actual.bytes_limit_when_visible = mb_limit_when_visible * 1024 * 1024;
+  } else {
+    // Ignore what the system said and give all clients the same maximum
+    // allocation on desktop platforms.
+    actual.bytes_limit_when_visible = 512 * 1024 * 1024;
+    actual.priority_cutoff_when_visible =
+        gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+
+    // For large monitors (4k), double the tile memory to avoid frequent out of
+    // memory problems. 4k could mean a screen width of anywhere from 3840 to
+    // 4096 (see https://en.wikipedia.org/wiki/4K_resolution). We use 3500 as a
+    // proxy for "large enough".
+    static const int kLargeDisplayThreshold = 3500;
+    int display_width =
+        std::round(initial_screen_size.width() * initial_device_scale_factor);
+    if (display_width >= kLargeDisplayThreshold) {
+      actual.bytes_limit_when_visible *= 2;
+    }
+  }
 #endif
+
   return actual;
 }
 
@@ -209,6 +296,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
     bool is_threaded,
     bool is_for_embedded_frame,
     bool is_for_scalable_page,
+    bool is_for_web_test,
     const gfx::Size& initial_screen_size,
     float initial_device_scale_factor) {
   const base::CommandLine& cmd = *base::CommandLine::ForCurrentProcess();
@@ -518,7 +606,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
     if (!cmd.HasSwitch(switches::kDisableRGBA4444Textures) &&
         base::SysInfo::AmountOfPhysicalMemoryMB() <= 512 &&
         !::features::IsUsingVulkan()) {
-      settings.use_rgba_4444 = viz::RGBA_4444;
+      settings.use_rgba_4444 = true;
 
       // If we are going to unpremultiply and dither these tiles, we need to
       // allocate an additional RGBA_8888 intermediate for each tile
@@ -576,6 +664,8 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
 
   settings.enable_variable_refresh_rate =
       ::features::IsVariableRefreshRateEnabled();
+
+  settings.is_threaded_web_test = is_for_web_test && is_threaded;
 
   std::tie(settings.tiling_interest_area_padding,
            settings.skewport_extrapolation_limit_in_screen_pixels) =

@@ -22,14 +22,16 @@ class MockAutofillPopupDelegate : public AutofillPopupDelegate {
 
   MOCK_METHOD(void, OnPopupShown, (), (override));
   MOCK_METHOD(void, OnPopupHidden, (), (override));
-  MOCK_METHOD(void, OnPopupSuppressed, (), (override));
   MOCK_METHOD(void,
               DidSelectSuggestion,
-              (const Suggestion& suggestion),
+              (const Suggestion& suggestion,
+               AutofillSuggestionTriggerSource trigger_source),
               (override));
   MOCK_METHOD(void,
               DidAcceptSuggestion,
-              (const Suggestion& suggestion, int position),
+              (const Suggestion& suggestion,
+               int position,
+               AutofillSuggestionTriggerSource trigger_source),
               (override));
   MOCK_METHOD(bool,
               GetDeletionConfirmationText,
@@ -47,11 +49,6 @@ class MockAutofillPopupDelegate : public AutofillPopupDelegate {
               (override));
   MOCK_METHOD(void, ClearPreviewedForm, (), (override));
   MOCK_METHOD(PopupType, GetPopupType, (), (const, override));
-  MOCK_METHOD((absl::variant<AutofillDriver*,
-                             password_manager::PasswordManagerDriver*>),
-              GetDriver,
-              (),
-              (override));
   MOCK_METHOD(int32_t,
               GetWebContentsPopupControllerAxId,
               (),

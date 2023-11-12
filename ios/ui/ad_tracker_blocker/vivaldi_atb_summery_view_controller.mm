@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/url_formatter/url_fixer.h"
@@ -53,8 +53,6 @@ const UIEdgeInsets titleLabelPadding = UIEdgeInsetsMake(0.f, 12.f, 0.f, 0.f);
 
 // Size for the favicon
 const CGSize faviconSize = CGSizeMake(22.f, 22.f);
-// Tableview header height
-const CGFloat tableHeaderHeight = 80.f;
 // Padding for the summery view.
 const UIEdgeInsets summeryViewPadding = UIEdgeInsetsMake(0, 20.f, 0, 20.f);
 
@@ -134,7 +132,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
     ruleGroupApplied[1] = NO;
     ruleApplyInProgress = NO;
   }
-  [self setUpNavigationBarStyle];
   [self setUpCustomNavigationBarTitleView];
   return self;
 }
@@ -153,9 +150,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 -(void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
+  // Remove shadows and background from nav bar.
+  [self setUpNavigationBarStyle];
   // We would like to initiate the title and favicon update when view is
   // about to be on the lifecycle.
   [self populateTitleAndFavicon];
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  [self updateHeaderViewHeight];
 }
 
 #pragma mark - PRIVATE
@@ -169,17 +173,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // For Vivaldi we will hide the 1px underline below the navigation bar.
 - (void)setUpNavigationBarStyle {
   UINavigationBarAppearance* appearance =
-    [[UINavigationBarAppearance alloc] init];
+      [[UINavigationBarAppearance alloc] init];
 
   [appearance setBackgroundColor:
-    [UIColor colorNamed:kGroupedPrimaryBackgroundColor]];
+      [UIColor colorNamed:kGroupedPrimaryBackgroundColor]];
   [appearance setShadowColor:UIColor.clearColor];
   [appearance setShadowImage:nil];
-  [[UINavigationBar appearance] setScrollEdgeAppearance:appearance];
-  [[UINavigationBar appearance] setStandardAppearance:appearance];
-  [[UINavigationBar appearance] setCompactAppearance:appearance];
 
-  // Add Done button.
+  // Apply the custom appearance to only this view controller's navigation bar
+  self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+  self.navigationController.navigationBar.standardAppearance = appearance;
+  self.navigationController.navigationBar.compactAppearance = appearance;
+
+  // Add Done button
   UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
@@ -231,9 +237,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)setUpTableViewHeader {
   UIView* tableHeaderView = [UIView new];
   tableHeaderView.backgroundColor = UIColor.clearColor;
-  tableHeaderView.frame = CGRectMake(0, 0,
-                                self.view.bounds.size.width,
-                                tableHeaderHeight);
   self.tableView.tableHeaderView = tableHeaderView;
 
   VivaldiATBSummeryHeaderView* summeryView =
@@ -273,21 +276,31 @@ typedef NS_ENUM(NSInteger, ItemType) {
     fillSuperviewToSafeAreaInsetWithPadding:actionButtonPadding];
 }
 
+- (void)updateHeaderViewHeight {
+  UIView *headerView = self.tableView.tableHeaderView;
+  if (headerView) {
+    CGSize newSize =
+        [headerView systemLayoutSizeFittingSize:CGSizeMake(
+              self.view.bounds.size.width, 0)];
+
+    if (newSize.height != headerView.frame.size.height) {
+      CGRect newFrame = headerView.frame;
+      newFrame.size.height = newSize.height;
+      headerView.frame = newFrame;
+      self.tableView.tableHeaderView = headerView;
+    }
+  }
+}
+
 #pragma mark ACTIONS
 - (void)handleDoneButtonTap {
-
-  // Don't allow users to close the modal if rules apply is in progress.
-  // Otherwise, it would cause unexpected user experience.
-  if (ruleApplyInProgress)
-    return;
-
   [self shutdown];
   [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)handleBlockerSettingsButtonTap {
   NSString* settingsTitleString =
-    l10n_util::GetNSString(IDS_PREFS_ADS_TRACKING);
+    l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
   VivaldiATBSettingsViewController* settingsController =
     [[VivaldiATBSettingsViewController alloc]
        initWithBrowser:_browser
@@ -300,6 +313,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.adblockManager = [[VivaldiATBManager alloc] initWithBrowser:_browser];
   self.adblockManager.consumer = self;
   [self.adblockManager getSettingOptions];
+
+  if ([self.adblockManager isApplyingExceptionRules]) {
+    ruleApplyInProgress = YES;
+    [_summeryView setRulesGroupApplying:YES];
+  }
 }
 
 - (void)updateTableViewHeader {
@@ -350,14 +368,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)populateTitleAndFavicon {
-  [self loadFaviconWithfallbackToGoogleServer:NO];
+  [self loadFavicon];
   self.titleLabel.text = self.host;
 }
 
 // Asynchronously loads favicon for given domain. When the favicon is not
-// found in cache, try loading it from a Google server if
-// `fallbackToGoogleServer` is YES, otherwise, use the fall back icon style.
-- (void)loadFaviconWithfallbackToGoogleServer:(BOOL)fallbackToGoogleServer {
+// found in cache, use the fall back icon style.
+- (void)loadFavicon {
 
   // Start loading a favicon.
   __weak VivaldiATBSummeryViewController* weakSelf = self;
@@ -375,12 +392,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     self.faviconView.image = attributes.faviconImage;
   };
 
-  CGFloat desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
-  CGFloat minFaviconSizeInPoints = kMinFaviconSizePt;
-
-  self.faviconLoader->FaviconForPageUrl(
-      blockURL, desiredFaviconSizeInPoints, minFaviconSizeInPoints,
-      /*fallback_to_google_server=*/fallbackToGoogleServer, faviconLoadedBlock);
+  self.faviconLoader->FaviconForPageUrlOrHost(
+      blockURL, kMinFaviconSizePt, faviconLoadedBlock);
 }
 
 - (void)navigateToDetailsViewControllerWithSource:(ATBSourceType)source {
@@ -405,7 +418,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (VivaldiATBSettingItem*) getSettingItemFromModel:(TableViewModel*)model
                                        atIndexPath:(NSIndexPath*)indexPath {
     TableViewItem* item = [model itemAtIndexPath:indexPath];
-    return base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+    return base::apple::ObjCCastStrict<VivaldiATBSettingItem>(item);
 }
 
 - (void)removeCheckmarksFromSettingItemsInSectionWithIdentifier:
@@ -416,7 +429,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     for (TableViewItem* item in
          [model itemsInSectionWithIdentifier:SectionIdentifierSiteSettings]) {
       VivaldiATBSettingItem* settingItem =
-          base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+          base::apple::ObjCCastStrict<VivaldiATBSettingItem>(item);
       if (settingItem.accessoryType == UITableViewCellAccessoryCheckmark) {
         // Pass user preferred to "None" as we will only use this to deselect
         // item.
@@ -452,7 +465,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
 
   VivaldiATBSettingItemCell* settingCell =
-      base::mac::ObjCCastStrict<VivaldiATBSettingItemCell>(cell);
+      base::apple::ObjCCastStrict<VivaldiATBSettingItemCell>(cell);
   [settingCell configurWithItem:settingItem.item
             userPreferredOption:userPreffered
             globalDefaultOption:[self.adblockManager globalBlockingSetting]
@@ -481,8 +494,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Set the flag to track if a user triggered rule update in progress or not.
   ruleApplyInProgress = YES;
-  // Disable interactive dismissal of the view controller.
-  self.modalInPresentation = true;
 
   // Update the header status
   [_summeryView setRulesGroupApplying:YES];
@@ -520,11 +531,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   TableViewModel* model = self.tableViewModel;
 
-  // If already rule group update is in progress don't allow users to select
-  // new settings.
-  if (ruleApplyInProgress)
-    return;
-
   // Get newly selected item.
   VivaldiATBSettingItem* selectedItem =
       [self getSettingItemFromModel:model atIndexPath:indexPath];
@@ -540,6 +546,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Set new selected item checkmark, style and notify adblock manager.
   [self setNewSelectionFor:selectedItem model:model atIndexPath:indexPath];
+
+  [self updateHeaderViewHeight];
 }
 
 #pragma mark: - VivaldiATBConsumer
@@ -553,7 +561,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self updateTableViewHeader];
 }
 
-- (void)rulesListDidApply:(RuleGroup)group {
+- (void)rulesListDidEndApplying:(RuleGroup)group {
 
   // If user explicitely did not trigger settings changes we will avoid
   // listening to the changes. This method can be triggered other ways too.
@@ -571,13 +579,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Check if all groups have been triggered
   if (ruleGroupApplied[0] && ruleGroupApplied[1]) {
-    // Notify observers.
-    NSDictionary *userInfo = @{vATBHostKey:_host};
-    [[NSNotificationCenter defaultCenter]
-        postNotificationName:vATBSiteSettingsDidChange
-                      object:nil
-                    userInfo:userInfo];
-
     // Dismiss when all rules are applied.
     ruleApplyInProgress = NO;
     [self shutdown];

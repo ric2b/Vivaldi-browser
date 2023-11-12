@@ -29,6 +29,8 @@
 #include "ash/system/cast/cast_feature_pod_controller.h"
 #include "ash/system/cast/unified_cast_detailed_view_controller.h"
 #include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
+#include "ash/system/focus_mode/focus_mode_detailed_view_controller.h"
+#include "ash/system/focus_mode/focus_mode_feature_pod_controller.h"
 #include "ash/system/hotspot/hotspot_detailed_view_controller.h"
 #include "ash/system/hotspot/hotspot_feature_pod_controller.h"
 #include "ash/system/ime/ime_feature_pod_controller.h"
@@ -68,7 +70,6 @@
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/system/unified/user_chooser_detailed_view_controller.h"
-#include "ash/wm/focus_mode/focus_mode_feature_pod_controller.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/functional/bind.h"
@@ -505,7 +506,8 @@ void UnifiedSystemTrayController::ShowAccessibilityDetailedView() {
 }
 
 void UnifiedSystemTrayController::ShowFocusModeDetailedView() {
-  // TODO(b/286931532): Create the Focus Mode detailed view.
+  base::RecordAction(base::UserMetricsAction("StatusArea_FocusMode_Detailed"));
+  ShowDetailedView(std::make_unique<FocusModeDetailedViewController>(this));
 }
 
 void UnifiedSystemTrayController::ShowVPNDetailedView() {
@@ -557,9 +559,10 @@ void UnifiedSystemTrayController::ShowCalendarView(
   }
 }
 
-void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
-  ShowDetailedView(
-      std::make_unique<UnifiedMediaControlsDetailedViewController>(this));
+void UnifiedSystemTrayController::ShowMediaControlsDetailedView(
+    const std::string& show_devices_for_item_id) {
+  ShowDetailedView(std::make_unique<UnifiedMediaControlsDetailedViewController>(
+      this, show_devices_for_item_id));
 }
 
 void UnifiedSystemTrayController::TransitionToMainView(bool restore_focus) {
@@ -724,7 +727,6 @@ void UnifiedSystemTrayController::InitFeaturePods() {
 }
 
 void UnifiedSystemTrayController::InitFeatureTiles() {
-  // TODO(b/252871301): Create each feature's tile.
   std::vector<std::unique_ptr<FeatureTile>> tiles;
 
   auto create_tile =
@@ -738,10 +740,6 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
 
   create_tile(std::make_unique<NetworkFeaturePodController>(this),
               feature_pod_controllers_, tiles);
-  if (features::IsHotspotEnabled()) {
-    create_tile(std::make_unique<HotspotFeaturePodController>(this),
-                feature_pod_controllers_, tiles);
-  }
 
   // CaptureMode and QuietMode tiles will be compact if both are visible.
   bool capture_and_quiet_tiles_are_compact =
@@ -768,6 +766,10 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
               cast_and_rotation_tiles_are_compact);
   create_tile(std::make_unique<AccessibilityFeaturePodController>(this),
               feature_pod_controllers_, tiles);
+  if (features::IsHotspotEnabled()) {
+    create_tile(std::make_unique<HotspotFeaturePodController>(this),
+                feature_pod_controllers_, tiles);
+  }
   if (base::FeatureList::IsEnabled(features::kFocusMode)) {
     create_tile(std::make_unique<FocusModeFeaturePodController>(this),
                 feature_pod_controllers_, tiles);

@@ -8,19 +8,46 @@
 
 namespace blink {
 
+bool ServiceWorkerRouterRequestCondition::operator==(
+    const ServiceWorkerRouterRequestCondition& other) const {
+  return method == other.method && mode == other.mode &&
+         destination == other.destination;
+}
+
 bool ServiceWorkerRouterCondition::operator==(
     const ServiceWorkerRouterCondition& other) const {
+  if (type != other.type) {
+    return false;
+  }
   switch (type) {
     case ConditionType::kUrlPattern:
       return url_pattern == other.url_pattern;
+    case ConditionType::kRequest:
+      return request == other.request;
+    case ConditionType::kRunningStatus:
+      return running_status == other.running_status;
   }
+}
+
+bool ServiceWorkerRouterCacheSource::operator==(
+    const ServiceWorkerRouterCacheSource& other) const {
+  return cache_name == other.cache_name;
 }
 
 bool ServiceWorkerRouterSource::operator==(
     const ServiceWorkerRouterSource& other) const {
+  if (type != other.type) {
+    return false;
+  }
   switch (type) {
     case SourceType::kNetwork:
       return network_source == other.network_source;
+    case SourceType::kRace:
+      return race_source == other.race_source;
+    case SourceType::kFetchEvent:
+      return fetch_event_source == other.fetch_event_source;
+    case SourceType::kCache:
+      return cache_source == other.cache_source;
   }
 }
 

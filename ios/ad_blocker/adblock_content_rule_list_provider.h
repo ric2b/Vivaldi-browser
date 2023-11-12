@@ -8,6 +8,7 @@
 #include "base/functional/callback.h"
 #include "base/values.h"
 #include "components/ad_blocker/adblock_metadata.h"
+#include "components/ad_blocker/adblock_resources.h"
 
 namespace web {
 class BrowserState;
@@ -23,11 +24,12 @@ class AdBlockerContentRuleListProvider {
       web::BrowserState* browser_state,
       RuleGroup group,
       base::OnceClosure on_loaded,
-      base::RepeatingClosure on_rules_applied);
+      base::RepeatingClosure on_done_applying_rules);
   virtual ~AdBlockerContentRuleListProvider();
 
   virtual void InstallContentRuleLists(const base::Value::List& lists) = 0;
   virtual void ApplyLoadedRules() = 0;
+  virtual bool IsApplyingRules() = 0;
 };
 
 }  // namespace adblock_filter

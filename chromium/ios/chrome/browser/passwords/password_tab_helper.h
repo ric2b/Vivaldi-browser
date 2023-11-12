@@ -16,10 +16,8 @@
 @protocol PasswordControllerDelegate;
 @protocol PasswordGenerationProvider;
 @protocol PasswordsUiDelegate;
-@class UIViewController;
 
 namespace password_manager {
-class PasswordGenerationFrameHelper;
 class PasswordManager;
 class PasswordManagerClient;
 }
@@ -35,9 +33,6 @@ class PasswordTabHelper : public web::WebStateObserver,
 
   ~PasswordTabHelper() override;
 
-  // Sets the BaseViewController from which to present UI.
-  void SetBaseViewController(UIViewController* baseViewController);
-
   // Sets the PasswordController delegate.
   void SetPasswordControllerDelegate(id<PasswordControllerDelegate> delegate);
 
@@ -52,9 +47,6 @@ class PasswordTabHelper : public web::WebStateObserver,
   // notice is removed.
   id<PasswordsAccountStorageNoticeHandler>
   GetPasswordsAccountStorageNoticeHandler();
-
-  // Returns the PasswordGenerationFrameHelper owned by the PasswordController.
-  password_manager::PasswordGenerationFrameHelper* GetGenerationHelper();
 
   // Returns the PasswordManager owned by the PasswordController.
   password_manager::PasswordManager* GetPasswordManager();

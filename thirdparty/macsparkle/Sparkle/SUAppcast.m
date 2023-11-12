@@ -21,12 +21,6 @@
 
 #include "AppKitPrevention.h"
 
-@interface SUAppcast ()
-
-@property (nonatomic, copy) NSArray<SUAppcastItem *> *items;
-
-@end
-
 @implementation SUAppcast
 
 @synthesize items = _items;
@@ -43,7 +37,7 @@
     return self;
 }
 
-- (NSDictionary *)attributesOfNode:(NSXMLElement *)node
+- (NSDictionary *)attributesOfNode:(NSXMLElement *)node SPU_OBJC_DIRECT
 {
     NSEnumerator *attributeEnum = [[node attributes] objectEnumerator];
     NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
@@ -61,7 +55,8 @@
     return dictionary;
 }
 
--(NSString *)sparkleNamespacedNameOfNode:(NSXMLNode *)node {
+-(NSString *)sparkleNamespacedNameOfNode:(NSXMLNode *)node SPU_OBJC_DIRECT
+{
     // XML namespace prefix is semantically meaningless, so compare namespace URI
     // NS URI isn't used to fetch anything, and must match exactly, so we look for http:// not https://
     if ([[node URI] isEqualToString:@"http://www.andymatuschak.org/xml-namespaces/sparkle"]) {
@@ -73,7 +68,8 @@
     }
 }
 
--(NSArray *)parseAppcastItemsFromXMLData:(NSData *)appcastData relativeToURL:(NSURL * _Nullable)appcastURL stateResolver:(SPUAppcastItemStateResolver *)stateResolver error:(NSError *__autoreleasing*)errorp {
+-(NSArray *)parseAppcastItemsFromXMLData:(NSData *)appcastData relativeToURL:(NSURL * _Nullable)appcastURL stateResolver:(SPUAppcastItemStateResolver *)stateResolver error:(NSError *__autoreleasing*)errorp SPU_OBJC_DIRECT
+{
     if (errorp) {
         *errorp = nil;
     }
@@ -84,7 +80,7 @@
 
     NSUInteger options = NSXMLNodeLoadExternalEntitiesNever; // Prevent inclusion from file://
     NSXMLDocument *document = [[NSXMLDocument alloc] initWithData:appcastData options:options error:errorp];
-	if (nil == document) {
+    if (nil == document) {
         return nil;
     }
 
@@ -97,7 +93,7 @@
     NSEnumerator *nodeEnum = [xmlItems objectEnumerator];
     NSXMLNode *node;
 
-	while((node = [nodeEnum nextObject])) {
+    while((node = [nodeEnum nextObject])) {
         NSMutableDictionary *nodesDict = [NSMutableDictionary dictionary];
         NSMutableDictionary *dict = [NSMutableDictionary dictionary];
 
@@ -124,8 +120,7 @@
                 // These are flattened as a separate dictionary for some reason
                 NSDictionary *innerDict = [self attributesOfNode:(NSXMLElement *)node];
                 [dict setObject:innerDict forKey:name];
-			}
-            else if ([name isEqualToString:SURSSElementPubDate]) {
+            } else if ([name isEqualToString:SURSSElementPubDate]) {
                 // We don't want to parse and create a NSDate instance -
                 // that's a risk we can avoid. We don't use the date anywhere other
                 // than it being accessible from SUAppcastItem
@@ -133,8 +128,21 @@
                 if (dateString) {
                     [dict setObject:dateString forKey:name];
                 }
-			}
-			else if ([name isEqualToString:SUAppcastElementDeltas]) {
+            } else if ([name isEqualToString:SURSSElementDescription]) {
+                NSString *description = node.stringValue;
+                if (description != nil) {
+                    NSDictionary *attributes = [self attributesOfNode:(NSXMLElement *)node];
+                    NSString *descriptionFormat = attributes[SUAppcastAttributeFormat];
+                    
+                    NSMutableDictionary *descriptionDict = [NSMutableDictionary dictionary];
+                    [descriptionDict setObject:description forKey:@"content"];
+                    if (descriptionFormat != nil) {
+                        [descriptionDict setObject:descriptionFormat forKey:@"format"];
+                    }
+                    
+                    [dict setObject:descriptionDict forKey:SURSSElementDescription];
+                }
+            } else if ([name isEqualToString:SUAppcastElementDeltas]) {
                 NSMutableArray *deltas = [NSMutableArray array];
                 NSEnumerator *childEnum = [[node children] objectEnumerator];
                 for (NSXMLNode *child in childEnum) {
@@ -143,8 +151,7 @@
                     }
                 }
                 [dict setObject:deltas forKey:name];
-			}
-            else if ([name isEqualToString:SUAppcastElementTags]) {
+            } else if ([name isEqualToString:SUAppcastElementTags]) {
                 NSMutableArray *names = [NSMutableArray array];
                 NSEnumerator *childEnum = [[node children] objectEnumerator];
                 for (NSXMLNode *child in childEnum) {
@@ -154,8 +161,7 @@
                     }
                 }
                 [dict setObject:names forKey:name];
-            }
-            else if ([name isEqualToString:SUAppcastElementInformationalUpdate]) {
+            } else if ([name isEqualToString:SUAppcastElementInformationalUpdate]) {
                 NSMutableSet *informationalUpdateVersions = [NSMutableSet set];
                 NSEnumerator *childEnum = [[node children] objectEnumerator];
                 for (NSXMLNode *child in childEnum) {
@@ -173,8 +179,7 @@
                     }
                 }
                 [dict setObject:[informationalUpdateVersions copy] forKey:name];
-            }
-			else if (name != nil) {
+            } else if (name != nil) {
                 // add all other values as strings
                 NSString *theValue = [[node stringValue] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 if (theValue != nil) {
@@ -188,8 +193,7 @@
         
         if (anItem) {
             [appcastItems addObject:anItem];
-		}
-        else {
+        } else {
             SULog(SULogLevelError, @"Sparkle Updater: Failed to parse appcast item: %@.\nAppcast dictionary was: %@", errString, dict);
             if (errorp) *errorp = [NSError errorWithDomain:SUSparkleErrorDomain
                                                       code:SUAppcastParseError
@@ -201,7 +205,7 @@
     return appcastItems;
 }
 
-- (NSXMLNode *)bestNodeInNodes:(NSArray *)nodes
+- (NSXMLNode *)bestNodeInNodes:(NSArray *)nodes SPU_OBJC_DIRECT
 {
     // We use this method to pick out the localized version of a node when one's available.
     if ([nodes count] == 1)
@@ -229,13 +233,13 @@
     SUAppcast *other = [SUAppcast new];
     NSMutableArray *newItems = [NSMutableArray new];
     
-    for (SUAppcastItem *item in self.items) {
+    for (SUAppcastItem *item in _items) {
         if (filterBlock(item)) {
             [newItems addObject:item];
         }
     }
     
-    other.items = newItems;
+    other->_items = newItems;
     return other;
 }
 

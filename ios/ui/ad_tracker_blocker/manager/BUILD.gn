@@ -19,6 +19,4 @@ source_set("manager") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

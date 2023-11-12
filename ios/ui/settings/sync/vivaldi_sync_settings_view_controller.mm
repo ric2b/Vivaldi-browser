@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
@@ -58,7 +58,7 @@
     forRowAtIndexPath:(NSIndexPath*)indexPath {
   if ([cell isKindOfClass:[VivaldiTableViewSyncStatusCell class]]) {
     VivaldiTableViewSyncStatusCell* editCell =
-        base::mac::ObjCCastStrict<VivaldiTableViewSyncStatusCell>(cell);
+        base::apple::ObjCCastStrict<VivaldiTableViewSyncStatusCell>(cell);
     [editCell updateLabelCornerRadius];
   }
 }
@@ -82,7 +82,7 @@
     }
     case ItemTypeSyncWhatSegmentedControl: {
       VivaldiTableViewSegmentedControlCell* segmentedControlCell =
-          base::mac::ObjCCastStrict<VivaldiTableViewSegmentedControlCell>(cell);
+          base::apple::ObjCCastStrict<VivaldiTableViewSegmentedControlCell>(cell);
       [segmentedControlCell.segmentedControl addTarget:self
                     action:@selector(syncAllOptionChanged:)
           forControlEvents:UIControlEventValueChanged];
@@ -93,7 +93,7 @@
     }
     case ItemTypeSyncBookmarksSwitch: {
       TableViewSwitchCell* switchCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [switchCell.switchView addTarget:self
                               action:@selector(bookmarksSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
@@ -101,7 +101,7 @@
     }
     case ItemTypeSyncSettingsSwitch: {
       TableViewSwitchCell* switchCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [switchCell.switchView addTarget:self
                               action:@selector(settingsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
@@ -109,7 +109,7 @@
     }
     case ItemTypeSyncPasswordsSwitch: {
       TableViewSwitchCell* switchCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [switchCell.switchView addTarget:self
                               action:@selector(passwordsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
@@ -117,23 +117,47 @@
     }
     case ItemTypeSyncAutofillSwitch: {
       TableViewSwitchCell* switchCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [switchCell.switchView addTarget:self
                               action:@selector(autofillSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
       break;
     }
+    case ItemTypeSyncTabsSwitch: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                              action:@selector(tabsSwitchToggled:)
+                    forControlEvents:UIControlEventValueChanged];
+      break;
+    }
     case ItemTypeSyncHistorySwitch: {
       TableViewSwitchCell* switchCell =
-          base::mac::ObjCCastStrict<TableViewSwitchCell>(cell);
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
       [switchCell.switchView addTarget:self
                               action:@selector(historySwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
       break;
     }
+    case ItemTypeSyncReadingListSwitch: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                              action:@selector(readingListSwitchToggled:)
+                    forControlEvents:UIControlEventValueChanged];
+      break;
+    }
+    case ItemTypeSyncNotesSwitch: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                              action:@selector(notesSwitchToggled:)
+                    forControlEvents:UIControlEventValueChanged];
+      break;
+    }
     case ItemTypeStartSyncingButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
-          base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
       [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
@@ -144,7 +168,7 @@
     case ItemTypeEncryptionPasswordButton: {
       cell.selectionStyle = UITableViewCellSelectionStyleNone;
       TableViewDetailTextCell* tableViewDetailTextCell =
-          base::mac::ObjCCastStrict<TableViewDetailTextCell>(cell);
+          base::apple::ObjCCastStrict<TableViewDetailTextCell>(cell);
       UITapGestureRecognizer* tap = [[UITapGestureRecognizer alloc]
           initWithTarget:self
           action:@selector(encryptionInfoButtonPressed)];
@@ -157,7 +181,7 @@
     case ItemTypeBackupRecoveryKeyButton: {
       cell.selectionStyle = UITableViewCellSelectionStyleNone;
       TableViewDetailTextCell* tableViewDetailTextCell =
-          base::mac::ObjCCastStrict<TableViewDetailTextCell>(cell);
+          base::apple::ObjCCastStrict<TableViewDetailTextCell>(cell);
       UILabel* label = [[UILabel alloc] initWithFrame:CGRectZero];
       label.text = l10n_util::GetNSString(IDS_VIVALDI_SAVE);
       label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
@@ -176,7 +200,7 @@
     }
     case ItemTypeLogOutButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
-          base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
       [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
@@ -186,7 +210,7 @@
     }
     case ItemTypeDeleteDataButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
-          base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
       [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
@@ -325,9 +349,24 @@
       syncer::UserSelectableType::kAutofill isOn:sender.isOn];
 }
 
+- (void)tabsSwitchToggled:(UISwitch*)sender {
+  [self.serviceDelegate updateChosenTypes:
+      syncer::UserSelectableType::kTabs isOn:sender.isOn];
+}
+
 - (void)historySwitchToggled:(UISwitch*)sender {
   [self.serviceDelegate updateChosenTypes:
       syncer::UserSelectableType::kHistory isOn:sender.isOn];
+}
+
+- (void)readingListSwitchToggled:(UISwitch*)sender {
+  [self.serviceDelegate updateChosenTypes:
+      syncer::UserSelectableType::kReadingList isOn:sender.isOn];
+}
+
+- (void)notesSwitchToggled:(UISwitch*)sender {
+  [self.serviceDelegate updateChosenTypes:
+      syncer::UserSelectableType::kNotes isOn:sender.isOn];
 }
 
 #pragma mark - PRIVATE

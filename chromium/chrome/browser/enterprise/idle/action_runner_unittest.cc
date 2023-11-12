@@ -12,6 +12,7 @@
 #include "chrome/browser/enterprise/idle/action.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/enterprise/idle/idle_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/test/browser_task_environment.h"
@@ -327,6 +328,11 @@ class FakeBrowsingDataRemover : public BrowsingDataRemover {
   uint64_t GetLastUsedOriginTypeMaskForTesting() override {
     return origin_type_mask_;
   }
+  absl::optional<content::StoragePartitionConfig>
+  GetLastUsedStoragePartitionConfigForTesting() override {
+    return absl::nullopt;
+  }
+  uint64_t GetPendingTaskCountForTesting() override { return 0; }
 
   void SetFailedDataTypesForTesting(uint64_t failed_data_types) {
     failed_data_types_ = failed_data_types;

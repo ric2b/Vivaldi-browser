@@ -60,6 +60,9 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
     // preferences.
     virtual void ResetEasterEggHighScore() = 0;
 
+    // Opens a tab with the built in Vivaldia game.
+    virtual void OpenVivaldia() = 0;
+
    protected:
     Delegate();
     virtual ~Delegate();
@@ -109,6 +112,7 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
   void SavePageForLater();
   void CancelSavePage();
   void ListVisibilityChanged(bool is_visible);
+  void OpenVivaldia();
 
   // gin::WrappableBase
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(

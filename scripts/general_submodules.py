@@ -32,7 +32,8 @@ excluded_modules = [
   "third_party/cros-components/src",
   "third_party/cardboard/src",
   "third_party/libFuzzer/src",
-  "third_party/libavifinfo/src",
+  "third_party/chromium-variations",
+  "third_party/speedometer/v3.0",
   ]
 
 def main():

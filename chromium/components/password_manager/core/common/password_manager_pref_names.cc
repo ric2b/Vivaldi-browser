@@ -54,6 +54,8 @@ const char kLocalPasswordsMigrationWarningShownTimestamp[] =
     "local_passwords_migration_warning_shown_timestamp";
 const char kLocalPasswordMigrationWarningShownAtStartup[] =
     "local_passwords_migration_warning_shown_at_startup";
+const char kLocalPasswordMigrationWarningPrefsVersion[] =
+    "local_passwords_migration_warning_reset_count";
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -126,9 +128,6 @@ const char kBiometricAuthenticationBeforeFilling[] =
 const char kHadBiometricsAvailable[] =
     "password_manager.had_biometrics_available";
 #endif
-
-const char kPasswordsGroupingInfoRequested[] =
-    "password_manager.passwords_grouping_info_requested";
 
 #if BUILDFLAG(IS_IOS)
 const char kAccountStorageNoticeShown[] =

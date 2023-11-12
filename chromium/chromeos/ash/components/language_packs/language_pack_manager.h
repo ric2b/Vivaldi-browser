@@ -7,11 +7,13 @@
 
 #include <string>
 
+#include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
 #include "chromeos/ash/components/dbus/dlcservice/dlcservice_client.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash::language_packs {
 
@@ -65,20 +67,29 @@ struct PackResult {
   ~PackResult();
   PackResult(const PackResult&);
 
-  enum StatusCode {
-    UNKNOWN = 0,
-    WRONG_ID,
-    NOT_INSTALLED,
-    IN_PROGRESS,
-    INSTALLED
+  enum class StatusCode {
+    kUnknown = 0,
+    kNotInstalled,
+    kInProgress,
+    kInstalled
   };
 
-  // This string contains the error returned by the DLC Service.
-  std::string operation_error;
+  enum class ErrorCode {
+    kNone = 0,
+    kOther,
+    kWrongId,
+    kNeedReboot,
+    kAllocation
+  };
 
   // The code that indicates the current state of the Pack.
-  // INSTALLED means that the Pack is ready to be used.
+  // kInstalled means that the Pack is ready to be used.
+  // If there's any error during the operation, we set status to kUnknown.
   StatusCode pack_state;
+
+  // If there is any error in the operation that is requested, it is indicated
+  // here.
+  ErrorCode operation_error;
 
   // The resolved language code that this Pack is associated with.
   // Often this field matches the locale requested by the client, but due to
@@ -97,8 +108,8 @@ struct PackSpecPair {
   std::string feature_id;
   std::string locale;
 
-  PackSpecPair(const std::string& feature_id, const std::string& locale)
-      : feature_id(feature_id), locale(locale) {}
+  PackSpecPair(std::string feature_id, std::string locale)
+      : feature_id(std::move(feature_id)), locale(std::move(locale)) {}
 
   bool operator==(const PackSpecPair& other) const {
     return (feature_id == other.feature_id && locale == other.locale);
@@ -124,6 +135,17 @@ struct PackSpecPair {
     }
   };
 };
+
+// Returns a static mapping from `PackSpecPair`s to DLC IDs.
+// Internal only, do not use - this function will likely be removed in the
+// future.
+const base::flat_map<PackSpecPair, std::string>& GetAllLanguagePackDlcIds();
+
+// Finds the ID of the DLC corresponding to the given spec.
+// Returns the DLC ID if the DLC exists or absl::nullopt otherwise.
+absl::optional<std::string> GetDlcIdForLanguagePack(
+    const std::string& feature_id,
+    const std::string& locale);
 
 using OnInstallCompleteCallback =
     base::OnceCallback<void(const PackResult& pack_result)>;

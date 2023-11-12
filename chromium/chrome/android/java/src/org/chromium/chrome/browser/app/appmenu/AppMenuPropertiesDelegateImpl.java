@@ -30,9 +30,11 @@ import com.google.common.primitives.UnsignedLongs;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CallbackController;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.banners.AppMenuVerbiage;
@@ -41,7 +43,6 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
-import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -57,12 +58,12 @@ import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
+import org.chromium.chrome.browser.readaloud.ReadAloudController;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
@@ -89,8 +90,6 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.WebappsUtils;
-import org.chromium.content_public.browser.ContentFeatureList;
-import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.net.ConnectionType;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.MVCListAdapter;
@@ -144,6 +143,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private ShareUtils mShareUtils;
     // Keeps track of which menu item was shown when installable app is detected.
     private int mAddAppTitleShown;
+    @Nullable
+    private final Supplier<ReadAloudController> mReadAloudControllerSupplier;
 
     /**
      * This is non null for the case of ChromeTabbedActivity when the corresponding {@link
@@ -210,7 +211,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             @Nullable OneshotSupplier<StartSurface> startSurfaceSupplier,
             ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             @Nullable OneshotSupplier<IncognitoReauthController>
-                    incognitoReauthControllerOneshotSupplier) {
+                    incognitoReauthControllerOneshotSupplier,
+            @Nullable Supplier<ReadAloudController> readAloudControllerSupplier) {
         mContext = context;
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
         mActivityTabProvider = activityTabProvider;
@@ -218,6 +220,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         mTabModelSelector = tabModelSelector;
         mToolbarManager = toolbarManager;
         mDecorView = decorView;
+        mReadAloudControllerSupplier = readAloudControllerSupplier;
 
         if (incognitoReauthControllerOneshotSupplier != null) {
             incognitoReauthControllerOneshotSupplier.onAvailable(
@@ -560,11 +563,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
             MenuItem setDefaultBrowserMenuItem = menu.findItem(R.id.set_default_browser_menu_id);
             if (setDefaultBrowserMenuItem != null) {
-                boolean shouldShowMeuItem =
-                        !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
-                        || !VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(mContext);
-                setDefaultBrowserMenuItem.setVisible(shouldShowMeuItem);
-                if (shouldShowMeuItem) {
+                boolean removeMenuItem =
+                        BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
+                        || VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(mContext);
+                setDefaultBrowserMenuItem.setVisible(!removeMenuItem);
+                if (!removeMenuItem) {
                     boolean showNewTag = VivaldiPreferences.getSharedPreferencesManager()
                             .readBoolean(VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
                     setDefaultBrowserMenuItem.setTitle(addOrRemoveNewLabel(
@@ -629,7 +632,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             MenuItem capturePageMenuItem = menu.findItem(R.id.capture_page_id);
             if (capturePageMenuItem != null)
                 capturePageMenuItem.setVisible(!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
-                        && hasWebContents);
+                        && hasWebContents && !isIncognito);
         }
 
         if (ChromeApplicationImpl.isVivaldi()) {
@@ -639,6 +642,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         // Prepare translate menu button.
         prepareTranslateMenuItem(menu, currentTab);
+
+        // Set visibility of Read Aloud menu item.
+        prepareReadAloudMenuItem(menu, currentTab);
 
         prepareAddToHomescreenMenuItem(menu, currentTab,
                 shouldShowHomeScreenMenuItem(
@@ -659,6 +665,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 .setVisible(isCurrentTabNotNull && shouldShowReaderModePrefs(currentTab));
 
         updateManagedByMenuItem(menu, currentTab);
+
+        // Only display quick delete divider line on the page menu and if quick delete is enabled.
+        menu.findItem(R.id.quick_delete_divider_line_id)
+                .setVisible(isQuickDeleteEnabled(isIncognito));
 
         if (ChromeApplicationImpl.isVivaldi())
             menu.findItem(R.id.managed_by_standard_menu_id).setVisible(false);
@@ -700,11 +710,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // We show the re-auth screen only in Incognito mode.
         boolean isIncognitoReauthShowing = isIncognito && (mIncognitoReauthController != null)
                 && mIncognitoReauthController.isReauthPageShowing();
-        boolean isTabSelectionEditorContext = isOverviewModeMenu
-                && TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext)
-                && !DeviceClassManager.enableAccessibilityLayout(mContext);
 
-        boolean isMenuSelectTabsVisible = isTabSelectionEditorContext;
+        boolean isMenuSelectTabsVisible = isOverviewModeMenu;
         boolean isMenuSelectTabsEnabled = !isIncognitoReauthShowing && isMenuSelectTabsVisible
                 && mTabModelSelector.getTabModelFilterProvider()
                                 .getCurrentTabModelFilter()
@@ -772,10 +779,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 item.setEnabled(hasIncognitoTabs);
             }
             if (item.getItemId() == R.id.quick_delete_menu_id) {
-                boolean isQuickDeleteEnabled =
-                        !isIncognito && QuickDeleteController.isQuickDeleteEnabled();
-                item.setVisible(isQuickDeleteEnabled);
-                item.setEnabled(isQuickDeleteEnabled);
+                item.setVisible(isQuickDeleteEnabled(isIncognito));
+                item.setEnabled(isQuickDeleteEnabled(isIncognito));
             }
 
             // This needs to be done after the visibility of the item is set.
@@ -793,6 +798,14 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 hasItemBetweenDividers = true;
             }
         }
+    }
+
+    /**
+     * @param isIncognito Whether the currentTab is incognito.
+     * @return Whether the quick delete menu item should be enabled.
+     */
+    private boolean isQuickDeleteEnabled(boolean isIncognito) {
+        return !isIncognito && QuickDeleteController.isQuickDeleteEnabled();
     }
 
     /**
@@ -838,6 +851,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @return Whether the "Move to other window" menu item should be displayed.
      */
     protected boolean shouldShowMoveToOtherWindow() {
+        // Hide the menu on automotive devices.
+        if (BuildInfo.getInstance().isAutomotive) return false;
+
         if (!instanceSwitcherEnabled() && shouldShowNewWindow()) return false;
         boolean hasMoreThanOneTab = mTabModelSelector.getTotalTabCount() > 1;
         boolean showAlsoForSingleTab = !isPartnerHomepageEnabled();
@@ -881,11 +897,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @return Whether the "New window" menu item should be displayed.
      */
     protected boolean shouldShowNewWindow() {
+        // Hide the menu on automotive devices.
+        if (BuildInfo.getInstance().isAutomotive) return false;
+
         if (instanceSwitcherEnabled()) {
             // Hide the menu if we already have the maximum number of windows.
             if (getInstanceCount() >= MultiWindowUtils.getMaxInstances()) return false;
-            // Hide the menu on automotive devices.
-            if (BuildInfo.getInstance().isAutomotive) return false;
+
+            // Vivaldi: hide the menu in automotive builds.
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
 
             // On phones, show the menu only when in split-screen, with a single instance
             // running on the foreground.
@@ -1055,6 +1075,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         menu.findItem(R.id.translate_id).setVisible(isTranslateVisible);
     }
 
+    /** Sets visibility of the "Listen to this page" menu item. */
+    private void prepareReadAloudMenuItem(Menu menu, @Nullable Tab currentTab) {
+        boolean visible = false;
+        if (mReadAloudControllerSupplier != null) {
+            ReadAloudController readAloudController = mReadAloudControllerSupplier.get();
+            visible = readAloudController != null && currentTab != null
+                    && readAloudController.isReadable(currentTab);
+        }
+        menu.findItem(R.id.readaloud_menu_id).setVisible(visible);
+    }
+
     @Override
     public void loadingStateChanged(boolean isLoading) {
         if (mReloadPropertyModel != null) {
@@ -1175,9 +1206,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         } else {
             if (ChromeApplicationImpl.isVivaldi()) {
                 Drawable icon =
-                        AppCompatResources.getDrawable(mContext, R.drawable.menu_add_bookmark_24dp);
+                        AppCompatResources.getDrawable(mContext, R.drawable.add_bookmarks_24dp);
                 DrawableCompat.setTintList(icon, AppCompatResources.getColorStateList(mContext,
-                        R.color.default_icon_color_tint_list));
+                        R.color.vivaldi_icon_fg_faded));
                 bookmarkMenuItemShortcut.setIcon(icon);
                 bookmarkMenuItemShortcut.setTitle(mContext.getString(R.string.bookmark_page));
             } else
@@ -1270,13 +1301,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         MenuItem requestMenuLabel = menu.findItem(R.id.request_desktop_site_id);
         MenuItem requestMenuCheck = menu.findItem(R.id.request_desktop_site_check_id);
 
-        // Hide request desktop site on all chrome:// pages except for the NTP. If
-        // REQUEST_DESKTOP_SITE_EXCEPTIONS is enabled, hide the entry for all native pages.
-        boolean itemVisible = currentTab != null && canShowRequestDesktopSite
-                && (!isChromeScheme
-                        || (!ContentFeatureMap.isEnabled(
-                                    ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
-                                && currentTab.isNativePage()))
+        // Hide request desktop site on all native pages.
+        boolean itemVisible = currentTab != null && canShowRequestDesktopSite && !isChromeScheme
                 && !shouldShowReaderModePrefs(currentTab) && currentTab.getWebContents() != null;
 
         requestMenuRow.setVisible(itemVisible);
@@ -1354,12 +1380,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         return IncognitoUtils.isIncognitoModeEnabled();
     }
 
-    @VisibleForTesting
     static void setPageBookmarkedForTesting(Boolean bookmarked) {
         sItemBookmarkedForTesting = bookmarked;
+        ResettersForTesting.register(() -> sItemBookmarkedForTesting = null);
     }
 
-    @VisibleForTesting
     void setStartSurfaceStateForTesting(@StartSurfaceState int state) {
         mStartSurfaceState = state;
     }
@@ -1377,6 +1402,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (itemId == R.id.edit_bookmark_menu_id || itemId == R.id.disable_price_tracking_menu_id) {
             return R.color.default_icon_color_accent1_tint_list;
         }
+        if (ChromeApplicationImpl.isVivaldi())
+            return R.color.vivaldi_icon_fg_faded;
+        else
         return R.color.default_icon_color_secondary_tint_list;
     }
 

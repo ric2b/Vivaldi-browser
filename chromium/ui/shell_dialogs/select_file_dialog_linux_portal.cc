@@ -154,7 +154,14 @@ SelectFileDialogLinuxPortal::SelectFileDialogLinuxPortal(
     std::unique_ptr<ui::SelectFilePolicy> policy)
     : SelectFileDialogLinux(listener, std::move(policy)) {}
 
-SelectFileDialogLinuxPortal::~SelectFileDialogLinuxPortal() = default;
+SelectFileDialogLinuxPortal::~SelectFileDialogLinuxPortal() {
+  // `info_` may have weak pointers which must be invalidated on the dbus
+  // thread. Pass our reference to that thread so weak pointers get invalidated
+  // on the correct sequence.
+  dbus_thread_linux::GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce([](scoped_refptr<DialogInfo> info) {}, std::move(info_)));
+}
 
 // static
 void SelectFileDialogLinuxPortal::StartAvailabilityTestInBackground() {
@@ -201,14 +208,13 @@ void SelectFileDialogLinuxPortal::SelectFileImpl(
     gfx::NativeWindow owning_window,
     void* params,
     const GURL* caller) {
-  auto info = base::MakeRefCounted<DialogInfo>(
+  info_ = base::MakeRefCounted<DialogInfo>(
       base::BindOnce(&SelectFileDialogLinuxPortal::CompleteOpenOnMainThread,
-                     this),
+                     weak_factory_.GetWeakPtr()),
       base::BindOnce(&SelectFileDialogLinuxPortal::CancelOpenOnMainThread,
-                     this));
-  info_ = info;
-  info->type = type;
-  info->main_task_runner = base::SequencedTaskRunner::GetCurrentDefault();
+                     weak_factory_.GetWeakPtr()));
+  info_->type = type;
+  info_->main_task_runner = base::SequencedTaskRunner::GetCurrentDefault();
   listener_params_ = params;
 
   if (owning_window && owning_window->GetHost()) {
@@ -289,8 +295,11 @@ bool SelectFileDialogLinuxPortal::IsPortalRunningOnBusThread(
   dbus::MessageWriter writer(&method_call);
   writer.AppendString(kXdgPortalService);
 
-  std::unique_ptr<dbus::Response> response = dbus_proxy->CallMethodAndBlock(
-      &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT);
+  std::unique_ptr<dbus::Response> response =
+      dbus_proxy
+          ->CallMethodAndBlock(&method_call,
+                               dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
+          .value_or(nullptr);
   if (!response)
     return false;
 
@@ -310,8 +319,11 @@ bool SelectFileDialogLinuxPortal::IsPortalActivatableOnBusThread(
   dbus::MethodCall method_call(DBUS_INTERFACE_DBUS,
                                kDBusMethodListActivatableNames);
 
-  std::unique_ptr<dbus::Response> response = dbus_proxy->CallMethodAndBlock(
-      &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT);
+  std::unique_ptr<dbus::Response> response =
+      dbus_proxy
+          ->CallMethodAndBlock(&method_call,
+                               dbus::ObjectProxy::TIMEOUT_USE_DEFAULT)
+          .value_or(nullptr);
   if (!response)
     return false;
 
@@ -328,8 +340,11 @@ bool SelectFileDialogLinuxPortal::IsPortalActivatableOnBusThread(
     dbus::MessageWriter start_service_writer(&start_service_call);
     start_service_writer.AppendString(kXdgPortalService);
     start_service_writer.AppendUint32(/*flags=*/0);
-    auto start_service_response = dbus_proxy->CallMethodAndBlock(
-        &start_service_call, kStartServiceTimeout.InMilliseconds());
+    auto start_service_response =
+        dbus_proxy
+            ->CallMethodAndBlock(&start_service_call,
+                                 kStartServiceTimeout.InMilliseconds())
+            .value_or(nullptr);
     if (!start_service_response)
       return false;
     dbus::MessageReader start_service_reader(start_service_response.get());
@@ -512,7 +527,8 @@ void SelectFileDialogLinuxPortal::DialogInfo::SelectFileImplOnBusThread(
       bus->GetObjectProxy(kXdgPortalService, portal_path);
   portal->CallMethodWithErrorResponse(
       &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-      base::BindOnce(&DialogInfo::OnCallResponse, this, base::Unretained(bus)));
+      base::BindOnce(&DialogInfo::OnCallResponse, weak_factory_.GetWeakPtr(),
+                     base::Unretained(bus)));
 }
 
 void SelectFileDialogLinuxPortal::DialogInfo::AppendOptions(
@@ -630,8 +646,10 @@ void SelectFileDialogLinuxPortal::DialogInfo::ConnectToHandle() {
   DCHECK(dbus_thread_linux::GetTaskRunner()->RunsTasksInCurrentSequence());
   response_handle_->ConnectToSignal(
       kXdgPortalRequestInterfaceName, kXdgPortalResponseSignal,
-      base::BindRepeating(&DialogInfo::OnResponseSignalEmitted, this),
-      base::BindOnce(&DialogInfo::OnResponseSignalConnected, this));
+      base::BindRepeating(&DialogInfo::OnResponseSignalEmitted,
+                          weak_factory_.GetWeakPtr()),
+      base::BindOnce(&DialogInfo::OnResponseSignalConnected,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void SelectFileDialogLinuxPortal::DialogInfo::CompleteOpen(

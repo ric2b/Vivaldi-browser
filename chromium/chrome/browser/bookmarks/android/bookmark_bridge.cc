@@ -1096,17 +1096,21 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::CreateJavaBookmark(
         ConvertUTF8ToJavaString(env, vivaldi_bookmark_kit::GetNickname(node)),
         ConvertUTF8ToJavaString(env,
                                 vivaldi_bookmark_kit::GetDescription(node)),
+        vivaldi_bookmark_kit::GetThemeColor(node),
         java_timestamp,
         ConvertUTF8ToJavaString(env, vivaldi_bookmark_kit::GetThumbnail(node)),
         ConvertUTF8ToJavaString(env, node->uuid().AsLowercaseString())
         );
   }
 
+  // TODO(crbug.com/1467559): Folders need to use most recent child's time for
+  // date_last_used.
   return Java_BookmarkBridge_createBookmarkItem(
       env, node->id(), type, ConvertUTF16ToJavaString(env, GetTitle(node)),
       url::GURLAndroid::FromNativeGURL(env, url), node->is_folder(), parent_id,
       GetBookmarkType(parent), IsEditable(node), IsManaged(node),
-      node->date_added().ToJavaTime(), read);
+      node->date_added().ToJavaTime(), read,
+      node->date_last_used().ToJavaTime());
 }
 
 void BookmarkBridge::ExtractBookmarkNodeInformation(

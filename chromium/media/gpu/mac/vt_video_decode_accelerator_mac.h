@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "base/apple/scoped_cftyperef.h"
 #include "base/containers/queue.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -52,7 +52,7 @@ class VP9ConfigChangeDetector;
 class VP9SuperFrameBitstreamFilter;
 
 // Preload VideoToolbox libraries, needed for sandbox warmup.
-MEDIA_GPU_EXPORT bool InitializeVideoToolbox();
+MEDIA_GPU_EXPORT void InitializeVideoToolbox();
 
 // VideoToolbox.framework implementation of the VideoDecodeAccelerator
 // interface for macOS.
@@ -143,7 +143,7 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
     gfx::Size image_size;
 
     // Decoded image, if decoding was successful.
-    base::ScopedCFTypeRef<CVImageBufferRef> image;
+    base::apple::ScopedCFTypeRef<CVImageBufferRef> image;
 
     // Dynamic HDR metadata, if any.
     absl::optional<gfx::HDRMetadata> hdr_metadata;
@@ -234,7 +234,8 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   const gpu::GpuDriverBugWorkarounds workarounds_;
   std::unique_ptr<MediaLog> media_log_;
 
-  raw_ptr<VideoDecodeAccelerator::Client, DanglingUntriaged> client_ = nullptr;
+  raw_ptr<VideoDecodeAccelerator::Client, AcrossTasksDanglingUntriaged>
+      client_ = nullptr;
   State state_ = STATE_DECODING;
 
   // Queue of pending flush tasks. This is used to drop frames when a reset
@@ -288,8 +289,8 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   // Decoder thread state.
   //
   VTDecompressionOutputCallbackRecord callback_;
-  base::ScopedCFTypeRef<CMFormatDescriptionRef> format_;
-  base::ScopedCFTypeRef<VTDecompressionSessionRef> session_;
+  base::apple::ScopedCFTypeRef<CMFormatDescriptionRef> format_;
+  base::apple::ScopedCFTypeRef<VTDecompressionSessionRef> session_;
   H264Parser h264_parser_;
 
   // SPSs and PPSs seen in the bitstream.

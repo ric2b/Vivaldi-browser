@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
 
+#import "base/apple/foundation_util.h"
 #include "base/command_line.h"
-#import "base/mac/foundation_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #import "chrome/browser/app_controller_mac.h"
@@ -28,10 +28,6 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 

@@ -4,39 +4,46 @@
 
 #include "chrome/browser/web_applications/web_app_provider.h"
 
+#include <map>
 #include <memory>
+#include <ostream>
 #include <utility>
 
 #include "base/barrier_closure.h"
+#include "base/check.h"
 #include "base/check_is_test.h"
-#include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/commands/web_app_command.h"
+#include "chrome/browser/web_applications/extensions_manager.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
-#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_web_app_from_command_line.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_installation_manager.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
-#include "chrome/browser/web_applications/os_integration/url_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_audio_focus_id_map.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_origin_association_manager.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -46,8 +53,22 @@
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
-#include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
+#include "chrome/browser/web_applications/web_app_run_on_os_login_manager.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#endif
+
+namespace webapps {
+enum class WebappInstallSource;
+}
 
 namespace web_app {
 
@@ -69,12 +90,15 @@ WebAppProvider* WebAppProvider::GetForWebApps(Profile* profile) {
   // If features::kWebAppsCrosapi is enabled, Ash browser only manages system
   // web apps (return nullptr here). Otherwise, Ash browser manages all web apps
   // (return WebAppProvider).
-  return IsWebAppsCrosapiEnabled()
-             ? nullptr
-             : WebAppProviderFactory::GetForProfile(profile);
-#else
-  return WebAppProviderFactory::GetForProfile(profile);
+  // An exception is that Shimless RMA app always requires loading IWA on Ash.
+  // TODO(b/292227137): Migrate Shimless RMA app to LaCrOS.
+  if (IsWebAppsCrosapiEnabled() &&
+      (!::ash::features::IsShimlessRMA3pDiagnosticsEnabled() ||
+       !::ash::IsShimlessRmaAppBrowserContext(profile))) {
+    return nullptr;
+  }
 #endif
+  return WebAppProviderFactory::GetForProfile(profile);
 }
 
 // static
@@ -163,6 +187,12 @@ const WebAppRegistrar& WebAppProvider::registrar_unsafe() const {
   return *registrar_;
 }
 
+WebAppRegistrarMutable& WebAppProvider::registrar_mutable(
+    base::PassKey<WebAppSyncBridge>) {
+  CheckIsConnected();
+  return *registrar_;
+}
+
 WebAppSyncBridge& WebAppProvider::sync_bridge_unsafe() {
   CheckIsConnected();
   return *sync_bridge_;
@@ -193,11 +223,23 @@ WebAppPolicyManager& WebAppProvider::policy_manager() {
   return *web_app_policy_manager_;
 }
 
-IsolatedWebAppCommandLineInstallManager&
-WebAppProvider::iwa_command_line_install_manager() {
+IsolatedWebAppInstallationManager&
+WebAppProvider::isolated_web_app_installation_manager() {
   CheckIsConnected();
-  return *iwa_command_line_install_manager_;
+  return *isolated_web_app_installation_manager_;
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+IsolatedWebAppUpdateManager& WebAppProvider::iwa_update_manager() {
+  CheckIsConnected();
+  return *iwa_update_manager_;
+}
+
+WebAppRunOnOsLoginManager& WebAppProvider::run_on_os_login_manager() {
+  CheckIsConnected();
+  return *web_app_run_on_os_login_manager_;
+}
+#endif
 
 WebAppUiManager& WebAppProvider::ui_manager() {
   CheckIsConnected();
@@ -207,6 +249,11 @@ WebAppUiManager& WebAppProvider::ui_manager() {
 WebAppAudioFocusIdMap& WebAppProvider::audio_focus_id_map() {
   CheckIsConnected();
   return *audio_focus_id_map_;
+}
+
+scoped_refptr<FileUtilsWrapper> WebAppProvider::file_utils() {
+  CheckIsConnected();
+  return file_utils_;
 }
 
 WebAppIconManager& WebAppProvider::icon_manager() {
@@ -237,18 +284,36 @@ WebContentsManager& WebAppProvider::web_contents_manager() {
   return *web_contents_manager_;
 }
 
+PreinstalledWebAppManager& WebAppProvider::preinstalled_web_app_manager() {
+  return *preinstalled_web_app_manager_;
+}
+
+ExtensionsManager& WebAppProvider::extensions_manager() {
+  return *extensions_manager_;
+}
+
+AbstractWebAppDatabaseFactory& WebAppProvider::database_factory() {
+  return *database_factory_;
+}
+
 void WebAppProvider::Shutdown() {
   command_scheduler_->Shutdown();
   command_manager_->Shutdown();
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
   manifest_update_manager_->Shutdown();
-  iwa_command_line_install_manager_->Shutdown();
+#if BUILDFLAG(IS_CHROMEOS)
+  iwa_update_manager_->Shutdown();
+#endif
   install_manager_->Shutdown();
   icon_manager_->Shutdown();
   install_finalizer_->Shutdown();
   registrar_->Shutdown();
   is_registry_ready_ = false;
+}
+
+base::WeakPtr<WebAppProvider> WebAppProvider::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 void WebAppProvider::StartImpl() {
@@ -265,28 +330,22 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   preinstalled_web_app_manager_ =
       std::make_unique<PreinstalledWebAppManager>(profile);
   web_app_policy_manager_ = std::make_unique<WebAppPolicyManager>(profile);
-  iwa_command_line_install_manager_ =
-      std::make_unique<IsolatedWebAppCommandLineInstallManager>(*profile);
+  isolated_web_app_installation_manager_ =
+      std::make_unique<IsolatedWebAppInstallationManager>(*profile);
+#if BUILDFLAG(IS_CHROMEOS)
+  iwa_update_manager_ = std::make_unique<IsolatedWebAppUpdateManager>(*profile);
+#endif
+  extensions_manager_ = std::make_unique<ExtensionsManager>(profile);
 
   database_factory_ = std::make_unique<WebAppDatabaseFactory>(profile);
 
-  std::unique_ptr<WebAppRegistrar> registrar;
-  std::unique_ptr<WebAppSyncBridge> sync_bridge;
+  registrar_ = std::make_unique<WebAppRegistrarMutable>(profile);
+  sync_bridge_ = std::make_unique<WebAppSyncBridge>(registrar_.get());
 
-  // Only WebAppSyncBridge must have an access to mutable WebAppRegistrar.
-  {
-    auto mutable_registrar = std::make_unique<WebAppRegistrarMutable>(profile);
+  file_utils_ = base::MakeRefCounted<FileUtilsWrapper>();
 
-    sync_bridge = std::make_unique<WebAppSyncBridge>(mutable_registrar.get());
-
-    // Upcast to read-only WebAppRegistrar.
-    registrar = std::move(mutable_registrar);
-  }
-
-  icon_manager_ = std::make_unique<WebAppIconManager>(
-      profile, base::MakeRefCounted<FileUtilsWrapper>());
-  translation_manager_ = std::make_unique<WebAppTranslationManager>(
-      profile, base::MakeRefCounted<FileUtilsWrapper>());
+  icon_manager_ = std::make_unique<WebAppIconManager>(profile);
+  translation_manager_ = std::make_unique<WebAppTranslationManager>(profile);
   install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(profile);
 
   if (g_os_integration_manager_factory_for_testing) {
@@ -298,8 +357,7 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
     auto protocol_handler_manager =
         std::make_unique<WebAppProtocolHandlerManager>(profile);
     auto shortcut_manager = std::make_unique<WebAppShortcutManager>(
-        profile, icon_manager_.get(), file_handler_manager.get(),
-        protocol_handler_manager.get());
+        profile, file_handler_manager.get(), protocol_handler_manager.get());
 
     // TODO(crbug.com/1072058): Remove UrlHandlerManager from
     // OsIntegrationManager.
@@ -308,18 +366,15 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
         std::move(protocol_handler_manager), /*url_handler_manager=*/nullptr);
   }
 
-  command_manager_ = std::make_unique<WebAppCommandManager>(profile, this);
-  command_scheduler_ = std::make_unique<WebAppCommandScheduler>(*profile, this);
+  command_manager_ = std::make_unique<WebAppCommandManager>(profile);
+  command_scheduler_ = std::make_unique<WebAppCommandScheduler>(*profile);
 
   origin_association_manager_ =
       std::make_unique<WebAppOriginAssociationManager>();
 
-  registrar_ = std::move(registrar);
-  sync_bridge_ = std::move(sync_bridge);
-
-#if (BUILDFLAG(IS_CHROMEOS))
+#if BUILDFLAG(IS_CHROMEOS)
   web_app_run_on_os_login_manager_ =
-      std::make_unique<WebAppRunOnOsLoginManager>(command_scheduler_.get());
+      std::make_unique<WebAppRunOnOsLoginManager>(profile);
 #endif
 
   web_contents_manager_ = std::make_unique<WebContentsManager>();
@@ -328,39 +383,36 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
 void WebAppProvider::ConnectSubsystems() {
   DCHECK(!started_);
 
+  // TODO(https://issuetracker.google.com/283816014): Replace SetSubsystems()
+  // with SetProvider().
   sync_bridge_->SetSubsystems(database_factory_.get(), command_manager_.get(),
                               command_scheduler_.get(), install_manager_.get());
-  icon_manager_->SetSubsystems(registrar_.get(), install_manager_.get());
-  install_finalizer_->SetSubsystems(
-      install_manager_.get(), registrar_.get(), ui_manager_.get(),
-      sync_bridge_.get(), os_integration_manager_.get(), icon_manager_.get(),
-      web_app_policy_manager_.get(), translation_manager_.get(),
-      command_manager_.get(), origin_association_manager_.get());
-  manifest_update_manager_->SetSubsystems(install_manager_.get(),
-                                          registrar_.get(), ui_manager_.get(),
-                                          command_scheduler_.get());
-  externally_managed_app_manager_->SetSubsystems(
-      ui_manager_.get(), install_finalizer_.get(), command_scheduler_.get(),
-      web_contents_manager_.get());
-  preinstalled_web_app_manager_->SetSubsystems(
-      registrar_.get(), ui_manager_.get(),
-      externally_managed_app_manager_.get());
-  web_app_policy_manager_->SetSubsystems(externally_managed_app_manager_.get(),
-                                         registrar_.get(), sync_bridge_.get(),
-                                         os_integration_manager_.get());
-  registrar_->SetSubsystems(web_app_policy_manager_.get(),
-                            translation_manager_.get());
-  ui_manager_->SetSubsystems(sync_bridge_.get(), os_integration_manager_.get());
-  os_integration_manager_->SetSubsystems(sync_bridge_.get(), registrar_.get(),
-                                         ui_manager_.get(),
-                                         icon_manager_.get());
-  iwa_command_line_install_manager_->SetSubsystems(command_scheduler_.get());
+
+  base::PassKey<WebAppProvider> pass_key;
+  icon_manager_->SetProvider(pass_key, *this);
+  install_finalizer_->SetProvider(pass_key, *this);
+  manifest_update_manager_->SetProvider(pass_key, *this);
+  externally_managed_app_manager_->SetProvider(pass_key, *this);
+  preinstalled_web_app_manager_->SetProvider(pass_key, *this);
+  web_app_policy_manager_->SetProvider(pass_key, *this);
+  registrar_->SetProvider(pass_key, *this);
+  os_integration_manager_->SetProvider(pass_key, *this);
+  command_manager_->SetProvider(pass_key, *this);
+  command_scheduler_->SetProvider(pass_key, *this);
+  isolated_web_app_installation_manager_->SetProvider(pass_key, *this);
+#if BUILDFLAG(IS_CHROMEOS)
+  iwa_update_manager_->SetProvider(pass_key, *this);
+  web_app_run_on_os_login_manager_->SetProvider(pass_key, *this);
+#endif
+  icon_manager_->SetProvider(pass_key, *this);
+  translation_manager_->SetProvider(pass_key, *this);
+
   connected_ = true;
 }
 
 void WebAppProvider::StartSyncBridge() {
-  sync_bridge_->Init(base::BindOnce(&WebAppProvider::OnSyncBridgeReady,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  sync_bridge_->Init(
+      base::BindOnce(&WebAppProvider::OnSyncBridgeReady, AsWeakPtr()));
 }
 
 void WebAppProvider::OnSyncBridgeReady() {
@@ -379,7 +431,17 @@ void WebAppProvider::OnSyncBridgeReady() {
               return;
             provider->on_external_managers_synchronized_.Signal();
           },
-          weak_ptr_factory_.GetWeakPtr()));
+          AsWeakPtr()));
+
+  base::OnceClosure on_web_app_policy_manager_done_callback =
+      external_manager_barrier;
+
+#if BUILDFLAG(IS_CHROMEOS)
+  on_web_app_policy_manager_done_callback =
+      base::BindOnce(&WebAppRunOnOsLoginManager::Start,
+                     web_app_run_on_os_login_manager_->GetWeakPtr())
+          .Then(external_manager_barrier);
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   registrar_->Start();
   install_finalizer_->Start();
@@ -387,14 +449,12 @@ void WebAppProvider::OnSyncBridgeReady() {
   translation_manager_->Start();
   install_manager_->Start();
   preinstalled_web_app_manager_->Start(external_manager_barrier);
-  web_app_policy_manager_->Start(external_manager_barrier);
-  iwa_command_line_install_manager_->Start();
+  web_app_policy_manager_->Start(
+      std::move(on_web_app_policy_manager_done_callback));
+  isolated_web_app_installation_manager_->Start();
 
-#if (BUILDFLAG(IS_CHROMEOS))
-  on_external_managers_synchronized_.Post(
-      FROM_HERE,
-      base::BindOnce(&WebAppRunOnOsLoginManager::Start,
-                     web_app_run_on_os_login_manager_->GetWeakPtr()));
+#if BUILDFLAG(IS_CHROMEOS)
+  iwa_update_manager_->Start();
 #endif
   manifest_update_manager_->Start();
   os_integration_manager_->Start();
@@ -414,7 +474,7 @@ void WebAppProvider::CheckIsConnected() const {
 void WebAppProvider::DoMigrateProfilePrefs(Profile* profile) {
   std::map<AppId, int> sources =
       TakeAllWebAppInstallSources(profile->GetPrefs());
-  ScopedRegistryUpdate update(sync_bridge_.get());
+  ScopedRegistryUpdate update = sync_bridge_->BeginUpdate();
   for (const auto& iter : sources) {
     WebApp* web_app = update->UpdateApp(iter.first);
     if (web_app && !web_app->latest_install_source()) {

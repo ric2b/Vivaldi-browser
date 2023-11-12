@@ -13,10 +13,10 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/external_install_options.h"
@@ -40,6 +40,7 @@
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/common/chrome_features.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/common/web_page_metadata.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -72,7 +73,8 @@ class ExternallyManagedAppManagerTest : public WebAppTest {
                 web_app->AddInstallURLToManagementExternalConfigMap(
                     WebAppManagement::kDefault, install_url);
                 {
-                  ScopedRegistryUpdate update(&provider().sync_bridge_unsafe());
+                  ScopedRegistryUpdate update =
+                      provider().sync_bridge_unsafe().BeginUpdate();
                   update->CreateApp(std::move(web_app));
                 }
                 ++deduped_install_count_;
@@ -87,7 +89,8 @@ class ExternallyManagedAppManagerTest : public WebAppTest {
               absl::optional<AppId> app_id =
                   app_registrar().LookupExternalAppId(app_url);
               if (app_id.has_value()) {
-                ScopedRegistryUpdate update(&provider().sync_bridge_unsafe());
+                ScopedRegistryUpdate update =
+                    provider().sync_bridge_unsafe().BeginUpdate();
                 update->DeleteApp(app_id.value());
                 deduped_uninstall_count_++;
               }
@@ -156,7 +159,7 @@ class ExternallyManagedAppManagerTest : public WebAppTest {
   int deduped_install_count_ = 0;
   int deduped_uninstall_count_ = 0;
 
-  raw_ptr<FakeWebAppProvider, DanglingUntriaged> provider_;
+  raw_ptr<FakeWebAppProvider, DanglingUntriaged> provider_ = nullptr;
 };
 
 // Test that destroying ExternallyManagedAppManager during a synchronize call
@@ -365,8 +368,33 @@ class ExternallyAppManagerTest : public WebAppTest {
         provider().web_contents_manager());
   }
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  AppId PopulateBasicInstallPageWithManifest(GURL install_url,
+                                             GURL manifest_url,
+                                             GURL start_url) {
+    auto& install_page_state =
+        web_contents_manager().GetOrCreatePageState(install_url);
+    install_page_state.url_load_result = WebAppUrlLoaderResult::kUrlLoaded;
+    install_page_state.redirection_url = absl::nullopt;
+
+    install_page_state.opt_metadata =
+        FakeWebContentsManager::CreateMetadataWithTitle(u"Basic app title");
+    install_page_state.title = u"Basic app title";
+
+    install_page_state.manifest_url = manifest_url;
+    install_page_state.valid_manifest_for_web_app = true;
+
+    install_page_state.opt_manifest = blink::mojom::Manifest::New();
+    install_page_state.opt_manifest->scope =
+        url::Origin::Create(start_url).GetURL();
+    install_page_state.opt_manifest->start_url = start_url;
+    install_page_state.opt_manifest->id =
+        GenerateManifestIdFromStartUrlOnly(start_url);
+    install_page_state.opt_manifest->display =
+        blink::mojom::DisplayMode::kStandalone;
+    install_page_state.opt_manifest->short_name = u"Basic app name";
+
+    return GenerateAppId(/*manifest_id=*/absl::nullopt, start_url);
+  }
 };
 
 TEST_F(ExternallyAppManagerTest, NoNetworkNoPlaceholder) {
@@ -795,7 +823,6 @@ TEST_F(ExternallyAppManagerTest, PlaceholderResolvedFromSynchronize) {
       GURL(), mojom::UserDisplayMode::kStandalone,
       ExternalInstallSource::kExternalPolicy);
   template_options.install_placeholder = true;
-  template_options.reinstall_placeholder = true;
 
   auto& page_state = web_contents_manager().GetOrCreatePageState(kInstallUrl);
   page_state.redirection_url = kRedirectToUrl;
@@ -819,8 +846,7 @@ TEST_F(ExternallyAppManagerTest, PlaceholderResolvedFromSynchronize) {
   AppId app_id = web_contents_manager().CreateBasicInstallPageState(
       kInstallUrl, kManifestUrl, kStartUrl);
 
-  // `reinstall_placeholder` option should cause the placeholder app to be
-  // uninstalled & the real one to work.
+  // The placeholder app should be uninstalled & the real one installed.
   {
     SynchronizeFuture result;
     provider().externally_managed_app_manager().SynchronizeInstalledApps(
@@ -873,7 +899,6 @@ TEST_F(ExternallyAppManagerTest, PlaceholderResolvedFromInstallNow) {
   ExternalInstallOptions options = template_options;
   options.install_url = kInstallUrl;
   options.wait_for_windows_closed = false;
-  options.reinstall_placeholder = true;
   InstallNowFuture install_future;
   provider().externally_managed_app_manager().InstallNow(
       std::move(options), install_future.GetCallback());
@@ -1180,7 +1205,6 @@ TEST_F(ExternallyAppManagerTest, PlaceholderFullInstallConflictCanUpdate) {
       GURL(), mojom::UserDisplayMode::kStandalone,
       ExternalInstallSource::kExternalPolicy);
   template_options.install_placeholder = true;
-  template_options.reinstall_placeholder = true;
 
   // Phase 1 state
   auto& page_state = web_contents_manager().GetOrCreatePageState(kInstallUrl1);

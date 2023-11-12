@@ -8,7 +8,6 @@
 #include "build/build_config.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -61,6 +60,15 @@ class WrappedSkImageBackingFactoryTest
     ASSERT_NO_FATAL_FAILURE(InitializeContext(gr_context_type));
 
     auto format = GetFormat();
+    if (gr_context_type == GrContextType::kGL &&
+        format == viz::SinglePlaneFormat::kBGRA_8888 &&
+        !context_state_->feature_info()
+             ->feature_flags()
+             .ext_texture_format_bgra8888) {
+      // We don't support GL context with Dawn for now.
+      GTEST_SKIP();
+    }
+
     // We don't use WrappedSkImageBacking with ALPHA8 if it's GL context.
     if (format == viz::SinglePlaneFormat::kALPHA_8 &&
         gr_context_type == GrContextType::kGL) {
@@ -221,7 +229,8 @@ const auto kFormats = ::testing::Values(viz::SinglePlaneFormat::kALPHA_8,
                                         viz::SinglePlaneFormat::kRGBX_8888,
                                         viz::SinglePlaneFormat::kRGBA_1010102,
                                         viz::MultiPlaneFormat::kNV12,
-                                        viz::MultiPlaneFormat::kYV12);
+                                        viz::MultiPlaneFormat::kYV12,
+                                        viz::MultiPlaneFormat::kI420);
 
 INSTANTIATE_TEST_SUITE_P(
     ,

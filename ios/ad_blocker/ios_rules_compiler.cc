@@ -469,7 +469,7 @@ std::vector<std::string> DomainsForRuleToIfUrls(
 // already superceded by an excludion at the preceding level and we can ignore
 // it. Same goes for inclusions and odd levels. Note that excluded domains are
 // ignored at level 0 because the presence of inclusions implies that
-// everything else is included and those inclusions are therefore redundant.
+// everything else is excluded and those exclusions are therefore redundant.
 void TraverseDomainTree(
     const DomainTreeNode& node,
     std::string domain,
@@ -675,18 +675,59 @@ void CompileCosmeticRule(const CosmeticRule& rule,
             ->EnsureDict(rule.selector)),
       Trigger(kWildcardRegex, false), Action::CssHideAction(rule.selector));
 }
+
+void AddScriptletRule(const ScriptletInjectionRule& rule,
+                      const DomainTreeNode& node,
+                      base::Value::Dict& dict) {
+  if (node.domain_type != DomainTreeNode::kNone) {
+    base::Value::List arguments;
+    for (const auto& argument : rule.arguments) {
+      arguments.Append(argument);
+    }
+    dict.EnsureDict((node.domain_type == DomainTreeNode::kIncluded)
+                        ? rules_json::kIncluded
+                        : rules_json::kExcluded)
+        ->EnsureList(rule.scriptlet_name)
+        ->Append(std::move(arguments));
+    if (!node.overriden)
+      return;
+  }
+  for (const auto& [subdomain, sub_node] : node.subdomains) {
+    AddScriptletRule(rule, sub_node, *dict.EnsureDict(subdomain));
+  }
+}
+
+void CompileScriptletInjectionRule(
+    const ScriptletInjectionRule& rule,
+    base::Value::Dict& compiled_cosmetic_filter_rules) {
+  // We don't expect allow rules so long as only abp scriptlets are supported
+  DCHECK(!rule.core.is_allow_rule);
+  DCHECK(!rule.core.included_domains.empty());
+
+  DomainTreeNode root;
+  BuildDomainTree(rule.core.included_domains, false, root);
+  BuildDomainTree(rule.core.excluded_domains, true, root);
+
+  AddScriptletRule(rule, root, compiled_cosmetic_filter_rules);
+}
 }  // namespace
 
 std::string CompileIosRulesToString(const ParseResult& parse_result,
                                     bool pretty_print) {
   base::Value::Dict compiled_request_filter_rules;
   base::Value::Dict compiled_cosmetic_filter_rules;
+  base::Value::Dict compiled_scriptlet_injection_rules;
   for (const auto& request_filter_rule : parse_result.request_filter_rules) {
     CompileRequestFilterRule(request_filter_rule, compiled_request_filter_rules,
                              compiled_cosmetic_filter_rules);
   }
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
     CompileCosmeticRule(cosmetic_rule, compiled_cosmetic_filter_rules);
+  }
+  for (const auto& scriptlet_injection_rule :
+       parse_result.scriptlet_injection_rules) {
+    CompileScriptletInjectionRule(scriptlet_injection_rule,
+                                  compiled_scriptlet_injection_rules);
   }
   base::Value::Dict result;
   result.Set(rules_json::kVersion,
@@ -695,6 +736,8 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
              std::move(compiled_request_filter_rules));
   result.Set(rules_json::kCosmeticRules,
              std::move(compiled_cosmetic_filter_rules));
+  result.Set(rules_json::kScriptletRules,
+             std::move(compiled_scriptlet_injection_rules));
   std::string output;
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(pretty_print);

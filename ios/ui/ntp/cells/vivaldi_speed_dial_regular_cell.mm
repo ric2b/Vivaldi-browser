@@ -5,11 +5,11 @@
 #import "Foundation/Foundation.h"
 
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
-#import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_style_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/thumbnail/vivaldi_thumbnail_service.h"
 
 namespace {
 
@@ -237,7 +237,7 @@ const UIEdgeInsets titleLabelMaskPadding =
     [self.thumbView setImage: thumbnailBundle];
   } else {
     UIImage* thumbnailLocal =
-      [[NSFileManager defaultManager] thumbnailForSDItem:item];
+      [[[VivaldiThumbnailService alloc] init] thumbnailForSDItem:item];
     if (thumbnailLocal) {
       [self.thumbView setImage: thumbnailLocal];
     } else {

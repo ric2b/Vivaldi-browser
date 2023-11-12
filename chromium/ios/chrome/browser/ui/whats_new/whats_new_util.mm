@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promos_manager.h"
@@ -15,13 +15,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -140,6 +137,10 @@ void setWhatsNewPromoRegistration() {
 }
 
 bool ShouldRegisterWhatsNewPromo() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return ShouldRegisterVivaldiWhatsNewPromo();
+  }
+
   return !IsWhatsNewPromoRegistered() &&
          (IsSixLaunchAfterFre() || IsSixDaysAfterFre());
 }
@@ -174,7 +175,7 @@ const char* WhatsNewTypeToString(WhatsNewType type) {
       return "ChromeActions";
     case WhatsNewType::kMiniMaps:
       return "MiniMaps";
-    default:
+    case WhatsNewType::kError:
       return nil;
   };
 }
@@ -195,17 +196,3 @@ const char* WhatsNewTypeToStringM116(WhatsNewType type) {
       return nil;
   };
 }
-
-// Vivaldi
-NSString* vWhatsNewWasShownKey = @"vivaldiWhatsNewWasShownKey";
-
-bool IsVivaldiWhatsNewShown() {
-  return
-      [[NSUserDefaults standardUserDefaults] boolForKey:vWhatsNewWasShownKey];
-}
-
-void setVivaldiWhatsNewShown(bool shown) {
-  [[NSUserDefaults standardUserDefaults] setBool:shown
-                                          forKey:vWhatsNewWasShownKey];
-}
-// End Vivaldi

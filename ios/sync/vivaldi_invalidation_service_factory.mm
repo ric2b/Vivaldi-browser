@@ -11,10 +11,6 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "sync/invalidation/vivaldi_invalidation_service.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace vivaldi {
 
 invalidation::InvalidationService*

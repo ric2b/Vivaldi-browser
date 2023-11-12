@@ -93,8 +93,13 @@ NGGridRangeBuilder::NGGridRangeBuilder(
     const wtf_size_t repeater_track_count =
         explicit_tracks_.RepeatCount(i, auto_repetitions_) *
         explicit_tracks_.RepeatSize(i);
-    DCHECK_NE(repeater_track_count, 0u);
 
+    // Subgrids can have zero auto repetitions.
+    if (explicit_tracks_.IsSubgriddedAxis() && repeater_track_count == 0) {
+      continue;
+    }
+
+    DCHECK_NE(repeater_track_count, 0u);
     start_lines_.emplace_back(current_repeater_start_line);
     current_repeater_start_line += repeater_track_count;
     end_lines_.emplace_back(current_repeater_start_line);
@@ -108,10 +113,12 @@ NGGridRangeBuilder::NGGridRangeBuilder(
   // In order to guarantee that such columns are included, if the last repeater
   // from the explicit grid ended before the end of the named grid area, add an
   // extra repeater to fulfill the named grid area's span.
-  const wtf_size_t named_grid_area_end_line =
-      start_offset_ + ((track_direction == kForColumns)
-                           ? grid_style.NamedGridAreaColumnCount()
-                           : grid_style.NamedGridAreaRowCount());
+  wtf_size_t named_grid_area_end_line = start_offset_;
+  if (const auto& grid_template_areas = grid_style.GridTemplateAreas()) {
+    named_grid_area_end_line += (track_direction == kForColumns)
+                                    ? grid_template_areas->column_count
+                                    : grid_template_areas->row_count;
+  }
 
   if (current_repeater_start_line < named_grid_area_end_line) {
     start_lines_.emplace_back(current_repeater_start_line);
@@ -376,12 +383,10 @@ NGGridSet::NGGridSet(wtf_size_t track_count,
       track_size(track_definition),
       fit_content_limit(kIndefiniteSize) {
   if (track_size.IsFitContent()) {
-    DCHECK(track_size.FitContentTrackBreadth().IsLength());
-
     // Argument for 'fit-content' is a <percentage> that couldn't be resolved to
     // a definite <length>, normalize to 'minmax(auto, max-content)'.
     if (is_available_size_indefinite &&
-        track_size.FitContentTrackBreadth().length().IsPercent()) {
+        track_size.FitContentTrackBreadth().IsPercent()) {
       track_size = GridTrackSize(Length::Auto(), Length::MaxContent());
     }
   } else {
@@ -389,9 +394,9 @@ NGGridSet::NGGridSet(wtf_size_t track_count,
     // definitions from https://drafts.csswg.org/css-grid-2/#algo-terms.
     bool is_unresolvable_percentage_min_function =
         is_available_size_indefinite &&
-        track_size.MinTrackBreadth().HasPercentage();
+        track_size.MinTrackBreadth().IsPercentOrCalc();
 
-    GridLength normalized_min_track_sizing_function =
+    Length normalized_min_track_sizing_function =
         (is_unresolvable_percentage_min_function ||
          track_size.HasFlexMinTrackBreadth())
             ? Length::Auto()
@@ -399,9 +404,9 @@ NGGridSet::NGGridSet(wtf_size_t track_count,
 
     bool is_unresolvable_percentage_max_function =
         is_available_size_indefinite &&
-        track_size.MaxTrackBreadth().HasPercentage();
+        track_size.MaxTrackBreadth().IsPercentOrCalc();
 
-    GridLength normalized_max_track_sizing_function =
+    Length normalized_max_track_sizing_function =
         (is_unresolvable_percentage_max_function ||
          track_size.HasAutoMaxTrackBreadth())
             ? Length::Auto()
@@ -416,7 +421,7 @@ NGGridSet::NGGridSet(wtf_size_t track_count,
 
 double NGGridSet::FlexFactor() const {
   DCHECK(track_size.HasFlexMaxTrackBreadth());
-  return track_size.MaxTrackBreadth().Flex() * track_count;
+  return track_size.MaxTrackBreadth().GetFloatValue() * track_count;
 }
 
 LayoutUnit NGGridSet::BaseSize() const {
@@ -654,8 +659,8 @@ NGGridLayoutTrackCollection::CreateSubgridTrackCollection(
     for (wtf_size_t i = 0; i <= range_count; ++i) {
       // Opposite direction subgrids need to iterate backwards.
       const wtf_size_t current_index = is_opposite_direction_in_root_grid
-                                           ? begin_range_index + i
-                                           : end_range_index - i;
+                                           ? end_range_index - i
+                                           : begin_range_index + i;
 
       auto& subgrid_translated_range =
           subgrid_ranges.emplace_back(ranges_[current_index]);
@@ -1000,14 +1005,17 @@ void NGGridSizingTrackCollection::SetMinorBaseline(
 }
 
 void NGGridSizingTrackCollection::BuildSets(const ComputedStyle& grid_style,
-                                            LayoutUnit grid_available_size) {
+                                            LayoutUnit grid_available_size,
+                                            LayoutUnit gutter_size) {
   const bool is_for_columns = track_direction_ == kForColumns;
+  gutter_size_ = gutter_size;
 
   BuildSets(
       is_for_columns ? grid_style.GridTemplateColumns().track_list
                      : grid_style.GridTemplateRows().track_list,
       is_for_columns ? grid_style.GridAutoColumns() : grid_style.GridAutoRows(),
       grid_available_size == kIndefiniteSize);
+  InitializeSets(grid_available_size);
 }
 
 void NGGridSizingTrackCollection::BuildSets(
@@ -1119,31 +1127,30 @@ void NGGridSizingTrackCollection::BuildSets(
 }
 
 // https://drafts.csswg.org/css-grid-2/#algo-init
-void NGGridSizingTrackCollection::InitializeSets(LayoutUnit grid_available_size,
-                                                 LayoutUnit gutter_size) {
-  gutter_size_ = gutter_size;
+void NGGridSizingTrackCollection::InitializeSets(
+    LayoutUnit grid_available_size) {
   for (auto& set : sets_) {
     const auto& track_size = set.track_size;
 
     if (track_size.IsFitContent()) {
       // Indefinite lengths cannot occur, as they must be normalized to 'auto'.
-      DCHECK(!track_size.FitContentTrackBreadth().HasPercentage() ||
+      DCHECK(!track_size.FitContentTrackBreadth().IsPercentOrCalc() ||
              grid_available_size != kIndefiniteSize);
 
       LayoutUnit fit_content_argument = MinimumValueForLength(
-          track_size.FitContentTrackBreadth().length(), grid_available_size);
+          track_size.FitContentTrackBreadth(), grid_available_size);
       set.fit_content_limit = fit_content_argument * set.track_count;
     }
 
     if (track_size.HasFixedMaxTrackBreadth()) {
-      DCHECK(!track_size.MaxTrackBreadth().HasPercentage() ||
+      DCHECK(!track_size.MaxTrackBreadth().IsPercentOrCalc() ||
              grid_available_size != kIndefiniteSize);
 
       // A fixed sizing function: Resolve to an absolute length and use that
       // size as the track’s initial growth limit; if the growth limit is less
       // than the base size, increase the growth limit to match the base size.
       LayoutUnit fixed_max_breadth = MinimumValueForLength(
-          track_size.MaxTrackBreadth().length(), grid_available_size);
+          track_size.MaxTrackBreadth(), grid_available_size);
       set.growth_limit = fixed_max_breadth * set.track_count;
     } else {
       // An intrinsic or flexible sizing function: Use an initial growth limit
@@ -1152,13 +1159,13 @@ void NGGridSizingTrackCollection::InitializeSets(LayoutUnit grid_available_size,
     }
 
     if (track_size.HasFixedMinTrackBreadth()) {
-      DCHECK(!track_size.MinTrackBreadth().HasPercentage() ||
+      DCHECK(!track_size.MinTrackBreadth().IsPercentOrCalc() ||
              grid_available_size != kIndefiniteSize);
 
       // A fixed sizing function: Resolve to an absolute length and use that
       // size as the track’s initial base size.
       LayoutUnit fixed_min_breadth = MinimumValueForLength(
-          track_size.MinTrackBreadth().length(), grid_available_size);
+          track_size.MinTrackBreadth(), grid_available_size);
       set.InitBaseSize(fixed_min_breadth * set.track_count);
     } else {
       // An intrinsic sizing function: Use an initial base size of zero.

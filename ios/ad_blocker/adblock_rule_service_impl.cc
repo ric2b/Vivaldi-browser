@@ -13,6 +13,7 @@
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "ios/ad_blocker/adblock_content_injection_handler.h"
 #include "ios/ad_blocker/adblock_content_rule_list_provider.h"
 #include "ios/web/public/browser_state.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -48,6 +49,11 @@ void RuleServiceImpl::Load() {
   file_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+  resources_.emplace(file_task_runner_.get());
+
+  content_injection_handler_ =
+      ContentInjectionHandler::Create(browser_state_, &resources_.value());
+
   state_store_.emplace(browser_state_->GetStatePath(), this, file_task_runner_);
 
   auto load_data = std::make_unique<LoadData>();
@@ -63,7 +69,7 @@ void RuleServiceImpl::Load() {
         ->loading_content_rule_list_providers[static_cast<size_t>(group)] =
         AdBlockerContentRuleListProvider::Create(
             browser_state_, group, on_loading_done,
-            base::BindRepeating(&RuleServiceImpl::OnRulesApplied,
+            base::BindRepeating(&RuleServiceImpl::OnDoneApplyingRules,
                                 weak_ptr_factory_.GetWeakPtr(), group));
   }
 
@@ -134,18 +140,25 @@ void RuleServiceImpl::OnStateLoaded(std::unique_ptr<LoadData> load_data) {
         std::move(
             load_data->loading_content_rule_list_providers[static_cast<size_t>(
                 group)]),
-        group, browser_state_->GetStatePath(),
+        content_injection_handler_.get(), group, browser_state_->GetStatePath(),
         load_result.index_checksums[static_cast<size_t>(group)],
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexChanged,
                             base::Unretained(this), group),
         base::BindRepeating(&RuleManager::OnCompiledRulesReadFailCallback,
                             base::Unretained(&rule_manager_.value())),
+        base::BindRepeating(&RuleServiceImpl::OnStartApplyingRules,
+                            base::Unretained(this), group),
         file_task_runner_);
   }
 
   is_loaded_ = true;
   for (RuleService::Observer& observer : observers_)
     observer.OnRuleServiceStateLoaded(this);
+}
+
+bool RuleServiceImpl::IsApplyingIosRules(RuleGroup group) {
+  return organized_rules_manager_[static_cast<size_t>(group)]
+      ->IsApplyingRules();
 }
 
 std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
@@ -188,9 +201,22 @@ void RuleServiceImpl::OnRulesIndexChanged(
     observer.OnRulesIndexBuilt(group, build_result);
 }
 
-void RuleServiceImpl::OnRulesApplied(RuleGroup group) {
-  for (RuleService::Observer& observer : observers_)
-    observer.OnIosRulesApplied(group);
+void RuleServiceImpl::OnStartApplyingRules(RuleGroup group) {
+  for (RuleService::Observer& observer : observers_) {
+    observer.OnStartApplyingIosRules(group);
+  }
+}
+
+void RuleServiceImpl::OnDoneApplyingRules(RuleGroup group) {
+  // We receive this signal when the AdBlockerContentRuleListProvider is done
+  // with all processing, but the OrganizedRulesManager may have started with
+  // new processing that has not yet reached the
+  // AdBlockerContentRuleListProvider. We block the signal when that happens.
+  if (IsApplyingIosRules(group))
+    return;
+  for (RuleService::Observer& observer : observers_) {
+    observer.OnDoneApplyingIosRules(group);
+  }
 }
 
 }  // namespace adblock_filter

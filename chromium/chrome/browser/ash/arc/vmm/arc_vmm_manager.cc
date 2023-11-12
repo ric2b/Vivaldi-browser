@@ -140,7 +140,10 @@ void ArcVmmManager::SetSwapState(SwapState state) {
     return;
   }
 
-  if (latest_swap_state_ == state &&
+  // Do not re-send "enable" signal if the timer is waiting for resend it. But
+  // allow "force-enable" bypass this restriction and redo the entire swap
+  // process.
+  if (latest_swap_state_ == SwapState::ENABLE && latest_swap_state_ == state &&
       enabled_state_heartbeat_timer_.IsRunning()) {
     // The state is not update, do not send request now but leave it to heart
     // beat timer.
@@ -241,7 +244,9 @@ void ArcVmmManager::SendSwapRequest(
       base::BindOnce(
           [](vm_tools::concierge::SwapOperation op, base::OnceClosure cb,
              absl::optional<vm_tools::concierge::SwapVmResponse> response) {
-            if (!response->success()) {
+            if (!response.has_value()) {
+              LOG(ERROR) << "Failed to receive SwapVm response.";
+            } else if (!response->success()) {
               LOG(ERROR) << "Failed to send request: "
                          << vm_tools::concierge::SwapOperation_Name(op)
                          << ". Reason: " << response->failure_reason();
@@ -289,7 +294,9 @@ void ArcVmmManager::SendAggressiveBalloonRequest(
           [](bool enabled, base::OnceClosure cb,
              absl::optional<vm_tools::concierge::AggressiveBalloonResponse>
                  response) {
-            if (!response->success()) {
+            if (!response.has_value()) {
+              LOG(ERROR) << "Failed to receive aggressive ballon response.";
+            } else if (!response->success()) {
               LOG(ERROR) << "Failed to send aggressive balloon request: "
                          << enabled
                          << ". Reason: " << response->failure_reason();

@@ -8,12 +8,6 @@
 #import "ios/chrome/browser/bring_android_tabs/bring_android_tabs_to_ios_service.h"
 #import "ios/chrome/browser/bring_android_tabs/metrics.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions_util.h"
-#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-#import "ios/chrome/browser/url_loading/url_loading_params.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @implementation BringAndroidTabsPromptMediator {
   // Keyed service to retrieve active tabs from Android.
@@ -53,10 +47,7 @@
 
 - (void)bringAndroidTabsPromptViewControllerDidTapOpenAllButton {
   [self onPromptDisappear:bring_android_tabs::PromptActionType::kOpenTabs];
-  for (size_t idx = 0; idx < _tabCount; idx++) {
-    OpenDistantTabInBackground(_bringAndroidTabsService->GetTabAtIndex(idx), NO,
-                               _URLLoader, UrlLoadStrategy::NORMAL);
-  }
+  _bringAndroidTabsService->OpenAllTabs(_URLLoader);
 }
 
 - (void)bringAndroidTabsPromptViewControllerDidTapReviewButton {

@@ -249,6 +249,7 @@ bool CanShowDropdownHere(int item_height,
       element_bounds.bottom() > content_area_bounds.y() &&
       element_bounds.bottom() <= content_area_bounds.bottom();
 
+  // TODO(crbug.com/1455336): Test the space on the left/right or forbid it explicitly.
   return (enough_space_for_one_item_in_content_area_above_element &&
           element_top_is_within_content_area_bounds) ||
          (enough_space_for_one_item_in_content_area_below_element &&
@@ -426,12 +427,10 @@ bool IsPopupPlaceableOnSideOfElement(const gfx::Rect& content_area_bounds,
 views::BubbleArrowSide GetOptimalArrowSide(
     const gfx::Rect& content_area_bounds,
     const gfx::Rect& element_bounds,
-    const gfx::Size& popup_preferred_size) {
+    const gfx::Size& popup_preferred_size,
+    base::span<const views::BubbleArrowSide> popup_preferred_sides) {
   // Probe for a side of the element on which the popup can be shown entirely.
-  const std::vector<views::BubbleArrowSide> sides_by_preference(
-      {views::BubbleArrowSide::kTop, views::BubbleArrowSide::kBottom,
-       views::BubbleArrowSide::kLeft, views::BubbleArrowSide::kRight});
-  for (views::BubbleArrowSide possible_side : sides_by_preference) {
+  for (views::BubbleArrowSide possible_side : popup_preferred_sides) {
     if (IsPopupPlaceableOnSideOfElement(
             content_area_bounds, element_bounds, popup_preferred_size,
             BubbleBorder::kVisibleArrowLength, possible_side) &&
@@ -459,11 +458,13 @@ BubbleBorder::Arrow GetOptimalPopupPlacement(
     int scrollbar_width,
     int maximum_pixel_offset_to_center,
     int maximum_width_percentage_to_center,
-    gfx::Rect& popup_bounds) {
+    gfx::Rect& popup_bounds,
+    base::span<const views::BubbleArrowSide> popup_preferred_sides) {
   // Determine the best side of the element to put the popup and get a
   // corresponding arrow.
-  views::BubbleArrowSide side = GetOptimalArrowSide(
-      content_area_bounds, element_bounds, popup_preferred_size);
+  views::BubbleArrowSide side =
+      GetOptimalArrowSide(content_area_bounds, element_bounds,
+                          popup_preferred_size, popup_preferred_sides);
   BubbleBorder::Arrow arrow =
       GetBubbleArrowForBubbleArrowSide(side, right_to_left);
 
@@ -550,19 +551,30 @@ BubbleBorder::Arrow GetOptimalPopupPlacement(
   return arrow;
 }
 
-bool IsFooterFrontendId(PopupItemId frontend_id) {
-  switch (frontend_id) {
+bool IsGroupFillingPopupItemId(PopupItemId popup_item_id) {
+  switch (popup_item_id) {
+    case PopupItemId::kFillFullAddress:
+    case PopupItemId::kFillFullName:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IsFooterPopupItemId(PopupItemId popup_item_id) {
+  switch (popup_item_id) {
     case PopupItemId::kScanCreditCard:
     case PopupItemId::kPasswordAccountStorageEmpty:
     case PopupItemId::kPasswordAccountStorageOptIn:
     case PopupItemId::kPasswordAccountStorageReSignin:
     case PopupItemId::kPasswordAccountStorageOptInAndGenerate:
     case PopupItemId::kShowAccountCards:
-    case PopupItemId::kUseVirtualCard:
     case PopupItemId::kAllSavedPasswordsEntry:
+    case PopupItemId::kFillEverythingFromAddressProfile:
     case PopupItemId::kClearForm:
     case PopupItemId::kAutofillOptions:
     case PopupItemId::kSeePromoCodeDetails:
+    case PopupItemId::kDeleteAddressProfile:
       return true;
     default:
       return false;

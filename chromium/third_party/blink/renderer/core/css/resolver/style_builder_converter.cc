@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/css/css_font_variation_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_auto_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_integer_repeat_value.h"
+#include "third_party/blink/renderer/core/css/css_grid_template_areas_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_math_expression_node.h"
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
@@ -68,7 +69,6 @@
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
-#include "third_party/blink/renderer/core/style/anchor_specifier_value.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/style/coord_box_offset_path_operation.h"
 #include "third_party/blink/renderer/core/style/offset_path_operation.h"
@@ -91,14 +91,17 @@
 
 namespace blink {
 
+const double kFinalStatePercentage = 100.0;
+const double kMiddleStatePercentage = 50.0;
+
 namespace {
 
-static GridLength ConvertGridTrackBreadth(const StyleResolverState& state,
-                                          const CSSValue& value) {
+static Length ConvertGridTrackBreadth(const StyleResolverState& state,
+                                      const CSSValue& value) {
   // Fractional unit.
   auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value);
   if (primitive_value && primitive_value->IsFlex()) {
-    return GridLength(primitive_value->GetDoubleValue());
+    return Length::Flex(primitive_value->GetDoubleValue());
   }
 
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
@@ -157,7 +160,7 @@ scoped_refptr<StyleReflection> StyleBuilderConverter::ConvertBoxReflect(
   return reflection;
 }
 
-scoped_refptr<StyleSVGResource> StyleBuilderConverter::ConvertElementReference(
+StyleSVGResource* StyleBuilderConverter::ConvertElementReference(
     StyleResolverState& state,
     const CSSValue& value) {
   if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
@@ -169,7 +172,8 @@ scoped_refptr<StyleSVGResource> StyleBuilderConverter::ConvertElementReference(
   SVGResource* resource =
       state.GetElementStyleResources().GetSVGResourceFromValue(
           CSSPropertyID::kInvalid, url_value);
-  return StyleSVGResource::Create(resource, url_value.ValueForSerialization());
+  return MakeGarbageCollected<StyleSVGResource>(
+      resource, url_value.ValueForSerialization());
 }
 
 LengthBox StyleBuilderConverter::ConvertClip(StyleResolverState& state,
@@ -182,11 +186,26 @@ LengthBox StyleBuilderConverter::ConvertClip(StyleResolverState& state,
                    ConvertLengthOrAuto(state, *rect.Left()));
 }
 
-scoped_refptr<ClipPathOperation> StyleBuilderConverter::ConvertClipPath(
+ClipPathOperation* StyleBuilderConverter::ConvertClipPath(
     StyleResolverState& state,
     const CSSValue& value) {
-  if (value.IsBasicShapeValue() || value.IsPathValue()) {
-    return ShapeClipPathOperation::Create(BasicShapeForValue(state, value));
+  if (const auto* list = DynamicTo<CSSValueList>(value)) {
+    if (list->First().IsBasicShapeValue() || list->First().IsPathValue()) {
+      const CSSValue& shape_value = list->First();
+      const CSSIdentifierValue* geometry_box_value = nullptr;
+      if (list->length() == 2) {
+        geometry_box_value = DynamicTo<CSSIdentifierValue>(list->Item(1));
+      }
+      // If <geometry-box> is omitted, default to border-box.
+      GeometryBox geometry_box =
+          geometry_box_value ? geometry_box_value->ConvertTo<GeometryBox>()
+                             : GeometryBox::kBorderBox;
+      return MakeGarbageCollected<ShapeClipPathOperation>(
+          BasicShapeForValue(state, shape_value), geometry_box);
+    }
+
+    // TODO(pdr): Support specifying <geometry-box> by itself, without a shape.
+    return nullptr;
   }
 
   if (const auto* url_value = DynamicTo<cssvalue::CSSURIValue>(value)) {
@@ -194,7 +213,7 @@ scoped_refptr<ClipPathOperation> StyleBuilderConverter::ConvertClipPath(
         state.GetElementStyleResources().GetSVGResourceFromValue(
             CSSPropertyID::kClipPath, *url_value);
     // TODO(fs): Doesn't work with external SVG references (crbug.com/109212.)
-    return ReferenceClipPathOperation::Create(
+    return MakeGarbageCollected<ReferenceClipPathOperation>(
         url_value->ValueForSerialization(), resource);
   }
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
@@ -261,8 +280,7 @@ static bool ConvertFontFamilyName(
       }
     } else if (cssValueID == CSSValueID::kSystemUi) {
       family_name = font_family_names::kSystemUi;
-    } else if (RuntimeEnabledFeatures::CSSFontFamilyMathEnabled() &&
-               cssValueID == CSSValueID::kMath) {
+    } else if (cssValueID == CSSValueID::kMath) {
       family_name = font_family_names::kMath;
     }
     // Something went wrong with the conversion or retrieving the name from
@@ -526,9 +544,22 @@ scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertPaletteMix(
     if (cssvalue::CSSColorMixValue::NormalizePercentages(
             palette_mix_value->Percentage1(), palette_mix_value->Percentage2(),
             normalized_percentage, alpha_multiplier)) {
-      return FontPalette::Mix(palette1, palette2, normalized_percentage,
-                              alpha_multiplier, color_space,
-                              hue_interpolation_method);
+      double percentage1 = kMiddleStatePercentage;
+      double percentage2 = kMiddleStatePercentage;
+      if (palette_mix_value->Percentage1() &&
+          palette_mix_value->Percentage2()) {
+        percentage1 = palette_mix_value->Percentage1()->GetDoubleValue();
+        percentage2 = palette_mix_value->Percentage2()->GetDoubleValue();
+      } else if (palette_mix_value->Percentage1()) {
+        percentage1 = palette_mix_value->Percentage1()->GetDoubleValue();
+        percentage2 = kFinalStatePercentage - percentage1;
+      } else if (palette_mix_value->Percentage2()) {
+        percentage2 = palette_mix_value->Percentage2()->GetDoubleValue();
+        percentage1 = kFinalStatePercentage - percentage2;
+      }
+      return FontPalette::Mix(palette1, palette2, percentage1, percentage2,
+                              normalized_percentage, alpha_multiplier,
+                              color_space, hue_interpolation_method);
     }
   }
   return nullptr;
@@ -700,6 +731,7 @@ FontDescription::Size StyleBuilderConverter::ConvertFontSize(
 }
 
 FontSizeAdjust StyleBuilderConverterBase::ConvertFontSizeAdjust(
+    const StyleResolverState& state,
     const CSSValue& value) {
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value && identifier_value->GetValueID() == CSSValueID::kNone) {
@@ -710,6 +742,21 @@ FontSizeAdjust StyleBuilderConverterBase::ConvertFontSizeAdjust(
     return FontBuilder::InitialSizeAdjust();
   }
 
+  float computed_font_size =
+      state.ParentStyle() ? state.ParentStyle()->ComputedFontSize() : 0;
+  const SimpleFontData* font_data =
+      state.ParentStyle() ? state.ParentStyle()->GetFont().PrimaryFont()
+                          : nullptr;
+  if (identifier_value &&
+      identifier_value->GetValueID() == CSSValueID::kFromFont) {
+    absl::optional<float> aspect_value = FontSizeFunctions::FontAspectValue(
+        font_data, FontSizeAdjust::Metric::kExHeight, computed_font_size);
+    return FontSizeAdjust(aspect_value.has_value()
+                              ? aspect_value.value()
+                              : FontSizeAdjust::kFontSizeAdjustNone,
+                          true);
+  }
+
   if (value.IsPrimitiveValue()) {
     const auto& primitive_value = To<CSSPrimitiveValue>(value);
     DCHECK(primitive_value.IsNumber());
@@ -718,15 +765,29 @@ FontSizeAdjust StyleBuilderConverterBase::ConvertFontSizeAdjust(
 
   DCHECK(value.IsValuePair());
   const auto& pair = To<CSSValuePair>(value);
-  return FontSizeAdjust(
-      To<CSSPrimitiveValue>(pair.Second()).GetFloatValue(),
-      To<CSSIdentifierValue>(pair.First()).ConvertTo<FontSizeAdjust::Metric>());
+  auto metric =
+      To<CSSIdentifierValue>(pair.First()).ConvertTo<FontSizeAdjust::Metric>();
+
+  if (pair.Second().IsPrimitiveValue()) {
+    const auto& primitive_value = To<CSSPrimitiveValue>(pair.Second());
+    DCHECK(primitive_value.IsNumber());
+    return FontSizeAdjust(primitive_value.GetFloatValue(), metric);
+  }
+
+  DCHECK(To<CSSIdentifierValue>(pair.Second()).GetValueID() ==
+         CSSValueID::kFromFont);
+  absl::optional<float> aspect_value =
+      FontSizeFunctions::FontAspectValue(font_data, metric, computed_font_size);
+  return FontSizeAdjust(aspect_value.has_value()
+                            ? aspect_value.value()
+                            : FontSizeAdjust::kFontSizeAdjustNone,
+                        metric, true);
 }
 
 FontSizeAdjust StyleBuilderConverter::ConvertFontSizeAdjust(
-    StyleResolverState&,
+    StyleResolverState& state,
     const CSSValue& value) {
-  return StyleBuilderConverterBase::ConvertFontSizeAdjust(value);
+  return StyleBuilderConverterBase::ConvertFontSizeAdjust(state, value);
 }
 
 FontSelectionValue StyleBuilderConverterBase::ConvertFontStretch(
@@ -1273,6 +1334,23 @@ GridPosition StyleBuilderConverter::ConvertGridPosition(StyleResolverState&,
   return position;
 }
 
+// static
+ComputedGridTemplateAreas* StyleBuilderConverter::ConvertGridTemplateAreas(
+    StyleResolverState&,
+    const CSSValue& value) {
+  if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    DCHECK_EQ(identifier_value->GetValueID(), CSSValueID::kNone);
+    return nullptr;
+  }
+
+  const auto& grid_template_areas_value =
+      To<cssvalue::CSSGridTemplateAreasValue>(value);
+  return MakeGarbageCollected<ComputedGridTemplateAreas>(
+      grid_template_areas_value.GridAreaMap(),
+      grid_template_areas_value.RowCount(),
+      grid_template_areas_value.ColumnCount());
+}
+
 GridTrackSize StyleBuilderConverter::ConvertGridTrackSize(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -1288,11 +1366,8 @@ GridTrackSize StyleBuilderConverter::ConvertGridTrackSize(
   }
 
   SECURITY_DCHECK(function.length() == 2);
-  GridLength min_track_breadth(
-      ConvertGridTrackBreadth(state, function.Item(0)));
-  GridLength max_track_breadth(
-      ConvertGridTrackBreadth(state, function.Item(1)));
-  return GridTrackSize(min_track_breadth, max_track_breadth);
+  return GridTrackSize(ConvertGridTrackBreadth(state, function.Item(0)),
+                       ConvertGridTrackBreadth(state, function.Item(1)));
 }
 
 static void ConvertGridLineNamesList(
@@ -1484,31 +1559,6 @@ void StyleBuilderConverter::ConvertGridTrackList(
   // the syntax.
   DCHECK(track_list.RepeaterCount() ||
          computed_grid_track_list.IsSubgriddedAxis());
-}
-
-void StyleBuilderConverter::CreateImplicitNamedGridLinesFromGridArea(
-    const NamedGridAreaMap& named_grid_areas,
-    NamedGridLinesMap& named_grid_lines,
-    GridTrackSizingDirection direction) {
-  for (const auto& named_grid_area_entry : named_grid_areas) {
-    GridSpan area_span = direction == kForRows
-                             ? named_grid_area_entry.value.rows
-                             : named_grid_area_entry.value.columns;
-    {
-      NamedGridLinesMap::AddResult start_result = named_grid_lines.insert(
-          named_grid_area_entry.key + "-start", Vector<wtf_size_t>());
-      start_result.stored_value->value.push_back(area_span.StartLine());
-      std::sort(start_result.stored_value->value.begin(),
-                start_result.stored_value->value.end());
-    }
-    {
-      NamedGridLinesMap::AddResult end_result = named_grid_lines.insert(
-          named_grid_area_entry.key + "-end", Vector<wtf_size_t>());
-      end_result.stored_value->value.push_back(area_span.EndLine());
-      std::sort(end_result.stored_value->value.begin(),
-                end_result.stored_value->value.end());
-    }
-  }
 }
 
 StyleHyphenateLimitChars StyleBuilderConverter::ConvertHyphenateLimitChars(
@@ -1774,6 +1824,12 @@ float StyleBuilderConverter::ConvertNumberOrPercentage(
   return primitive_value.GetFloatValue() / 100.0f;
 }
 
+int StyleBuilderConverter::ConvertInteger(StyleResolverState& state,
+                                          const CSSValue& value) {
+  return To<CSSPrimitiveValue>(value).ComputeInteger(
+      state.CssToLengthConversionData());
+}
+
 float StyleBuilderConverter::ConvertAlpha(StyleResolverState& state,
                                           const CSSValue& value) {
   return ClampTo<float>(ConvertNumberOrPercentage(state, value), 0, 1);
@@ -1790,9 +1846,21 @@ ScopedCSSName* StyleBuilderConverter::ConvertNoneOrCustomIdent(
   return ConvertCustomIdent(state, value);
 }
 
-ScopedCSSName* StyleBuilderConverter::ConvertCustomIdent(
-    StyleResolverState&,
+ScopedCSSName* StyleBuilderConverter::ConvertNormalOrCustomIdent(
+    StyleResolverState& state,
     const CSSValue& value) {
+  DCHECK(value.IsScopedValue());
+  if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    DCHECK_EQ(identifier_value->GetValueID(), CSSValueID::kNormal);
+    return nullptr;
+  }
+  return ConvertCustomIdent(state, value);
+}
+
+ScopedCSSName* StyleBuilderConverter::ConvertCustomIdent(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  state.SetHasTreeScopedReference();
   const CSSCustomIdentValue& custom_ident = To<CSSCustomIdentValue>(value);
   return MakeGarbageCollected<ScopedCSSName>(custom_ident.Value(),
                                              custom_ident.GetTreeScope());
@@ -1806,32 +1874,23 @@ ScopedCSSName* StyleBuilderConverter::ConvertAnchorDefault(
     DCHECK_EQ(identifier_value->GetValueID(), CSSValueID::kImplicit);
     return nullptr;
   }
-  const CSSCustomIdentValue& custom_ident = To<CSSCustomIdentValue>(value);
-  return MakeGarbageCollected<ScopedCSSName>(custom_ident.Value(),
-                                             custom_ident.GetTreeScope());
+  return ConvertCustomIdent(state, value);
 }
 
-AnchorSpecifierValue* StyleBuilderConverter::ConvertAnchorScroll(
+ScopedCSSNameList* StyleBuilderConverter::ConvertAnchorName(
     StyleResolverState& state,
     const CSSValue& value) {
   DCHECK(value.IsScopedValue());
   if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
-    switch (identifier_value->GetValueID()) {
-      case CSSValueID::kNone:
-        return nullptr;
-      case CSSValueID::kDefault:
-        return AnchorSpecifierValue::Default();
-      case CSSValueID::kImplicit:
-        return AnchorSpecifierValue::Implicit();
-      default:
-        NOTREACHED();
-        return nullptr;
-    }
+    DCHECK_EQ(identifier_value->GetValueID(), CSSValueID::kNone);
+    return nullptr;
   }
-  const CSSCustomIdentValue& custom_ident = To<CSSCustomIdentValue>(value);
-  return MakeGarbageCollected<AnchorSpecifierValue>(
-      *MakeGarbageCollected<ScopedCSSName>(custom_ident.Value(),
-                                           custom_ident.GetTreeScope()));
+  DCHECK(value.IsBaseValueList());
+  HeapVector<Member<const ScopedCSSName>> names;
+  for (const Member<const CSSValue>& item : To<CSSValueList>(value)) {
+    names.push_back(ConvertCustomIdent(state, *item));
+  }
+  return MakeGarbageCollected<ScopedCSSNameList>(std::move(names));
 }
 
 StyleInitialLetter StyleBuilderConverter::ConvertInitialLetter(
@@ -2529,29 +2588,29 @@ scoped_refptr<StylePath> StyleBuilderConverter::ConvertPathOrNone(
 
 namespace {
 
-scoped_refptr<OffsetPathOperation> ConvertOffsetPathValueToOperation(
+OffsetPathOperation* ConvertOffsetPathValueToOperation(
     StyleResolverState& state,
     const CSSValue& value,
     CoordBox coord_box) {
   if (value.IsRayValue() || value.IsBasicShapeValue()) {
-    return ShapeOffsetPathOperation::Create(BasicShapeForValue(state, value),
-                                            coord_box);
+    return MakeGarbageCollected<ShapeOffsetPathOperation>(
+        BasicShapeForValue(state, value), coord_box);
   }
   if (auto* path_value = DynamicTo<cssvalue::CSSPathValue>(value)) {
-    return ShapeOffsetPathOperation::Create(path_value->GetStylePath(),
-                                            coord_box);
+    return MakeGarbageCollected<ShapeOffsetPathOperation>(
+        path_value->GetStylePath(), coord_box);
   }
   const auto& url_value = To<cssvalue::CSSURIValue>(value);
   SVGResource* resource =
       state.GetElementStyleResources().GetSVGResourceFromValue(
           CSSPropertyID::kOffsetPath, url_value);
-  return ReferenceOffsetPathOperation::Create(url_value.ValueForSerialization(),
-                                              resource, coord_box);
+  return MakeGarbageCollected<ReferenceOffsetPathOperation>(
+      url_value.ValueForSerialization(), resource, coord_box);
 }
 
 }  // namespace
 
-scoped_refptr<OffsetPathOperation> StyleBuilderConverter::ConvertOffsetPath(
+OffsetPathOperation* StyleBuilderConverter::ConvertOffsetPath(
     StyleResolverState& state,
     const CSSValue& value) {
   if (value.IsIdentifierValue()) {
@@ -2564,7 +2623,7 @@ scoped_refptr<OffsetPathOperation> StyleBuilderConverter::ConvertOffsetPath(
     // If <offset-path> is omitted, it defaults to inset(0 round X),
     // where X is the value of border-radius on the element that
     // establishes the containing block for this element.
-    return CoordBoxOffsetPathOperation::Create(
+    return MakeGarbageCollected<CoordBoxOffsetPathOperation>(
         identifier->ConvertTo<CoordBox>());
   }
   // If <coord-box> is omitted, it defaults to border-box.
@@ -2899,8 +2958,7 @@ StyleIntrinsicLength StyleBuilderConverter::ConvertIntrinsicDimension(
   if (auto* primitive_value = DynamicTo<CSSPrimitiveValue>(list->Item(0))) {
     DCHECK_EQ(list->length(), 1u);
     return StyleIntrinsicLength(
-        /*has_auto=*/false,
-        ConvertLayoutUnit(state, *primitive_value).ToDouble());
+        /*has_auto=*/false, ConvertLength(state, *primitive_value));
   }
 
   // The rest of the syntax will have "auto" as the first keyword.
@@ -2912,8 +2970,7 @@ StyleIntrinsicLength StyleBuilderConverter::ConvertIntrinsicDimension(
   // Handle "auto && <length>"
   if (auto* primitive_value = DynamicTo<CSSPrimitiveValue>(list->Item(1))) {
     return StyleIntrinsicLength(
-        /*has_auto=*/true,
-        ConvertLayoutUnit(state, *primitive_value).ToDouble());
+        /*has_auto=*/true, ConvertLength(state, *primitive_value));
   }
 
   // The only grammar left is "auto && none".

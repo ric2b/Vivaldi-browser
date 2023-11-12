@@ -112,7 +112,7 @@ class TestAppBannerManager : public AppBannerManagerAndroid {
     ambient_badge_test_->WaitForState(target_badge_state_,
                                       std::move(on_badge_done_));
     ambient_badge_test_->MaybeShow(
-        validated_url_, GetAppName(),
+        validated_url_, GetAppName(), GetAppIdentifier(),
         CreateAddToHomescreenParams(InstallableMetrics::GetInstallSource(
             web_contents(), InstallTrigger::AMBIENT_BADGE)),
         base::BindOnce(&AppBannerManagerAndroid::ShowBannerFromBadge,
@@ -158,8 +158,10 @@ class AmbientBadgeManagerBrowserTest : public AndroidBrowserTest {
   }
 
   virtual void SetUpFeatureList() {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kAmbientBadgeSuppressFirstVisit);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kBlockInstallPromptIfIgnoreRecently},
+        /*disabled_features=*/{features::kAmbientBadgeSuppressFirstVisit,
+                               features::kInstallPromptSegmentation});
   }
 
   void ResetEngagementForUrl(const GURL& url, double score) {
@@ -234,6 +236,32 @@ IN_PROC_BROWSER_TEST_F(AmbientBadgeManagerBrowserTest,
           AmbientBadgeManager::State::kShowing);
 }
 
+IN_PROC_BROWSER_TEST_F(AmbientBadgeManagerBrowserTest,
+                       BlockedIfIgnoredRecently) {
+  auto app_banner_manager =
+      std::make_unique<TestAppBannerManager>(web_contents());
+
+  RunTest(app_banner_manager.get(),
+          embedded_test_server()->GetURL("/banners/manifest_test_page.html"),
+          AmbientBadgeManager::State::kShowing);
+
+  // Explicitly dismiss the badge.
+  app_banner_manager->GetBadgeManagerForTest()->BadgeIgnored();  // IN-TEST
+  EXPECT_EQ(AmbientBadgeManager::State::kDismissed,
+            app_banner_manager->GetBadgeManagerForTest()->state());  // IN-TEST
+
+  // Badge blocked because it was recently dismissed.
+  RunTest(app_banner_manager.get(),
+          embedded_test_server()->GetURL("/banners/manifest_test_page.html"),
+          AmbientBadgeManager::State::kBlocked);
+
+  // Badge can show again after 8 days.
+  webapps::AppBannerManager::SetTimeDeltaForTesting(8);
+  RunTest(app_banner_manager.get(),
+          embedded_test_server()->GetURL("/banners/manifest_test_page.html"),
+          AmbientBadgeManager::State::kShowing);
+}
+
 class AmbientBadgeManagerSecondVisitTest
     : public AmbientBadgeManagerBrowserTest {
  public:
@@ -247,8 +275,9 @@ class AmbientBadgeManagerSecondVisitTest
   ~AmbientBadgeManagerSecondVisitTest() override = default;
 
   void SetUpFeatureList() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAmbientBadgeSuppressFirstVisit);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kAmbientBadgeSuppressFirstVisit},
+        /*disabled_features=*/{features::kInstallPromptSegmentation});
   }
 };
 

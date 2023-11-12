@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_mediator.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
@@ -14,12 +14,15 @@
 #import "base/time/time.h"
 #import "base/version.h"
 #import "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#import "components/password_manager/core/browser/password_sync_util.h"
 #import "components/password_manager/core/browser/ui/password_check_referrer.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/prefs/pref_service.h"
 #import "components/safe_browsing/core/common/features.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/safety_check/safety_check.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "components/version_info/version_info.h"
 #import "ios/chrome/browser/omaha/omaha_service.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
@@ -29,13 +32,13 @@
 #import "ios/chrome/browser/passwords/password_store_observer_bridge.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_check_item.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_constants.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_consumer.h"
@@ -60,10 +63,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/time_format.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using l10n_util::GetNSString;
 using password_manager::WarningType;
@@ -170,10 +169,13 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
 @property(nonatomic, assign) AuthenticationService* authService;
 
 // Service to check if passwords are synced.
-@property(nonatomic, assign) SyncSetupService* syncService;
+@property(nonatomic, assign) syncer::SyncService* syncService;
 
 // Service used to check user preference values.
 @property(nonatomic, assign, readonly) PrefService* userPrefService;
+
+// Service used to check local preference values.
+@property(nonatomic, assign, readonly) PrefService* localPrefService;
 
 // When the check was started.
 @property(nonatomic, assign) base::Time checkStartTime;
@@ -185,19 +187,22 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
 @synthesize passwordCheckManager = _passwordCheckManager;
 
 - (instancetype)initWithUserPrefService:(PrefService*)userPrefService
+                            localPrefService:(PrefService*)localPrefService
                    passwordCheckManager:
                        (scoped_refptr<IOSChromePasswordCheckManager>)
                            passwordCheckManager
                             authService:(AuthenticationService*)authService
-                            syncService:(SyncSetupService*)syncService {
+                            syncService:(syncer::SyncService*)syncService {
   self = [super init];
   if (self) {
     DCHECK(userPrefService);
+    DCHECK(localPrefService);
     DCHECK(passwordCheckManager);
     DCHECK(authService);
     DCHECK(syncService);
 
     _userPrefService = userPrefService;
+    _localPrefService = localPrefService;
     _authService = authService;
     _syncService = syncService;
 
@@ -706,8 +711,9 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
 
 // Computes whether user is capable to run password check in Google Account.
 - (BOOL)canUseAccountPasswordCheckup {
-  return self.syncService->IsSyncFeatureEnabled() &&
-         !self.syncService->IsEncryptEverythingEnabled();
+  return password_manager::sync_util::GetAccountForSaving(self.userPrefService,
+                                                          self.syncService) &&
+         !self.syncService->GetUserSettings()->IsEncryptEverythingEnabled();
 }
 
 // Configures check error info with a link for popovers.
@@ -763,6 +769,10 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
 - (void)startCheck {
   // Otherwise start a check.
   self.checkStartTime = base::Time::Now();
+
+  if (IsSafetyCheckMagicStackEnabled()) {
+    [self updateTimestampOfLastRun];
+  }
 
   // Record the current state of the checks.
   self.previousUpdateCheckRowState = self.updateCheckRowState;
@@ -869,6 +879,11 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
       (FoundInsecurePasswords(self.passwordCheckRowState));
   if (self.checkDidRun && issuesFound) {
     [self updateTimestampOfLastCheck];
+
+    if (IsSafetyCheckMagicStackEnabled()) {
+      [self updateTimestampOfLastRun];
+    }
+
     self.checkDidRun = NO;
   } else if (self.checkDidRun && !issuesFound) {
     // Clear the timestamp if the last check found no issues.
@@ -876,6 +891,10 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
         setDouble:base::Time().ToDoubleT()
            forKey:kTimestampOfLastIssueFoundKey];
     self.checkDidRun = NO;
+
+    if (IsSafetyCheckMagicStackEnabled()) {
+      [self updateTimestampOfLastRun];
+    }
   }
   // If no checks are still running, reset `checkStartItem`.
   self.checkStartState = CheckStartStateDefault;
@@ -1296,6 +1315,15 @@ void ResetSettingsCheckItem(SettingsCheckItem* item) {
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   [defaults setDouble:base::Time::Now().ToDoubleT()
                forKey:kTimestampOfLastIssueFoundKey];
+}
+
+// Updates the timestamp of when the safety check was most recently run.
+//
+// TODO(crbug.com/1481230): Remove this method once Settings Safety Check is
+// refactored to use the new Safety Check Manager.
+- (void)updateTimestampOfLastRun {
+  _localPrefService->SetTime(prefs::kIosSettingsSafetyCheckLastRunTime,
+                             base::Time::Now());
 }
 
 // Shows the timestamp if the last safety check found issues.

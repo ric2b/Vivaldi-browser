@@ -85,9 +85,8 @@ LayoutBlockFlow::LayoutBlockFlow(ContainerNode* node) : LayoutBlock(node) {
 
 LayoutBlockFlow::~LayoutBlockFlow() = default;
 
-LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(
-    Document* document,
-    scoped_refptr<const ComputedStyle> style) {
+LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(Document* document,
+                                                  const ComputedStyle* style) {
   auto* layout_block_flow = MakeGarbageCollected<LayoutNGBlockFlow>(nullptr);
   layout_block_flow->SetDocumentForAnonymous(document);
   layout_block_flow->SetStyle(style);
@@ -161,14 +160,15 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats(
 
 void LayoutBlockFlow::ComputeVisualOverflow() {
   NOT_DESTROYED();
-  DCHECK(!SelfNeedsLayout());
+  DCHECK(!SelfNeedsFullLayout());
 
-  LayoutRect previous_visual_overflow_rect = VisualOverflowRectAllowingUnset();
+  PhysicalRect previous_visual_overflow_rect =
+      PhysicalVisualOverflowRectAllowingUnset();
   ClearVisualOverflow();
   AddVisualOverflowFromChildren();
   AddVisualEffectOverflow();
 
-  if (VisualOverflowRect() != previous_visual_overflow_rect) {
+  if (PhysicalVisualOverflowRect() != previous_visual_overflow_rect) {
     InvalidateIntersectionObserverCachedRects();
     SetShouldCheckForPaintInvalidation();
     GetFrameView()->SetIntersectionObservationState(LocalFrameView::kDesired);
@@ -277,7 +277,7 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
 
 static bool IsMergeableAnonymousBlock(const LayoutBlockFlow* block) {
   return block->IsAnonymousBlock() && !block->BeingDestroyed() &&
-         !block->IsRubyRun() && !block->IsRubyBase();
+         !block->IsRubyColumn() && !block->IsRubyBase();
 }
 
 void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
@@ -371,19 +371,17 @@ void LayoutBlockFlow::ChildBecameFloatingOrOutOfFlow(LayoutBox* child) {
   MakeChildrenInlineIfPossible();
 
   // Reparent the child to an adjacent anonymous block if one is available.
-  LayoutObject* prev = child->PreviousSibling();
-  auto* new_container = DynamicTo<LayoutBlockFlow>(prev);
-  if (prev && prev->IsAnonymousBlock() && new_container) {
-    MoveChildTo(new_container, child, nullptr, false);
+  auto* prev = DynamicTo<LayoutBlockFlow>(child->PreviousSibling());
+  if (prev && prev->IsAnonymousBlock()) {
+    MoveChildTo(prev, child, nullptr, false);
     // The anonymous block we've moved to may now be adjacent to former siblings
     // of ours that it can contain also.
-    new_container->ReparentSubsequentFloatingOrOutOfFlowSiblings();
+    prev->ReparentSubsequentFloatingOrOutOfFlowSiblings();
     return;
   }
-  LayoutObject* next = child->NextSibling();
-  new_container = DynamicTo<LayoutBlockFlow>(next);
-  if (next && next->IsAnonymousBlock() && next->IsLayoutBlockFlow()) {
-    MoveChildTo(new_container, child, new_container->FirstChild(), false);
+  auto* next = DynamicTo<LayoutBlockFlow>(child->NextSibling());
+  if (next && next->IsAnonymousBlock()) {
+    MoveChildTo(next, child, next->FirstChild(), false);
   }
 }
 
@@ -394,10 +392,11 @@ static bool AllowsCollapseAnonymousBlockChild(const LayoutBlockFlow& parent,
   // destroyed. See crbug.com/282088
   if (child.BeingDestroyed())
     return false;
-  // Ruby elements use anonymous wrappers for ruby runs and ruby bases by
+  // Ruby elements use anonymous wrappers for ruby columns and ruby bases by
   // design, so we don't remove them.
-  if (child.IsRubyRun() || child.IsRubyBase())
+  if (child.IsRubyColumn() || child.IsRubyBase()) {
     return false;
+  }
   if (IsA<LayoutMultiColumnFlowThread>(parent) &&
       parent.Parent()->IsLayoutNGObject() && child.ChildrenInline()) {
     // The test[1] reaches here.
@@ -526,10 +525,11 @@ void LayoutBlockFlow::MakeChildrenInlineIfPossible() {
     // siblings underneath them.
     if (!child->ChildrenInline())
       return;
-    // Ruby elements use anonymous wrappers for ruby runs and ruby bases by
+    // Ruby elements use anonymous wrappers for ruby columns and ruby bases by
     // design, so we don't remove them.
-    if (child->IsRubyRun() || child->IsRubyBase())
+    if (child->IsRubyColumn() || child->IsRubyBase()) {
       return;
+    }
 
     blocks_to_remove.push_back(child_block_flow);
   }

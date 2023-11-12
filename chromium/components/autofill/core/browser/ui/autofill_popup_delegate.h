@@ -10,15 +10,10 @@
 #include "base/functional/callback_forward.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/common/aliases.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
-namespace password_manager {
-class PasswordManagerDriver;
-}
-
 namespace autofill {
-
-class AutofillDriver;
 
 // An interface for interaction with AutofillPopupController. Will be notified
 // of events by the controller.
@@ -27,20 +22,23 @@ class AutofillPopupDelegate {
   // Called when the Autofill popup is shown.
   virtual void OnPopupShown() = 0;
 
-  // Called when the Autofill popup is hidden.
+  // Called when the Autofill popup is hidden. This may also get called if the
+  // popup was never shown at all, e.g. because of insufficient space.
   virtual void OnPopupHidden() = 0;
-
-  virtual void OnPopupSuppressed() = 0;
 
   // Called when the autofill `suggestion` has been temporarily selected (e.g.,
   // hovered).
-  virtual void DidSelectSuggestion(const Suggestion& suggestion) = 0;
+  virtual void DidSelectSuggestion(
+      const Suggestion& suggestion,
+      AutofillSuggestionTriggerSource trigger_source) = 0;
 
   // Informs the delegate that a row in the popup has been chosen. |suggestion|
   // is the suggestion that was chosen in the popup. |position| refers to the
   // index of the suggestion in the suggestion list.
-  virtual void DidAcceptSuggestion(const Suggestion& suggestion,
-                                   int position) = 0;
+  virtual void DidAcceptSuggestion(
+      const Suggestion& suggestion,
+      int position,
+      AutofillSuggestionTriggerSource trigger_source) = 0;
 
   // Returns whether the given value can be deleted, and if true,
   // fills out |title| and |body|.
@@ -61,11 +59,6 @@ class AutofillPopupDelegate {
 
   // Returns the type of the popup being shown.
   virtual PopupType GetPopupType() const = 0;
-
-  // Returns the associated AutofillDriver.
-  virtual absl::variant<AutofillDriver*,
-                        password_manager::PasswordManagerDriver*>
-  GetDriver() = 0;
 
   // Returns the ax node id associated with the current web contents' element
   // who has a controller relation to the current autofill popup.

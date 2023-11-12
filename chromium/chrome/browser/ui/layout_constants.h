@@ -50,6 +50,9 @@ enum LayoutConstant {
   // The internal padding to use inside children of the location bar.
   LOCATION_BAR_CHILD_INTERIOR_PADDING,
 
+  // The corner radius to use for children of the location bar.
+  LOCATION_BAR_CHILD_CORNER_RADIUS,
+
   // The vertical and horizontal padding inside the border.
   LOCATION_BAR_ELEMENT_PADDING,
 
@@ -73,6 +76,9 @@ enum LayoutConstant {
   // either `LOCATION_BAR_LEADING_ICON_SIZE` or
   // `LOCATION_BAR_TRAILING_ICON_SIZE`
   LOCATION_BAR_ICON_SIZE,
+
+  // The size of icons within chips inside the LocationBar.
+  LOCATION_BAR_CHIP_ICON_SIZE,
 
   // The size of the leading icons used inside the LocationBar.
   LOCATION_BAR_LEADING_ICON_SIZE,
@@ -100,6 +106,13 @@ enum LayoutConstant {
   // slightly larger than the apparent height of the tab, as the top stroke is
   // drawn as a 1-px line flush with the bottom of the tab's topmost DIP.
   TAB_HEIGHT,
+
+  // The total tab strip height, including all interior padding.
+  TAB_STRIP_HEIGHT,
+
+  // The padding value shared between the area above the tab, the bottom of the
+  // detached tab, and on all sides of the controls padding.
+  TAB_STRIP_PADDING,
 
   // The height of a separator in the tabstrip.
   TAB_SEPARATOR_HEIGHT,

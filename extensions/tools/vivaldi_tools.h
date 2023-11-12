@@ -7,7 +7,7 @@
 #include <string>
 
 #include "base/values.h"
-#include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/common/input/native_web_keyboard_event.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/geometry/rect_f.h"
 

@@ -23,6 +23,7 @@ import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
@@ -67,6 +68,7 @@ import org.chromium.components.offline_items_collection.OpenParams;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
 import org.chromium.url.GURL;
@@ -243,8 +245,7 @@ public class DownloadUtils {
      */
     public static boolean shouldShowPaginationHeaders() {
         return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
-                || ChromeAccessibilityUtil.isHardwareKeyboardAttached(
-                        ContextUtils.getApplicationContext().getResources().getConfiguration());
+                || UiUtils.isHardwareKeyboardAttached();
     }
 
     /**
@@ -430,9 +431,11 @@ public class DownloadUtils {
             }
             String normalizedMimeType = Intent.normalizeMimeType(mimeType);
 
+            // Sharing for media files is disabled on automotive.
+            boolean isAutomotive = BuildInfo.getInstance().isAutomotive;
             Intent intent = MediaViewerUtils.getMediaViewerIntent(fileUri /*displayUri*/,
-                    contentUri /*contentUri*/, normalizedMimeType,
-                    true /* allowExternalAppHandlers */, context);
+                    contentUri /*contentUri*/, normalizedMimeType, !isAutomotive, !isAutomotive,
+                    context);
             IntentHandler.startActivityForTrustedIntent(context, intent);
             service.updateLastAccessTime(downloadGuid, otrProfileID);
             return true;

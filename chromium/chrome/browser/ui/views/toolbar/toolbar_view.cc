@@ -24,6 +24,7 @@
 #include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/share/share_features.h"
@@ -180,8 +181,8 @@ class TabstripLikeBackground : public views::Background {
  private:
   // views::Background:
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
-    bool painted = TopContainerBackground::PaintThemeCustomImage(
-        canvas, view, browser_view_, /*translate_view_coordinates=*/false);
+    bool painted = TopContainerBackground::PaintThemeCustomImage(canvas, view,
+                                                                 browser_view_);
     if (!painted) {
       SkColor frame_color =
           browser_view_->frame()->GetFrameView()->GetFrameColor(
@@ -192,7 +193,6 @@ class TabstripLikeBackground : public views::Background {
 
   const raw_ptr<BrowserView> browser_view_;
 };
-
 }  // namespace
 
 class ToolbarView::ContainerView : public views::View {
@@ -396,7 +396,7 @@ void ToolbarView::Init() {
         gfx::Size(kToolbarDividerWidth, kToolbarDividerHeight));
   }
 
-  if (base::FeatureList::IsEnabled(features::kChromeLabs)) {
+  if (IsChromeLabsEnabled()) {
     chrome_labs_model_ = std::make_unique<ChromeLabsModel>();
     UpdateChromeLabsNewBadgePrefs(browser_->profile(),
                                   chrome_labs_model_.get());
@@ -406,7 +406,7 @@ void ToolbarView::Init() {
               browser_view_, chrome_labs_model_.get()));
 
       show_chrome_labs_button_.Init(
-          chrome_labs_prefs::kBrowserLabsEnabled, prefs,
+          chrome_labs_prefs::kBrowserLabsEnabledEnterprisePolicy, prefs,
           base::BindRepeating(&ToolbarView::OnChromeLabsPrefChanged,
                               base::Unretained(this)));
       // Set the visibility for the button based on initial enterprise policy
@@ -416,8 +416,12 @@ void ToolbarView::Init() {
     }
   }
 
-  battery_saver_button_ = container_view_->AddChildView(
-      std::make_unique<BatterySaverButton>(browser_view_));
+  // Only show the Battery Saver button when it is not controlled by the OS. On
+  // ChromeOS the battery icon in the shelf shows the same information.
+  if (!performance_manager::user_tuning::IsBatterySaverModeManagedByOS()) {
+    battery_saver_button_ = container_view_->AddChildView(
+        std::make_unique<BatterySaverButton>(browser_view_));
+  }
 
   if (cast)
     cast_ = container_view_->AddChildView(std::move(cast));
@@ -453,7 +457,7 @@ void ToolbarView::Init() {
       (browser_->profile()->IsOffTheRecord() &&
        browser_->profile()->GetOTRProfileID().IsCaptivePortal());
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  show_avatar_toolbar_button = !profiles::IsPublicSession();
+  show_avatar_toolbar_button = !profiles::IsManagedGuestSession();
 #endif
   avatar_->SetVisible(show_avatar_toolbar_button);
 
@@ -836,16 +840,12 @@ void ToolbarView::InitLayout() {
   // TODO(dfried): rename this constant.
   const int location_bar_margin = GetLayoutConstant(TOOLBAR_STANDARD_SPACING);
 
-  const views::FlexSpecification account_container_flex_rule =
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
-                               views::MaximumFlexSizeRule::kPreferred)
-          .WithOrder(1);
   const views::FlexSpecification location_bar_flex_rule =
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
                                views::MaximumFlexSizeRule::kUnbounded)
-          .WithOrder(2);
-  constexpr int kSidePanelFlexOrder = 3;
-  constexpr int kExtensionsFlexOrder = 4;
+          .WithOrder(1);
+  constexpr int kSidePanelFlexOrder = 2;
+  constexpr int kExtensionsFlexOrder = 3;
 
   layout_manager_ =
       container_view_->SetLayoutManager(std::make_unique<views::FlexLayout>());

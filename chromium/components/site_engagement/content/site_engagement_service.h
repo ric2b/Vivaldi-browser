@@ -29,10 +29,8 @@ namespace webapps {
 FORWARD_DECLARE_TEST(AppBannerManagerBrowserTest, WebAppBannerNeedsEngagement);
 }
 
-namespace site_settings {
-FORWARD_DECLARE_TEST(SiteSettingsHelperTest,
+FORWARD_DECLARE_TEST(NotificationPermissionReviewServiceTest,
                      PopulateNotificationPermissionReviewData);
-}
 
 namespace content {
 class BrowserContext;
@@ -217,7 +215,7 @@ class SiteEngagementService : public KeyedService,
                            WebAppBannerNeedsEngagement);
   FRIEND_TEST_ALL_PREFIXES(AppBannerSettingsHelperTest, SiteEngagementTrigger);
   FRIEND_TEST_ALL_PREFIXES(HostedAppPWAOnlyTest, EngagementHistogram);
-  FRIEND_TEST_ALL_PREFIXES(site_settings::SiteSettingsHelperTest,
+  FRIEND_TEST_ALL_PREFIXES(::NotificationPermissionReviewServiceTest,
                            PopulateNotificationPermissionReviewData);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -302,7 +300,8 @@ class SiteEngagementService : public KeyedService,
   void AddObserver(SiteEngagementObserver* observer);
   void RemoveObserver(SiteEngagementObserver* observer);
 
-  raw_ptr<content::BrowserContext, DanglingUntriaged> browser_context_;
+  raw_ptr<content::BrowserContext, AcrossTasksDanglingUntriaged>
+      browser_context_;
 
   // The clock used to vend times.
   raw_ptr<base::Clock> clock_;

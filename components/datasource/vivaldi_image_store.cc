@@ -4,6 +4,7 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -33,6 +34,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
+#include "net/base/data_url.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 #include "app/vivaldi_constants.h"
@@ -46,40 +48,58 @@
 
 namespace {
 
-constexpr const char* const kCanonicalExtensions[] = {
-    // clang-format off
-    "bmp",
-    "gif",
-    "jpg",
-    "png",
-    "webp",
-    "svg",
-    // clang-format on
+const std::pair<const char *, VivaldiImageStore::ImageFormat>
+kCanonicalExtensionPairs[] = {
+  // clang-format off
+  { "bmp", VivaldiImageStore::ImageFormat::kBMP },
+  { "gif", VivaldiImageStore::ImageFormat::kGIF },
+  { "jpg", VivaldiImageStore::ImageFormat::kJPEG },
+  { "jpeg", VivaldiImageStore::ImageFormat::kJPEG },
+  { "png", VivaldiImageStore::ImageFormat::kPNG },
+  { "webp", VivaldiImageStore::ImageFormat::kWEBP },
+  { "svg", VivaldiImageStore::ImageFormat::kSVG },
+  { "tiff", VivaldiImageStore::ImageFormat::kTIFF },
+  { nullptr, VivaldiImageStore::ImageFormat(-1) }
+  // clang-format on
 };
 
-static_assert(std::size(kCanonicalExtensions) ==
-                  VivaldiImageStore::kImageFormatCount,
-              "array must be in sync with ImageFormat");
+std::pair<const char *, VivaldiImageStore::ImageFormat >
+kMimeTypePairs[] = {
+  // clang-format off
+  { "image/bmp", VivaldiImageStore::ImageFormat::kBMP },
+  { "image/gif", VivaldiImageStore::ImageFormat::kGIF },
+  { "image/jpeg", VivaldiImageStore::ImageFormat::kJPEG },
+  { "image/jpg", VivaldiImageStore::ImageFormat::kJPEG },
+  { "image/png", VivaldiImageStore::ImageFormat::kPNG },
+  { "image/webp", VivaldiImageStore::ImageFormat::kWEBP },
+  { "image/svg+xml", VivaldiImageStore::ImageFormat::kSVG },
+  { "image/tiff", VivaldiImageStore::ImageFormat::kTIFF },
+  { nullptr, VivaldiImageStore::ImageFormat(-1) }
+  // clang-format on
+};
 
 constexpr const char* GetCanonicalExtension(
     VivaldiImageStore::ImageFormat format) {
-  return kCanonicalExtensions[static_cast<int>(format)];
+  switch(format) {
+    case VivaldiImageStore::ImageFormat::kBMP:
+      return "bmp";
+    case VivaldiImageStore::ImageFormat::kGIF:
+      return "gif";
+    case VivaldiImageStore::ImageFormat::kJPEG:
+      return "jpg";
+    case VivaldiImageStore::ImageFormat::kPNG:
+      return "png";
+    case VivaldiImageStore::ImageFormat::kSVG:
+      return "svg";
+    case VivaldiImageStore::ImageFormat::kWEBP:
+      return "webp";
+    case VivaldiImageStore::ImageFormat::kTIFF:
+      return "tiff";
+  }
+
+  NOTREACHED();
+  return "";
 }
-
-const char* const kAllowedMimeTypes[] = {
-    // clang-format off
-    "image/bmp",
-    "image/gif",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/svg+xml",
-    // clang-format on
-};
-
-static_assert(std::size(kAllowedMimeTypes) ==
-                  VivaldiImageStore::kImageFormatCount,
-              "array must be in sync with ImageFormat");
 
 const char kDatasourceFilemappingFilename[] = "file_mapping.json";
 const char kDatasourceFilemappingTmpFilename[] = "file_mapping.tmp";
@@ -100,6 +120,17 @@ constexpr int kOffscreenWindowHeight = 838;
 // Delay to check for no longer used data url after initialization when the
 // browser is likely idle.
 constexpr base::TimeDelta kDataUrlGCStartupDelay = base::Seconds(60);
+
+class BookmarkSanitizer {
+  public:
+    ~BookmarkSanitizer() = default;
+
+    void AddUpdate(int64_t id, const std::string url) {
+      id_to_url[id] = url;
+    }
+
+    base::flat_map<int64_t, std::string> id_to_url;
+};
 
 }  // namespace
 
@@ -168,12 +199,9 @@ class VivaldiImageStoreFactory : public BrowserContextKeyedServiceFactory {
 std::vector<base::FilePath::StringType>
 VivaldiImageStore::GetAllowedImageExtensions() {
   std::vector<base::FilePath::StringType> extensions;
-  for (int i = 0; i < kImageFormatCount; ++i) {
-    extensions.push_back(
-        base::FilePath::FromASCII(kCanonicalExtensions[i]).value());
-    if (static_cast<ImageFormat>(i) == ImageFormat::kJPEG) {
-      extensions.push_back(base::FilePath::FromASCII("jpeg").value());
-    }
+  for (int i = 0; kCanonicalExtensionPairs[i].first; ++i) {
+    extensions.push_back(base::FilePath::FromASCII(
+          kCanonicalExtensionPairs[i].first).value());
   }
   return extensions;
 }
@@ -181,9 +209,9 @@ VivaldiImageStore::GetAllowedImageExtensions() {
 /* static */
 absl::optional<VivaldiImageStore::ImageFormat>
 VivaldiImageStore::FindFormatForMimeType(base::StringPiece mime_type) {
-  for (int i = 0; i < kImageFormatCount; ++i) {
-    if (mime_type == kAllowedMimeTypes[i]) {
-      return static_cast<ImageFormat>(i);
+  for (int i = 0; kMimeTypePairs[i].first; ++i) {
+    if (mime_type == kMimeTypePairs[i].first) {
+      return kMimeTypePairs[i].second;
     }
   }
   return absl::nullopt;
@@ -197,15 +225,14 @@ VivaldiImageStore::FindFormatForExtension(base::StringPiece file_extension) {
   if (file_extension[0] == '.') {
     file_extension.remove_prefix(1);
   }
-  for (int i = 0; i < kImageFormatCount; ++i) {
+
+  for (int i = 0; kCanonicalExtensionPairs[i].first; ++i) {
     if (base::EqualsCaseInsensitiveASCII(file_extension,
-                                         kCanonicalExtensions[i])) {
-      return static_cast<ImageFormat>(i);
+          kCanonicalExtensionPairs[i].first)) {
+      return kCanonicalExtensionPairs[i].second;
     }
   }
-  if (base::EqualsCaseInsensitiveASCII(file_extension, "jpeg")) {
-    return ImageFormat::kJPEG;
-  }
+
   return absl::nullopt;
 }
 
@@ -429,15 +456,81 @@ void VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(
       base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, api), when);
 }
 
+void VivaldiImageStore::ScheduleThumbnalSanitizer() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  vivaldi_bookmark_kit::RunAfterModelLoad(
+      GetBookmarkModel(), base::BindOnce(
+        &VivaldiImageStore::SanitizeUrlsOnUIThreadWithLoadedBookmarks, this));
+}
+
+void VivaldiImageStore::SanitizeUrlsOnUIThreadWithLoadedBookmarks(
+  bookmarks::BookmarkModel* bookmark_model) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!profile_ || !bookmark_model)
+    return;
+  ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
+      bookmark_model->root_node());
+
+  std::unique_ptr<BookmarkSanitizer> sanitizer = std::make_unique<BookmarkSanitizer>();
+
+  bool need_satitize = false;
+  while (iterator.has_next()) {
+    const bookmarks::BookmarkNode* node = iterator.Next();
+    std::string thumbnail_url = vivaldi_bookmark_kit::GetThumbnail(node);
+
+    if (thumbnail_url.empty())
+      continue;
+
+    GURL gurl(thumbnail_url);
+    std::string mime, charset, data;
+    if (net::DataURL::Parse(gurl, &mime, &charset, &data)) {
+      auto format = FindFormatForMimeType(mime);
+      if (!format) {
+        continue;
+      }
+      need_satitize = true;
+      auto bytes =  base::MakeRefCounted<base::RefCountedBytes>(
+          reinterpret_cast<const uint8_t*>(data.c_str()), data.size());
+
+      StoreImageData(*format, bytes,
+          base::BindOnce([](BookmarkSanitizer* sanitizer,
+              int64_t id, std::string image_url)
+            {
+              sanitizer->AddUpdate(id, image_url);
+            }, sanitizer.get(), node->id())
+          );
+    }
+  }
+
+  if (!need_satitize) {
+    return;
+  }
+
+  sequence_task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::DoNothing(),
+      base::BindOnce([](std::unique_ptr<BookmarkSanitizer> sanitizer,
+          scoped_refptr<VivaldiImageStore> api)
+        {
+          LOG(INFO) << "Sanitizing " << sanitizer->id_to_url.size()
+                    << " bookmarks";
+          bookmarks::BookmarkModel* bookmark_model = api->GetBookmarkModel();
+          for (auto &item: sanitizer->id_to_url) {
+            vivaldi_bookmark_kit::SetBookmarkThumbnail(bookmark_model,
+              item.first, item.second);
+          }
+      }, std::move(sanitizer), scoped_refptr<VivaldiImageStore>(this)));
+}
+
 void VivaldiImageStore::FindUsedUrlsOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   vivaldi_bookmark_kit::RunAfterModelLoad(
       GetBookmarkModel(),
       base::BindOnce(
-          &VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks, this));
+          &VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks, this));
 }
 
-void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
+void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
     bookmarks::BookmarkModel* bookmark_model) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!profile_ || !bookmark_model)
@@ -453,15 +546,19 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
   // Find all data url ids in bookmarks.
   ui::TreeNodeIterator<const bookmarks::BookmarkNode> iterator(
       bookmark_model->root_node());
+
   while (iterator.has_next()) {
     const bookmarks::BookmarkNode* node = iterator.Next();
     std::string thumbnail_url = vivaldi_bookmark_kit::GetThumbnail(node);
     if (ParseDataUrl(thumbnail_url, url_kind, id)) {
-      if (url_kind != VivaldiImageStore::kPathMappingUrl) {
-        used_ids[url_kind].push_back(std::move(id));
-      } else {
-        bookmark_thumbnail_ids_to_migrate.push_back(
-            std::pair(node->uuid(), std::move(id)));
+      switch (url_kind) {
+        case VivaldiImageStore::kPathMappingUrl:
+          bookmark_thumbnail_ids_to_migrate.push_back(
+              std::pair(node->uuid(), std::move(id)));
+          break;
+        case VivaldiImageStore::kImageUrl:
+          used_ids[url_kind].push_back(std::move(id));
+          break;
       }
     }
   }

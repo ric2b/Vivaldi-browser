@@ -118,6 +118,9 @@ enum VideoConferenceAppType {
   [MinVersion=1] kBorealis,
   // App is traced by AshClient, but the type is unknown.
   [MinVersion=1] kAshClientUnknown,
+
+  // The ChromeOS native Screen Capture tool.
+  [MinVersion=2] kAshCaptureMode,
 };
 
 [Stable]
@@ -165,4 +168,8 @@ interface VideoConferenceManagerClient {
   // Informs client of system device's disable status
   SetSystemMediaDeviceStatus@2(VideoConferenceMediaDevice device,
                                bool disabled) => (bool success);
+
+  // Stops screen sharings from all media apps.
+  [MinVersion=1]
+  StopAllScreenShare@3();
 };

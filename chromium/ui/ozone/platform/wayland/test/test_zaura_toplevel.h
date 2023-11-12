@@ -32,6 +32,9 @@ class TestZAuraToplevel : public ServerObject {
   const absl::optional<TestRegion>& shape() const { return shape_; }
   void set_shape(const absl::optional<TestRegion>& shape) { shape_ = shape; }
 
+  int top_inset() const { return top_inset_; }
+  void set_top_inset(int top_inset) { top_inset_ = top_inset; }
+
   using AckRotateFocusCallback =
       base::RepeatingCallback<void(uint32_t serial, uint32_t handled)>;
   void set_ack_rotate_focus_callback(const AckRotateFocusCallback cb) {
@@ -41,9 +44,20 @@ class TestZAuraToplevel : public ServerObject {
     return ack_rotate_focus_callback_;
   }
 
+  void set_can_maximize(bool can_maximize) { can_maximize_ = can_maximize; }
+  bool can_maximize() const { return can_maximize_; }
+
+  void set_can_fullscreen(bool can_fullscreen) {
+    can_fullscreen_ = can_fullscreen;
+  }
+  bool can_fullscreen() const { return can_fullscreen_; }
+
  private:
   absl::optional<TestRegion> shape_;
+  int top_inset_;
   AckRotateFocusCallback ack_rotate_focus_callback_;
+  bool can_maximize_ = false;
+  bool can_fullscreen_ = false;
 };
 
 }  // namespace wl

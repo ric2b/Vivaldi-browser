@@ -13,6 +13,9 @@ template("node_action") {
   if (defined(cwd)) {
     command_cwd = cwd
   }
+  if (defined(output_from_stdout)) {
+    command_output_from_stdout = output_from_stdout
+  }
   command_outputs = outputs
   system_command(target_name) {
     forward_variables_from(invoker, [ "testonly" ])
@@ -21,6 +24,9 @@ template("node_action") {
       cwd = command_cwd
     } else {
       command_script = rebase_path(script, root_build_dir)
+    }
+    if (defined(command_output_from_stdout)) {
+      output_from_stdout = command_output_from_stdout
     }
 
     command = "node"

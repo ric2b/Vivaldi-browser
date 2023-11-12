@@ -26,7 +26,6 @@ source_set("commerce") {
     "//ios/web",
     "//ios/web/public",
   ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 static_library("shopping_service") {
@@ -44,7 +43,8 @@ static_library("shopping_service") {
     "//components/keyed_service/ios",
     "//components/leveldb_proto",
     "//components/prefs",
-    "//ios/chrome/browser/bookmarks",
+    "//ios/chrome/browser/bookmarks/model",
+    "//ios/chrome/browser/history",
     "//ios/chrome/browser/optimization_guide",
     "//ios/chrome/browser/power_bookmarks",
     "//ios/chrome/browser/shared/model/application_context",
@@ -54,8 +54,6 @@ static_library("shopping_service") {
     "//ios/web",
     "//services/network/public/cpp",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 static_library("session_proto_db") {
@@ -71,12 +69,9 @@ static_library("session_proto_db") {
     "//components/session_proto_db:session_proto_db",
     "//ios/web/public:public",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "price_alert_util_unittest.mm",

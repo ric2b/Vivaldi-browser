@@ -61,7 +61,7 @@ namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
     defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ZOS) ||  \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21
+    defined(OS_ANDROID) && __ANDROID_API__ < 21 || defined(OS_SERENITY)
 int CallStat(const char* path, stat_wrapper_t* sb) {
   return stat(path, sb);
 }

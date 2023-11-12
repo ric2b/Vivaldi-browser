@@ -6,7 +6,7 @@
 
 #import <memory>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -30,9 +30,13 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 namespace {
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
@@ -57,6 +61,14 @@ const char kUmaSelectDefaultSearchEngine[] =
 @interface SearchEngineTableViewController () <SearchEngineObserving> {
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
+
+  // Vivaldi
+  // Keep a track whether the search engine settings page is opened by tapping
+  // private tab search engine settings button or standard tab search engine
+  // settings.
+  BOOL _isPrivate;
+  // End Vivaldi
+
 }
 
 // Prevent unnecessary notifications when we write to the setting.
@@ -96,7 +108,11 @@ const char kUmaSelectDefaultSearchEngine[] =
     _templateURLService->Load();
     _faviconLoader =
         IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
+
+    if (!IsVivaldiRunning()) {
     [self setTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)];
+    } // End Vivaldi
+
     self.shouldDisableDoneButtonOnEdit = YES;
     [self updateUIForEditState];
   }
@@ -183,6 +199,11 @@ const char kUmaSelectDefaultSearchEngine[] =
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   self.navigationController.toolbarHidden = NO;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self setUpSearchEngineResetButton];
+  }  // End Vivaldi
+
 }
 
 - (void)setEditing:(BOOL)editing animated:(BOOL)animated {
@@ -280,6 +301,11 @@ const char kUmaSelectDefaultSearchEngine[] =
 }
 
 - (BOOL)editButtonEnabled {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return NO;
+  }  // End Vivaldi
+
   return [self.tableViewModel hasItemForItemType:ItemTypeCustomEngine
                                sectionIdentifier:SectionIdentifierFirstList] ||
          [self.tableViewModel hasItemForItemType:ItemTypeCustomEngine
@@ -315,7 +341,7 @@ const char kUmaSelectDefaultSearchEngine[] =
 
   // Do nothing if the tapped engine was already the default.
   SearchEngineItem* selectedTextItem =
-      base::mac::ObjCCastStrict<SearchEngineItem>(selectedItem);
+      base::apple::ObjCCastStrict<SearchEngineItem>(selectedItem);
   if (selectedTextItem.accessoryType == UITableViewCellAccessoryCheckmark) {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     return;
@@ -326,7 +352,7 @@ const char kUmaSelectDefaultSearchEngine[] =
     for (TableViewItem* item in
          [model itemsInSectionWithIdentifier:SectionIdentifierFirstList]) {
       SearchEngineItem* textItem =
-          base::mac::ObjCCastStrict<SearchEngineItem>(item);
+          base::apple::ObjCCastStrict<SearchEngineItem>(item);
       if (textItem.accessoryType == UITableViewCellAccessoryCheckmark) {
         textItem.accessoryType = UITableViewCellAccessoryNone;
         UITableViewCell* cell =
@@ -340,7 +366,7 @@ const char kUmaSelectDefaultSearchEngine[] =
          [model itemsInSectionWithIdentifier:SectionIdentifierSecondList]) {
       DCHECK(item.type == ItemTypeCustomEngine);
       SearchEngineItem* textItem =
-          base::mac::ObjCCastStrict<SearchEngineItem>(item);
+          base::apple::ObjCCastStrict<SearchEngineItem>(item);
       if (textItem.accessoryType == UITableViewCellAccessoryCheckmark) {
         textItem.accessoryType = UITableViewCellAccessoryNone;
         UITableViewCell* cell =
@@ -353,7 +379,7 @@ const char kUmaSelectDefaultSearchEngine[] =
   // Show the checkmark on the new default engine.
 
   SearchEngineItem* newDefaultEngine =
-      base::mac::ObjCCastStrict<SearchEngineItem>(
+      base::apple::ObjCCastStrict<SearchEngineItem>(
           [model itemAtIndexPath:indexPath]);
   newDefaultEngine.accessoryType = UITableViewCellAccessoryCheckmark;
   UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];
@@ -363,8 +389,14 @@ const char kUmaSelectDefaultSearchEngine[] =
   self.updatingBackend = YES;
   if (indexPath.section ==
       [model sectionForSectionIdentifier:SectionIdentifierFirstList]) {
+
+    if (IsVivaldiRunning()) {
+      [self updateSearchEngine:_firstList[indexPath.row]];
+    } else {
     _templateURLService->SetUserSelectedDefaultSearchProvider(
         _firstList[indexPath.row]);
+    } // End Vivaldi
+
   } else {
     _templateURLService->SetUserSelectedDefaultSearchProvider(
         _secondList[indexPath.row]);
@@ -396,10 +428,16 @@ const char kUmaSelectDefaultSearchEngine[] =
   DCHECK(item.type == ItemTypePrepopulatedEngine ||
          item.type == ItemTypeCustomEngine);
   SearchEngineItem* engineItem =
-      base::mac::ObjCCastStrict<SearchEngineItem>(item);
-  TableViewURLCell* urlCell = base::mac::ObjCCastStrict<TableViewURLCell>(cell);
+      base::apple::ObjCCastStrict<SearchEngineItem>(item);
+  TableViewURLCell* urlCell =
+      base::apple::ObjCCastStrict<TableViewURLCell>(cell);
 
   if (item.type == ItemTypePrepopulatedEngine) {
+
+    if (IsVivaldiRunning()) {
+      [self loadFaviconForItem:engineItem
+                       forCell:urlCell];
+    } else {
     _faviconLoader->FaviconForPageUrl(
         engineItem.URL, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
         /*fallback_to_google_server=*/YES, ^(FaviconAttributes* attributes) {
@@ -409,6 +447,8 @@ const char kUmaSelectDefaultSearchEngine[] =
             [urlCell.faviconView configureWithAttributes:attributes];
           }
         });
+    } // End Vivaldi
+
   } else {
     _faviconLoader->FaviconForIconUrl(
         engineItem.URL, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
@@ -462,6 +502,13 @@ const char kUmaSelectDefaultSearchEngine[] =
   _secondList.clear();
   _secondList.reserve(urls.size());
 
+  if (vivaldi::IsVivaldiRunning()) {
+    for (TemplateURL* url : urls) {
+      if (url->is_active() != TemplateURLData::ActiveStatus::kFalse)
+        _firstList.push_back(url);
+    }
+  } else {
+
   // Classify TemplateURLs.
   for (TemplateURL* url : urls) {
     if (_templateURLService->IsPrepopulatedOrCreatedByPolicy(url) ||
@@ -470,6 +517,8 @@ const char kUmaSelectDefaultSearchEngine[] =
     else
       _secondList.push_back(url);
   }
+
+  } // End Vivaldi
 
   // Do not sort prepopulated search engines, they are already sorted by
   // locale use.
@@ -505,7 +554,13 @@ const char kUmaSelectDefaultSearchEngine[] =
     std::string emptyPageUrl = templateURL->url_ref().ReplaceSearchTerms(
         TemplateURLRef::SearchTermsArgs(std::u16string()),
         _templateURLService->search_terms_data());
+
+    if (IsVivaldiRunning()) {
+      item.URL = templateURL->favicon_url();
+    } else {
     item.URL = GURL(emptyPageUrl);
+    } // End Vivaldi
+
   } else {
     item = [[SearchEngineItem alloc] initWithType:ItemTypeCustomEngine];
     // Use icon URL for favicons of custom search engines.
@@ -513,9 +568,17 @@ const char kUmaSelectDefaultSearchEngine[] =
   }
   item.text = base::SysUTF16ToNSString(templateURL->short_name());
   item.detailText = base::SysUTF16ToNSString(templateURL->keyword());
+
+  if (IsVivaldiRunning()) {
+    if (templateURL == [self defaultSearchEngine]) {
+      [item setAccessoryType:UITableViewCellAccessoryCheckmark];
+    }
+  } else {
   if (templateURL == _templateURLService->GetDefaultSearchProvider()) {
     [item setAccessoryType:UITableViewCellAccessoryCheckmark];
   }
+  } // End Vivaldi
+
   return item;
 }
 
@@ -609,7 +672,7 @@ const char kUmaSelectDefaultSearchEngine[] =
                                                       inSection:firstSection];
           TableViewItem* item = [model itemAtIndexPath:indexPath];
           SearchEngineItem* engineItem =
-              base::mac::ObjCCastStrict<SearchEngineItem>(item);
+              base::apple::ObjCCastStrict<SearchEngineItem>(item);
           engineItem.accessoryType = UITableViewCellAccessoryCheckmark;
           [strongSelf.tableView
               reloadRowsAtIndexPaths:@[ indexPath ]
@@ -655,7 +718,7 @@ const char kUmaSelectDefaultSearchEngine[] =
   for (NSIndexPath* indexPath in indexPaths) {
     TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
     SearchEngineItem* engineItem =
-        base::mac::ObjCCastStrict<SearchEngineItem>(item);
+        base::apple::ObjCCastStrict<SearchEngineItem>(item);
     engineItem.enabled = !editing;
     if (!editing && _firstList[indexPath.item] ==
                         _templateURLService->GetDefaultSearchProvider()) {
@@ -676,6 +739,144 @@ const char kUmaSelectDefaultSearchEngine[] =
   NSString* keyword = base::SysUTF16ToNSString(templateURL->keyword());
   return ![item.text isEqualToString:name] ||
          ![item.detailText isEqualToString:keyword];
+}
+
+#pragma mark - VIVALDI
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+                           isPrivate:(BOOL)isPrivate {
+  self = [self initWithBrowserState:browserState];
+  if (self) {
+    _isPrivate = isPrivate;
+    [self updateTitleForPage];
+    [self reloadData];
+  }
+  return self;
+}
+
+- (void)updateTitleForPage {
+  // We will show different title for different entry point.
+  // e.g. Standard Tab Search Engine, Private Tab Search Engine
+  NSString* titlePrefix = _isPrivate ?
+    l10n_util::GetNSString(
+        IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_PRIVATE_TAB_TITLE) :
+    l10n_util::GetNSString(
+        IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_STANDARD_TAB_TITLE);
+
+  NSString* title =
+      [NSString stringWithFormat:@"%@ %@",
+        titlePrefix,
+          l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)];
+
+  [self setTitle:title];
+}
+
+- (void)setUpSearchEngineResetButton {
+  UIBarButtonItem* flexibleSpace = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                           target:nil
+                           action:nil];
+  [self setToolbarItems:@[ flexibleSpace,
+                           self.searchEngineResetButton,
+                           flexibleSpace ]
+               animated:YES];
+}
+
+- (UIBarButtonItem*)searchEngineResetButton {
+  UIBarButtonItem* resetButtonButton = [[UIBarButtonItem alloc]
+      initWithTitle:l10n_util::GetNSString(
+         IDS_VIVALDI_SEARCH_ENGINE_RESTORE_DEFAULT_BUTTON_TITLE)
+              style:UIBarButtonItemStylePlain
+             target:self
+             action:@selector(resetButtonAction)];
+  resetButtonButton.accessibilityIdentifier = kSettingsToolbarDeleteButtonId;
+  return resetButtonButton;
+}
+
+- (void)resetButtonAction {
+  UIAlertController* alertController = [UIAlertController
+      alertControllerWithTitle:l10n_util::GetNSString(
+          IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_DEFAULT_TITLE)
+        message:l10n_util::GetNSString(
+          IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_DEFAULT_MESSAGE)
+        preferredStyle:UIAlertControllerStyleAlert];
+
+  __weak __typeof(self) weakSelf = self;
+
+  UIAlertAction* restoreAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+         IDS_VIVALDI_SEARCH_ENGINE_CONFIRM_RESTORE_BUTTON_TITLE)
+                style:UIAlertActionStyleDestructive
+              handler:^(UIAlertAction* action) {
+                  [weakSelf executeRestoreAction];
+              }];
+  [alertController addAction:restoreAction];
+
+  UIAlertAction* cancelAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+         IDS_VIVALDI_SEARCH_ENGINE_CANCEL_BUTTON_TITLE)
+                style:UIAlertActionStyleCancel
+              handler:^(UIAlertAction* action){
+              }];
+  [alertController addAction:cancelAction];
+  [self presentViewController:alertController animated:YES completion:nil];
+}
+
+- (const TemplateURL*)defaultSearchEngine {
+  if (!_templateURLService)
+    return nullptr;
+  return _templateURLService->GetDefaultSearchProvider(
+      [self defaultSearchType]);
+}
+
+- (TemplateURLService::DefaultSearchType)defaultSearchType {
+  TemplateURLService::DefaultSearchType type = _isPrivate ?
+    TemplateURLService::kDefaultSearchPrivate :
+    TemplateURLService::kDefaultSearchMain;
+  return type;
+}
+
+- (void)updateSearchEngine:(TemplateURL*)url {
+  if (!_templateURLService)
+    return;
+  _templateURLService->SetUserSelectedDefaultSearchProvider(
+      url, [self defaultSearchType]);
+}
+
+- (void)executeRestoreAction {
+  if (!_templateURLService)
+    return;
+
+  _templateURLService->RepairPrepopulatedSearchEngines();
+
+  // Get all template URLs
+  TemplateURLService::TemplateURLVector template_urls =
+      _templateURLService->GetTemplateURLs();
+
+  // Iterate over template URLs and remove non-prepopulated ones
+  for (const auto* template_url : template_urls) {
+    if (template_url->prepopulate_id() == 0)
+      _templateURLService->Remove(template_url);
+  }
+
+  // Reload tableview
+  [self reloadData];
+}
+
+// Asynchronously loads favicon for given url. When the favicon is not
+// found in cache, use history service, and if not found
+// use the fall back icon style.
+- (void)loadFaviconForItem:(SearchEngineItem*)item
+                   forCell:(TableViewURLCell*)cell {
+
+  auto faviconLoadedBlock = ^(FaviconAttributes* attributes) {
+    if (cell.cellUniqueIdentifier == item.uniqueIdentifier)
+      [cell.faviconView configureWithAttributes:attributes];
+  };
+
+  _faviconLoader->FaviconForIconUrl(item.URL,
+                                        kDesiredMediumFaviconSizePt,
+                                        kMinFaviconSizePt,
+                                        faviconLoadedBlock);
 }
 
 @end

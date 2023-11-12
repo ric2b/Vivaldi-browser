@@ -22,6 +22,10 @@ class BookmarkNode;
 // Whether a slashed cloud should be displayed.
 @property(nonatomic, assign) BOOL shouldDisplayCloudSlashIcon;
 
+// Vivaldi
+@property(nonatomic, assign) BOOL shouldShowTrashIcon;
+// End Vivaldi
+
 - (instancetype)initWithType:(NSInteger)type
                 bookmarkNode:(const bookmarks::BookmarkNode*)node
     NS_DESIGNATED_INITIALIZER;

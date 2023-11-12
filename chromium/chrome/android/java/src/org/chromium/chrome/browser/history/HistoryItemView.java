@@ -193,7 +193,6 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
                 mContentView.getPaddingTop(), endPadding, mContentView.getPaddingBottom());
     }
 
-    @VisibleForTesting
     View getRemoveButtonForTests() {
         return mRemoveButton;
     }

@@ -17,7 +17,8 @@
 using l10n_util::GetNSString;
 
 namespace {
-const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
+const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(4, 0, 4, 0);
+const UIEdgeInsets statusLabelPadding = UIEdgeInsetsMake(6, 4, 6, 4);
 } // End Namespace
 
 
@@ -79,7 +80,7 @@ const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
   statusLabel.textColor = UIColor.whiteColor;
 
   [statusContainer addSubview:statusLabel];
-  [statusLabel fillSuperview];
+  [statusLabel fillSuperviewWithPadding:statusLabelPadding];
 }
 
 #pragma mark - SETTERS

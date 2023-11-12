@@ -35,10 +35,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 
 class MockTRS : public sessions::TabRestoreServiceImpl {
@@ -164,7 +160,7 @@ class HistoryMenuBridgeTest : public BrowserWithTestWindowTest {
     [item setTag:tag];
     if (selector) {
       [item setAction:selector];
-      [item setTarget:bridge_->controller_.get()];
+      [item setTarget:bridge_->controller_];
     }
     [menu addItem:item];
     return item;
@@ -546,7 +542,7 @@ TEST_F(HistoryMenuBridgeTest, GotFaviconData) {
 
   // Set up the HistoryItem.
   HistoryMenuBridge::HistoryItem item;
-  item.menu_item.reset([[NSMenuItem alloc] init]);
+  item.menu_item = [[NSMenuItem alloc] init];
   GetFaviconForHistoryItem(&item);
 
   // Cancel the request so there will be no race.
@@ -559,7 +555,7 @@ TEST_F(HistoryMenuBridgeTest, GotFaviconData) {
 
   // Make sure the callback works.
   EXPECT_FALSE(item.icon_requested);
-  EXPECT_TRUE(item.icon.get());
+  EXPECT_TRUE(item.icon);
   EXPECT_TRUE([item.menu_item image]);
 }
 

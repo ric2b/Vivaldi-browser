@@ -4,7 +4,7 @@
 
 import 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 
-import {crosAudioConfigMojom, DevicePageBrowserProxyImpl, fakeCrosAudioConfig, FakeInputDeviceSettingsProvider, fakeKeyboards, fakeMice, fakePointingSticks, fakeTouchpads, IdleBehavior, LidClosedBehavior, NoteAppLockScreenSupport, Router, routes, setCrosAudioConfigForTesting, setDisplayApiForTesting, setInputDeviceSettingsProviderForTesting, StorageSpaceState} from 'chrome://os-settings/os_settings.js';
+import {crosAudioConfigMojom, DevicePageBrowserProxyImpl, fakeCrosAudioConfig, fakeGraphicsTablets, FakeInputDeviceSettingsProvider, fakeKeyboards, fakeMice, fakePointingSticks, fakeTouchpads, IdleBehavior, LidClosedBehavior, NoteAppLockScreenSupport, Router, routes, setCrosAudioConfigForTesting, setDisplayApiForTesting, setInputDeviceSettingsProviderForTesting, StorageSpaceState} from 'chrome://os-settings/os_settings.js';
 import {assert} from 'chrome://resources/ash/common/assert.js';
 import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
@@ -82,6 +82,13 @@ function getFakePrefs() {
           type: chrome.settingsPrivate.PrefType.NUMBER,
           value: 0,
         },
+      },
+    },
+    gdata: {
+      disabled: {
+        key: 'gdata.disabled',
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: false,
       },
     },
     power: {
@@ -2068,6 +2075,14 @@ suite('SettingsDevicePage', function() {
 
   suite(assert(TestNames.GraphicsTablet), function() {
     let graphicsTabletPage;
+    let inputDeviceSettingsProvider;
+
+    suiteSetup(() => {
+      inputDeviceSettingsProvider = new FakeInputDeviceSettingsProvider();
+      inputDeviceSettingsProvider.setFakeGraphicsTablets(fakeGraphicsTablets);
+      setInputDeviceSettingsProviderForTesting(inputDeviceSettingsProvider);
+    });
+
     setup(async function() {
       setPeripheralCustomizationEnabled(true);
       await init();
@@ -2083,10 +2098,59 @@ suite('SettingsDevicePage', function() {
       });
     });
 
-    test('graphics tablet subpage visibility', function() {
+    test('graphics tablet subpage visibility', async () => {
       assertEquals(routes.GRAPHICS_TABLET, Router.getInstance().currentRoute);
-      assertTrue(isVisible(graphicsTabletPage.shadowRoot.querySelector(
-          '#graphicsTabletSubpageTitle')));
+      const items = graphicsTabletPage.shadowRoot.querySelectorAll('.device');
+      // Verify that all graphics tablets are displayed and their ids are same
+      // with the data in the provider.
+      assertEquals(items.length, fakeGraphicsTablets.length);
+      assertTrue(isVisible(items[0]));
+      assertEquals(
+          Number(items[0].getAttribute('data-evdev-id')),
+          fakeGraphicsTablets[0].id);
+      assertTrue(isVisible(items[1]));
+      assertEquals(
+          Number(items[1].getAttribute('data-evdev-id')),
+          fakeGraphicsTablets[1].id);
+
+      // Verify that the customize-tablet-buttons and customize-pen-buttons
+      // crLinkRow are visible.
+      const customizeTabletButtons =
+          graphicsTabletPage.shadowRoot.querySelector(
+              '#customizeTabletButtons');
+      assert(customizeTabletButtons);
+      assertTrue(isVisible(customizeTabletButtons));
+
+      // Verify clicking the customize table buttons row will be redirecting
+      // to the customize table buttons subpage.
+      customizeTabletButtons.click();
+      await flushTasks();
+      assertEquals(
+          routes.CUSTOMIZE_TABLET_BUTTONS, Router.getInstance().currentRoute);
+
+      const urlSearchQuery =
+          Router.getInstance().getQueryParameters().get('graphicsTabletId');
+      assertTrue(!!urlSearchQuery);
+      const graphicsTabletId = Number(urlSearchQuery);
+      assertFalse(isNaN(graphicsTabletId));
+      assertEquals(fakeGraphicsTablets[0].id, graphicsTabletId);
+
+      // Verify clicking the customize pen buttons row will be redirected
+      // to the customize table buttons subpage.
+      Router.getInstance().navigateTo(routes.GRAPHICS_TABLET);
+      assertEquals(routes.GRAPHICS_TABLET, Router.getInstance().currentRoute);
+      const customizePenButtons =
+          graphicsTabletPage.shadowRoot.querySelector('#customizePenButtons');
+
+      assertTrue(isVisible(customizePenButtons));
+      customizePenButtons.click();
+      await flushTasks();
+      assertEquals(
+          routes.CUSTOMIZE_PEN_BUTTONS, Router.getInstance().currentRoute);
+      const graphicsTabletPenId = Number(
+          Router.getInstance().getQueryParameters().get('graphicsTabletId'));
+      assertFalse(isNaN(graphicsTabletPenId));
+      assertEquals(fakeGraphicsTablets[0].id, graphicsTabletPenId);
     });
   });
 
@@ -2440,10 +2504,14 @@ suite('SettingsDevicePage', function() {
     await fakeSystemDisplay.getLayoutCalled.promise;
     assertEquals(1, displayPage.displays.length);
 
+    const displayNightLight =
+        displayPage.shadowRoot.querySelector('settings-display-night-light');
+    assert(displayNightLight);
+
     const temperature =
-        displayPage.shadowRoot.querySelector('#nightLightTemperatureDiv');
-    const schedule =
-        displayPage.shadowRoot.querySelector('#nightLightScheduleTypeDropDown');
+        displayNightLight.shadowRoot.getElementById('nightLightTemperatureDiv');
+    const schedule = displayNightLight.shadowRoot.getElementById(
+        'nightLightScheduleTypeDropDown');
 
     // Night Light is off, so temperature is hidden. Schedule is always shown.
     assertTrue(temperature.hidden);
@@ -3855,14 +3923,17 @@ suite('SettingsDevicePage', function() {
       testing.Test.disableAnimationsAndTransitions();
     });
 
-    setup(async function() {
+    async function setupPage() {
+      PolymerTest.clearBody();
       await init();
       return showAndGetDeviceSubpage('storage', routes.STORAGE)
           .then(function(page) {
             storagePage = page;
             storagePage.stopPeriodicUpdate_();
           });
-    });
+    }
+
+    setup(setupPage);
 
     test('storage stats size', async function() {
       // Low available storage space.
@@ -3992,6 +4063,82 @@ suite('SettingsDevicePage', function() {
       flush();
       assertFalse(
           isVisible(storagePage.shadowRoot.querySelector('#otherUsersSize')));
+    });
+
+    test('drive offline size', async () => {
+      async function assertDriveOfflineSizeVisibility(params) {
+        loadTimeData.overrideValues({
+          enableDriveFsBulkPinning: params.enableDriveFsBulkPinning,
+          showGoogleDriveSettingsPage: params.showGoogleDriveSettingsPage,
+        });
+        await setupPage();
+        devicePage.prefs.gdata.disabled = !params.isDriveEnabled;
+        await flushTasks();
+        const expectedState =
+            (params.isVisible) ? 'be visible' : 'not be visible';
+        assertEquals(
+            params.isVisible,
+            isVisible(
+                storagePage.shadowRoot.getElementById('driveOfflineSize')),
+            `Expected #driveOfflineSize to ${expectedState} with params: ${
+                JSON.stringify(params)}`);
+      }
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: false,
+        showGoogleDriveSettingsPage: false,
+        isDriveEnabled: false,
+        isVisible: false,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: false,
+        showGoogleDriveSettingsPage: false,
+        isDriveEnabled: true,
+        isVisible: false,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: false,
+        showGoogleDriveSettingsPage: true,
+        isDriveEnabled: false,
+        isVisible: false,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: true,
+        showGoogleDriveSettingsPage: false,
+        isDriveEnabled: false,
+        isVisible: false,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: true,
+        showGoogleDriveSettingsPage: true,
+        isDriveEnabled: false,
+        isVisible: false,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: false,
+        showGoogleDriveSettingsPage: true,
+        isDriveEnabled: true,
+        isVisible: true,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: true,
+        showGoogleDriveSettingsPage: false,
+        isDriveEnabled: true,
+        isVisible: true,
+      });
+
+      assertDriveOfflineSizeVisibility({
+        enableDriveFsBulkPinning: true,
+        showGoogleDriveSettingsPage: true,
+        isDriveEnabled: true,
+        isVisible: true,
+      });
     });
   });
 });

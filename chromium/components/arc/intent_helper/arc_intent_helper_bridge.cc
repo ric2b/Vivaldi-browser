@@ -22,7 +22,6 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/arc/common/intent_helper/arc_intent_helper_package.h"
-#include "components/arc/intent_helper/arc_settings_app_delegate.h"
 #include "components/arc/intent_helper/control_camera_app_delegate.h"
 #include "components/arc/intent_helper/intent_constants.h"
 #include "components/arc/intent_helper/open_url_delegate.h"
@@ -42,7 +41,6 @@ constexpr const char* kArcSchemes[] = {url::kHttpScheme, url::kHttpsScheme,
 // is ChromeNewWindowClient in the browser.
 OpenUrlDelegate* g_open_url_delegate = nullptr;
 ControlCameraAppDelegate* g_control_camera_app_delegate = nullptr;
-std::unique_ptr<ArcSettingsAppDelegate> g_arc_settings_app_delegate = nullptr;
 
 // Singleton factory for ArcIntentHelperBridge.
 class ArcIntentHelperBridgeFactory
@@ -131,12 +129,6 @@ void ArcIntentHelperBridge::SetOpenUrlDelegate(OpenUrlDelegate* delegate) {
 void ArcIntentHelperBridge::SetControlCameraAppDelegate(
     ControlCameraAppDelegate* delegate) {
   g_control_camera_app_delegate = delegate;
-}
-
-// static
-void ArcIntentHelperBridge::SetArcSettingsAppDelegate(
-    std::unique_ptr<ArcSettingsAppDelegate> delegate) {
-  g_arc_settings_app_delegate = std::move(delegate);
 }
 
 void ArcIntentHelperBridge::SetDelegate(std::unique_ptr<Delegate> delegate) {
@@ -241,15 +233,6 @@ void ArcIntentHelperBridge::OnOpenWebApp(const std::string& url) {
   // Web app launches should only be invoked on HTTPS URLs.
   if (CanOpenWebAppForUrl(gurl))
     g_open_url_delegate->OpenWebAppFromArc(gurl);
-}
-
-// TODO(b/200873831): Delete this anytime on 2022.
-void ArcIntentHelperBridge::RecordShareFilesMetricsDeprecated(
-    mojom::ShareFiles flag) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // Record metrics coming from ARC, these are related Share files feature
-  // stability.
-  LOG(ERROR) << "Arc.ShareFilesOnExit is deprecated, erasing incoming";
 }
 
 void ArcIntentHelperBridge::LaunchCameraApp(uint32_t intent_id,
@@ -416,11 +399,11 @@ void ArcIntentHelperBridge::SendNewCaptureBroadcast(bool is_video,
 void ArcIntentHelperBridge::OnAndroidSettingChange(
     arc::mojom::AndroidSetting setting,
     bool is_enabled) {
-  if (!g_arc_settings_app_delegate) {
+  if (!delegate_) {
     LOG(ERROR) << "Unable to set value as ARC app delegate is null.";
     return;
   }
-  g_arc_settings_app_delegate->HandleUpdateAndroidSettings(setting, is_enabled);
+  delegate_->HandleUpdateAndroidSettings(setting, is_enabled);
 }
 
 // static

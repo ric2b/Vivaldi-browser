@@ -29,7 +29,7 @@ class TextBreakIteratorTest : public testing::Test {
       test_string_ = String::Make16BitFrom8BitSource(test_string_.Characters8(),
                                                      test_string_.length());
     }
-    LazyLineBreakIterator lazy_break_iterator(test_string_);
+    LazyLineBreakIterator lazy_break_iterator(test_string_, locale_.get());
     lazy_break_iterator.SetBreakType(line_break_type);
     lazy_break_iterator.SetBreakSpace(break_space);
     TestIsBreakable(expected_break_positions, lazy_break_iterator);
@@ -81,11 +81,13 @@ class TextBreakIteratorTest : public testing::Test {
 
  protected:
   String test_string_;
+  scoped_refptr<LayoutLocale> locale_;
 };
 
 static const LineBreakType all_break_types[] = {
     LineBreakType::kNormal, LineBreakType::kBreakAll,
-    LineBreakType::kBreakCharacter, LineBreakType::kKeepAll};
+    LineBreakType::kBreakCharacter, LineBreakType::kKeepAll,
+    LineBreakType::kPhrase};
 
 class BreakTypeTest : public TextBreakIteratorTest,
                       public testing::WithParamInterface<LineBreakType> {};
@@ -104,6 +106,22 @@ TEST_P(BreakTypeTest, EmptyNullString) {
   LazyLineBreakIterator iterator(String{});
   iterator.SetBreakType(GetParam());
   EXPECT_TRUE(iterator.IsBreakable(0));
+}
+
+TEST_F(TextBreakIteratorTest, Strictness) {
+  scoped_refptr<LayoutLocale> locale =
+      LayoutLocale::CreateForTesting(AtomicString("ja"));
+  LazyLineBreakIterator iterator(String(u"あーあ"), locale.get());
+  EXPECT_EQ(iterator.NextBreakOpportunity(0), 1u);
+  EXPECT_EQ(iterator.LocaleWithKeyword(), "ja");
+
+  iterator.SetStrictness(LineBreakStrictness::kStrict);
+  EXPECT_EQ(iterator.NextBreakOpportunity(0), 2u);
+  EXPECT_EQ(iterator.LocaleWithKeyword(), "ja@lb=strict");
+
+  iterator.SetLocale(nullptr);
+  EXPECT_EQ(iterator.NextBreakOpportunity(0), 1u);
+  EXPECT_EQ(iterator.LocaleWithKeyword(), "");
 }
 
 TEST_F(TextBreakIteratorTest, Basic) {
@@ -190,15 +208,19 @@ TEST_F(TextBreakIteratorTest, KeepEmojiModifierSequence) {
   MatchLineBreaks(LineBreakType::kKeepAll, {4, 8, 11});
 }
 
-TEST_F(TextBreakIteratorTest, NextBreakOpportunityAtEnd) {
-  LineBreakType break_types[] = {
-      LineBreakType::kNormal, LineBreakType::kBreakAll,
-      LineBreakType::kBreakCharacter, LineBreakType::kKeepAll};
-  for (const auto break_type : break_types) {
-    LazyLineBreakIterator break_iterator(String("1"));
-    break_iterator.SetBreakType(break_type);
-    EXPECT_EQ(1u, break_iterator.NextBreakOpportunity(1));
-  }
+TEST_P(BreakTypeTest, NextBreakOpportunityAtEnd) {
+  const LineBreakType break_type = GetParam();
+  LazyLineBreakIterator break_iterator(String("1"));
+  break_iterator.SetBreakType(break_type);
+  EXPECT_EQ(1u, break_iterator.NextBreakOpportunity(1));
+}
+
+TEST_F(TextBreakIteratorTest, Phrase) {
+  locale_ = LayoutLocale::CreateForTesting(AtomicString("ja"));
+  test_string_ = u"今日はよい天気です。";
+  MatchLineBreaks(LineBreakType::kPhrase, {3, 5, 10});
+  test_string_ = u"あなたに寄り添う最先端のテクノロジー。";
+  MatchLineBreaks(LineBreakType::kPhrase, {4, 8, 12, 19});
 }
 
 TEST_F(TextBreakIteratorTest, LengthOfGraphemeCluster) {

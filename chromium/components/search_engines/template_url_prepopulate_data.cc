@@ -5,7 +5,7 @@
 #include "components/search_engines/template_url_prepopulate_data.h"
 
 #include "base/logging.h"
-#include "base/memory/raw_ptr_exclusion.h"
+#include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/country_codes/country_codes.h"
@@ -17,6 +17,7 @@
 #include "components/search_engines/template_url_data_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "components/search_engines/vivaldi_pref_names.h"
 namespace TemplateURLPrepopulateData {
 
@@ -1284,6 +1285,7 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
 
     // Countries using the "United Kingdom" engine set.
     UNHANDLED_COUNTRY(B, M)  // Bermuda
+    UNHANDLED_COUNTRY(C, Q)  // Sark
     UNHANDLED_COUNTRY(F, K)  // Falkland Islands
     UNHANDLED_COUNTRY(G, G)  // Guernsey
     UNHANDLED_COUNTRY(G, I)  // Gibraltar
@@ -1497,6 +1499,26 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
         itr == t_urls.end() ? 0 : std::distance(t_urls.begin(), itr);
   }
   return t_urls;
+}
+
+std::vector<std::unique_ptr<TemplateURLData>>
+GetPrepopulatedEnginesForChoiceScreen(PrefService* prefs) {
+  // TODO (b/282656014): Update the returned list of search engines to comply
+  // with choice screen requirements.
+  std::vector<std::unique_ptr<TemplateURLData>> engines =
+      GetPrepopulatedEngines(prefs, nullptr);
+  std::vector<TemplateURLData*> tmp_engines;
+  for (auto& engine : engines) {
+    tmp_engines.push_back(engine.get());
+  }
+
+  base::RandomShuffle(tmp_engines.begin(), tmp_engines.end());
+
+  std::vector<std::unique_ptr<TemplateURLData>> shuffled_engines;
+  for (TemplateURLData* engine : tmp_engines) {
+    shuffled_engines.push_back(std::make_unique<TemplateURLData>(*engine));
+  }
+  return shuffled_engines;
 }
 
 std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(PrefService* prefs,

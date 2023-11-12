@@ -28,7 +28,7 @@ namespace syncer {
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
                                          browser:(Browser*)browser
-    NS_DESIGNATED_INITIALIZER;
+                               showCreateAccount:(BOOL)showCreateAccount;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser NS_UNAVAILABLE;

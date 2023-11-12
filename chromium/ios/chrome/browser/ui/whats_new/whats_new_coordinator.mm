@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/whats_new/whats_new_coordinator.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/time/time.h"
@@ -20,10 +20,6 @@
 #import "ios/chrome/browser/ui/whats_new/whats_new_mediator.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_table_view_controller.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 

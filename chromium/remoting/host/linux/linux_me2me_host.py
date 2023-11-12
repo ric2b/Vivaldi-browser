@@ -43,7 +43,7 @@ import time
 import uuid
 
 import psutil
-import xdg
+import xdg.BaseDirectory
 from packaging import version
 
 # If this env var is defined, extra host params will be loaded from this env var
@@ -645,9 +645,9 @@ class Desktop(abc.ABC):
     try:
       for config_file in ["pipewire.conf", "pipewire-pulse.conf",
                           self.pipewire_session_manager + ".conf"]:
-        with (open(os.path.join(SCRIPT_DIR, config_file + ".template"), "r")
-                as infile,
-              open(os.path.join(runtime_path, config_file), "w") as outfile):
+        with open(os.path.join(SCRIPT_DIR, config_file + ".template"),
+                  "r") as infile, \
+             open(os.path.join(runtime_path, config_file), "w") as outfile:
           template = string.Template(infile.read())
           outfile.write(template.substitute({
               "instance_name": instance_name,
@@ -1344,7 +1344,7 @@ class XDesktop(Desktop):
           br'^Version: (\S+)$', video_dummy_info, re.MULTILINE)
       if not match:
         logging.error('Version line is not found')
-        return False
+        return True
       version = match[1]
       retcode = subprocess.call(
           ['dpkg', '--compare-versions', version, 'ge', '1:0.4.0'])

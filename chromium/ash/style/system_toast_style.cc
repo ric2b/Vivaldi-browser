@@ -193,6 +193,7 @@ bool SystemToastStyle::ToggleA11yFocus() {
   }
 
   auto* focus_ring = views::FocusRing::Get(dismiss_button_);
+  focus_ring->SetOutsetFocusRingDisabled(true);
   focus_ring->SetHasFocusPredicate(base::BindRepeating(
       [](const SystemToastStyle* style, const views::View* view) {
         return style->is_dismiss_button_highlighted_;
@@ -228,6 +229,9 @@ void SystemToastStyle::AddedToWidget() {
 
   // Update shadow content bounds with the bounds of widget layer.
   shadow_->SetContentBounds(gfx::Rect(widget_layer->bounds().size()));
+
+  // Make shadow observe the theme change of the widget.
+  shadow_->ObserveColorProviderSource(GetWidget());
 }
 
 void SystemToastStyle::UpdateInsideBorderInsets() {

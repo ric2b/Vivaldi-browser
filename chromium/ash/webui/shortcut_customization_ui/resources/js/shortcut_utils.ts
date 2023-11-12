@@ -7,12 +7,14 @@ import '../strings.m.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 
-import {Accelerator, AcceleratorCategory, AcceleratorId, AcceleratorInfo, AcceleratorSource, AcceleratorState, AcceleratorSubcategory, AcceleratorType, Modifier, MojoAcceleratorInfo, MojoSearchResult, StandardAcceleratorInfo, TextAcceleratorInfo} from './shortcut_types.js';
+import {Accelerator, AcceleratorCategory, AcceleratorId, AcceleratorInfo, AcceleratorKeyState, AcceleratorSource, AcceleratorState, AcceleratorSubcategory, AcceleratorType, Modifier, MojoAcceleratorInfo, MojoSearchResult, StandardAcceleratorInfo, TextAcceleratorInfo} from './shortcut_types.js';
 
 // TODO(jimmyxgong): ChromeOS currently supports up to F24 but can be updated to
 // F32. Update here when F32 is available.
 const kF11 = 112;  // Keycode for F11.
 const kF24 = 135;  // Keycode for F24.
+
+const kMeta = 91;  // Keycode for Meta.
 
 const modifiers: Modifier[] = [
   Modifier.SHIFT,
@@ -21,29 +23,25 @@ const modifiers: Modifier[] = [
   Modifier.COMMAND,
 ];
 
+export const keyCodeToModifier: {[keyCode: number]: number} = {
+  16: Modifier.SHIFT,
+  17: Modifier.CONTROL,
+  18: Modifier.ALT,
+  91: Modifier.COMMAND,
+  92: Modifier.COMMAND,
+};
+
+export const unidentifiedKeyCodeToKey: {[keyCode: number]: string} = {
+  159: 'MicrophoneMuteToggle',
+  237: 'EmojiPicker',
+  238: 'EnableOrToggleDictation',
+  239: 'ViewAllApps',
+};
+
 // Returns true if shortcut customization is disabled via the feature flag.
 export const isCustomizationDisabled = (): boolean => {
   return !loadTimeData.getBoolean('isCustomizationEnabled');
 };
-
-// Returns true if search is enabled via the feature flag.
-export const isSearchEnabled = (): boolean => {
-  return loadTimeData.getBoolean('isSearchEnabled');
-};
-
-export const areAcceleratorsEqual =
-    (accelA: Accelerator, accelB: Accelerator): boolean => {
-      // This picking of types is necessary because Accelerators are a subset
-      // of MojoAccelerators, and MojoAccelerators have properties that error
-      // when they're stringified. Due to TypeScript's structural typing, we
-      // can't prevent MojoAccelerators from being passed to this function.
-      const accelAComparable:
-          Accelerator = {keyCode: accelA.keyCode, modifiers: accelA.modifiers};
-      const accelBComparable:
-          Accelerator = {keyCode: accelB.keyCode, modifiers: accelB.modifiers};
-      return JSON.stringify(accelAComparable) ===
-          JSON.stringify(accelBComparable);
-    };
 
 export const isTextAcceleratorInfo =
     (accelInfo: AcceleratorInfo|MojoAcceleratorInfo):
@@ -71,7 +69,8 @@ export const createEmptyAccelInfoFromAccel =
     };
 
 export const createEmptyAcceleratorInfo = (): StandardAcceleratorInfo => {
-  return createEmptyAccelInfoFromAccel({modifiers: 0, keyCode: 0});
+  return createEmptyAccelInfoFromAccel(
+      {modifiers: 0, keyCode: 0, keyState: AcceleratorKeyState.PRESSED});
 };
 
 export const getAcceleratorId =
@@ -183,6 +182,11 @@ function getModifierCount(accelerator: Accelerator): number {
   return count;
 }
 
+function isSearchOnlyAccelerator(accelerator: Accelerator): boolean {
+  return accelerator.keyCode === kMeta &&
+      accelerator.modifiers === Modifier.NONE;
+}
+
 // Comparison function that checks the number of modifiers in an accelerator.
 // Lower number of modifiers get higher priority.
 // @returns a negative number if the first accelerator info should be higher in
@@ -194,6 +198,17 @@ export function compareAcceleratorInfos(
   // a no-opt.
   if (!isStandardAcceleratorInfo(first) || !isStandardAcceleratorInfo(second)) {
     return 0;
+  }
+
+  // Search/meta as the activation key should always be the highest priority.
+  if (isSearchOnlyAccelerator(
+          first.layoutProperties.standardAccelerator.accelerator)) {
+    return -1;
+  }
+
+  if (isSearchOnlyAccelerator(
+          second.layoutProperties.standardAccelerator.accelerator)) {
+    return -1;
   }
 
   const firstModifierCount =
@@ -237,6 +252,8 @@ export function getModifiersForAcceleratorInfo(
 }
 
 export const SHORTCUTS_APP_URL = 'chrome://shortcut-customization';
+export const META_KEY = 'meta';
+export const LWIN_KEY = 'Meta';
 
 export const getURLForSearchResult = (searchResult: MojoSearchResult): URL => {
   const url = new URL(SHORTCUTS_APP_URL);

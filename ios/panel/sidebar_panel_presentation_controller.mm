@@ -2,7 +2,7 @@
 
 #import "ios/panel/sidebar_panel_presentation_controller.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/panel/panel_constants.h"
 #import "ios/panel/slide_in_animator.h"
 #import "ios/panel/slide_out_animator.h"

@@ -8,11 +8,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <cctype>  // std::isupper()
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include "third_party/jsoncpp/source/include/json/json.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -33,7 +33,7 @@ class FilterBuffer {
 
   size_t remaining() { return kFilterBufferSize - (cursor_ - data_); }
   void Reset() { cursor_ = data_; }
-  re2::StringPiece Get() { return re2::StringPiece(data_, cursor_ - data_); }
+  std::string_view Get() { return std::string_view(data_, cursor_ - data_); }
 
   void Append(char c) {
     if (remaining() > 0) {
@@ -76,7 +76,7 @@ std::string JsonSerialize(const Json::Value& value) {
 
 bool ContainsUpper(const char* str) {
   while (*str) {
-    if (std::isupper(*str)) {
+    if (*str >= 'A' && *str <= 'Z') {
       return true;
     }
     ++str;

@@ -105,12 +105,9 @@ import org.chromium.ui.display.DisplayUtil;
         mAnchorView.addOnLayoutChangeListener(this);
         mHorizontalAlignmentView.addOnLayoutChangeListener(this);
         mAnchorView.getViewTreeObserver().addOnGlobalLayoutListener(this);
-        if (OmniboxFeatures.omniboxConsumesImeInsets()) {
-            mDeferredIMEWindowInsetApplicationCallback =
-                    new DeferredIMEWindowInsetApplicationCallback(
-                            this::recalculateOmniboxAlignment);
-            mDeferredIMEWindowInsetApplicationCallback.attach(mWindowAndroid);
-        }
+        mDeferredIMEWindowInsetApplicationCallback =
+                new DeferredIMEWindowInsetApplicationCallback(this::recalculateOmniboxAlignment);
+        mDeferredIMEWindowInsetApplicationCallback.attach(mWindowAndroid);
         onConfigurationChanged(mContext.getResources().getConfiguration());
         recalculateOmniboxAlignment();
     }
@@ -155,10 +152,7 @@ import org.chromium.ui.display.DisplayUtil;
         mWindowWidthDp = windowWidth;
         mWindowHeightDp = windowHeight;
 
-        if (OmniboxFeatures.shouldAdaptToNarrowTabletWindows()
-                || OmniboxFeatures.omniboxConsumesImeInsets()) {
-            recalculateOmniboxAlignment();
-        }
+        recalculateOmniboxAlignment();
     }
 
     @Override
@@ -194,8 +188,14 @@ import org.chromium.ui.display.DisplayUtil;
             if (OmniboxFeatures.shouldShowModernizeVisualUpdate(mContext)) {
                 // Case 1: tablets with revamp enabled. Width equal to alignment view and left
                 // equivalent to left of alignment view.
-                left = mPositionArray[0];
                 width = mHorizontalAlignmentView.getMeasuredWidth();
+
+                if (mAnchorView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
+                    // The view will be shifted to the left, so the adjustment needs to be negative.
+                    left = -(mAnchorView.getMeasuredWidth() - width - mPositionArray[0]);
+                } else {
+                    left = mPositionArray[0];
+                }
                 paddingLeft = 0;
                 paddingRight = 0;
             } else {
@@ -216,16 +216,11 @@ import org.chromium.ui.display.DisplayUtil;
             paddingRight = 0;
         }
 
-        // The height param shouldn't be used with omniboxConsumesImeInsets() off; -1 is a sentinel
-        // value that will reveal a problem quickly.
-        int height = -1;
-        if (OmniboxFeatures.omniboxConsumesImeInsets()) {
-            int mKeyboardHeight = mDeferredIMEWindowInsetApplicationCallback != null
-                    ? mDeferredIMEWindowInsetApplicationCallback.getCurrentKeyboardHeight()
-                    : 0;
-            height = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mWindowHeightDp) - top
-                    - mKeyboardHeight;
-        }
+        int mKeyboardHeight = mDeferredIMEWindowInsetApplicationCallback != null
+                ? mDeferredIMEWindowInsetApplicationCallback.getCurrentKeyboardHeight()
+                : 0;
+        int height = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mWindowHeightDp) - top
+                - mKeyboardHeight;
 
         // TODO(pnoland@, https://crbug.com/1416985): avoid pushing changes that are identical to
         // the previous alignment value.

@@ -238,13 +238,12 @@ void AddOncLocalizedStrings(content::WebUIDataSource* html_source) {
       {"OncTether-BatteryPercentage_Value",
        IDS_ONC_TETHER_BATTERY_PERCENTAGE_VALUE},
       {"OncTether-SignalStrength", IDS_ONC_TETHER_SIGNAL_STRENGTH},
-      {"OncTether-SignalStrength_Weak", IDS_ONC_TETHER_SIGNAL_STRENGTH_WEAK},
-      {"OncTether-SignalStrength_Okay", IDS_ONC_TETHER_SIGNAL_STRENGTH_OKAY},
-      {"OncTether-SignalStrength_Good", IDS_ONC_TETHER_SIGNAL_STRENGTH_GOOD},
+      {"OncTether-SignalStrength_None", IDS_ONC_TETHER_SIGNAL_STRENGTH_NONE},
+      {"OncTether-SignalStrength_Low", IDS_ONC_TETHER_SIGNAL_STRENGTH_LOW},
+      {"OncTether-SignalStrength_Medium",
+       IDS_ONC_TETHER_SIGNAL_STRENGTH_MEDIUM},
       {"OncTether-SignalStrength_Strong",
        IDS_ONC_TETHER_SIGNAL_STRENGTH_STRONG},
-      {"OncTether-SignalStrength_VeryStrong",
-       IDS_ONC_TETHER_SIGNAL_STRENGTH_VERY_STRONG},
       {"OncTether-Carrier", IDS_ONC_TETHER_CARRIER},
       {"OncTether-Carrier_Unknown", IDS_ONC_TETHER_CARRIER_UNKNOWN},
       {"OncVPN-Host", IDS_ONC_VPN_HOST},
@@ -336,10 +335,15 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
       {"apnSettingsCustomApnsErrorMessage",
        IDS_SETTINGS_APN_CUSTOM_APNS_ERROR_MESSAGE},
       {"apnMenuDetails", IDS_SETTINGS_APN_MENU_DETAILS},
+      {"apnMenuEdit", IDS_SETTINGS_APN_MENU_EDIT},
       {"apnMenuDisable", IDS_SETTINGS_APN_MENU_DISABLE},
       {"apnMenuEnable", IDS_SETTINGS_APN_MENU_ENABLE},
       {"apnMenuRemove", IDS_SETTINGS_APN_MENU_REMOVE},
       {"apnMoreActionsTitle", IDS_SETTINGS_APN_MORE_ACTIONS_TITLE},
+      {"apnA11yName", IDS_SETTINGS_APN_A11Y_NAME},
+      {"apnA11yAutoDetected", IDS_SETTINGS_APN_A11Y_AUTO_DETECTED},
+      {"apnA11yConnected", IDS_SETTINGS_APN_A11Y_CONNECTED},
+      {"apnA11yDisabled", IDS_SETTINGS_APN_A11Y_DISABLED},
       {"apnDetailAddApnDialogTitle", IDS_SETTINGS_ADD_APN_DIALOG_TITLE},
       {"apnDetailViewApnDialogTitle", IDS_SETTINGS_VIEW_APN_DIALOG_TITLE},
       {"apnDetailEditApnDialogTitle", IDS_SETTINGS_EDIT_APN_DIALOG_TITLE},
@@ -362,6 +366,7 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
       {"apnAutoDetected", IDS_SETTINGS_APN_AUTO_DETECTED},
       {"apnWarningPromptForDisableRemove",
        IDS_SETTINGS_APN_WARNING_PROMPT_FOR_DISABLE_REMOVE},
+      {"apnWarningPromptForEnable", IDS_SETTINGS_APN_WARNING_PROMPT_FOR_ENABLE},
       {"apnDetailDialogAdd", IDS_SETTINGS_APN_DIALOG_ADD},
       {"apnDetailDialogSave", IDS_SETTINGS_APN_DIALOG_SAVE},
       {"apnDetailDialogCancel", IDS_SETTINGS_APN_DIALOG_CANCEL},
@@ -530,10 +535,6 @@ void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showHiddenNetworkWarning",
       base::FeatureList::IsEnabled(ash::features::kHiddenNetworkWarning));
-
-  html_source->AddBoolean(
-      "enableHiddenNetworkMigration",
-      base::FeatureList::IsEnabled(ash::features::kHiddenNetworkMigration));
 
   // Login screen and public account users can only create shared network
   // configurations. Other users default to unshared network configurations.

@@ -93,15 +93,25 @@ struct NetworkResponseInfo {
       AccountTokenFetchStatus::kUnspecified;
   base::TimeTicks fetch_time_ticks;
   base::TimeTicks loader_start_time_ticks;
+  // List of HTTP response header names and values.
+  std::vector<std::string> response_header_names_and_values;
 };
 
 std::ostream& operator<<(std::ostream& os, const NetworkResponseInfo& o);
 
 struct NetworkResponse {
+  NetworkResponse();
+  NetworkResponse(const std::string& response_bytes, int status_code);
+  ~NetworkResponse();
+  NetworkResponse(const NetworkResponse&);
+  NetworkResponse& operator=(const NetworkResponse&);
+
   // HTTP response body.
   std::string response_bytes;
   // HTTP status code if available, or net::Error otherwise.
   int status_code;
+  // List of HTTP response header names and values.
+  std::vector<std::string> response_header_names_and_values;
 };
 
 // For the snippets-internals page.

@@ -18,8 +18,9 @@ void ScreenAIDownloaderAsh::Bind(
   receivers_.Add(this, std::move(screen_ai_downloader));
 }
 
-void ScreenAIDownloaderAsh::DownloadComponent(
-    DownloadComponentCallback callback) {
+void ScreenAIDownloaderAsh::GetComponentFolder(
+    bool download_if_needed,
+    GetComponentFolderCallback callback) {
   auto* install_state = screen_ai::ScreenAIInstallState::GetInstance();
 
   if (install_state->IsComponentAvailable()) {
@@ -28,8 +29,7 @@ void ScreenAIDownloaderAsh::DownloadComponent(
     return;
   }
 
-  if (install_state->get_state() ==
-      screen_ai::ScreenAIInstallState::State::kFailed) {
+  if (!download_if_needed) {
     std::move(callback).Run(absl::nullopt);
     return;
   }
@@ -37,8 +37,18 @@ void ScreenAIDownloaderAsh::DownloadComponent(
   // Keep the callback and observe status updates.
   pending_download_callbacks_.push_back(std::move(callback));
   if (!install_state_observer_.IsObserving()) {
+    // Adding the observer will trigger download.
     install_state_observer_.Observe(install_state);
+  } else {
+    // When the observer is added and the component does not exit, it means that
+    // download has failed the previous time. So we need to try again.
+    install_state->DownloadComponent();
   }
+}
+
+void ScreenAIDownloaderAsh::DownloadComponentDeprecated(
+    DownloadComponentDeprecatedCallback callback) {
+  GetComponentFolder(/*download_if_needed=*/true, std::move(callback));
 }
 
 void ScreenAIDownloaderAsh::SetLastUsageTime() {

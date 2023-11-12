@@ -15,7 +15,7 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 };
 
 /// Contains the helper methods related to window size and device
-/// state for iPad multitasking UI.
+/// state for iPad multitasking UI, also other common misc ones.
 @interface VivaldiGlobalHelpers: NSObject
 
 /// Returns the key window of the application.
@@ -47,6 +47,9 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// enough space to show iPad side panel.
 + (BOOL)canShowSidePanel;
 
+/// Returns whether the build is final release build.
++ (BOOL)isFinalReleaseBuild;
+
 /// Returns true if given string matches a valid domain format.
 /*
  Ruturns True for below formats:
@@ -74,6 +77,9 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns alphabetically  sorted result from two provided NSString keys.
 + (NSComparisonResult)compare:(NSString* _Nonnull)first
                        second:(NSString* _Nonnull)second;
+/// Returns True if URL A and URL B has same host.
++ (BOOL)areHostsEquivalentForURL:(NSURL* _Nonnull)aURL
+                            bURL:(NSURL* _Nonnull)bURL;
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_GLOBAL_HELPERS_H_

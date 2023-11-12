@@ -60,6 +60,7 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     public ChromeSiteSettingsDelegate(Context context, Profile profile) {
         mContext = context;
         mProfile = profile;
+        mPrivacySandboxController = null;
     }
 
     @Override
@@ -74,10 +75,12 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
      * Used to set an instance of {@link SnackbarManager} by the parent activity.
      */
     public void setSnackbarManager(SnackbarManager manager) {
+        /* disabled in vivaldi
         if (manager != null) {
             mPrivacySandboxController = new PrivacySandboxSnackbarController(
                     mContext, manager, new SettingsLauncherImpl());
         }
+        */
     }
 
     @Override
@@ -97,7 +100,6 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
         }
         return mManagedPreferenceDelegate;
     }
-
     @Override
     public void getFaviconImageForURL(GURL faviconUrl, Callback<Drawable> callback) {
         if (mLargeIconBridge == null) {
@@ -128,6 +130,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
                 return ContentFeatureMap.isEnabled(ContentFeatures.FED_CM);
             case SiteSettingsCategory.Type.NFC:
                 return ContentFeatureMap.isEnabled(ContentFeatureList.WEB_NFC);
+            case SiteSettingsCategory.Type.ZOOM:
+                return ContentFeatureMap.isEnabled(ContentFeatureList.SMART_ZOOM);
             default:
                 return true;
         }
@@ -151,6 +155,11 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     @Override
     public boolean isPrivacySandboxSettings4Enabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4);
+    }
+
+    @Override
+    public boolean isUserBypassUIEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.USER_BYPASS_UI);
     }
 
     @Override

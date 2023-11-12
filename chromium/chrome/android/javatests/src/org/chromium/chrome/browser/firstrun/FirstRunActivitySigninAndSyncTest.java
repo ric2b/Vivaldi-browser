@@ -23,6 +23,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.text.Spanned;
 import android.text.style.ClickableSpan;
 import android.view.View;
@@ -46,11 +47,10 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.chromium.base.BuildInfo;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Matchers;
@@ -67,6 +67,7 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
+import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.policy.test.annotations.Policies;
@@ -121,7 +122,10 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    public void dismissButtonClickSkipsSyncConsentPageWhenNoAccountsAreOnDevice() {
+    @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O,
+            message = "This test is disabled on Android N because of https://crbug.com/1459076")
+    public void
+    dismissButtonClickSkipsSyncConsentPageWhenNoAccountsAreOnDevice() {
         launchFirstRunActivityAndWaitForNativeInitialization();
         onView(withId(R.id.signin_fre_selected_account)).check(matches(not(isDisplayed())));
 
@@ -132,7 +136,10 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    public void dismissButtonClickSkipsSyncConsentPageWhenOneAccountIsOnDevice() {
+    @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.O,
+            message = "This test is disabled on Android N because of https://crbug.com/1459076")
+    public void
+    dismissButtonClickSkipsSyncConsentPageWhenOneAccountIsOnDevice() {
         mAccountManagerTestRule.addAccount(TEST_EMAIL);
         launchFirstRunActivityAndWaitForNativeInitialization();
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -261,7 +268,8 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @DisableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
+    @DisableFeatures(ChromeFeatureList.TANGIBLE_SYNC)
+    @DisabledTest(message = "https://crbug.com/1459076")
     public void acceptingSyncEndsFreAndEnablesSync() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
         mAccountManagerTestRule.addAccount(TEST_EMAIL);
@@ -279,7 +287,8 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
+    @EnableFeatures(ChromeFeatureList.TANGIBLE_SYNC)
+    @DisabledTest(message = "https://crbug.com/1459076")
     public void acceptingSyncEndsFreAndEnablesSync_tangibleSyncEnabled() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
         mAccountManagerTestRule.addAccount(TEST_EMAIL);
@@ -297,7 +306,8 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @DisableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
+    @DisableFeatures(ChromeFeatureList.TANGIBLE_SYNC)
+    @DisabledTest(message = "https://crbug.com/1459076")
     public void refusingSyncEndsFreAndDoesNotEnableSync() {
         mAccountManagerTestRule.addAccount(TEST_EMAIL);
         launchFirstRunActivityAndWaitForNativeInitialization();
@@ -315,7 +325,8 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.TANGIBLE_SYNC})
+    @EnableFeatures(ChromeFeatureList.TANGIBLE_SYNC)
+    @DisabledTest(message = "https://crbug.com/1459076")
     public void refusingSyncEndsFreAndDoesNotEnableSync_tangibleSyncEnabled() {
         mAccountManagerTestRule.addAccount(TEST_EMAIL);
         launchFirstRunActivityAndWaitForNativeInitialization();
@@ -401,6 +412,7 @@ public class FirstRunActivitySigninAndSyncTest {
     // ChildAccountStatusSupplier uses AppRestrictions to quickly detect non-supervised cases,
     // adding at least one policy via AppRestrictions prevents that.
     @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
+    @DisabledTest(message = "https://crbug.com/1459076")
     public void clickingSettingsThenCancelForChildAccountDoesNotEnableSync() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
         mAccountManagerTestRule.addAccount(CHILD_EMAIL);
@@ -487,18 +499,10 @@ public class FirstRunActivitySigninAndSyncTest {
     }
 
     private void completeAutoDeviceLockIfNeeded() {
-        if (!ThreadUtils.runOnUiThreadBlockingNoException(
-                    () -> BuildInfo.getInstance().isAutomotive)) {
-            return;
+        if (mFirstRunActivity.getCurrentFragmentForTesting() instanceof SigninFirstRunFragment) {
+            SigninTestUtil.completeAutoDeviceLockIfNeeded(
+                    (SigninFirstRunFragment) mFirstRunActivity.getCurrentFragmentForTesting());
         }
-
-        onView(withId(R.id.device_lock_view)).check(matches(isDisplayed()));
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            SigninFirstRunFragment signinFirstRunFragment =
-                    (SigninFirstRunFragment) mFirstRunActivity.getCurrentFragmentForTesting();
-            signinFirstRunFragment.onDeviceLockReady();
-        });
     }
 
     private static class LinkClick implements ViewAction {

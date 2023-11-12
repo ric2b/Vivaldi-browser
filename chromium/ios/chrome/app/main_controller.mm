@@ -7,14 +7,15 @@
 #import <memory>
 
 #import "base/apple/bundle_locations.h"
+#import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
 #import "base/functional/callback.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/path_service.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/sequenced_task_runner.h"
 #import "components/component_updater/component_updater_service.h"
 #import "components/component_updater/installer_policies/autofill_states_component_installer.h"
 #import "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
@@ -58,8 +59,7 @@
 #import "ios/chrome/app/startup_tasks.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/app/variations_app_state_agent.h"
-#import "ios/chrome/browser/accessibility/window_accessibility_change_notifier_app_agent.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state_removal_controller.h"
+#import "ios/chrome/browser/accessibility/model/window_accessibility_change_notifier_app_agent.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remover.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #import "ios/chrome/browser/browsing_data/sessions_storage_util.h"
@@ -72,7 +72,6 @@
 #import "ios/chrome/browser/download/download_directory_util.h"
 #import "ios/chrome/browser/external_files/external_file_remover_factory.h"
 #import "ios/chrome/browser/external_files/external_file_remover_impl.h"
-#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/mailto_handler/mailto_handler_service.h"
@@ -83,13 +82,11 @@
 #import "ios/chrome/browser/metrics/window_configuration_recorder.h"
 #import "ios/chrome/browser/omaha/omaha_service.h"
 #import "ios/chrome/browser/passwords/password_manager_util_ios.h"
-#import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
 #import "ios/chrome/browser/screenshot/screenshot_metrics_recorder.h"
 #import "ios/chrome/browser/search_engines/extension_search_engine_data_updater.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
-#import "ios/chrome/browser/sessions/scene_util.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/share_extension/share_extension_service.h"
 #import "ios/chrome/browser/share_extension/share_extension_service_factory.h"
@@ -102,6 +99,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -148,9 +146,9 @@
 #import "ios/chrome/app/dump_documents_statistics.h"
 #endif  // BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// To get access to UseSessionSerializationOptimizations().
+// TODO(crbug.com/1383087): remove once the feature is fully launched.
+#import "ios/web/common/features.h"
 
 namespace {
 
@@ -176,6 +174,9 @@ NSString* const kMailtoHandlingInitialization = @"MailtoHandlingInitialization";
 
 // Constants for deferring saving field trial values
 NSString* const kSaveFieldTrialValues = @"SaveFieldTrialValues";
+
+// Constants for refreshing the WidgetKit after five minutes
+NSString* const kWidgetKitRefreshFiveMinutes = @"WidgetKitRefreshFiveMinutes";
 
 // Constants for deferred check if it is necessary to send pings to
 // Chrome distribution related services.
@@ -429,7 +430,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   DCHECK(self.appState.initStage > InitStageSafeMode);
 
   NSBundle* baseBundle = base::apple::OuterBundle();
-  base::mac::SetBaseBundleID(
+  base::apple::SetBaseBundleID(
       base::SysNSStringToUTF8([baseBundle bundleIdentifier]).c_str());
 
   // Register default values for experimental settings (Application Preferences)
@@ -447,10 +448,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   // Start recording field trial info.
   [[PreviousSessionInfo sharedInstance] beginRecordingFieldTrials];
-
-  // Remove the extra browser states as Chrome iOS is single profile in M48+.
-  ChromeBrowserStateRemovalController::GetInstance()
-      ->RemoveBrowserStatesIfNecessary();
 
   ChromeBrowserState* chromeBrowserState = GetApplicationContext()
                                                ->GetChromeBrowserStateManager()
@@ -721,7 +718,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)sceneState:(SceneState*)sceneState
     transitionedToActivationLevel:(SceneActivationLevel)level {
-  if (level == SceneActivationLevelUnattached) {
+  if (level <= SceneActivationLevelDisconnected) {
     [sceneState removeObserver:self];
   } else if (level > SceneActivationLevelBackground) {
     // Stop observing all scenes since we only needed to know when the app
@@ -807,7 +804,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // connected scene states as disconnected in order to allow services to
   // properly unregister their observers and tear down remaining UI.
   for (SceneState* sceneState in self.appState.connectedScenes) {
-    sceneState.activationLevel = SceneActivationLevelUnattached;
+    sceneState.activationLevel = SceneActivationLevelDisconnected;
   }
 
 #if BUILDFLAG(FAST_APP_TERMINATE_ENABLED)
@@ -824,7 +821,12 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
         dispatch_semaphore_signal(semaphore);
       }
     };
-    [[SessionServiceIOS sharedService] shutdownWithCompletion:completionBlock];
+    if (!web::features::UseSessionSerializationOptimizations()) {
+      [[SessionServiceIOS sharedService]
+          shutdownWithCompletion:completionBlock];
+    } else {
+      completionBlock();
+    }
 
     if (metrics) {
       metrics->Stop();
@@ -1108,6 +1110,11 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
       kFieldTrialValueKey : credentialProviderExtensionPasswordNotesValue,
       kFieldTrialVersionKey : credentialProviderExtensionPasswordNotesVersion,
     },
+    kWidgetKitRefreshFiveMinutes : @{
+      kFieldTrialValueKey : @([[NSUserDefaults standardUserDefaults]
+          boolForKey:kWidgetKitRefreshFiveMinutes]),
+      kFieldTrialVersionKey : @1,
+    },
   };
   [sharedDefaults setObject:fieldTrialValues
                      forKey:app_group::kChromeExtensionFieldTrialPreference];
@@ -1239,15 +1246,18 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   }
 
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  NSDate* lastLogged = base::mac::ObjCCast<NSDate>(
+  NSDate* lastLogged = base::apple::ObjCCast<NSDate>(
       [defaults objectForKey:kLastApplicationStorageMetricsLogTime]);
   if (lastLogged && [[NSDate date] timeIntervalSinceDate:lastLogged] <
                         kMinimumTimeBetweenDocumentsSizeLogging) {
     return;
   }
 
-  base::FilePath profilePath = self.appState.mainBrowserState->GetStatePath();
-  LogApplicationStorageMetrics(profilePath);
+  ChromeBrowserState* browserState = self.appState.mainBrowserState;
+  base::FilePath profilePath = browserState->GetStatePath();
+  base::FilePath offTheRecordStatePath =
+      browserState->GetOffTheRecordStatePath();
+  LogApplicationStorageMetrics(profilePath, offTheRecordStatePath);
 }
 
 - (void)expireFirstUserActionRecorder {
@@ -1404,9 +1414,10 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   BOOL isPasswordSyncEnabled =
       password_manager_util::IsPasswordSyncNormalEncryptionEnabled(syncService);
   if (isPasswordSyncEnabled) {
-    UpdateFaviconsStorage(
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState),
-        /*sync_enabled=*/isPasswordSyncEnabled);
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&UpdateFaviconsStorageForBrowserState,
+                                  browserState->AsWeakPtr(),
+                                  /*sync_enabled=*/isPasswordSyncEnabled));
   }
 }
 #endif

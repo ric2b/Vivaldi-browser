@@ -4,11 +4,7 @@
 
 #include "media/capture/video/apple/test/fake_av_capture_device_format.h"
 
-#include "base/mac/scoped_cftyperef.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+#include "base/apple/scoped_cftyperef.h"
 
 @implementation FakeAVFrameRateRange
 #pragma clang diagnostic push
@@ -28,7 +24,7 @@
 @end
 
 @implementation FakeAVCaptureDeviceFormat {
-  base::ScopedCFTypeRef<CMVideoFormatDescriptionRef> _formatDescription;
+  base::apple::ScopedCFTypeRef<CMVideoFormatDescriptionRef> _formatDescription;
   FakeAVFrameRateRange* __strong _frameRateRange1;
   FakeAVFrameRateRange* __strong _frameRateRange2;
 }

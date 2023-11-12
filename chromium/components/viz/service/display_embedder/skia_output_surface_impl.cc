@@ -18,13 +18,13 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/threading/sequence_local_storage_slot.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_util.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/service/display/external_use_client.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -37,6 +37,7 @@
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "gpu/command_buffer/service/graphite_cache_controller.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
@@ -51,6 +52,9 @@
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
 #include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
+#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "third_party/skia/include/gpu/graphite/Image.h"
 #include "third_party/skia/include/gpu/graphite/Recorder.h"
 #include "third_party/skia/include/gpu/graphite/YUVABackendTextures.h"
@@ -83,7 +87,8 @@ struct FulfillForPlane {
   explicit FulfillForPlane(ImageContextImpl* context, int plane_index = 0)
       : context_(context), plane_index_(plane_index) {}
 
-  const raw_ptr<ImageContextImpl, DanglingUntriaged> context_ = nullptr;
+  const raw_ptr<ImageContextImpl, AcrossTasksDanglingUntriaged> context_ =
+      nullptr;
   const int plane_index_ = 0;
 };
 
@@ -129,10 +134,22 @@ gpu::ContextUrl& GetActiveUrl() {
   return *active_url;
 }
 
-OutputSurface::Type GetOutputSurfaceType(SkiaOutputSurfaceDependency* deps) {
-  // TODO(penghuang): Support more types.
-  return deps->IsUsingVulkan() ? OutputSurface::Type::kVulkan
-                               : OutputSurface::Type::kOpenGL;
+scoped_refptr<gpu::raster::GraphiteCacheController>
+GetOrCreateGraphiteCacheController(skgpu::graphite::Recorder* recorder) {
+  // All SkiaOutputSurfaceImpl instances on a thread share one cache controller,
+  // and the controller will be released when all SkiaOutputSurfaceImpl
+  // instances are released, so we use a sequence local WeakPtr here.
+  static base::SequenceLocalStorageSlot<
+      base::WeakPtr<gpu::raster::GraphiteCacheController>>
+      sls_weak_controller;
+  auto& weak_controller = sls_weak_controller.GetOrCreateValue();
+  if (weak_controller) {
+    return base::WrapRefCounted(weak_controller.get());
+  }
+  auto controller =
+      base::MakeRefCounted<gpu::raster::GraphiteCacheController>(recorder);
+  weak_controller = controller->AsWeakPtr();
+  return controller;
 }
 
 }  // namespace
@@ -257,9 +274,7 @@ SkiaOutputSurfaceImpl::SkiaOutputSurfaceImpl(
     DisplayCompositorMemoryAndTaskController* display_controller,
     const RendererSettings& renderer_settings,
     const DebugRendererSettings* debug_settings)
-    : SkiaOutputSurface(
-          GetOutputSurfaceType(display_controller->skia_dependency())),
-      dependency_(display_controller->skia_dependency()),
+    : dependency_(display_controller->skia_dependency()),
       renderer_settings_(renderer_settings),
       debug_settings_(debug_settings),
       display_compositor_controller_(display_controller),
@@ -379,7 +394,7 @@ void SkiaOutputSurfaceImpl::Reshape(const ReshapeParams& params) {
          params.alpha_type == kOpaque_SkAlphaType);
 
   size_ = params.size;
-  format_ = GetSharedImageFormat(params.format);
+  format_ = GetSinglePlaneSharedImageFormat(params.format);
   alpha_type_ = params.alpha_type;
 
   const auto format_index = static_cast<int>(params.format);
@@ -476,7 +491,7 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintCurrentFrame() {
     // CopyDst usage. So don't treat it like a root surface which generally
     // won't have or support those usages.
     skgpu::graphite::TextureInfo texture_info =
-        gpu::GetGraphiteTextureInfo(dependency_->gr_context_type(), format_);
+        gpu::GetGraphiteTextureInfo(gr_context_type_, format_);
     CHECK(texture_info.isValid());
     current_paint_.emplace(graphite_recorder_, image_info, texture_info);
   } else {
@@ -555,11 +570,11 @@ sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromYUV(
       // NOTE: We don't have promises for individual planes, but still need
       // texture info for fallback. Fallback textures are not considered YUV
       // planes since they are allocated separately and need write usage.
-      context->SetImage(nullptr, {gpu::GetGraphiteTextureInfo(
-                                     dependency_->gr_context_type(), format)});
+      context->SetImage(
+          nullptr, {gpu::GetGraphiteTextureInfo(gr_context_type_, format)});
 
       texture_infos[i] =
-          gpu::GetGraphiteTextureInfo(dependency_->gr_context_type(), format,
+          gpu::GetGraphiteTextureInfo(gr_context_type_, format,
                                       /*plane_index=*/0, /*is_yuv_plane=*/true);
       fulfills[i] = new FulfillForPlane(context);
     }
@@ -610,16 +625,27 @@ void SkiaOutputSurfaceImpl::MakePromiseSkImageSinglePlane(
   CHECK(format.is_single_plane() || format.PrefersExternalSampler());
   FulfillForPlane* fulfill = new FulfillForPlane(image_context);
   SkColorType color_type =
-      ToClosestSkColorType(/*gpu_compositing=*/true, format);
+      format.PrefersExternalSampler()
+          ? gpu::ToClosestSkColorTypeExternalSampler(format)
+          : ToClosestSkColorType(/*gpu_compositing=*/true, format);
   if (graphite_recorder_) {
-    skgpu::graphite::TextureInfo texture_info = gpu::GetGraphiteTextureInfo(
-        dependency_->gr_context_type(), format, /*plane_index=*/0,
-        /*is_yuv_plane=*/false, mipmap);
+    skgpu::graphite::TextureInfo texture_info =
+        gpu::GetGraphiteTextureInfo(gr_context_type_, format, /*plane_index=*/0,
+                                    /*is_yuv_plane=*/false, mipmap);
     SkColorInfo color_info(color_type, image_context->alpha_type(),
                            image_context->color_space());
+    static_assert(skgpu::Origin::kTopLeft ==
+                      static_cast<skgpu::Origin>(
+                          GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin),
+                  "");
+    static_assert(skgpu::Origin::kBottomLeft ==
+                      static_cast<skgpu::Origin>(
+                          GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin),
+                  "");
+    skgpu::Origin origin = static_cast<skgpu::Origin>(image_context->origin());
     auto image = SkImages::PromiseTextureFrom(
         graphite_recorder_, gfx::SizeToSkISize(image_context->size()),
-        texture_info, color_info, skgpu::graphite::Volatile::kYes,
+        texture_info, color_info, origin, skgpu::graphite::Volatile::kYes,
         FulfillGraphite, CleanUp, ReleaseGraphite, fulfill);
     image_context->SetImage(std::move(image), {texture_info});
   } else {
@@ -659,8 +685,8 @@ void SkiaOutputSurfaceImpl::MakePromiseSkImageMultiPlane(
          plane_index++) {
       CHECK_EQ(image_context->origin(), kTopLeft_GrSurfaceOrigin);
       fulfills[plane_index] = new FulfillForPlane(image_context, plane_index);
-      texture_infos.emplace_back(gpu::GetGraphiteTextureInfo(
-          dependency_->gr_context_type(), format, plane_index));
+      texture_infos.emplace_back(
+          gpu::GetGraphiteTextureInfo(gr_context_type_, format, plane_index));
     }
 
     skgpu::graphite::YUVABackendTextureInfo yuva_backend_info(
@@ -760,6 +786,10 @@ void SkiaOutputSurfaceImpl::SwapBuffers(OutputSurfaceFrame frame) {
   if (reset_ddl_recorder_on_swap_) {
     RecreateRootDDLRecorder();
   }
+
+  if (graphite_cache_controller_) {
+    graphite_cache_controller_->ScheduleCleanup();
+  }
 }
 
 void SkiaOutputSurfaceImpl::SwapBuffersSkipped(
@@ -820,8 +850,9 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPass(
     SkImageInfo image_info =
         SkImageInfo::Make(gfx::SizeToSkISize(surface_size), color_type,
                           kPremul_SkAlphaType, color_space);
-    skgpu::graphite::TextureInfo texture_info =
-        gpu::GetGraphiteTextureInfo(dependency_->gr_context_type(), format);
+    skgpu::graphite::TextureInfo texture_info = gpu::GetGraphiteTextureInfo(
+        gr_context_type_, format, /*plane_index=*/0,
+        /*is_yuv_plane=*/false, mipmap, scanout_dcomp_surface);
     if (!texture_info.isValid()) {
       DLOG(ERROR) << "BeginPaintRenderPass: invalid Graphite TextureInfo";
       return nullptr;
@@ -1099,6 +1130,13 @@ bool SkiaOutputSurfaceImpl::Initialize() {
       frame_buffer_damage_tracker_.emplace(capabilities_.number_of_buffers);
     }
   }
+
+  // |graphite_recorder_| is used on viz thread, so we get or create cache
+  // controller for graphite_recorder_ and use it on viz thread.
+  if (graphite_recorder_) {
+    graphite_cache_controller_ =
+        GetOrCreateGraphiteCacheController(graphite_recorder_);
+  }
   return result;
 }
 
@@ -1130,11 +1168,12 @@ void SkiaOutputSurfaceImpl::InitializeOnGpuThread(
   capabilities_ = impl_on_gpu_->capabilities();
   is_displayed_as_overlay_ = impl_on_gpu_->IsDisplayedAsOverlay();
 
-  if (auto* gr_context = dependency_->GetSharedContextState()->gr_context()) {
+  auto shared_context_state = dependency_->GetSharedContextState();
+  gr_context_type_ = shared_context_state->gr_context_type();
+  if (auto* gr_context = shared_context_state->gr_context()) {
     gr_context_thread_safe_ = gr_context->threadSafeProxy();
   }
-  graphite_recorder_ =
-      dependency_->GetSharedContextState()->viz_compositor_graphite_recorder();
+  graphite_recorder_ = shared_context_state->viz_compositor_graphite_recorder();
 
   *result = true;
 }
@@ -1163,12 +1202,12 @@ SkiaOutputSurfaceImpl::CreateGrSurfaceCharacterizationRenderPass(
   DCHECK(backend_format.isValid());
 #if BUILDFLAG(IS_APPLE)
   if (is_overlay) {
-    DCHECK_EQ(dependency_->gr_context_type(), gpu::GrContextType::kGL);
+    DCHECK_EQ(gr_context_type_, gpu::GrContextType::kGL);
     // For overlay, IOSurface will be used, and we may need using
     // GL_TEXTURE_RECTANGLE_ARB as texture target.
-    backend_format =
-        GrBackendFormat::MakeGL(backend_format.asGLFormatEnum(),
-                                gpu::GetPlatformSpecificTextureTarget());
+    backend_format = GrBackendFormats::MakeGL(
+        GrBackendFormats::AsGLFormatEnum(backend_format),
+        gpu::GetPlatformSpecificTextureTarget());
   }
 #endif
   auto image_info =
@@ -1210,11 +1249,12 @@ SkiaOutputSurfaceImpl::CreateGrSurfaceCharacterizationCurrentFrame(
   auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
       color_type, GrRenderable::kYes);
 #if BUILDFLAG(IS_MAC)
-  DCHECK_EQ(dependency_->gr_context_type(), gpu::GrContextType::kGL);
+  DCHECK_EQ(gr_context_type_, gpu::GrContextType::kGL);
   // For root rander pass, IOSurface will be used, and we may need using
   // GL_TEXTURE_RECTANGLE_ARB as texture target.
-  backend_format = GrBackendFormat::MakeGL(
-      backend_format.asGLFormatEnum(), gpu::GetPlatformSpecificTextureTarget());
+  backend_format =
+      GrBackendFormats::MakeGL(GrBackendFormats::AsGLFormatEnum(backend_format),
+                               gpu::GetPlatformSpecificTextureTarget());
 #endif
   DCHECK(backend_format.isValid())
       << "GrBackendFormat is invalid for color_type: " << color_type;
@@ -1226,7 +1266,7 @@ SkiaOutputSurfaceImpl::CreateGrSurfaceCharacterizationCurrentFrame(
       SkImageInfo::Make(surface_size.width(), surface_size.height(), color_type,
                         alpha_type, std::move(color_space));
   DCHECK((capabilities_.uses_default_gl_framebuffer &&
-          dependency_->gr_context_type() == gpu::GrContextType::kGL) ||
+          gr_context_type_ == gpu::GrContextType::kGL) ||
          !capabilities_.uses_default_gl_framebuffer);
   // Skia doesn't support set desired MSAA count for default gl framebuffer.
   if (capabilities_.uses_default_gl_framebuffer) {
@@ -1250,11 +1290,12 @@ SkiaOutputSurfaceImpl::CreateGrSurfaceCharacterizationCurrentFrame(
       << "\n  backend_format.isValid()=" << backend_format.isValid()
       << "\n  backend_format.backend()="
       << static_cast<int>(backend_format.backend())
-      << "\n  backend_format.asGLFormat()="
-      << static_cast<int>(backend_format.asGLFormat())
+      << "\n  GrBackendFormats::AsGLFormat(backend_format)="
+      << static_cast<int>(GrBackendFormats::AsGLFormat(backend_format))
 #if BUILDFLAG(ENABLE_VULKAN)
       << "\n  backend_format.asVkFormat()="
-      << static_cast<int>(backend_format.asVkFormat(&vk_format))
+      << static_cast<int>(
+             GrBackendFormats::AsVkFormat(backend_format, &vk_format))
       << "\n  backend_format.asVkFormat() vk_format="
       << static_cast<int>(vk_format)
 #endif
@@ -1433,9 +1474,9 @@ GrBackendFormat SkiaOutputSurfaceImpl::GetGrBackendFormatForTexture(
     uint32_t gl_texture_target,
     const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info) {
 #if BUILDFLAG(ENABLE_VULKAN)
-  if (dependency_->gr_context_type() == gpu::GrContextType::kVulkan) {
+  if (gr_context_type_ == gpu::GrContextType::kVulkan) {
     if (!ycbcr_info) {
-      return GrBackendFormat::MakeVk(gpu::ToVkFormat(si_format, plane_index));
+      return GrBackendFormats::MakeVk(gpu::ToVkFormat(si_format, plane_index));
     }
 
     // Assume optimal tiling.
@@ -1447,16 +1488,16 @@ GrBackendFormat SkiaOutputSurfaceImpl::GetGrBackendFormatForTexture(
 #if BUILDFLAG(IS_LINUX)
     // Textures that were allocated _on linux_ with ycbcr info came from
     // VaapiVideoDecoder, which exports using DRM format modifiers.
-    return GrBackendFormat::MakeVk(gr_ycbcr_info,
-                                   /*willUseDRMFormatModifiers=*/true);
+    return GrBackendFormats::MakeVk(gr_ycbcr_info,
+                                    /*willUseDRMFormatModifiers=*/true);
 #else
-    return GrBackendFormat::MakeVk(gr_ycbcr_info);
+    return GrBackendFormats::MakeVk(gr_ycbcr_info);
 #endif  // BUILDFLAG(IS_LINUX)
   } else {
 #else
   {
 #endif  // BUILDFLAG(ENABLE_VULKAN)
-    CHECK_EQ(dependency_->gr_context_type(), gpu::GrContextType::kGL);
+    CHECK_EQ(gr_context_type_, gpu::GrContextType::kGL);
     // Convert internal format from GLES2 to platform GL.
     bool use_angle_rgbx_format = impl_on_gpu_->GetFeatureInfo()
                                      ->feature_flags()
@@ -1470,7 +1511,7 @@ GrBackendFormat SkiaOutputSurfaceImpl::GetGrBackendFormatForTexture(
         impl_on_gpu_->GetFeatureInfo(), gl_storage_internal_format,
         gr_context_thread_safe_);
 
-    return GrBackendFormat::MakeGL(texture_storage_format, gl_texture_target);
+    return GrBackendFormats::MakeGL(texture_storage_format, gl_texture_target);
   }
 }
 

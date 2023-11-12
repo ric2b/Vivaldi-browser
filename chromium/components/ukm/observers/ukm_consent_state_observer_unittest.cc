@@ -27,6 +27,10 @@ class MockSyncService : public syncer::TestSyncService {
   MockSyncService() {
     SetTransportState(TransportState::INITIALIZING);
     SetLastCycleSnapshot(syncer::SyncCycleSnapshot());
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    SetAppSync(false);
+#endif
   }
 
   MockSyncService(const MockSyncService&) = delete;
@@ -54,10 +58,6 @@ class MockSyncService : public syncer::TestSyncService {
         sync_pb::SyncEnums::UNKNOWN_ORIGIN, base::Minutes(1), false));
 
     NotifyObserversOfStateChanged();
-
-#if BUILDFLAG(IS_CHROMEOS)
-    SetAppSync(false);
-#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   void Shutdown() override {
@@ -270,17 +270,7 @@ TEST_F(UkmConsentStateObserverTest, PurgeOnDisable) {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// Tests for when AppSync is not dependent on MSBB.
-class MsbbAppOptInUkmConsentStateObserverTest
-    : public UkmConsentStateObserverTest {
- public:
-  MsbbAppOptInUkmConsentStateObserverTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        ukm::kAppMetricsOnlyRelyOnAppSync);
-  }
-};
-
-TEST_F(MsbbAppOptInUkmConsentStateObserverTest, VerifyConsentStates) {
+TEST_F(UkmConsentStateObserverTest, VerifyConsentStates) {
   sync_preferences::TestingPrefServiceSyncable prefs;
   RegisterUrlKeyedAnonymizedDataCollectionPref(prefs);
   TestUkmConsentStateObserver observer;
@@ -350,8 +340,7 @@ TEST_F(MsbbAppOptInUkmConsentStateObserverTest, VerifyConsentStates) {
   EXPECT_TRUE(observer.ResetPurged());
 }
 
-TEST_F(MsbbAppOptInUkmConsentStateObserverTest,
-       VerifyConflictingProfilesRevokesConsent) {
+TEST_F(UkmConsentStateObserverTest, VerifyConflictingProfilesRevokesConsent) {
   sync_preferences::TestingPrefServiceSyncable prefs1;
   RegisterUrlKeyedAnonymizedDataCollectionPref(prefs1);
   sync_preferences::TestingPrefServiceSyncable prefs2;

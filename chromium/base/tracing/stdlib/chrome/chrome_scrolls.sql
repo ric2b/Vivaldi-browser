@@ -1,4 +1,4 @@
--- Copyright 2019 The Chromium Authors
+-- Copyright 2023 The Chromium Authors
 -- Use of this source code is governed by a BSD-style license that can be
 -- found in the LICENSE file.
 
@@ -16,7 +16,7 @@
 -- WebView instances. Currently gesture_scroll_id unique within an instance, but
 -- is not unique across multiple instances. Switching to an EventLatency based
 -- definition of scrolls should resolve this.
-CREATE TABLE chrome_scrolls AS
+CREATE PERFETTO TABLE chrome_scrolls AS
 WITH all_scrolls AS (
   SELECT
     name,
@@ -46,8 +46,8 @@ SELECT
   sa.scroll_id AS id,
   MIN(ts) AS ts,
   CAST(MAX(ts + dur) - MIN(ts) AS INT) AS dur,
-  IFNULL(ss.scroll_start_ts, -1) AS scroll_start_ts,
-  IFNULL(se.scroll_end_ts, -1) AS scroll_end_ts
+  ss.scroll_start_ts AS scroll_start_ts,
+  se.scroll_end_ts AS scroll_end_ts
 FROM all_scrolls sa
   LEFT JOIN scroll_starts ss ON
     sa.scroll_id = ss.scroll_id

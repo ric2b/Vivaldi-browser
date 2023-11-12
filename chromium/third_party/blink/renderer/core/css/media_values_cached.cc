@@ -74,6 +74,8 @@ MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData(
     preferred_contrast = MediaValues::CalculatePreferredContrast(frame);
     prefers_reduced_motion = MediaValues::CalculatePrefersReducedMotion(frame);
     prefers_reduced_data = MediaValues::CalculatePrefersReducedData(frame);
+    prefers_reduced_transparency =
+        MediaValues::CalculatePrefersReducedTransparency(frame);
     forced_colors = MediaValues::CalculateForcedColors(frame);
     navigation_controls = MediaValues::CalculateNavigationControls(frame);
     horizontal_viewport_segments =
@@ -81,6 +83,8 @@ MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData(
     vertical_viewport_segments =
         MediaValues::CalculateVerticalViewportSegments(frame);
     device_posture = MediaValues::CalculateDevicePosture(frame);
+    inverted_colors = MediaValues::CalculateInvertedColors(frame);
+    scripting = MediaValues::CalculateScripting(frame);
   }
 }
 
@@ -150,6 +154,18 @@ float MediaValuesCached::RootLineHeight(float zoom) const {
   return data_.line_height;
 }
 
+float MediaValuesCached::CapFontSize(float zoom) const {
+  DCHECK_EQ(1.0f, zoom);
+  // For media queries cap units are based on the initial font.
+  return data_.cap_size;
+}
+
+float MediaValuesCached::RcapFontSize(float zoom) const {
+  DCHECK_EQ(1.0f, zoom);
+  // For media queries rcap units are based on the initial font.
+  return data_.cap_size;
+}
+
 double MediaValuesCached::ViewportWidth() const {
   return data_.viewport_width;
 }
@@ -212,6 +228,10 @@ int MediaValuesCached::ColorBitsPerComponent() const {
 
 int MediaValuesCached::MonochromeBitsPerComponent() const {
   return data_.monochrome_bits_per_component;
+}
+
+bool MediaValuesCached::InvertedColors() const {
+  return data_.inverted_colors;
 }
 
 mojom::blink::PointerType MediaValuesCached::PrimaryPointerType() const {
@@ -287,6 +307,10 @@ bool MediaValuesCached::PrefersReducedData() const {
   return data_.prefers_reduced_data;
 }
 
+bool MediaValuesCached::PrefersReducedTransparency() const {
+  return data_.prefers_reduced_transparency;
+}
+
 ForcedColors MediaValuesCached::GetForcedColors() const {
   return data_.forced_colors;
 }
@@ -306,6 +330,10 @@ int MediaValuesCached::GetVerticalViewportSegments() const {
 device::mojom::blink::DevicePostureType MediaValuesCached::GetDevicePosture()
     const {
   return data_.device_posture;
+}
+
+Scripting MediaValuesCached::GetScripting() const {
+  return data_.scripting;
 }
 
 }  // namespace blink

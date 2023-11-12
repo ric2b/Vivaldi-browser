@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "net/base/isolation_info.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "url/origin.h"
@@ -20,6 +21,7 @@
 namespace autofill {
 
 class FormStructure;
+class AutofillManager;
 
 // AutofillDriver is Autofill's lowest-level abstraction of a frame that is
 // shared among all platforms.
@@ -50,10 +52,6 @@ class AutofillDriver {
   // Returns the uniquely identifying frame token.
   virtual LocalFrameToken GetFrameToken() const = 0;
 
-  // Returns the AutofillDriver of the parent frame, if such a frame and driver
-  // exist, and nullptr otherwise.
-  virtual AutofillDriver* GetParent() = 0;
-
   // Resolves a FrameToken `query` from the perspective of `this` to the
   // globally unique LocalFrameToken. Returns `absl::nullopt` if `query` is a
   // RemoteFrameToken that cannot be resolved from the perspective of `this`.
@@ -63,6 +61,13 @@ class AutofillDriver {
   //
   // See the documentation of LocalFrameToken and RemoteFrameToken for details.
   virtual absl::optional<LocalFrameToken> Resolve(FrameToken query) = 0;
+
+  // Returns the AutofillDriver of the parent frame, if such a frame and driver
+  // exist, and nullptr otherwise.
+  virtual AutofillDriver* GetParent() = 0;
+
+  // Returns the AutofillManager owned by the AutofillDriver.
+  virtual AutofillManager& GetAutofillManager() = 0;
 
   // Returns whether the AutofillDriver instance is associated with an active
   // frame in the MPArch sense.
@@ -85,11 +90,6 @@ class AutofillDriver {
   // Returns true iff a popup can be shown on the behalf of the associated
   // frame.
   virtual bool CanShowAutofillUi() const = 0;
-
-  // Sets whether the keyboard should be suppressed. Used to keep the keyboard
-  // hidden while the bottom sheet (e.g. Touch To Fill) is shown. Forwarded to
-  // the last-queried source remembered by `ContentAutofillRouter`.
-  virtual void SetShouldSuppressKeyboard(bool suppress) = 0;
 
   // Triggers a form extraction of the new forms in the AutofillAgent. This is
   // necessary when a form is seen in a child frame and it is not known which
@@ -116,9 +116,6 @@ class AutofillDriver {
       base::OnceCallback<void(bool success)>
           form_extraction_finished_callback) = 0;
 
-  // Returns the ax tree id associated with this driver.
-  virtual ui::AXTreeID GetAxTreeId() const = 0;
-
   // Returns true iff the renderer is available for communication.
   virtual bool RendererIsAvailable() = 0;
 
@@ -141,7 +138,28 @@ class AutofillDriver {
   //
   // This method is a no-op if the renderer is not currently available.
   virtual std::vector<FieldGlobalId> FillOrPreviewForm(
-      mojom::RendererFormDataAction action,
+      mojom::AutofillActionPersistence action_persistence,
+      const FormData& data,
+      const url::Origin& triggered_origin,
+      const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) = 0;
+
+  // Forwards `data` to the renderer which shall fill the values of `data`'s
+  // fields, whose last filling operation was undone, into the relevant DOM
+  // elements.
+  //
+  // `field_type_map` contains the type predictions of the fields that may be
+  // modified; this parameter can be taken into account to decide which fields
+  // to modify across frames. See FormForest::GetRendererFormsOfBrowserForm()
+  // for the details on Autofill's security policy. Note that this map contains
+  // the types of the fields at filling time and not at undo time, to ensure
+  // consistency.
+  //
+  // `triggered_origin` is the origin of the field that triggered the filling
+  // operation currently being undone.
+  //
+  // This method is a no-op if the renderer is not currently available.
+  virtual void UndoAutofill(
+      mojom::AutofillActionPersistence action_persistence,
       const FormData& data,
       const url::Origin& triggered_origin,
       const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) = 0;

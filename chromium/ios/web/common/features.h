@@ -45,10 +45,6 @@ BASE_DECLARE_FEATURE(kIOSSharedHighlightingColorChange);
 // interaction state.
 BASE_DECLARE_FEATURE(kSynthesizedRestoreSession);
 
-// Enables the Fullscreen API in WebKit (supported on iOS 16.0+). This API
-// allows web sites to enter fullscreen mode, with all browser UI hidden.
-BASE_DECLARE_FEATURE(kEnableFullscreenAPI);
-
 // Feature flag enabling use of new iOS 15
 // loadSimulatedRequest:responseHTMLString: API to display error pages in
 // CRWWKNavigationHandler. The helper method IsLoadSimulatedRequestAPIEnabled()
@@ -61,8 +57,22 @@ BASE_DECLARE_FEATURE(kEnableEmails);
 // Feature flag to enable Phone Numbers detection.
 BASE_DECLARE_FEATURE(kEnablePhoneNumbers);
 
+// Feature flag to enable Measurements detection.
+BASE_DECLARE_FEATURE(kEnableMeasurements);
+
+// Feature param under kOneTapForMaps to select consent behavior.
+extern const char kOneTapForMapsConsentModeParamTitle[];
+extern const char kOneTapForMapsConsentModeDefaultParam[];
+extern const char kOneTapForMapsConsentModeForcedParam[];
+extern const char kOneTapForMapsConsentModeDisabledParam[];
+extern const char kOneTapForMapsConsentModeIPHParam[];
+extern const char kOneTapForMapsConsentModeIPHForcedParam[];
 // Feature flag to enable One tap experience for Maps.
 BASE_DECLARE_FEATURE(kOneTapForMaps);
+
+// Feature flag that enables using web::AnnotationsTextManager for fetching web
+// page text for language detection.
+BASE_DECLARE_FEATURE(kUseAnnotationsForLanguageDetection);
 
 // When enabled, CRWWebViewScrollViewProxy's `scrollEnabled` state is not
 // restored if the new instance already has the same `scrollEnabled` state as
@@ -85,9 +95,6 @@ BASE_DECLARE_FEATURE(kEnableSessionSerializationOptimizations);
 // When true, the new loadSimulatedRequest API should be used when displaying
 // error pages.
 bool IsLoadSimulatedRequestAPIEnabled();
-
-// When true, the fullscreen API should be used to enable fullscreen mode.
-bool IsFullscreenAPIEnabled();
 
 // When true, an option to enable Web Inspector should be present in Settings.
 bool IsWebInspectorSupportEnabled();

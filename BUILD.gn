@@ -183,6 +183,12 @@ group("vivaldi") {
     deps -= [ "//chrome" ]
     deps += [ "//chrome/android:chrome_public_apk" ]
     deps += [ "//chrome/android:chrome_public_bundle" ]
+    foreach(t, ["//chrome/android:libchrome"]) {
+      deps += [
+        "${t}__jni_registration__native_sources",
+        "${t}__jni_registration__java_sources",
+      ]
+    }
   }
   if (is_mac || is_win) {
     deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]

@@ -71,6 +71,8 @@ class Reconfigurer {
 
   readonly capturePreferrer = new CaptureCandidatePreferrer();
 
+  private readonly failedDevices = new Set<string>();
+
   constructor(
       private readonly preview: Preview,
       private readonly modes: Modes,
@@ -86,10 +88,7 @@ class Reconfigurer {
     this.shouldSuspend = value;
   }
 
-  /**
-   * Gets the video device ids sorted by preference.
-   */
-  private getDeviceIdCandidates(cameraInfo: CameraInfo): string[] {
+  getDeviceIdsSortedbyPreferredFacing(cameraInfo: CameraInfo): string[] {
     let devices: Array<Camera3DeviceInfo|MediaDeviceInfo>;
     /**
      * Object mapping from device id to facing. Set to null for fake cameras.
@@ -107,20 +106,35 @@ class Reconfigurer {
       devices = cameraInfo.devicesInfo;
     }
 
-    const preferredFacing =
-        this.config?.facing ?? this.initialFacing ?? util.getDefaultFacing();
-    // Put the selected video device id first.
+    const preferredFacing = this.initialFacing ?? util.getDefaultFacing();
     const sorted = devices.map((device) => device.deviceId).sort((a, b) => {
       if (a === b) {
         return 0;
       }
-      if (this.config !== null ? a === this.config.deviceId :
-                                 facings?.[a] === preferredFacing) {
+      if (facings?.[a] === preferredFacing) {
         return -1;
       }
       return 1;
     });
     return sorted;
+  }
+
+  /**
+   * Gets the video device ids sorted by preference.
+   */
+  private getDeviceIdCandidates(cameraInfo: CameraInfo): string[] {
+    const deviceIds = this.getDeviceIdsSortedbyPreferredFacing(cameraInfo);
+    // If there is no preferred device or the device is not in the list,
+    // return devices sorted by preferred facing.
+    if (this.config === null || !deviceIds.includes(this.config.deviceId)) {
+      return deviceIds;
+    }
+    // Put the preferred device on the top of the list.
+    function rotation(devices: string[], leftRotateNum: number): string[] {
+      return devices.slice(leftRotateNum)
+          .concat(devices.slice(0, leftRotateNum));
+    }
+    return rotation(deviceIds, deviceIds.indexOf(this.config.deviceId));
   }
 
   private async getModeCandidates(deviceId: string): Promise<Mode[]> {
@@ -210,7 +224,15 @@ class Reconfigurer {
   }
 
   /**
-   * @return If the reconfiguration finished successfully.
+   * Reset the failed devices list so the next reconfiguration
+   * will try to open those devices.
+   */
+  resetFailedDevices(): void {
+    this.failedDevices.clear();
+  }
+
+  /**
+   * @return If the configuration finished successfully.
    */
   async startConfigure(cameraInfo: CameraInfo): Promise<boolean> {
     if (this.shouldSuspend) {
@@ -224,7 +246,17 @@ class Reconfigurer {
       if (this.shouldSuspend) {
         return false;
       }
-
+      if (this.failedDevices.has(c.deviceId)) {
+        // Check if the devices is released from other apps. If not,
+        // we skip using it as a constraint to open a stream.
+        const deviceOperator = DeviceOperator.getInstance();
+        if (deviceOperator !== null) {
+          const inUse = await deviceOperator.isDeviceInUse(c.deviceId);
+          if (inUse) {
+            continue;
+          }
+        }
+      }
       let facing = c.deviceId !== null ?
           cameraInfo.getCamera3DeviceInfo(c.deviceId)?.facing ?? null :
           null;
@@ -286,14 +318,25 @@ class Reconfigurer {
           if (e.name === 'NotReadableError') {
             // TODO(b/187879603): Remove this hacked once we understand more
             // about such error.
-            // We cannot get the camera facing from stream since it might
-            // not be successfully opened. Therefore, we asked the camera
-            // facing via Mojo API.
             let facing: Facing|null = null;
+            let errorMessage: string = e.message;
+            const deviceOperator = DeviceOperator.getInstance();
             if (deviceOperator !== null) {
+              // We cannot get the camera facing from stream since it might
+              // not be successfully opened. Therefore, we asked the camera
+              // facing via Mojo API.
               facing = await deviceOperator.getCameraFacing(c.deviceId);
+              // If 'NotReadableError' is thrown while the device is in use,
+              // it means that the devices is used by Lacros.
+              // In this case, we add it into `failedDevices` and skip using
+              // it to open a stream until it is not in use.
+              const inUse = await deviceOperator.isDeviceInUse(c.deviceId);
+              if (inUse) {
+                this.failedDevices.add(c.deviceId);
+                errorMessage = 'Lacros is using the camera';
+              }
             }
-            errorToReport = new Error(`${e.message} (facing = ${facing})`);
+            errorToReport = new Error(`${errorMessage} (facing = ${facing})`);
             errorToReport.name = 'NotReadableError';
           } else {
             errorToReport = e;
@@ -307,11 +350,11 @@ class Reconfigurer {
   }
 
   /**
-   * Stop extra stream and preview stream.
+   * Stops extra stream and preview stream.
    */
   private async stopStreams() {
     await this.modes.clear();
-    await this.preview.close();
+    this.preview.close();
   }
 }
 
@@ -334,9 +377,9 @@ class Capturer {
     }
   }
 
-  toggleVideoRecordingPause() {
+  async toggleVideoRecordingPause(): Promise<void> {
     if (this.modes.current instanceof Video) {
-      this.modes.current.togglePaused();
+      await this.modes.current.togglePaused();
     }
   }
 }
@@ -362,6 +405,8 @@ export class OperationScheduler {
   private ongoingOperationType: OperationType|null = null;
 
   private pendingReconfigureWaiters: Array<CancelableEvent<boolean>> = [];
+
+  private togglePausedEvent: Promise<void>|null = null;
 
   constructor(
       private readonly listener: EventListener,
@@ -424,9 +469,18 @@ export class OperationScheduler {
     }
   }
 
-  toggleVideoRecordingPause(): void {
-    if (this.ongoingOperationType === OperationType.CAPTURE) {
-      this.capturer.toggleVideoRecordingPause();
+  async toggleVideoRecordingPause(): Promise<void> {
+    if (this.ongoingOperationType !== OperationType.CAPTURE ||
+        this.togglePausedEvent !== null) {
+      return;
+    }
+    try {
+      this.togglePausedEvent = this.capturer.toggleVideoRecordingPause();
+      await this.togglePausedEvent;
+    } catch (e) {
+      error.reportError(ErrorType.RESUME_PAUSE_FAILURE, ErrorLevel.ERROR, e);
+    } finally {
+      this.togglePausedEvent = null;
     }
   }
 
@@ -468,10 +522,18 @@ export class OperationScheduler {
     }
   }
 
-  stopCapture(): void {
-    if (this.ongoingOperationType === OperationType.CAPTURE) {
-      this.capturer.stop();
+  async stopCapture(): Promise<void> {
+    if (this.ongoingOperationType !== OperationType.CAPTURE) {
+      return;
     }
+    if (this.togglePausedEvent !== null) {
+      try {
+        await this.togglePausedEvent;
+      } catch (e) {
+        // The error is handled in toggleVideoRecordingPause().
+      }
+    }
+    this.capturer.stop();
   }
 
   private async startReconfigure(onReconfigured: CancelableEvent<boolean>):
@@ -491,7 +553,6 @@ export class OperationScheduler {
     } catch (e) {
       onReconfigured.signalError(assertInstanceof(e, Error));
       this.clearPendingReconfigureWaiters();
-      throw e;
     } finally {
       this.finishOperation();
     }

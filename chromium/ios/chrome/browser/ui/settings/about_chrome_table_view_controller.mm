@@ -6,8 +6,8 @@
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
+#import "base/apple/foundation_util.h"
 #import "base/ios/block_types.h"
-#import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/notreached.h"
@@ -43,10 +43,6 @@
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -146,7 +142,7 @@ const CGFloat kDefaultHeight = 70;
     viewForFooterInSection:(NSInteger)section {
   UIView* footer = [super tableView:tableView viewForFooterInSection:section];
   VersionFooter* versionFooter =
-      base::mac::ObjCCastStrict<VersionFooter>(footer);
+      base::apple::ObjCCastStrict<VersionFooter>(footer);
   versionFooter.delegate = self;
   return footer;
 }

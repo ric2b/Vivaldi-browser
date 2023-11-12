@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">A beállítások visszaállítása</translation>
 <translation id="4478664379124702289">Hivatkozás mentése &amp;másként...</translation>
 <translation id="4520385623207007473">Használatban lévő cookie-k</translation>
+<translation id="456449593072900590">Törlés kilépéskor</translation>
 <translation id="4580596421317071374">A rendszer az eszközön a <ph name="GOOGLE_PASSWORD_MANAGER" /> alkalmazásba menti a jelszavakat.</translation>
 <translation id="4593021220803146968">&amp;Ugrás: <ph name="URL" /></translation>
 <translation id="4595560905247879544">Az alkalmazásokat és bővítményeket csak a kezelő (<ph name="CUSTODIAN_NAME" />) módosíthatja.</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Színek</translation>
 <translation id="5485102783864353244">Alkalmazás hozzáadása</translation>
 <translation id="5486561344817861625">Böngésző újraindításának szimulálása</translation>
-<translation id="5487521232677179737">Adatok törlése</translation>
 <translation id="5509693895992845810">Mentés &amp;másként...</translation>
 <translation id="5521078259930077036">Erre a kezdőoldalra számított?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Ismeretlen</translation>
 <translation id="5851868085455377790">Kiállító</translation>
 <translation id="5860491529813859533">Bekapcsolás</translation>
-<translation id="5867841422488265304">Keress, vagy írj be internetcímet</translation>
 <translation id="5910363049092958439">Ké&amp;p mentése másként...</translation>
 <translation id="5914724413750400082">Együttható (<ph name="MODULUS_NUM_BITS" /> bit):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Helyesírás-ellenőrzés gépeléskor</translation>
-<translation id="73786666777299047">Chrome Webáruház megnyitása</translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
 <translation id="7412226954991670867">GPU memória</translation>
 <translation id="7421925624202799674">&amp;Oldal forrásának megtekintése</translation>
@@ -398,7 +396,7 @@
 <translation id="7684212569183643648">Rendszergazda által telepítve</translation>
 <translation id="7685049629764448582">JavaScript memória</translation>
 <translation id="7701869757853594372">FELHASZNÁLÓI azonosítók</translation>
-<translation id="7702907602086592255">Domain</translation>
+<translation id="7702907602086592255">Tartomány</translation>
 <translation id="7704305437604973648">Feladat</translation>
 <translation id="7710568461918838723">Át&amp;játszás...</translation>
 <translation id="7714464543167945231">Tanúsítvány</translation>
@@ -434,13 +432,15 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8071432093239591881">Nyomtatás képként</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8168435359814927499">Tartalom</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD, plural, =1 {Letöltés folyamatban} other {Letöltések folyamatban}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Letöltés folyamatban} other {Letöltések folyamatban}}</translation>
 <translation id="8230134520748321204">Szeretnéd elmenteni a(z) <ph name="ORIGIN" /> jelszavát?</translation>
 <translation id="8261378640211443080">A bővítmény nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
 <translation id="8351419472474436977">A bővítmény átvette az irányítást proxybeállításai felett, ami azt jelenti, hogy a bővítmény minden internetes tevékenységét módosíthatja, feltörheti vagy lehallgathatja. Ha nem biztos benne, hogy miért történt a változás, akkor valószínűleg nem is akarja azt.</translation>
 <translation id="8382913212082956454">&amp;E-mail cím másolása</translation>
 <translation id="8434480141477525001">NaCl hibakeresési port</translation>
 <translation id="8449008133205184768">Beillesztés és stílus egyeztetése</translation>
+<translation id="8477178913400731244">Adatok törlése</translation>
 <translation id="8477384620836102176">&amp;Általános</translation>
 <translation id="8496717697661868878">A beépülő modul futtatása</translation>
 <translation id="8512476990829870887">Folyamat leállítása</translation>

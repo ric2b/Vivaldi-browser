@@ -32,8 +32,10 @@
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_app_button.h"
+#include "ash/shelf/shelf_context_menu_model.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_focus_cycler.h"
+#include "ash/shelf/shelf_metrics.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_observer.h"
 #include "ash/shelf/shelf_test_util.h"
@@ -67,6 +69,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/time/time.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -663,10 +666,12 @@ class ShelfViewTest : public AshTestBase {
         ui::HapticTouchpadEffectStrength::kMedium);
   }
 
-  raw_ptr<ShelfModel, ExperimentalAsh> model_ = nullptr;
-  raw_ptr<ShelfView, ExperimentalAsh> shelf_view_ = nullptr;
-  raw_ptr<views::View, ExperimentalAsh> navigation_view_ = nullptr;
-  raw_ptr<views::View, ExperimentalAsh> status_area_ = nullptr;
+  raw_ptr<ShelfModel, DanglingUntriaged | ExperimentalAsh> model_ = nullptr;
+  raw_ptr<ShelfView, DanglingUntriaged | ExperimentalAsh> shelf_view_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged | ExperimentalAsh> navigation_view_ =
+      nullptr;
+  raw_ptr<views::View, DanglingUntriaged | ExperimentalAsh> status_area_ =
+      nullptr;
 
   int id_ = 0;
 
@@ -1440,7 +1445,7 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipTest) {
       continue;
     }
     EXPECT_FALSE(shelf_view_->ShouldHideTooltip(
-        button->GetMirroredBounds().CenterPoint()))
+        button->GetMirroredBounds().CenterPoint(), shelf_view_))
         << "ShelfView tries to hide on button " << i;
   }
 
@@ -1463,8 +1468,10 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipTest) {
   gfx::Point test_point(left + (right - left) / 2,
                         home_button->GetBoundsInScreen().y());
   views::View::ConvertPointFromScreen(shelf_view_, &test_point);
-  EXPECT_TRUE(shelf_view_->ShouldHideTooltip(gfx::Point(
-      shelf_view_->GetMirroredXInView(test_point.x()), test_point.y())))
+  EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
+      gfx::Point(shelf_view_->GetMirroredXInView(test_point.x()),
+                 test_point.y()),
+      shelf_view_))
       << "Tooltip should hide between home button and first shelf item";
 
   // The tooltip shouldn't hide if the mouse is in the gap between two buttons.
@@ -1473,7 +1480,8 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipTest) {
       GetButtonByID(platform_button_id)->GetMirroredBounds();
   ASSERT_FALSE(app_button_rect.Intersects(platform_button_rect));
   EXPECT_FALSE(shelf_view_->ShouldHideTooltip(
-      gfx::UnionRects(app_button_rect, platform_button_rect).CenterPoint()));
+      gfx::UnionRects(app_button_rect, platform_button_rect).CenterPoint(),
+      shelf_view_));
 
   // The tooltip should hide if it's outside of all buttons.
   gfx::Rect all_area;
@@ -1486,15 +1494,15 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipTest) {
     all_area.Union(button->GetMirroredBounds());
   }
   EXPECT_FALSE(shelf_view_->ShouldHideTooltip(
-      gfx::Point(all_area.right() - 1, all_area.bottom() - 1)));
+      gfx::Point(all_area.right() - 1, all_area.bottom() - 1), shelf_view_));
   EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
-      gfx::Point(all_area.right(), all_area.y())));
+      gfx::Point(all_area.right(), all_area.y()), shelf_view_));
   EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
-      gfx::Point(all_area.x() - 1, all_area.y())));
+      gfx::Point(all_area.x() - 1, all_area.y()), shelf_view_));
   EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
-      gfx::Point(all_area.x(), all_area.y() - 1)));
+      gfx::Point(all_area.x(), all_area.y() - 1), shelf_view_));
   EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
-      gfx::Point(all_area.x(), all_area.bottom())));
+      gfx::Point(all_area.x(), all_area.bottom()), shelf_view_));
 }
 
 // Test that shelf button tooltips show (except app list) with an open app list.
@@ -1509,7 +1517,7 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipWithAppListWindowTest) {
     }
 
     EXPECT_FALSE(shelf_view_->ShouldHideTooltip(
-        button->GetMirroredBounds().CenterPoint()))
+        button->GetMirroredBounds().CenterPoint(), shelf_view_))
         << "ShelfView tries to hide on button " << i;
   }
 
@@ -1518,8 +1526,10 @@ TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipWithAppListWindowTest) {
       GetPrimaryShelf()->navigation_widget()->GetHomeButton();
   gfx::Point center_point = home_button->GetBoundsInScreen().CenterPoint();
   views::View::ConvertPointFromScreen(shelf_view_, &center_point);
-  EXPECT_TRUE(shelf_view_->ShouldHideTooltip(gfx::Point(
-      shelf_view_->GetMirroredXInView(center_point.x()), center_point.y())));
+  EXPECT_TRUE(shelf_view_->ShouldHideTooltip(
+      gfx::Point(shelf_view_->GetMirroredXInView(center_point.x()),
+                 center_point.y()),
+      shelf_view_));
 }
 
 // Test that by moving the mouse cursor off the button onto the bubble it closes
@@ -2807,12 +2817,16 @@ class ShelfViewInkDropTest : public ShelfViewTest {
         .SetInkDrop(std::move(browser_button_ink_drop));
   }
 
-  raw_ptr<HomeButton, ExperimentalAsh> home_button_ = nullptr;
-  raw_ptr<InkDropSpy, ExperimentalAsh> home_button_ink_drop_ = nullptr;
-  raw_ptr<ShelfAppButton, ExperimentalAsh> browser_button_ = nullptr;
-  raw_ptr<InkDropSpy, ExperimentalAsh> browser_button_ink_drop_ = nullptr;
-  raw_ptr<views::InkDropImpl, ExperimentalAsh> browser_button_ink_drop_impl_ =
+  raw_ptr<HomeButton, DanglingUntriaged | ExperimentalAsh> home_button_ =
       nullptr;
+  raw_ptr<InkDropSpy, DanglingUntriaged | ExperimentalAsh>
+      home_button_ink_drop_ = nullptr;
+  raw_ptr<ShelfAppButton, DanglingUntriaged | ExperimentalAsh> browser_button_ =
+      nullptr;
+  raw_ptr<InkDropSpy, DanglingUntriaged | ExperimentalAsh>
+      browser_button_ink_drop_ = nullptr;
+  raw_ptr<views::InkDropImpl, DanglingUntriaged | ExperimentalAsh>
+      browser_button_ink_drop_impl_ = nullptr;
 };
 
 // Tests that changing visibility of the app list transitions home button's
@@ -2822,17 +2836,27 @@ TEST_F(ShelfViewInkDropTest, HomeButtonWhenVisibilityChanges) {
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
 
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTIVATED));
+  }
 
   GetAppListTestHelper()->DismissAndRunLoop();
 
   EXPECT_EQ(views::InkDropState::HIDDEN,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::DEACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::DEACTIVATED));
+  }
 }
 
 // Tests that when the app list is hidden, mouse press on the home button,
@@ -2849,18 +2873,27 @@ TEST_F(ShelfViewInkDropTest, HomeButtonMouseEventsWhenHidden) {
   generator->PressLeftButton();
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_PENDING,
-                          views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING,
+                            views::InkDropState::ACTION_TRIGGERED));
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING,
+                            views::InkDropState::ACTIVATED));
+  }
 
   // Dragging mouse out and back and releasing the button should not change the
   // ink drop state.
   generator->MoveMouseBy(home_button_->width(), 0);
   generator->MoveMouseBy(-home_button_->width(), 0);
   generator->ReleaseLeftButton();
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
 }
@@ -2872,10 +2905,16 @@ TEST_F(ShelfViewInkDropTest, HomeButtonMouseEventsWhenVisible) {
   InitHomeButtonInkDrop();
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTIVATED));
+  }
 
   // Mouse press on the button, which dismisses the app list, should end up in
   // the hidden state.
@@ -2885,9 +2924,16 @@ TEST_F(ShelfViewInkDropTest, HomeButtonMouseEventsWhenVisible) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(views::InkDropState::HIDDEN,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_PENDING,
-                          views::InkDropState::DEACTIVATED));
+
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING,
+                            views::InkDropState::ACTION_TRIGGERED));
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING,
+                            views::InkDropState::DEACTIVATED));
+  }
 
   // Dragging mouse out and back and releasing the button should not change the
   // ink drop state.
@@ -2909,21 +2955,33 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapWhenHidden) {
 
   // Touch press on the button should end up in the pending state.
   generator->PressTouch();
-  EXPECT_EQ(views::InkDropState::ACTION_PENDING,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTION_PENDING,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_PENDING));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING));
+  }
 
   // Touch release on the button, which shows the app list, should end up in the
   // activated state.
   generator->ReleaseTouch();
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_TRIGGERED,
-                          views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_TRIGGERED));
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_TRIGGERED,
+                            views::InkDropState::ACTIVATED));
+  }
 }
 
 // Tests that when the app list is visible, tapping on the home button
@@ -2933,10 +2991,16 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapWhenVisible) {
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
 
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTIVATED));
+  }
 
   // Touch press and release on the button, which dismisses the app list, should
   // end up in the hidden state.
@@ -2947,8 +3011,13 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapWhenVisible) {
   GetAppListTestHelper()->WaitUntilIdle();
   EXPECT_EQ(views::InkDropState::HIDDEN,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::DEACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_TRIGGERED));
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::DEACTIVATED));
+  }
 }
 
 // Tests that when the app list is hidden, tapping down on the home button
@@ -2962,18 +3031,23 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapDragWhenHidden) {
 
   // Touch press on the button should end up in the pending state.
   generator->PressTouch();
-  EXPECT_EQ(views::InkDropState::ACTION_PENDING,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTION_PENDING,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_PENDING));
 
   // Dragging the touch point should hide the pending ink drop.
   touch_location.Offset(home_button_->width(), 0);
   generator->MoveTouch(touch_location);
   EXPECT_EQ(views::InkDropState::HIDDEN,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTION_TRIGGERED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTION_PENDING,
+                            views::InkDropState::ACTION_TRIGGERED));
+  }
 
   // Touch release should not change the ink drop state.
   generator->ReleaseTouch();
@@ -2989,10 +3063,16 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapDragWhenVisible) {
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
 
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  const bool default_ink_drop_behavior = chromeos::features::IsJellyEnabled();
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
-  EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
-              ElementsAre(views::InkDropState::ACTIVATED));
+  if (default_ink_drop_behavior) {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
+  } else {
+    EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(),
+                ElementsAre(views::InkDropState::ACTIVATED));
+  }
 
   // Touch press on the button, dragging the touch point, and releasing, which
   // will not dismisses the app list, should end up in the |ACTIVATED| state.
@@ -3002,20 +3082,23 @@ TEST_F(ShelfViewInkDropTest, HomeButtonGestureTapDragWhenVisible) {
 
   // Touch press on the button should not change the ink drop state.
   generator->PressTouch();
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
 
   // Dragging the touch point should not hide the pending ink drop.
   touch_location.Offset(home_button_->width(), 0);
   generator->MoveTouch(touch_location);
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
 
   // Touch release should not change the ink drop state.
   generator->ReleaseTouch();
-  EXPECT_EQ(views::InkDropState::ACTIVATED,
+  EXPECT_EQ(default_ink_drop_behavior ? views::InkDropState::HIDDEN
+                                      : views::InkDropState::ACTIVATED,
             home_button_ink_drop_->GetTargetInkDropState());
   EXPECT_THAT(home_button_ink_drop_->GetAndResetRequestedStates(), IsEmpty());
 }
@@ -3486,8 +3569,10 @@ class ShelfViewGestureTapTest : public ShelfViewTest {
   }
 
  protected:
-  raw_ptr<ShelfAppButton, ExperimentalAsh> app_icon1_ = nullptr;
-  raw_ptr<ShelfAppButton, ExperimentalAsh> app_icon2_ = nullptr;
+  raw_ptr<ShelfAppButton, DanglingUntriaged | ExperimentalAsh> app_icon1_ =
+      nullptr;
+  raw_ptr<ShelfAppButton, DanglingUntriaged | ExperimentalAsh> app_icon2_ =
+      nullptr;
 };
 
 // Verifies the shelf app button's inkdrop behavior when the mouse click
@@ -3675,7 +3760,7 @@ class ShelfViewDeskButtonTest : public ShelfViewTest {
     prefs_ = Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   }
 
-  raw_ptr<PrefService, ExperimentalAsh> prefs_;
+  raw_ptr<PrefService, DanglingUntriaged | ExperimentalAsh> prefs_;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -3857,4 +3942,18 @@ TEST_F(ShelfViewDeskButtonTest, PrefVisibilityRelationship) {
     }
   }
 }
+
+// Verify that metrics are being correctly recorded for when a user hides the
+// desk button.
+TEST_F(ShelfViewDeskButtonTest, VisibilityMetrics) {
+  SetShowDeskButtonInShelfPref(prefs_, true);
+  base::HistogramTester histogram_tester;
+  ShelfContextMenuModel menu_model(nullptr, GetPrimaryDisplayId(),
+                                   /*menu_in_shelf=*/false);
+  menu_model.ExecuteCommand(
+      static_cast<int>(ShelfContextMenuModel::CommandId::MENU_HIDE_DESK_NAME),
+      /*event_flags=*/0);
+  histogram_tester.ExpectTotalCount(kDeskButtonHiddenHistogramName, 1);
+}
+
 }  // namespace ash

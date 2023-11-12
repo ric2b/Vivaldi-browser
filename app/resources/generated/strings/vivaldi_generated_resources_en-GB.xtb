@@ -272,7 +272,6 @@
 <translation id="5431318178759467895">Colour</translation>
 <translation id="5485102783864353244">Add app</translation>
 <translation id="5486561344817861625">Simulate Browser Restart</translation>
-<translation id="5487521232677179737">Clear data</translation>
 <translation id="5509693895992845810">Save &amp;As...</translation>
 <translation id="5521078259930077036">Is this the home page that you were expecting?</translation>
 <translation id="5542132724887566711">Profile</translation>
@@ -298,7 +297,6 @@
 <translation id="583281660410589416">Unknown</translation>
 <translation id="5851868085455377790">Issuer</translation>
 <translation id="5860491529813859533">Turn on</translation>
-<translation id="5867841422488265304">Search or type web address</translation>
 <translation id="5910363049092958439">Sa&amp;ve Image As...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -371,7 +369,6 @@
 <translation id="7186088072322679094">Keep in Toolbar</translation>
 <translation id="7287143125007575591">Access denied.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="73786666777299047">Open Chrome Web Store</translation>
 <translation id="7385854874724088939">Something went wrong when trying to print. Please check your printer and try again.</translation>
 <translation id="7412226954991670867">GPU Memory</translation>
 <translation id="7421925624202799674">&amp;View Page Source</translation>

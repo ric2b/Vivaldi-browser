@@ -33,13 +33,10 @@
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -313,25 +310,6 @@ UIImage* DefaultFaviconImage() {
   _closeButton = [HighlightButton buttonWithType:UIButtonTypeCustom];
   [_closeButton setTranslatesAutoresizingMaskIntoConstraints:NO];
 
-  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-  // iOS 15.
-  if (base::ios::IsRunningOnIOS15OrLater() &&
-      IsUIButtonConfigurationEnabled()) {
-    if (@available(iOS 15, *)) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-          kTabCloseTopInset, kTabCloseLeftInset, kTabCloseBottomInset,
-          kTabCloseRightInset);
-      _closeButton.configuration = buttonConfiguration;
-    }
-  } else {
-    UIEdgeInsets contentInsets =
-        UIEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
-                         kTabCloseBottomInset, kTabCloseRightInset);
-    SetContentEdgeInsets(_closeButton, contentInsets);
-  }
-
   UIImage* closeButton =
       DefaultSymbolTemplateWithPointSize(kXMarkSymbol, kXmarkSymbolPointSize);
 
@@ -341,7 +319,22 @@ UIImage* DefaultFaviconImage() {
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   // End Vivaldi
 
-  [_closeButton setImage:closeButton forState:UIControlStateNormal];
+  if (IsUIButtonConfigurationEnabled()) {
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets =
+        NSDirectionalEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
+                                    kTabCloseBottomInset, kTabCloseRightInset);
+    buttonConfiguration.image = closeButton;
+    _closeButton.configuration = buttonConfiguration;
+  } else {
+    [_closeButton setImage:closeButton forState:UIControlStateNormal];
+    UIEdgeInsets contentInsets =
+        UIEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
+                         kTabCloseBottomInset, kTabCloseRightInset);
+    SetContentEdgeInsets(_closeButton, contentInsets);
+  }
+
   [_closeButton setAccessibilityLabel:l10n_util::GetNSString(
                                           IDS_IOS_TOOLS_MENU_CLOSE_TAB)];
   [_closeButton addTarget:self
@@ -364,7 +357,7 @@ UIImage* DefaultFaviconImage() {
   [_faviconView setContentMode:UIViewContentModeScaleAspectFit];
 
   if (IsVivaldiRunning()) {
-    [_faviconView setImage:[UIImage imageNamed:@"toolbar_menu"]];
+    [_faviconView setImage:[UIImage imageNamed:vToolbarMenu]];
   } else {
   [_faviconView setImage:DefaultFaviconImage()];
   } // End Vivaldi

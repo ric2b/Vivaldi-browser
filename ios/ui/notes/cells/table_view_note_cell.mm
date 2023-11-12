@@ -2,8 +2,8 @@
 
 #import "ios/ui/notes/cells/table_view_note_cell.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/i18n/rtl.h"
-#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
@@ -20,6 +20,11 @@
 namespace {
 const CGFloat textStackSpacing = 4.0;
 const UIEdgeInsets textStackPadding = UIEdgeInsetsMake(12, 52, 12, 8);
+const UIEdgeInsets imageStackPadding = UIEdgeInsetsMake(12, 12, 12, 8);
+
+// The amount in points by which to inset horizontally the cell contents.
+const CGFloat kNoteCellHorizonalInset = 17.0;
+
 }  // namespace
 
 #pragma mark - TableViewNoteCell
@@ -31,11 +36,14 @@ const UIEdgeInsets textStackPadding = UIEdgeInsetsMake(12, 52, 12, 8);
 @property(nonatomic, strong) UILabel* createdLabel;
 // Date formatter for createdLabel.
 @property(nonatomic, strong) NSDateFormatter* formatter;
+// The image displayed by this cell.
+@property(nonatomic, strong) UIImageView* imageView;
 @end
 
 @implementation TableViewNoteCell
 @synthesize titleLabel = _titleLabel;
 @synthesize createdLabel = _createdLabel;
+@synthesize imageView = _imageView;
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style
               reuseIdentifier:(NSString*)reuseIdentifier {
@@ -74,15 +82,54 @@ const UIEdgeInsets textStackPadding = UIEdgeInsetsMake(12, 52, 12, 8);
   createdLabel.textColor = UIColor.secondaryLabelColor;
   createdLabel.textAlignment = NSTextAlignmentLeft;
 
+  UIImageView* imageView = [UIImageView new];
+  _imageView = imageView;
+  self.imageView.contentMode = UIViewContentModeScaleAspectFit;
+  [self.imageView
+      setContentHuggingPriority:UILayoutPriorityRequired
+                        forAxis:UILayoutConstraintAxisHorizontal];
+  [self.imageView
+      setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                      forAxis:
+                                          UILayoutConstraintAxisHorizontal];
+
   UIStackView* textVStack = [[UIStackView alloc] initWithArrangedSubviews:@[
-    titleLabel, createdLabel
-  ]];
+     titleLabel, createdLabel]];
   textVStack.axis = UILayoutConstraintAxisVertical;
   textVStack.spacing = textStackSpacing;
   textVStack.distribution = UIStackViewDistributionFillProportionally;
+  textVStack.alignment = UIStackViewAlignmentLeading;
+  textVStack.translatesAutoresizingMaskIntoConstraints = NO;
 
-  [self.contentView addSubview:textVStack];
-  [textVStack fillSuperviewWithPadding: textStackPadding];
+  // Container StackView.
+  UIStackView* horizontalStack =
+      [[UIStackView alloc] initWithArrangedSubviews:@[
+        self.imageView, textVStack
+      ]];
+  horizontalStack.axis = UILayoutConstraintAxisHorizontal;
+  horizontalStack.spacing = kNoteCellViewSpacing;
+  horizontalStack.distribution = UIStackViewDistributionFill;
+  horizontalStack.alignment = UIStackViewAlignmentCenter;
+  horizontalStack.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.contentView addSubview:horizontalStack];
+
+  // Set up constraints.
+  NSLayoutConstraint* indentationConstraint = [horizontalStack.leadingAnchor
+      constraintEqualToAnchor:self.contentView.leadingAnchor
+                     constant:kNoteCellHorizonalInset];
+
+  [NSLayoutConstraint activateConstraints:@[
+    [horizontalStack.topAnchor
+        constraintEqualToAnchor:self.contentView.topAnchor
+                       constant:kNoteCellVerticalInset],
+    [horizontalStack.bottomAnchor
+        constraintEqualToAnchor:self.contentView.bottomAnchor
+                       constant:-kNoteCellVerticalInset],
+    [horizontalStack.trailingAnchor
+        constraintEqualToAnchor:self.contentView.trailingAnchor
+                       constant:-kNoteCellHorizonalInset],
+    indentationConstraint,
+  ]];
 }
 
 #pragma mark: GETTERS

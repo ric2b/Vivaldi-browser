@@ -26,6 +26,8 @@ void AddTopicsConsentStrings(content::WebUIDataSource* html_source,
                              Profile* profile) {
   auto* privacy_sandbox_service =
       PrivacySandboxServiceFactory::GetForProfile(profile);
+  if (privacy_sandbox_service)
+    return;
 
   // Regardless of profile type, the service should always exist.
   DCHECK(privacy_sandbox_service);

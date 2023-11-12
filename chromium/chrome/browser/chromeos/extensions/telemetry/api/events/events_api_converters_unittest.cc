@@ -6,12 +6,13 @@
 
 #include "chrome/common/chromeos/extensions/api/events.h"
 #include "chromeos/crosapi/mojom/nullable_primitives.mojom.h"
+#include "chromeos/crosapi/mojom/probe_service.mojom.h"
 #include "chromeos/crosapi/mojom/telemetry_event_service.mojom.h"
 #include "chromeos/crosapi/mojom/telemetry_keyboard_event.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos::converters {
+namespace chromeos::converters::events {
 
 namespace {
 
@@ -48,7 +49,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
       cx_events::AudioJackDeviceType::kMicrophone);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardConnectionType) {
+TEST(CrosTelemetryEventServiceConvertersTest, ConvertKeyboardConnectionType) {
   EXPECT_EQ(
       Convert(crosapi::TelemetryKeyboardConnectionType::kUnmappedEnumField),
       cx_events::KeyboardConnectionType::kNone);
@@ -66,7 +67,7 @@ TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardConnectionType) {
             cx_events::KeyboardConnectionType::kUnknown);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardPhysicalLayout) {
+TEST(CrosTelemetryEventServiceConvertersTest, ConvertKeyboardPhysicalLayout) {
   EXPECT_EQ(
       Convert(crosapi::TelemetryKeyboardPhysicalLayout::kUnmappedEnumField),
       cx_events::PhysicalKeyboardLayout::kNone);
@@ -78,7 +79,7 @@ TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardPhysicalLayout) {
             cx_events::PhysicalKeyboardLayout::kChromeOs);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardMechanicalLayout) {
+TEST(CrosTelemetryEventServiceConvertersTest, ConvertKeyboardMechanicalLayout) {
   EXPECT_EQ(
       Convert(crosapi::TelemetryKeyboardMechanicalLayout::kUnmappedEnumField),
       cx_events::MechanicalKeyboardLayout::kNone);
@@ -96,7 +97,8 @@ TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardMechanicalLayout) {
             cx_events::MechanicalKeyboardLayout::kJis);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardNumberPadPresence) {
+TEST(CrosTelemetryEventServiceConvertersTest,
+     ConvertKeyboardNumberPadPresence) {
   EXPECT_EQ(
       Convert(crosapi::TelemetryKeyboardNumberPadPresence::kUnmappedEnumField),
       cx_events::KeyboardNumberPadPresence::kNone);
@@ -111,7 +113,7 @@ TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardNumberPadPresence) {
             cx_events::KeyboardNumberPadPresence::kNotPresent);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardTopRowKey) {
+TEST(CrosTelemetryEventServiceConvertersTest, ConvertKeyboardTopRowKey) {
   EXPECT_EQ(Convert(crosapi::TelemetryKeyboardTopRowKey::kUnmappedEnumField),
             cx_events::KeyboardTopRowKey::kNone);
 
@@ -187,7 +189,7 @@ TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardTopRowKey) {
             cx_events::KeyboardTopRowKey::kDelete);
 }
 
-TEST(TelemetryEventServiceConvertersTest, ConvertKeyboardTopRightKey) {
+TEST(CrosTelemetryEventServiceConvertersTest, ConvertKeyboardTopRightKey) {
   EXPECT_EQ(Convert(crosapi::TelemetryKeyboardTopRightKey::kUnmappedEnumField),
             cx_events::KeyboardTopRightKey::kNone);
 
@@ -224,6 +226,30 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertUsbState) {
 
   EXPECT_EQ(Convert(crosapi::TelemetryUsbEventInfo::State::kRemove),
             cx_events::UsbEvent::kDisconnected);
+}
+
+TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertDisplayInputType) {
+  EXPECT_EQ(Convert(crosapi::ProbeDisplayInputType::kUnmappedEnumField),
+            cx_events::DisplayInputType::kUnknown);
+
+  EXPECT_EQ(Convert(crosapi::ProbeDisplayInputType::kDigital),
+            cx_events::DisplayInputType::kDigital);
+
+  EXPECT_EQ(Convert(crosapi::ProbeDisplayInputType::kAnalog),
+            cx_events::DisplayInputType::kAnalog);
+}
+
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertExternalDisplayState) {
+  EXPECT_EQ(Convert(crosapi::TelemetryExternalDisplayEventInfo::State::
+                        kUnmappedEnumField),
+            cx_events::ExternalDisplayEvent::kNone);
+
+  EXPECT_EQ(Convert(crosapi::TelemetryExternalDisplayEventInfo::State::kAdd),
+            cx_events::ExternalDisplayEvent::kConnected);
+
+  EXPECT_EQ(Convert(crosapi::TelemetryExternalDisplayEventInfo::State::kRemove),
+            cx_events::ExternalDisplayEvent::kDisconnected);
 }
 
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertSdCardState) {
@@ -283,6 +309,25 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertInputTouchButton) {
             cx_events::InputTouchButton::kRight);
 }
 
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertStylusTouchpointInfo) {
+  constexpr int kX = 1;
+  constexpr int kY = 1;
+  constexpr int kPressure = 1;
+  {
+    auto output = ConvertStructPtr(
+        crosapi::TelemetryStylusTouchPointInfo::New(kX, kY, kPressure));
+    EXPECT_EQ(output.x, kX);
+    EXPECT_EQ(output.y, kY);
+    EXPECT_EQ(output.pressure, kPressure);
+  }
+  {
+    auto output = ConvertStructPtr(
+        crosapi::TelemetryStylusTouchPointInfo::New(kX, kY, absl::nullopt));
+    EXPECT_EQ(output.pressure, absl::nullopt);
+  }
+}
+
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertEventCategoryEnum) {
   EXPECT_EQ(Convert(cx_events::EventCategory::kNone),
             crosapi::TelemetryEventCategoryEnum::kUnmappedEnumField);
@@ -295,6 +340,9 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertEventCategoryEnum) {
 
   EXPECT_EQ(Convert(cx_events::EventCategory::kUsb),
             crosapi::TelemetryEventCategoryEnum::kUsb);
+
+  EXPECT_EQ(Convert(cx_events::EventCategory::kExternalDisplay),
+            crosapi::TelemetryEventCategoryEnum::kExternalDisplay);
 
   EXPECT_EQ(Convert(cx_events::EventCategory::kSdCard),
             crosapi::TelemetryEventCategoryEnum::kSdCard);
@@ -316,6 +364,18 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertEventCategoryEnum) {
 
   EXPECT_EQ(Convert(cx_events::EventCategory::kTouchpadConnected),
             crosapi::TelemetryEventCategoryEnum::kTouchpadConnected);
+
+  EXPECT_EQ(Convert(cx_events::EventCategory::kTouchscreenTouch),
+            crosapi::TelemetryEventCategoryEnum::kTouchscreenTouch);
+
+  EXPECT_EQ(Convert(cx_events::EventCategory::kTouchscreenConnected),
+            crosapi::TelemetryEventCategoryEnum::kTouchscreenConnected);
+
+  EXPECT_EQ(Convert(cx_events::EventCategory::kStylusTouch),
+            crosapi::TelemetryEventCategoryEnum::kStylusTouch);
+
+  EXPECT_EQ(Convert(cx_events::EventCategory::kStylusConnected),
+            crosapi::TelemetryEventCategoryEnum::kStylusConnected);
 }
 
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertKeyboardInfo) {
@@ -337,7 +397,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertKeyboardInfo) {
   input->top_right_key = crosapi::TelemetryKeyboardTopRightKey::kPower;
   input->has_assistant_key = crosapi::BoolValue::New(true);
 
-  auto result = ConvertStructPtr<cx_events::KeyboardInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   ASSERT_TRUE(result.id.has_value());
   EXPECT_EQ(*result.id, kId);
@@ -401,8 +461,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
   input->tested_keys = kTestedKeys;
   input->tested_top_row_keys = kTestedTopRowKeys;
 
-  auto result = ConvertStructPtr<cx_events::KeyboardDiagnosticEventInfo>(
-      std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   ASSERT_TRUE(result.keyboard_info.has_value());
 
@@ -449,8 +508,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertAudioJackEventInfo) {
   input->device_type =
       crosapi::TelemetryAudioJackEventInfo::DeviceType::kHeadphone;
 
-  auto result =
-      ConvertStructPtr<cx_events::AudioJackEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::AudioJackEvent::kConnected);
   EXPECT_EQ(result.device_type, cx_events::AudioJackDeviceType::kHeadphone);
@@ -460,7 +518,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertLidEventInfo) {
   auto input = crosapi::TelemetryLidEventInfo::New();
   input->state = crosapi::TelemetryLidEventInfo::State::kOpened;
 
-  auto result = ConvertStructPtr<cx_events::LidEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::LidEvent::kOpened);
 }
@@ -475,7 +533,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertUsbEventInfo) {
   input->pid = 2;
   input->categories = categories;
 
-  auto result = ConvertStructPtr<cx_events::UsbEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::UsbEvent::kConnected);
   EXPECT_EQ(result.vendor, "test_vendor");
@@ -485,11 +543,75 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertUsbEventInfo) {
   EXPECT_EQ(result.categories, categories);
 }
 
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertExternalDisplayEventInfo) {
+  constexpr uint32_t kDisplayWidth = 0;
+  constexpr uint32_t kDisplayHeight = 1;
+  constexpr uint32_t kResolutionHorizontal = 2;
+  constexpr uint32_t kResolutionVertical = 3;
+  constexpr double kRefreshRate = 4.4;
+  constexpr char kManufacturer[] = "manufacturer";
+  constexpr uint16_t kModelId = 5;
+  constexpr uint32_t kSerialNumber = 6;
+  constexpr uint8_t kManufactureWeek = 7;
+  constexpr uint16_t kManufactureYear = 8;
+  constexpr char kEdidVersion[] = "1.4";
+  constexpr crosapi::ProbeDisplayInputType kInputType =
+      crosapi::ProbeDisplayInputType::kDigital;
+  constexpr char kDisplayName[] = "display";
+
+  auto input = crosapi::TelemetryExternalDisplayEventInfo::New();
+  input->state = crosapi::TelemetryExternalDisplayEventInfo::State::kAdd;
+  input->display_info = crosapi::ProbeExternalDisplayInfo::New(
+      kDisplayWidth, kDisplayHeight, kResolutionHorizontal, kResolutionVertical,
+      kRefreshRate, std::string(kManufacturer), kModelId, kSerialNumber,
+      kManufactureWeek, kManufactureYear, std::string(kEdidVersion), kInputType,
+      std::string(kDisplayName));
+
+  auto result = ConvertStructPtr(std::move(input));
+
+  EXPECT_EQ(result.event, cx_events::ExternalDisplayEvent::kConnected);
+
+  ASSERT_TRUE(result.display_info.has_value());
+  const auto& display_info = result.display_info.value();
+
+  ASSERT_TRUE(display_info.display_width.has_value());
+  EXPECT_EQ(static_cast<uint32_t>(display_info.display_width.value()),
+            kDisplayWidth);
+  ASSERT_TRUE(display_info.display_height.has_value());
+  EXPECT_EQ(static_cast<uint32_t>(display_info.display_height.value()),
+            kDisplayHeight);
+  ASSERT_TRUE(display_info.resolution_horizontal.has_value());
+  EXPECT_EQ(static_cast<uint32_t>(display_info.resolution_horizontal.value()),
+            kResolutionHorizontal);
+  ASSERT_TRUE(display_info.resolution_vertical.has_value());
+  EXPECT_EQ(static_cast<uint32_t>(display_info.resolution_vertical.value()),
+            kResolutionVertical);
+  ASSERT_TRUE(display_info.refresh_rate.has_value());
+  EXPECT_EQ(static_cast<double>(display_info.refresh_rate.value()),
+            kRefreshRate);
+  EXPECT_EQ(display_info.manufacturer, kManufacturer);
+  ASSERT_TRUE(display_info.model_id.has_value());
+  EXPECT_EQ(static_cast<uint16_t>(display_info.model_id.value()), kModelId);
+  ASSERT_TRUE(display_info.serial_number.has_value());
+  EXPECT_EQ(static_cast<uint32_t>(display_info.serial_number.value()),
+            kSerialNumber);
+  ASSERT_TRUE(display_info.manufacture_week.has_value());
+  EXPECT_EQ(static_cast<uint8_t>(display_info.manufacture_week.value()),
+            kManufactureWeek);
+  ASSERT_TRUE(display_info.manufacture_year.has_value());
+  EXPECT_EQ(static_cast<uint16_t>(display_info.manufacture_year.value()),
+            kManufactureYear);
+  EXPECT_EQ(display_info.edid_version, kEdidVersion);
+  EXPECT_EQ(display_info.input_type, Convert(kInputType));
+  EXPECT_EQ(display_info.display_name, kDisplayName);
+}
+
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertSdCardEventInfo) {
   auto input = crosapi::TelemetrySdCardEventInfo::New();
   input->state = crosapi::TelemetrySdCardEventInfo::State::kAdd;
 
-  auto result = ConvertStructPtr<cx_events::SdCardEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::SdCardEvent::kConnected);
 }
@@ -498,7 +620,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertPowerEventInfo) {
   auto input = crosapi::TelemetryPowerEventInfo::New();
   input->state = crosapi::TelemetryPowerEventInfo::State::kAcInserted;
 
-  auto result = ConvertStructPtr<cx_events::PowerEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::PowerEvent::kAcInserted);
 }
@@ -508,8 +630,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
   auto input = crosapi::TelemetryStylusGarageEventInfo::New();
   input->state = crosapi::TelemetryStylusGarageEventInfo::State::kInserted;
 
-  auto result =
-      ConvertStructPtr<cx_events::StylusGarageEventInfo>(std::move(input));
+  auto result = ConvertStructPtr(std::move(input));
 
   EXPECT_EQ(result.event, cx_events::StylusGarageEvent::kInserted);
 }
@@ -521,8 +642,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
       crosapi::TelemetryTouchpadButtonEventInfo_State::kPressed;
   button_event->button = crosapi::TelemetryInputTouchButton::kLeft;
 
-  auto result = ConvertStructPtr<cx_events::TouchpadButtonEventInfo>(
-      std::move(button_event));
+  auto result = ConvertStructPtr(std::move(button_event));
 
   EXPECT_EQ(result.state, cx_events::InputTouchButtonState::kPressed);
   EXPECT_EQ(result.button, cx_events::InputTouchButton::kLeft);
@@ -551,8 +671,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
   auto touch_event =
       crosapi::TelemetryTouchpadTouchEventInfo::New(std::move(touch_points));
 
-  auto result = ConvertStructPtr<cx_events::TouchpadTouchEventInfo>(
-      std::move(touch_event));
+  auto result = ConvertStructPtr(std::move(touch_event));
 
   EXPECT_EQ(result.touch_points.size(), static_cast<size_t>(2));
 
@@ -585,8 +704,7 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
   auto connected_event = crosapi::TelemetryTouchpadConnectedEventInfo::New(
       kMaxX, kMaxY, kMaxPressure, std::move(buttons));
 
-  auto result = ConvertStructPtr<cx_events::TouchpadConnectedEventInfo>(
-      std::move(connected_event));
+  auto result = ConvertStructPtr(std::move(connected_event));
 
   EXPECT_EQ(result.max_x, kMaxX);
   EXPECT_EQ(result.max_y, kMaxY);
@@ -598,19 +716,67 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest,
   EXPECT_EQ(result.buttons[2], cx_events::InputTouchButton::kRight);
 }
 
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertTouchscreenEventInfoTouchEvent) {
+  constexpr int32_t kTrackingId1 = 1;
+  constexpr int32_t kX1 = 2;
+  constexpr int32_t kY1 = 3;
+  constexpr int32_t kPressure1 = 4;
+  constexpr int32_t kTouchMajor1 = 5;
+  constexpr int32_t kTouchMinor1 = 6;
+  constexpr int32_t kTrackingId2 = 7;
+  constexpr int32_t kX2 = 8;
+  constexpr int32_t kY2 = 9;
+
+  std::vector<crosapi::TelemetryTouchPointInfoPtr> touch_points;
+  touch_points.push_back(crosapi::TelemetryTouchPointInfo::New(
+      kTrackingId1, kX1, kY1, crosapi::UInt32Value::New(kPressure1),
+      crosapi::UInt32Value::New(kTouchMajor1),
+      crosapi::UInt32Value::New(kTouchMinor1)));
+  touch_points.push_back(crosapi::TelemetryTouchPointInfo::New(
+      kTrackingId2, kX2, kY2, nullptr, nullptr, nullptr));
+
+  auto touch_event =
+      crosapi::TelemetryTouchscreenTouchEventInfo::New(std::move(touch_points));
+
+  auto result = ConvertStructPtr(std::move(touch_event));
+
+  EXPECT_EQ(result.touch_points.size(), static_cast<size_t>(2));
+
+  EXPECT_EQ(result.touch_points[0].tracking_id, kTrackingId1);
+  EXPECT_EQ(result.touch_points[0].x, kX1);
+  EXPECT_EQ(result.touch_points[0].y, kY1);
+  EXPECT_EQ(result.touch_points[0].pressure, kPressure1);
+  EXPECT_EQ(result.touch_points[0].touch_major, kTouchMajor1);
+  EXPECT_EQ(result.touch_points[0].touch_minor, kTouchMinor1);
+
+  EXPECT_EQ(result.touch_points[1].tracking_id, kTrackingId2);
+  EXPECT_EQ(result.touch_points[1].x, kX2);
+  EXPECT_EQ(result.touch_points[1].y, kY2);
+  EXPECT_EQ(result.touch_points[1].pressure, absl::nullopt);
+  EXPECT_EQ(result.touch_points[1].touch_major, absl::nullopt);
+  EXPECT_EQ(result.touch_points[1].touch_minor, absl::nullopt);
+}
+
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertTouchscreenEventInfoConnectedEvent) {
+  constexpr int32_t kMaxX = 1;
+  constexpr int32_t kMaxY = 2;
+  constexpr int32_t kMaxPressure = 3;
+
+  auto connected_event = crosapi::TelemetryTouchscreenConnectedEventInfo::New(
+      kMaxX, kMaxY, kMaxPressure);
+
+  auto result = ConvertStructPtr(std::move(connected_event));
+
+  EXPECT_EQ(result.max_x, kMaxX);
+  EXPECT_EQ(result.max_y, kMaxY);
+  EXPECT_EQ(result.max_pressure, kMaxPressure);
+}
+
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertNullableInt) {
-  {
-    auto output =
-        ConvertStructPtr<absl::optional<uint32_t>, crosapi::UInt32ValuePtr>(
-            crosapi::UInt32Value::New(10));
-    EXPECT_EQ(output, uint32_t{10});
-  }
-  {
-    auto output =
-        ConvertStructPtr<absl::optional<uint32_t>, crosapi::UInt32ValuePtr>(
-            nullptr);
-    EXPECT_EQ(output, absl::nullopt);
-  }
+  auto output = ConvertStructPtr(crosapi::UInt32Value::New(10));
+  EXPECT_EQ(output, uint32_t{10});
 }
 
 TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertTouchpointInfo) {
@@ -620,11 +786,9 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertTouchpointInfo) {
   constexpr int32_t kPressure = 4;
   constexpr int32_t kTouchMajor = 5;
 
-  auto output = ConvertStructPtr<cx_events::TouchPointInfo,
-                                 crosapi::TelemetryTouchPointInfoPtr>(
-      crosapi::TelemetryTouchPointInfo::New(
-          kTrackingId, kX, kY, crosapi::UInt32Value::New(kPressure),
-          crosapi::UInt32Value::New(kTouchMajor), nullptr));
+  auto output = ConvertStructPtr(crosapi::TelemetryTouchPointInfo::New(
+      kTrackingId, kX, kY, crosapi::UInt32Value::New(kPressure),
+      crosapi::UInt32Value::New(kTouchMajor), nullptr));
 
   EXPECT_EQ(output.tracking_id, kTrackingId);
   EXPECT_EQ(output.x, kX);
@@ -634,4 +798,36 @@ TEST(TelemetryExtensionEventsApiConvertersUnitTest, ConvertTouchpointInfo) {
   EXPECT_EQ(output.touch_minor, absl::nullopt);
 }
 
-}  // namespace chromeos::converters
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertStylusTouchEventInfo) {
+  constexpr int32_t kX = 1;
+  constexpr int32_t kY = 2;
+  constexpr int32_t kPressure = 3;
+
+  auto touch_event = crosapi::TelemetryStylusTouchEventInfo::New(
+      crosapi::TelemetryStylusTouchPointInfo::New(kX, kY, kPressure));
+
+  auto result = ConvertStructPtr(std::move(touch_event));
+
+  EXPECT_EQ(result.touch_point->x, kX);
+  EXPECT_EQ(result.touch_point->y, kY);
+  EXPECT_EQ(result.touch_point->pressure, kPressure);
+}
+
+TEST(TelemetryExtensionEventsApiConvertersUnitTest,
+     ConvertStylusConnectedEventInfo) {
+  constexpr int32_t kMaxX = 1;
+  constexpr int32_t kMaxY = 2;
+  constexpr int32_t kMaxPressure = 3;
+
+  auto connected_event = crosapi::TelemetryStylusConnectedEventInfo::New(
+      kMaxX, kMaxY, kMaxPressure);
+
+  auto result = ConvertStructPtr(std::move(connected_event));
+
+  EXPECT_EQ(result.max_x, kMaxX);
+  EXPECT_EQ(result.max_y, kMaxY);
+  EXPECT_EQ(result.max_pressure, kMaxPressure);
+}
+
+}  // namespace chromeos::converters::events

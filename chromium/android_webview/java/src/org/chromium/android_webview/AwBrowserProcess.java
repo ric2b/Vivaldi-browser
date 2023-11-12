@@ -9,11 +9,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.StrictMode;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -29,6 +31,7 @@ import org.chromium.android_webview.common.services.ServiceNames;
 import org.chromium.android_webview.metrics.AwMetricsLogUploader;
 import org.chromium.android_webview.metrics.AwMetricsServiceClient;
 import org.chromium.android_webview.metrics.AwNonembeddedUmaReplayer;
+import org.chromium.android_webview.metrics.MetricsFilteringDecorator;
 import org.chromium.android_webview.policy.AwPolicyProvider;
 import org.chromium.android_webview.proto.MetricsBridgeRecords.HistogramRecord;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
@@ -54,6 +57,7 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.components.component_updater.ComponentLoaderPolicyBridge;
 import org.chromium.components.component_updater.EmbeddedComponentLoader;
 import org.chromium.components.metrics.AndroidMetricsFeatures;
+import org.chromium.components.metrics.AndroidMetricsLogConsumer;
 import org.chromium.components.metrics.AndroidMetricsLogUploader;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.policy.CombinedPolicyProvider;
@@ -90,6 +94,7 @@ public final class AwBrowserProcess {
 
     private static String sWebViewPackageName;
     private static @ApkType int sApkType;
+    private static @Nullable String sProcessDataDirSuffix;
 
     /**
      * Loads the native library, and performs basic static construction of objects needed
@@ -118,6 +123,7 @@ public final class AwBrowserProcess {
     public static void loadLibrary(String processDataDirBasePath, String processCacheDirBasePath,
             String processDataDirSuffix) {
         LibraryLoader.getInstance().setLibraryProcessType(LibraryProcessType.PROCESS_WEBVIEW);
+        sProcessDataDirSuffix = processDataDirSuffix;
         if (processDataDirSuffix == null) {
             PathUtils.setPrivateDirectoryPath(processDataDirBasePath, processCacheDirBasePath,
                     WEBVIEW_DIR_BASENAME, "WebView");
@@ -190,6 +196,10 @@ public final class AwBrowserProcess {
                 }
 
                 PowerMonitor.create();
+                PlatformServiceBridge.getInstance().setSafeBrowsingHandler();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    AwContentsLifecycleNotifier.initialize();
+                }
             });
         }
     }
@@ -202,6 +212,15 @@ public final class AwBrowserProcess {
     public static String getWebViewPackageName() {
         if (sWebViewPackageName == null) return ""; // May be null in testing.
         return sWebViewPackageName;
+    }
+
+    public static void setProcessDataDirSuffixForTesting(@Nullable String processDataDirSuffix) {
+        sProcessDataDirSuffix = processDataDirSuffix;
+    }
+
+    @Nullable
+    public static String getProcessDataDirSuffix() {
+        return sProcessDataDirSuffix;
     }
 
     public static void initializeApkType(ApplicationInfo info) {
@@ -526,12 +545,13 @@ public final class AwBrowserProcess {
             // ComponentsProviderService and VariationSeedServer to try to avoid spinning the
             // nonembedded ":webview_service" twice.
             uploader.initialize();
-            AndroidMetricsLogUploader.setConsumer(uploader);
+            AndroidMetricsLogUploader.setConsumer(new MetricsFilteringDecorator(uploader));
         } else {
-            AndroidMetricsLogUploader.setConsumer((byte[] data) -> {
+            AndroidMetricsLogConsumer directUploader = data -> {
                 PlatformServiceBridge.getInstance().logMetrics(data, useDefaultUploadQos);
                 return HttpURLConnection.HTTP_OK;
-            });
+            };
+            AndroidMetricsLogUploader.setConsumer(new MetricsFilteringDecorator(directUploader));
         }
     }
 

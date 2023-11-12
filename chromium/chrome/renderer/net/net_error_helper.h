@@ -62,6 +62,7 @@ class NetErrorHelper
   void ListVisibilityChanged(bool is_visible) override;
   void UpdateEasterEggHighScore(int high_score) override;
   void ResetEasterEggHighScore() override;
+  void OpenVivaldia() override;
 
   // RenderFrameObserver implementation.
   void DidCommitProvisionalLoad(ui::PageTransition transition) override;

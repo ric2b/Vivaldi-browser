@@ -165,7 +165,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ではセキュリティ規格が遵守されていません。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使用しています。</translation>
 <translation id="7221855153210829124">通知の表示</translation>
-<translation id="7260504762447901703">アクセス権を取り消します</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7364115444476960850">Vivaldi の <ph name="BLOCKER_NAME" /> により、アクセスしようとしているページはブロックされました</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>

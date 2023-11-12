@@ -19,5 +19,15 @@ NSString* const vVivaldiTermsOfServiceUrl =
     @"https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/";
 NSString* const vVivaldiReleaseNotesUrl =
     @"https://vivaldi.com/ios/new/";
+NSString* const vVivaldiFirstRunUrl =
+    @"https://vivaldi.com/ios/getstarted/";
 NSString* const vVivaldiPrivacyAndSecurity =
     @"https://vvld.in/privacy-and-security";
+NSString* const vVivaldiRecoverUsernameUrl =
+    @"https://login.vivaldi.net/profile/id/recoverAccount";
+NSString* const vVivaldiRecoverPasswordUrl =
+    @"https://login.vivaldi.net/profile/id/userInfoView";
+
+// Help
+const char vVivaldiHelpCopyLinkToHightlightUrl[] =
+    "https://help.vivaldi.com/ios/ios-browse/copy-link-to-highlight-on-ios/";

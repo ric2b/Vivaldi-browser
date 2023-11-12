@@ -215,8 +215,16 @@ bool IsAPIFeatureAvailable(v8::Local<v8::Context> context,
 bool ArePromisesAllowed(v8::Local<v8::Context> context) {
   ScriptContext* script_context = GetScriptContextFromV8ContextChecked(context);
   const Extension* extension = script_context->extension();
-  return (extension && extension->manifest_version() >= 3) ||
-         script_context->context_type() == Feature::WEBUI_CONTEXT;
+  if (extension && extension->manifest_version() >= 3) {
+    return true;
+  }
+  if (script_context->context_type() == Feature::WEBUI_CONTEXT) {
+    return true;
+  }
+  if (script_context->context_type() == Feature::WEB_PAGE_CONTEXT) {
+    return true;
+  }
+  return false;
 }
 
 // Instantiates the binding object for the given |name|. |name| must specify a
@@ -287,7 +295,7 @@ v8::Local<v8::Object> CreateFullBinding(
 
   // Look for any bindings that would be on the same object. Any of these would
   // start with the same base name (e.g. 'app') + '.' (since '.' is < x for any
-  // isalpha(x)).
+  // absl::ascii_isalpha(x)).
   std::string upper = root_name + static_cast<char>('.' + 1);
   base::StringPiece last_binding_name;
   // The following loop is a little painful because we have crazy binding names
@@ -891,6 +899,8 @@ void NativeExtensionBindingsSystem::SendRequest(
   params->worker_thread_id = kMainThreadId;
   params->service_worker_version_id =
       blink::mojom::kInvalidServiceWorkerVersionId;
+  CHECK_NE(Feature::UNSPECIFIED_CONTEXT, script_context->context_type())
+      << script_context->GetDebugString();
 
   ipc_message_sender_->SendRequestIPC(script_context, std::move(params));
 }

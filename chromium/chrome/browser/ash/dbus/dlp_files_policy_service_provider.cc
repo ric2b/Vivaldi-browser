@@ -33,9 +33,9 @@ policy::dlp::FileAction MapProtoToFileAction(dlp::FileAction file_action) {
     case dlp::FileAction::MOVE:
       return policy::dlp::FileAction::kMove;
     case dlp::FileAction::OPEN:
-    // TODO(crbug.com/1378653): Return open FileAction.
+      return policy::dlp::FileAction::kOpen;
     case dlp::FileAction::SHARE:
-    // TODO(crbug.com/1378653): Return share FileAction.
+      return policy::dlp::FileAction::kShare;
     case dlp::FileAction::TRANSFER:
       return policy::dlp::FileAction::kTransfer;
   }
@@ -61,6 +61,50 @@ data_controls::Component MapProtoToPolicyComponent(
     case ::dlp::DlpComponent::SYSTEM:
       return data_controls::Component::kUnknownComponent;
   }
+}
+
+// Called when restricted files sources are obtained.
+void RespondWithRestrictedFilesTransfer(
+    dbus::MethodCall* method_call,
+    dbus::ExportedObject::ResponseSender response_sender,
+    const std::vector<std::pair<policy::DlpFilesControllerAsh::FileDaemonInfo,
+                                dlp::RestrictionLevel>>& requested_files) {
+  dlp::IsFilesTransferRestrictedResponse response_proto;
+
+  for (const auto& [file, level] : requested_files) {
+    dlp::FileRestriction* files_restriction =
+        response_proto.add_files_restrictions();
+    files_restriction->mutable_file_metadata()->set_inode(file.inode);
+    files_restriction->mutable_file_metadata()->set_crtime(file.crtime);
+    files_restriction->mutable_file_metadata()->set_path(file.path.value());
+    files_restriction->mutable_file_metadata()->set_source_url(
+        file.source_url.spec());
+    files_restriction->mutable_file_metadata()->set_referrer_url(
+        file.referrer_url.spec());
+    files_restriction->set_restriction_level(level);
+  }
+  std::unique_ptr<dbus::Response> response =
+      dbus::Response::FromMethodCall(method_call);
+  dbus::MessageWriter writer(response.get());
+  writer.AppendProtoAsArrayOfBytes(response_proto);
+  std::move(response_sender).Run(std::move(response));
+}
+
+// Respond with a single restriction level.
+void DirectRespondWithRestrictedFilesTransfer(
+    dbus::MethodCall* method_call,
+    dbus::ExportedObject::ResponseSender response_sender,
+    const std::vector<policy::DlpFilesControllerAsh::FileDaemonInfo>&
+        files_info,
+    ::dlp::RestrictionLevel restriction_level) {
+  std::vector<std::pair<policy::DlpFilesControllerAsh::FileDaemonInfo,
+                        dlp::RestrictionLevel>>
+      response_files;
+  for (const auto& file : files_info) {
+    response_files.emplace_back(file, restriction_level);
+  }
+  RespondWithRestrictedFilesTransfer(method_call, std::move(response_sender),
+                                     std::move(response_files));
 }
 
 }  // namespace
@@ -113,13 +157,14 @@ void DlpFilesPolicyServiceProvider::IsDlpPolicyMatched(
   policy::DlpFilesControllerAsh* files_controller =
       policy::DlpFilesControllerAsh::GetForPrimaryProfile();
 
-  // TODO(crbug.com/1360005): Add actual file path.
   bool restricted =
       files_controller
           ? files_controller->IsDlpPolicyMatched(
                 policy::DlpFilesControllerAsh::FileDaemonInfo(
-                    request.file_metadata().inode(), base::FilePath(),
-                    request.file_metadata().source_url()))
+                    request.file_metadata().inode(),
+                    request.file_metadata().crtime(), base::FilePath(),
+                    request.file_metadata().source_url(),
+                    request.file_metadata().referrer_url()))
           : false;
 
   dlp::IsDlpPolicyMatchedResponse response_proto;
@@ -157,22 +202,27 @@ void DlpFilesPolicyServiceProvider::IsFilesTransferRestricted(
       LOG(ERROR) << "Missing file path or file source url";
       continue;
     }
-    files_info.emplace_back(file.inode(), base::FilePath(file.path()),
-                            file.source_url());
+    files_info.emplace_back(file.inode(), file.crtime(),
+                            base::FilePath(file.path()), file.source_url(),
+                            file.referrer_url());
+  }
+
+  // Transfer to local file system or access by system components is always
+  // allowed.
+  if (request.has_destination_component() &&
+      request.destination_component() == dlp::SYSTEM) {
+    DirectRespondWithRestrictedFilesTransfer(
+        method_call, std::move(response_sender), files_info,
+        ::dlp::RestrictionLevel::LEVEL_ALLOW);
+    return;
   }
 
   policy::DlpFilesControllerAsh* files_controller =
       policy::DlpFilesControllerAsh::GetForPrimaryProfile();
   if (!files_controller) {
-    std::vector<std::pair<policy::DlpFilesControllerAsh::FileDaemonInfo,
-                          dlp::RestrictionLevel>>
-        response_files;
-    for (const auto& file : files_info) {
-      response_files.emplace_back(file,
-                                  ::dlp::RestrictionLevel::LEVEL_UNSPECIFIED);
-    }
-    RespondWithRestrictedFilesTransfer(method_call, std::move(response_sender),
-                                       std::move(response_files));
+    DirectRespondWithRestrictedFilesTransfer(
+        method_call, std::move(response_sender), files_info,
+        ::dlp::RestrictionLevel::LEVEL_UNSPECIFIED);
     return;
   }
 
@@ -181,7 +231,7 @@ void DlpFilesPolicyServiceProvider::IsFilesTransferRestricted(
     destination.emplace(
         MapProtoToPolicyComponent(request.destination_component()));
   } else {
-    destination.emplace(request.destination_url());
+    destination.emplace(GURL(request.destination_url()));
   }
 
   policy::dlp::FileAction files_action = policy::dlp::FileAction::kTransfer;
@@ -197,33 +247,8 @@ void DlpFilesPolicyServiceProvider::IsFilesTransferRestricted(
   files_controller->IsFilesTransferRestricted(
       std::move(task_id), std::move(files_info), std::move(destination.value()),
       files_action,
-      base::BindOnce(
-          &DlpFilesPolicyServiceProvider::RespondWithRestrictedFilesTransfer,
-          weak_ptr_factory_.GetWeakPtr(), method_call,
-          std::move(response_sender)));
-}
-
-void DlpFilesPolicyServiceProvider::RespondWithRestrictedFilesTransfer(
-    dbus::MethodCall* method_call,
-    dbus::ExportedObject::ResponseSender response_sender,
-    const std::vector<std::pair<policy::DlpFilesControllerAsh::FileDaemonInfo,
-                                dlp::RestrictionLevel>>& requested_files) {
-  dlp::IsFilesTransferRestrictedResponse response_proto;
-
-  for (const auto& [file, level] : requested_files) {
-    dlp::FileRestriction* files_restriction =
-        response_proto.add_files_restrictions();
-    files_restriction->mutable_file_metadata()->set_inode(file.inode);
-    files_restriction->mutable_file_metadata()->set_path(file.path.value());
-    files_restriction->mutable_file_metadata()->set_source_url(
-        file.source_url.spec());
-    files_restriction->set_restriction_level(level);
-  }
-  std::unique_ptr<dbus::Response> response =
-      dbus::Response::FromMethodCall(method_call);
-  dbus::MessageWriter writer(response.get());
-  writer.AppendProtoAsArrayOfBytes(response_proto);
-  std::move(response_sender).Run(std::move(response));
+      base::BindOnce(&RespondWithRestrictedFilesTransfer, method_call,
+                     std::move(response_sender)));
 }
 
 }  // namespace ash

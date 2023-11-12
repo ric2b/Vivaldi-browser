@@ -44,7 +44,13 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/menu/menu_scroll_view_container.h"
 #include "ui/views/controls/menu/submenu_view.h"
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "ui/display/screen.h"
+#include "ui/display/tablet_state.h"
+#endif
 
 namespace {
 
@@ -129,7 +135,8 @@ bool AppMenuBrowserTest::VerifyUi() {
 
   const auto* const test_info =
       testing::UnitTest::GetInstance()->current_test_info();
-  return VerifyPixelUi(menu_item->GetSubmenu(), test_info->test_case_name(),
+  return VerifyPixelUi(menu_item->GetSubmenu()->GetScrollViewContainer(),
+                       test_info->test_case_name(),
                        test_info->name()) != ui::test::ActionResult::kFailed;
 }
 
@@ -164,12 +171,10 @@ class AppMenuBrowserTestRefreshOnly : public AppMenuBrowserTest {
     // testing that seemed to result in them always being skipped when the
     // default feature state wasn't correct, even when setting the correct state
     // via command-line flags. Probably I was doing something wrong...
-    scoped_feature_list_.InitWithFeatures(
-        {features::kChromeRefresh2023,
-         // Needed for the "extensions" test
-         features::kExtensionsMenuInAppMenu},
-        // Needed for the "passwords_and_autofill" test
-        {password_manager::features::kPasswordManagerRedesign});
+    scoped_feature_list_.InitWithFeatures({features::kChromeRefresh2023,
+                                           // Needed for the "extensions" test
+                                           features::kExtensionsMenuInAppMenu},
+                                          {});
   }
 
  private:
@@ -218,6 +223,21 @@ IN_PROC_BROWSER_TEST_F(AppMenuBrowserTest, InvokeUi_main) {
 IN_PROC_BROWSER_TEST_F(AppMenuBrowserTestRefreshOnly, InvokeUi_main) {
   ShowAndVerifyUi();
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+IN_PROC_BROWSER_TEST_F(AppMenuBrowserTest, InvokeUi_main_tablet_mode) {
+  display::Screen::GetScreen()->OverrideTabletStateForTesting(
+      display::TabletState::kInTabletMode);
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AppMenuBrowserTestRefreshOnly,
+                       InvokeUi_main_tablet_mode) {
+  display::Screen::GetScreen()->OverrideTabletStateForTesting(
+      display::TabletState::kInTabletMode);
+  ShowAndVerifyUi();
+}
+#endif
 
 IN_PROC_BROWSER_TEST_F(AppMenuBrowserTestRefreshOnly, InvokeUi_main_guest) {
 // TODO(crbug.com/1427667): ChromeOS specific profile logic still needs to be

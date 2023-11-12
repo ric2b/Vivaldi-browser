@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/web_applications/web_app_uninstall_and_replace_job.h"
+#include "chrome/browser/web_applications/jobs/uninstall/web_app_uninstall_and_replace_job.h"
 
 #include <memory>
 
@@ -45,7 +45,7 @@ class TestUninstallAndReplaceJobCommand
   void StartWithLock(std::unique_ptr<AppLock> lock) override {
     lock_ = std::move(lock);
     uninstall_and_replace_job_.emplace(
-        profile_, lock_->AsWeakPtr(), from_apps_, to_app_,
+        profile_, *lock_, from_apps_, to_app_,
         base::BindOnce(&TestUninstallAndReplaceJobCommand::OnComplete,
                        base::Unretained(this)));
     uninstall_and_replace_job_->Start();
@@ -66,7 +66,7 @@ class TestUninstallAndReplaceJobCommand
   void OnShutdown() override {}
 
  private:
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile> profile_ = nullptr;
   std::unique_ptr<AppLockDescription> lock_description_;
   std::unique_ptr<AppLock> lock_;
 
@@ -107,7 +107,7 @@ class WebAppUninstallAndReplaceJobTest : public WebAppTest {
   TestShortcutManager* shortcut_manager() { return shortcut_manager_; }
 
  private:
-  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_;
+  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_ = nullptr;
 };
 
 // `WebAppUninstallAndReplaceJob` uses `AppServiceProxy` to do uninstall, app

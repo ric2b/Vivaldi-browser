@@ -4,17 +4,23 @@
 
 #include "chrome/browser/ui/views/autofill/popup/popup_row_strategy.h"
 
+#include <memory>
+
 #include "base/feature_list.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_autocomplete_cell_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_base_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_cell_utils.h"
+#include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
+#include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/throbber.h"
 #include "ui/views/layout/box_layout_view.h"
@@ -32,11 +38,17 @@ constexpr PopupItemId kItemTypesUsingLeadingIcons[] = {
     PopupItemId::kClearForm,
     PopupItemId::kShowAccountCards,
     PopupItemId::kAutofillOptions,
+    PopupItemId::kEditAddressProfile,
+    PopupItemId::kDeleteAddressProfile,
     PopupItemId::kAllSavedPasswordsEntry,
+    PopupItemId::kFillEverythingFromAddressProfile,
     PopupItemId::kPasswordAccountStorageEmpty,
     PopupItemId::kPasswordAccountStorageOptIn,
     PopupItemId::kPasswordAccountStorageReSignin,
     PopupItemId::kPasswordAccountStorageOptInAndGenerate};
+
+constexpr int kExpandableControlCellInsetPadding = 16;
+constexpr int kExpandableControlCellIconSize = 8;
 
 // ********************* AccessibilityDelegate implementations *****************
 
@@ -52,6 +64,7 @@ class ContentItemAccessibilityDelegate
   ~ContentItemAccessibilityDelegate() override = default;
 
   void GetAccessibleNodeData(bool is_selected,
+                             bool is_permanently_highlighted,
                              ui::AXNodeData* node_data) const override;
 
  private:
@@ -87,6 +100,7 @@ ContentItemAccessibilityDelegate::ContentItemAccessibilityDelegate(
 
 void ContentItemAccessibilityDelegate::GetAccessibleNodeData(
     bool is_selected,
+    bool is_permanently_highlighted,
     ui::AXNodeData* node_data) const {
   DCHECK(node_data);
   // Options are selectable.
@@ -98,38 +112,31 @@ void ContentItemAccessibilityDelegate::GetAccessibleNodeData(
   node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize, set_size_);
 }
 
-// ******************** DeleteButtonAccessibilityDelegate  *********************
-class DeleteButtonAccessibilityDelegate
+// ************** ExpandableControlCellAccessibilityDelegate  ******************
+class ExpandableControlCellAccessibilityDelegate
     : public PopupCellView::AccessibilityDelegate {
  public:
-  DeleteButtonAccessibilityDelegate(
-      base::WeakPtr<AutofillPopupController> controller,
-      int line_number);
-  ~DeleteButtonAccessibilityDelegate() override = default;
+  ExpandableControlCellAccessibilityDelegate() = default;
+  ~ExpandableControlCellAccessibilityDelegate() override = default;
 
   void GetAccessibleNodeData(bool is_selected,
+                             bool is_permanently_highlighted,
                              ui::AXNodeData* node_data) const override;
-
- private:
-  std::u16string voice_over_string_;
 };
 
-DeleteButtonAccessibilityDelegate::DeleteButtonAccessibilityDelegate(
-    base::WeakPtr<AutofillPopupController> controller,
-    int line_number) {
-  DCHECK(controller);
-  voice_over_string_ = l10n_util::GetStringFUTF16(
-      IDS_AUTOFILL_DELETE_AUTOCOMPLETE_SUGGESTION_A11Y_HINT,
-      popup_cell_utils::GetVoiceOverStringFromSuggestion(
-          controller->GetSuggestionAt(line_number)));
-}
-
-void DeleteButtonAccessibilityDelegate::GetAccessibleNodeData(
+// Sets the checked state according to `is_permanently_highlighted`,
+// `is_selected` is ignored as the first one is more important and updating
+// two states within hundreds of milliseconds can be confusing.
+void ExpandableControlCellAccessibilityDelegate::GetAccessibleNodeData(
     bool is_selected,
+    bool is_permanently_highlighted,
     ui::AXNodeData* node_data) const {
-  node_data->role = ax::mojom::Role::kMenuItem;
-  node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, is_selected);
-  node_data->SetNameChecked(voice_over_string_);
+  node_data->role = ax::mojom::Role::kToggleButton;
+  node_data->SetNameChecked(l10n_util::GetStringUTF16(
+      IDS_AUTOFILL_EXPANDABLE_SUGGESTION_CONTROLL_A11Y_NAME));
+  node_data->SetCheckedState(is_permanently_highlighted
+                                 ? ax::mojom::CheckedState::kTrue
+                                 : ax::mojom::CheckedState::kFalse);
 }
 
 }  // namespace
@@ -163,25 +170,32 @@ std::unique_ptr<PopupCellView> PopupSuggestionStrategy::CreateContent() {
   if (!GetController()) {
     return nullptr;
   }
+
+  PopupItemId popup_up_item_id =
+      GetController()->GetSuggestionAt(GetLineNumber()).popup_item_id;
   if (base::FeatureList::IsEnabled(
           features::kAutofillShowAutocompleteDeleteButton) &&
-      GetController()->GetSuggestionAt(GetLineNumber()).popup_item_id ==
-          PopupItemId::kAutocompleteEntry) {
-    return CreateDeleteAutocompleteRow();
+      popup_up_item_id == PopupItemId::kAutocompleteEntry) {
+    return CreateAutocompleteRow();
   }
   const Suggestion& kSuggestion =
       GetController()->GetSuggestionAt(GetLineNumber());
   std::unique_ptr<PopupCellView> view =
-      views::Builder<PopupCellView>()
+      views::Builder<PopupCellView>(
+          std::make_unique<PopupCellView>(
+              GetController()
+                  ->ShouldIgnoreMouseObservedOutsideItemBoundsCheck()))
           .SetAccessibilityDelegate(
               std::make_unique<ContentItemAccessibilityDelegate>(
                   GetController(), GetLineNumber()))
           .Build();
 
   // Add the actual views.
+  int text_style = IsGroupFillingPopupItemId(popup_up_item_id)
+                       ? views::style::TextStyle::STYLE_SECONDARY
+                       : views::style::TextStyle::STYLE_PRIMARY;
   std::unique_ptr<views::Label> main_text_label =
-      popup_cell_utils::CreateMainTextLabel(
-          kSuggestion.main_text, views::style::TextStyle::STYLE_PRIMARY);
+      popup_cell_utils::CreateMainTextLabel(kSuggestion.main_text, text_style);
   popup_cell_utils::FormatLabel(*main_text_label, kSuggestion.main_text,
                                 GetController());
   popup_cell_utils::AddSuggestionContentToView(
@@ -200,7 +214,7 @@ std::unique_ptr<PopupCellView> PopupSuggestionStrategy::CreateContent() {
 }
 
 std::unique_ptr<PopupCellView>
-PopupSuggestionStrategy::CreateDeleteAutocompleteRow() {
+PopupSuggestionStrategy::CreateAutocompleteRow() {
   if (!GetController()) {
     return nullptr;
   }
@@ -213,10 +227,27 @@ PopupSuggestionStrategy::CreateDeleteAutocompleteRow() {
   return view;
 }
 
-// This method is currently not implemented but we will re-evaluate it (probably
-// implement it) when granular filling starts its implementation phase.
 std::unique_ptr<PopupCellView> PopupSuggestionStrategy::CreateControl() {
-  return nullptr;
+  const Suggestion& kSuggestion =
+      GetController()->GetSuggestionAt(GetLineNumber());
+  if (kSuggestion.children.empty()) {
+    return nullptr;
+  }
+
+  std::unique_ptr<PopupCellView> view =
+      views::Builder<PopupCellView>(
+          std::make_unique<PopupCellView>(
+              GetController()
+                  ->ShouldIgnoreMouseObservedOutsideItemBoundsCheck()))
+          .SetAccessibilityDelegate(
+              std::make_unique<ExpandableControlCellAccessibilityDelegate>())
+          .Build();
+  view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal,
+      gfx::Insets(kExpandableControlCellInsetPadding)));
+  view->AddChildView(popup_cell_utils::ImageViewFromVectorIcon(
+      vector_icons::kSubmenuArrowIcon, kExpandableControlCellIconSize));
+  return view;
 }
 
 /************************ PopupPasswordSuggestionStrategy *******************/
@@ -237,7 +268,7 @@ PopupPasswordSuggestionStrategy::CreateContent() {
   const Suggestion& kSuggestion =
       GetController()->GetSuggestionAt(GetLineNumber());
   std::unique_ptr<PopupCellView> view =
-      views::Builder<PopupCellView>()
+      views::Builder<PopupCellView>(std::make_unique<PopupCellView>())
           .SetAccessibilityDelegate(
               std::make_unique<ContentItemAccessibilityDelegate>(
                   GetController(), GetLineNumber()))
@@ -316,7 +347,7 @@ std::unique_ptr<PopupCellView> PopupFooterStrategy::CreateContent() {
   const Suggestion& kSuggestion =
       GetController()->GetSuggestionAt(GetLineNumber());
   std::unique_ptr<PopupCellView> view =
-      views::Builder<PopupCellView>()
+      views::Builder<PopupCellView>(std::make_unique<PopupCellView>())
           .SetAccessibilityDelegate(
               std::make_unique<ContentItemAccessibilityDelegate>(
                   GetController(), GetLineNumber()))

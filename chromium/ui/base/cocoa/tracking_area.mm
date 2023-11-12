@@ -6,10 +6,6 @@
 
 #include "base/check.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // NSTrackingArea does not retain its |owner| so CrTrackingArea wraps the real
 // owner in this proxy, which can stop forwarding messages to the owner when
 // it is no longer |alive_|.
@@ -104,11 +100,11 @@ ScopedCrTrackingArea::~ScopedCrTrackingArea() {
 }
 
 void ScopedCrTrackingArea::reset(CrTrackingArea* tracking_area) {
-  tracking_area_.reset(tracking_area);
+  tracking_area_ = tracking_area;
 }
 
 CrTrackingArea* ScopedCrTrackingArea::get() const {
-  return tracking_area_.get();
+  return tracking_area_;
 }
 
 }  // namespace ui

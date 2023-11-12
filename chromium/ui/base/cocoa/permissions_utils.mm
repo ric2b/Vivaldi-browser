@@ -8,15 +8,11 @@
 #include <Foundation/Foundation.h>
 
 #include "base/apple/bridging.h"
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
 #include "base/mac/wrap_cg_display.h"
 #include "base/task/thread_pool.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace ui {
 
@@ -28,7 +24,7 @@ namespace ui {
 bool IsScreenCaptureAllowed() {
   if (@available(macOS 11.0, *)) {
     return CGPreflightScreenCaptureAccess();
-  } else if (@available(macOS 10.15, *)) {
+  } else {
     // Screen Capture is considered allowed if the name of at least one normal
     // or dock window running on another process is visible.
     // See https://crbug.com/993692.
@@ -59,54 +55,56 @@ bool IsScreenCaptureAllowed() {
       }
     }
     return false;
-  } else {
-    // Screen capture is always allowed in older macOS versions.
-    return true;
   }
 }
 
 bool TryPromptUserForScreenCapture() {
   if (@available(macOS 11.0, *)) {
     return CGRequestScreenCaptureAccess();
-  } else if (@available(macOS 10.15, *)) {
+  } else {
     // On 10.15+, macOS will show the permissions prompt for Screen Recording
     // if we request to create a display stream and our application is not
     // in the applications list in System permissions. Stream creation will
     // fail if the user denies permission, or if our application is already
     // in the system permission and is unchecked.
-    base::ScopedCFTypeRef<CGDisplayStreamRef> stream(wrapCGDisplayStreamCreate(
-        CGMainDisplayID(), 1, 1, 'BGRA', nullptr,
-        ^(CGDisplayStreamFrameStatus status, uint64_t displayTime,
-          IOSurfaceRef frameSurface, CGDisplayStreamUpdateRef updateRef){
-        }));
+    base::apple::ScopedCFTypeRef<CGDisplayStreamRef> stream(
+        wrapCGDisplayStreamCreate(
+            CGMainDisplayID(), 1, 1, 'BGRA', nullptr,
+            ^(CGDisplayStreamFrameStatus status, uint64_t displayTime,
+              IOSurfaceRef frameSurface, CGDisplayStreamUpdateRef updateRef){
+            }));
     return stream != nullptr;
-  } else {
-    // Screen capture is always allowed in older macOS versions.
-    return true;
   }
 }
 
 void WarmScreenCapture() {
-  if (@available(macOS 10.15, *)) {
-    // WarmScreenCapture() is meant to be called during early startup. Since the
-    // calls to warm the cache may block, execute them off the main thread so we
-    // don't hold up startup. To be effective these calls need to run before
-    // Chrome is updated. Running them off the main thread technically opens us
-    // to a race condition, however updating happens way later so this is not a
-    // concern.
-    base::ThreadPool::PostTask(
-        FROM_HERE,
-        // Checking screen capture access hits the TCC.db and reads Chrome's
-        // code signature from disk, marking as MayBlock.
-        {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce([] {
-          if (IsScreenCaptureAllowed()) {
-            base::ScopedCFTypeRef<CGImageRef>(CGWindowListCreateImage(
-                CGRectInfinite, kCGWindowListOptionOnScreenOnly,
-                kCGNullWindowID, kCGWindowImageDefault));
-          }
-        }));
+  if (base::mac::MacOSMajorVersion() >= 14) {
+    // Starting in macOS 14, a "your screen is being captured" chip shows in the
+    // menu bar while an app is capturing the screen, and if it's a one-time
+    // image capture, it shows for ten seconds. Doing the warmup below would
+    // cause the chip to show on every app start. Therefore, skip the warmup as
+    // the benefit isn't worth the cost of startling the user with the chip.
+    return;
   }
+
+  // WarmScreenCapture() is meant to be called during early startup. Since the
+  // calls to warm the cache may block, execute them off the main thread so we
+  // don't hold up startup. To be effective these calls need to run before
+  // Chrome is updated. Running them off the main thread technically opens us
+  // to a race condition, however updating happens way later so this is not a
+  // concern.
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      // Checking screen capture access hits the TCC.db and reads Chrome's
+      // code signature from disk, marking as MayBlock.
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce([] {
+        if (IsScreenCaptureAllowed()) {
+          base::apple::ScopedCFTypeRef<CGImageRef>(CGWindowListCreateImage(
+              CGRectInfinite, kCGWindowListOptionOnScreenOnly, kCGNullWindowID,
+              kCGWindowImageDefault));
+        }
+      }));
 }
 
 }  // namespace ui

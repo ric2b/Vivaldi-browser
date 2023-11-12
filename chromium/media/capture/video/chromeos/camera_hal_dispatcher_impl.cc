@@ -197,6 +197,10 @@ void FailedCameraHalServerCallbacks::CameraPrivacySwitchStateChange(
 void FailedCameraHalServerCallbacks::CameraSWPrivacySwitchStateChange(
     cros::mojom::CameraPrivacySwitchState state) {}
 
+void FailedCameraHalServerCallbacks::Reset() {
+  callbacks_.reset();
+}
+
 // static
 CameraHalDispatcherImpl* CameraHalDispatcherImpl::GetInstance() {
   return base::Singleton<CameraHalDispatcherImpl>::get();
@@ -415,7 +419,8 @@ void CameraHalDispatcherImpl::DisableSensorForTesting() {
 }
 
 CameraHalDispatcherImpl::CameraHalDispatcherImpl()
-    : proxy_thread_("CameraProxyThread"),
+    : is_service_loop_running_(false),
+      proxy_thread_("CameraProxyThread"),
       blocking_io_thread_("CameraBlockingIOThread"),
       main_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       camera_hal_server_callbacks_(this),
@@ -441,8 +446,8 @@ CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
 void CameraHalDispatcherImpl::RegisterServer(
     mojo::PendingRemote<cros::mojom::CameraHalServer> camera_hal_server) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  LOG(ERROR) << "CameraHalDispatcher::RegisterServer is deprecated. "
-                "CameraHalServer will not be registered.";
+  NOTREACHED() << "CameraHalDispatcher::RegisterServer is deprecated. "
+                  "CameraHalServer will not be registered.";
 }
 
 void CameraHalDispatcherImpl::RegisterServerWithToken(
@@ -515,7 +520,7 @@ void CameraHalDispatcherImpl::RegisterServerWithTokenOnProxyThread(
 
 void CameraHalDispatcherImpl::RegisterClient(
     mojo::PendingRemote<cros::mojom::CameraHalClient> client) {
-  NOTREACHED() << "RegisterClient() is disabled";
+  NOTREACHED() << "CameraHalDispatcher::RegisterClient is deprecated.";
 }
 
 void CameraHalDispatcherImpl::RegisterClientWithToken(
@@ -585,11 +590,9 @@ void CameraHalDispatcherImpl::RegisterSensorClientWithTokenOnProxyThread(
 void CameraHalDispatcherImpl::BindServiceToMojoServiceManager(
     const std::string& service_name,
     mojo::ScopedMessagePipeHandle receiver) {
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &CameraHalDispatcherImpl::BindToMojoServiceManagerOnUIThread,
-          base::Unretained(this), service_name, std::move(receiver)));
+  NOTREACHED()
+      << "CameraHalDispatcher::BindServiceToMojoServiceManager is deprecated. "
+         "Please ask for services from Mojo Service Manager.";
 }
 
 void CameraHalDispatcherImpl::CameraDeviceActivityChange(
@@ -723,6 +726,16 @@ void CameraHalDispatcherImpl::CreateSocket(base::WaitableEvent* started) {
                      base::Unretained(started)));
 }
 
+bool CameraHalDispatcherImpl::IsServiceLoopRunning() {
+  base::AutoLock lock(service_loop_status_lock_);
+  return is_service_loop_running_;
+}
+
+void CameraHalDispatcherImpl::SetServiceLoopStatus(bool is_running) {
+  base::AutoLock lock(service_loop_status_lock_);
+  is_service_loop_running_ = is_running;
+}
+
 void CameraHalDispatcherImpl::StartServiceLoop(base::ScopedFD socket_fd,
                                                base::WaitableEvent* started) {
   DCHECK(blocking_io_task_runner_->BelongsToCurrentThread());
@@ -738,12 +751,14 @@ void CameraHalDispatcherImpl::StartServiceLoop(base::ScopedFD socket_fd,
   }
 
   proxy_fd_ = std::move(socket_fd);
+  SetServiceLoopStatus(true);
   started->Signal();
   VLOG(1) << "CameraHalDispatcherImpl started; waiting for incoming connection";
 
   while (true) {
     if (!WaitForSocketReadable(proxy_fd_.get(), cancel_fd.get())) {
       VLOG(1) << "Quit CameraHalDispatcherImpl IO thread";
+      SetServiceLoopStatus(false);
       return;
     }
 
@@ -990,12 +1005,21 @@ void CameraHalDispatcherImpl::StopOnProxyThread() {
     LOG(ERROR) << "Failed to delete " << kArcCamera3SocketPath;
   }
   // Close |cancel_pipe_| to quit the loop in WaitForIncomingConnection.
-  cancel_pipe_.reset();
+  // If poll() is called after signaling |cancel_pipe_| without a while loop,
+  // the service loop will deadlock because it will be blocked in poll() since
+  // it is unable to receive the signal from |cancel_pipe_|. To avoid the
+  // deadlock, |cancel_pipe_| is kept signaling until the service loop stops.
+  while (IsServiceLoopRunning()) {
+    cancel_pipe_.reset();
+    base::PlatformThread::Sleep(base::Milliseconds(100));
+  }
+
   mojo_client_observers_.clear();
   client_observers_.clear();
   camera_hal_server_callbacks_.reset();
   camera_hal_server_.reset();
   receiver_set_.Clear();
+  failed_camera_hal_server_callbacks_.Reset();
   {
     base::AutoLock lock(device_id_to_hw_privacy_switch_state_lock_);
     device_id_to_hw_privacy_switch_state_.clear();
@@ -1182,21 +1206,14 @@ TokenManager* CameraHalDispatcherImpl::GetTokenManagerForTesting() {
   return &token_manager_;
 }
 
-void CameraHalDispatcherImpl::BindToMojoServiceManagerOnUIThread(
-    const std::string service_name,
-    mojo::ScopedMessagePipeHandle receiver) {
-  CHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  CHECK(ash::mojo_service_manager::IsServiceManagerBound());
-  ash::mojo_service_manager::GetServiceManagerProxy()->Request(
-      service_name, /*timeout=*/absl::nullopt, std::move(receiver));
-}
-
 void CameraHalDispatcherImpl::Request(
     chromeos::mojo_service_manager::mojom::ProcessIdentityPtr identity,
     mojo::ScopedMessagePipeHandle receiver) {
-  receiver_set_.Add(this,
-                    mojo::PendingReceiver<cros::mojom::CameraHalDispatcher>(
-                        std::move(receiver)));
+  // Unretained reference is safe here because CameraHalDispatcherImpl owns
+  // |proxy_thread_|.
+  proxy_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&CameraHalDispatcherImpl::OnPeerConnected,
+                                base::Unretained(this), std::move(receiver)));
   VLOG(1) << "New CameraHalDispatcher binding added from Mojo Service Manager.";
 }
 

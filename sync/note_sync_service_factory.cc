@@ -7,6 +7,7 @@
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_factory.h"
 #include "sync/notes/note_sync_service.h"
@@ -36,7 +37,8 @@ NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 KeyedService* NoteSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   return new sync_notes::NoteSyncService(
-      SyncedFileStoreFactory::GetForBrowserContext(context), false);
+      SyncedFileStoreFactory::GetForBrowserContext(context),
+      syncer::WipeModelUponSyncDisabledBehavior::kNever);
 }
 
 content::BrowserContext* NoteSyncServiceFactory::GetBrowserContextToUse(

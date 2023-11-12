@@ -11,10 +11,12 @@ import static org.junit.Assume.assumeTrue;
 
 import static org.chromium.net.CronetEngine.Builder.HTTP_CACHE_IN_MEMORY;
 import static org.chromium.net.CronetTestRule.getTestStorage;
+import static org.chromium.net.truth.UrlResponseInfoSubject.assertThat;
 
 import android.content.Context;
 import android.net.Network;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.ConditionVariable;
 import android.os.Handler;
 import android.os.Looper;
@@ -30,17 +32,24 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.net.CronetTestRule.OnlyRunJavaCronet;
 import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 import org.chromium.net.CronetTestRule.RequiresMinAndroidApi;
 import org.chromium.net.CronetTestRule.RequiresMinApi;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.ConnectivityManagerDelegate;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
+import org.chromium.net.httpflags.FlagValue;
+import org.chromium.net.httpflags.Flags;
 import org.chromium.net.impl.CronetLibraryLoader;
+import org.chromium.net.impl.CronetManifest;
+import org.chromium.net.impl.CronetManifestInterceptor;
 import org.chromium.net.impl.CronetUrlRequestContext;
 import org.chromium.net.impl.NativeCronetEngineBuilderImpl;
+import org.chromium.net.impl.NetworkExceptionImpl;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.io.BufferedReader;
@@ -48,6 +57,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.FutureTask;
@@ -62,6 +73,7 @@ public class CronetUrlRequestContextTest {
     @Rule
     public final CronetTestRule mTestRule = CronetTestRule.withManualEngineStartup();
 
+    private static final String TAG = "CronetUrlReqCtxTest";
     // URLs used for tests.
     private static final String MOCK_CRONET_TEST_FAILED_URL =
             "http://mock.failed.request/-2";
@@ -148,6 +160,84 @@ public class CronetUrlRequestContextTest {
         void blockForCallbackToComplete() {
             mCallbackCompletionBlock.block();
         }
+    }
+
+    private void setReadHttpFlagsInManifest(boolean value) {
+        Bundle metaData = new Bundle();
+        metaData.putBoolean(CronetManifest.READ_HTTP_FLAGS_META_DATA_KEY, value);
+        mTestRule.getTestFramework().interceptContext(new CronetManifestInterceptor(metaData));
+    }
+
+    private void setLogFlag(String marker) {
+        mTestRule.getTestFramework().setHttpFlags(
+                Flags.newBuilder()
+                        .putFlags(CronetLibraryLoader.LOG_FLAG_NAME,
+                                FlagValue.newBuilder()
+                                        .addConstrainedValues((
+                                                FlagValue.ConstrainedValue.newBuilder()
+                                                        .setStringValue(
+                                                                "Test log flag value " + marker))
+                                                                      .build())
+                                        .build())
+                        .build());
+    }
+
+    private void runOneRequest() {
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        CronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
+        UrlRequest.Builder urlRequestBuilder =
+                cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
+        urlRequestBuilder.build().start();
+        callback.blockForDone();
+    }
+
+    private void runRequestWhileExpectingLog(String marker, boolean shouldBeLogged)
+            throws Exception {
+        try (LogcatCapture logcatSink = new LogcatCapture(
+                     Arrays.asList(Log.normalizeTag(CronetLibraryLoader.TAG + ":I"),
+                             Log.normalizeTag(TAG + ":I")))) {
+            // Use the engine at least once to ensure we do not race against Cronet initialization.
+            runOneRequest();
+
+            String stopMarker = UUID.randomUUID().toString();
+            Log.i(TAG, "%s --- ENGINE STARTED ---", stopMarker);
+
+            if (shouldBeLogged) {
+                while (true) {
+                    String line = logcatSink.readLine();
+                    assertThat(line).doesNotContain(stopMarker);
+                    if (line.contains(marker)) break;
+                }
+                while (!logcatSink.readLine().contains(stopMarker)) {
+                }
+            } else {
+                while (true) {
+                    String line = logcatSink.readLine();
+                    assertThat(line).doesNotContain(marker);
+                    if (line.contains(stopMarker)) break;
+                }
+            }
+        }
+    }
+
+    @Test
+    @SmallTest
+    @OnlyRunNativeCronet // HTTP flags are only supported on native Cronet for now
+    public void testHttpFlagsAreLoaded() throws Exception {
+        setReadHttpFlagsInManifest(true);
+        String marker = UUID.randomUUID().toString();
+        setLogFlag(marker);
+        runRequestWhileExpectingLog(marker, /*shouldBeLogged=*/true);
+    }
+
+    @Test
+    @SmallTest
+    @OnlyRunNativeCronet // HTTP flags are only supported on native Cronet for now
+    public void testHttpFlagsAreNotLoadedIfDisabledInManifest() throws Exception {
+        setReadHttpFlagsInManifest(false);
+        String marker = UUID.randomUUID().toString();
+        setLogFlag(marker);
+        runRequestWhileExpectingLog(marker, /*shouldBeLogged=*/false);
     }
 
     @Test
@@ -381,7 +471,7 @@ public class CronetUrlRequestContextTest {
 
     @Test
     @SmallTest
-    @OnlyRunNativeCronet // Only chromium based Cronet supports the multi-network API
+    @OnlyRunNativeCronet // Tests internals of Native CronetEngine
     @RequiresMinAndroidApi(Build.VERSION_CODES.M) // Multi-network API is supported from Marshmallow
     public void testNetworkBoundRequestCancel() throws Exception {
         // Upon a network disconnection, NCN posts a tasks onto the network thread that calls
@@ -428,6 +518,36 @@ public class CronetUrlRequestContextTest {
         assertThat(callback.mError).isNull();
         // urlRequest.cancel(); should destroy the underlying network bound context.
         assertThat(ApiHelper.doesContextExistForNetwork(cronetEngine, defaultNetwork)).isFalse();
+    }
+
+    @Test
+    @OnlyRunJavaCronet
+    @RequiresMinAndroidApi(Build.VERSION_CODES.M)
+    public void testBindToNetwork() {
+        // bind to invalid network handle
+        ExperimentalCronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        cronetEngine.bindToNetwork(-150 /* invalid network handle */);
+        ExperimentalUrlRequest.Builder builder =
+                cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
+        builder.build().start();
+        callback.blockForDone();
+
+        assertThat(callback.mError).hasCauseThat().isInstanceOf(NetworkExceptionImpl.class);
+        assertThat(callback.mError).hasCauseThat().hasMessageThat().contains("Network bound");
+
+        // bind to the default network
+        ConnectivityManagerDelegate delegate =
+                new ConnectivityManagerDelegate(mTestRule.getTestFramework().getContext());
+        Network defaultNetwork = delegate.getDefaultNetwork();
+        assumeTrue(defaultNetwork != null);
+        cronetEngine.bindToNetwork(defaultNetwork.getNetworkHandle());
+        callback = new TestUrlRequestCallback();
+        builder = cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
+        builder.build().start();
+        callback.blockForDone();
+
+        assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
     }
 
     @Test
@@ -1043,8 +1163,8 @@ public class CronetUrlRequestContextTest {
                 cronetEngine.newUrlRequestBuilder(url, callback, callback.getExecutor());
         urlRequestBuilder.build().start();
         callback.blockForDone();
-        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
-        assertThat(callback.mResponseInfo.wasCached()).isTrue();
+        assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
+        assertThat(callback.getResponseInfoWithChecks()).wasCached();
         assertThat(callback.mOnCanceledCalled).isTrue();
     }
 
@@ -1292,7 +1412,9 @@ public class CronetUrlRequestContextTest {
                 engine.newUrlRequestBuilder(url, callback, callback.getExecutor()).build();
         request.start();
         callback.blockForDone();
-        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(expectedStatusCode);
+        assertThat(callback.getResponseInfoWithChecks())
+                .hasHttpStatusCodeThat()
+                .isEqualTo(expectedStatusCode);
     }
 
     private void checkRequestCaching(CronetEngine engine, String url, boolean expectCached) {
@@ -1309,7 +1431,7 @@ public class CronetUrlRequestContextTest {
         }
         urlRequestBuilder.build().start();
         callback.blockForDone();
-        assertThat(callback.mResponseInfo.wasCached()).isEqualTo(expectCached);
+        assertThat(callback.getResponseInfoWithChecks().wasCached()).isEqualTo(expectCached);
         assertThat(callback.mResponseAsString).isEqualTo("this is a cacheable file\n");
     }
 
@@ -1421,7 +1543,6 @@ public class CronetUrlRequestContextTest {
         urlRequestBuilder.disableCache();
         urlRequestBuilder.build().start();
         callback.blockForDone();
-        assertThat(callback.mError).isNotNull();
         assertThat(callback.mError)
                 .hasMessageThat()
                 .contains("Exception in CronetUrlRequest: net::ERR_CONNECTION_REFUSED");
@@ -1461,7 +1582,7 @@ public class CronetUrlRequestContextTest {
                 cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
         urlRequestBuilder.build().start();
         callback.blockForDone();
-        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
     }
 
     @Test
@@ -1477,7 +1598,7 @@ public class CronetUrlRequestContextTest {
                     cronetEngine.newUrlRequestBuilder(urls[i], callback, callback.getExecutor());
             urlRequestBuilder.build().start();
             callback.blockForDone();
-            statusCodes[i] = callback.mResponseInfo.getHttpStatusCode();
+            statusCodes[i] = callback.getResponseInfoWithChecks().getHttpStatusCode();
         }
         assertThat(statusCodes).asList().containsExactly(200, 404).inOrder();
     }
@@ -1495,8 +1616,8 @@ public class CronetUrlRequestContextTest {
         runBlocker.open();
         thread1.join();
         thread2.join();
-        assertThat(thread1.mCallback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
-        assertThat(thread2.mCallback.mResponseInfo.getHttpStatusCode()).isEqualTo(404);
+        assertThat(thread1.mCallback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
+        assertThat(thread2.mCallback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(404);
     }
 
     @Test
@@ -1510,8 +1631,8 @@ public class CronetUrlRequestContextTest {
         thread1.join();
         thread2.start();
         thread2.join();
-        assertThat(thread1.mCallback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
-        assertThat(thread2.mCallback.mResponseInfo.getHttpStatusCode()).isEqualTo(404);
+        assertThat(thread1.mCallback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
+        assertThat(thread2.mCallback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(404);
     }
 
     @Test
@@ -1637,6 +1758,13 @@ public class CronetUrlRequestContextTest {
         assertThrows(
                 "Native library should not be loaded", UnsatisfiedLinkError.class, builder::build);
         assertThat(loader.wasCalled()).isTrue();
+
+        // The init thread is started *before* the library is loaded, so the init thread is running
+        // despite the library loading failure. Init thread initialization can race against test
+        // cleanup (e.g. Context access). We work around the issue by ensuring test cleanup will
+        // call shutdown() on a real engine, which will block until the init thread initialization
+        // is done.
+        mTestRule.getTestFramework().startEngine();
     }
 
     @Test
@@ -1650,6 +1778,7 @@ public class CronetUrlRequestContextTest {
         CronetEngine engine = builder.build();
         assertThat(engine).isNotNull();
         assertThat(loader.wasCalled()).isFalse();
+        engine.shutdown();
     }
 
     // Creates a CronetEngine on another thread and then one on the main thread.  This shouldn't
@@ -1704,7 +1833,7 @@ public class CronetUrlRequestContextTest {
                 requestUrl.toString(), callback, callback.getExecutor());
         urlRequestBuilder.build().start();
         callback.blockForDone();
-        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
     }
 
     /**

@@ -6,6 +6,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
@@ -80,13 +81,11 @@ class AppServicePromiseAppModelBuilderTest : public app_list::AppListTestBase {
     // Register two promise apps in the promise app registry cache.
     apps::PromiseAppPtr promise_app_1 = std::make_unique<apps::PromiseApp>(
         apps::PackageId(apps::AppType::kArc, "test1"));
-    promise_app_1->name = "Test 1";
     promise_app_1->should_show = true;
     cache()->OnPromiseApp(std::move(promise_app_1));
 
     apps::PromiseAppPtr promise_app_2 = std::make_unique<apps::PromiseApp>(
         apps::PackageId(apps::AppType::kArc, "test2"));
-    promise_app_2->name = "Test 2";
     promise_app_2->should_show = true;
     cache()->OnPromiseApp(std::move(promise_app_2));
   }
@@ -100,9 +99,7 @@ class AppServicePromiseAppModelBuilderTest : public app_list::AppListTestBase {
     // Confirm there are 2 launcher promise app items.
     EXPECT_EQ(model_updater()->ItemCount(), 2u);
     EXPECT_EQ(model_updater()->ItemAtForTest(0)->id(), "android:test1");
-    EXPECT_EQ(model_updater()->ItemAtForTest(0)->name(), "Test 1");
     EXPECT_EQ(model_updater()->ItemAtForTest(1)->id(), "android:test2");
-    EXPECT_EQ(model_updater()->ItemAtForTest(1)->name(), "Test 2");
   }
 
   AppListModelUpdater* model_updater() { return model_updater_.get(); }
@@ -120,7 +117,7 @@ class AppServicePromiseAppModelBuilderTest : public app_list::AppListTestBase {
   display::test::TestScreen test_screen_;
   std::unique_ptr<Profile> profile_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  apps::PromiseAppRegistryCache* cache_;
+  raw_ptr<apps::PromiseAppRegistryCache, ExperimentalAsh> cache_;
   syncer::StringOrdinal last_position_;
   base::WeakPtrFactory<AppServicePromiseAppModelBuilderTest> weak_ptr_factory_{
       this};

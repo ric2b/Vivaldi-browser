@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="1063263220330818888">Zasebno iskanje</translation>
+<translation id="1137850887415122856">Če želite zakleniti zasebne zavihke, nastavite Touch ID, Face ID ali geslo.</translation>
+<translation id="1310184829257917508">Vprašaj za zasebno odpiranje povezav iz drugih aplikacij</translation>
 <translation id="1512201558627495343">Nov zasebni zavihek</translation>
+<translation id="1786453623676543866">Začni iskanje v novem Vivaldi zavihku.</translation>
+<translation id="207677936531967364">Stran z novim zasebnim zavihkom</translation>
+<translation id="2899836479226240291">Povezave v programu Vivaldi lahko samodejno odprete tako, da ga nastavite kot privzeto aplikacijo brskalnika.</translation>
+<translation id="3171582312249481866">Odpri Vivaldi nastavitve</translation>
+<translation id="3372807273343182542">Odpri URL-je v Vivaldiju zasebno</translation>
+<translation id="3379322781901918214">1. Odprite Vivaldi nastavitve</translation>
+<translation id="3473652525653758699">Novo zasebno okno</translation>
+<translation id="3501504415290398157">Za odklepanje zasebnih zavihkov uporabite <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
+<translation id="3692650606013198282">Odpri zasebno</translation>
+<translation id="3709782636417497984">Odpri v novem zasebnem zavihku</translation>
+<translation id="3981599532037327317">Odpri ${url} zasebno</translation>
+<translation id="4755216899422789286">Odpri URL-je v Vivaldiju</translation>
+<translation id="6233792867654386826">Odpre vnesene URL-je v Vivaldiju.</translation>
 <translation id="6827597288286078054">Zasebno iskanje</translation>
+<translation id="7175743738896712454">Odpre vnesene URL-je v Vivaldiju zasebno.</translation>
+<translation id="7307970171564921489">Odklenite zasebne zavihke z <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Želite odpreti zasebno?</translation>
+<translation id="7549299604720382000">Nov zasebni zavihek</translation>
+<translation id="8326104954595890674">Nov zasebni zavihek</translation>
+<translation id="8763006697839582351">Odpri v Vivaldiju zasebno</translation>
+<translation id="9060728682512999830">Išči v Vivaldiju</translation>
 </translationbundle>

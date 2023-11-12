@@ -110,6 +110,10 @@ ClientSummarizedResultType GetClientSummarizedResultType(
            ClientSummarizedResultType::kUrl},
           {OmniboxEventProto::Suggestion::STARTER_PACK,
            ClientSummarizedResultType::kUrl},
+          {OmniboxEventProto::Suggestion::TAB_SWITCH,
+           ClientSummarizedResultType::kUrl},
+          {OmniboxEventProto::Suggestion::PEDAL,
+           ClientSummarizedResultType::kUrl},
       });
 
   const auto it = kResultTypesToClientSummarizedResultTypes->find(type);
@@ -185,6 +189,12 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
   // open.
   omnibox_event->set_is_popup_open(log.is_popup_open && !log.is_paste_and_go);
   omnibox_event->set_is_paste_and_go(log.is_paste_and_go);
+
+  if (log.steady_state_omnibox_position !=
+      metrics::OmniboxEventProto::UNKNOWN_POSITION) {
+    omnibox_event->set_steady_state_omnibox_position(
+        log.steady_state_omnibox_position);
+  }
 
   for (size_t i = 0; i < log.result->size(); i++) {
     const AutocompleteMatch& match = log.result->match_at(i);

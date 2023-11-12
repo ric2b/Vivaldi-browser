@@ -5,11 +5,11 @@
 #import <memory>
 #import <set>
 
+#import "base/apple/foundation_util.h"
+#import "base/apple/scoped_cftyperef.h"
 #import "base/auto_reset.h"
 #import "base/check_op.h"
 #import "base/ios/block_types.h"
-#import "base/mac/foundation_util.h"
-#import "base/mac/scoped_cftyperef.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"

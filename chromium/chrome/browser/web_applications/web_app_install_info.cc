@@ -6,6 +6,7 @@
 
 #include <sstream>
 
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "ui/gfx/skia_util.h"
@@ -104,6 +105,23 @@ IconSizes::IconSizes(IconSizes&&) noexcept = default;
 IconSizes& IconSizes::operator=(const IconSizes&) = default;
 
 IconSizes& IconSizes::operator=(IconSizes&&) noexcept = default;
+
+base::Value IconSizes::AsDebugValue() const {
+  auto ConvertList = [](const auto& list) {
+    base::Value::List list_json;
+    for (const auto& item : list) {
+      list_json.Append(item);
+    }
+    return list_json;
+  };
+
+  base::Value::Dict root;
+  for (IconPurpose purpose : kIconPurposes) {
+    root.Set(base::ToString(purpose), ConvertList(GetSizesForPurpose(purpose)));
+  }
+
+  return base::Value(std::move(root));
+}
 
 const std::vector<SquareSizePx>& IconSizes::GetSizesForPurpose(
     IconPurpose purpose) const {
@@ -207,6 +225,7 @@ void WebAppShortcutsMenuItemInfo::SetShortcutIconInfosForPurpose(
 }
 
 base::Value WebAppShortcutsMenuItemInfo::AsDebugValue() const {
+  TRACE_EVENT0("ui", "WebAppShortcutsMenuItemInfo::AsDebugValue");
   base::Value::Dict root;
 
   root.Set("name", name);
@@ -224,18 +243,23 @@ base::Value WebAppShortcutsMenuItemInfo::AsDebugValue() const {
   }
   root.Set("icons", std::move(icons));
 
+  root.Set("downloaded_icons_sizes", downloaded_icon_sizes.AsDebugValue());
+
   return base::Value(std::move(root));
 }
 
 // WebAppInstallInfo
 
+namespace web_app {
+
 // static
 WebAppInstallInfo WebAppInstallInfo::CreateInstallInfoForCreateShortcut(
     const GURL& document_url,
+    const std::u16string& document_title,
     const WebAppInstallInfo& other) {
   WebAppInstallInfo create_shortcut_info(
       web_app::GenerateManifestIdFromStartUrlOnly(document_url));
-  create_shortcut_info.title = other.title;
+  create_shortcut_info.title = document_title;
   create_shortcut_info.description = other.description;
   create_shortcut_info.start_url = document_url;
   create_shortcut_info.manifest_url = other.manifest_url;
@@ -255,11 +279,26 @@ WebAppInstallInfo WebAppInstallInfo::CreateInstallInfoForCreateShortcut(
   return create_shortcut_info;
 }
 
+// static
+std::unique_ptr<WebAppInstallInfo>
+WebAppInstallInfo::CreateWithStartUrlForTesting(const GURL& start_url) {
+  return std::make_unique<WebAppInstallInfo>(
+      GenerateManifestIdFromStartUrlOnly(start_url), start_url);
+}
+
 WebAppInstallInfo::WebAppInstallInfo() = default;
 
 WebAppInstallInfo::WebAppInstallInfo(const web_app::ManifestId& manifest_id)
     : manifest_id(manifest_id) {
   CHECK(manifest_id.is_valid());
+}
+
+WebAppInstallInfo::WebAppInstallInfo(const web_app::ManifestId& manifest_id,
+                                     const GURL& start_url)
+    : manifest_id(manifest_id), start_url(start_url) {
+  CHECK(manifest_id.is_valid());
+  CHECK(!manifest_id.has_ref());
+  CHECK(start_url.is_valid());
 }
 
 WebAppInstallInfo::WebAppInstallInfo(const WebAppInstallInfo& other) = default;
@@ -273,6 +312,8 @@ WebAppInstallInfo::~WebAppInstallInfo() = default;
 WebAppInstallInfo WebAppInstallInfo::Clone() const {
   return WebAppInstallInfo(*this);
 }
+
+}  // namespace web_app
 
 bool operator==(const IconSizes& icon_sizes1, const IconSizes& icon_sizes2) {
   return std::tie(icon_sizes1.any, icon_sizes1.maskable,

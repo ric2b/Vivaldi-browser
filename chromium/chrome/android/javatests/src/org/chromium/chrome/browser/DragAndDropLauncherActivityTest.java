@@ -12,7 +12,6 @@ import androidx.annotation.RequiresApi;
 import androidx.test.filters.LargeTest;
 import androidx.test.runner.lifecycle.Stage;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -39,6 +38,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.concurrent.ExecutionException;
@@ -63,12 +63,7 @@ public class DragAndDropLauncherActivityTest {
     public void setUp() {
         mActivityTestRule.startMainActivityOnBlankPage();
         mContext = ContextUtils.getApplicationContext();
-        mLinkUrl = JUnitTestGURLs.HTTP_URL;
-    }
-
-    @After
-    public void tearDown() {
-        DragAndDropLauncherActivity.setLinkDropTimeoutMsForTesting(null);
+        mLinkUrl = JUnitTestGURLs.HTTP_URL.getSpec();
     }
 
     /**
@@ -97,7 +92,7 @@ public class DragAndDropLauncherActivityTest {
         Tab activityTab = TestThreadUtils.runOnUiThreadBlocking(
                 () -> mActivityTestRule.getActivity().getActivityTab());
         Assert.assertEquals("Activity tab URL should match the dragged link URL.",
-                JUnitTestGURLs.getGURL(mLinkUrl).getSpec(),
+                new GURL(mLinkUrl).getSpec(),
                 ChromeTabUtils.getUrlOnUiThread(activityTab).getSpec());
     }
 
@@ -127,7 +122,7 @@ public class DragAndDropLauncherActivityTest {
         // are open. Do this by setting the EXTRA_WINDOW_ID extra on the intent that is reflective
         // of this state.
         Intent newIntent =
-                createLinkDragDropIntent(JUnitTestGURLs.MAPS_URL, lastAccessedInstanceId);
+                createLinkDragDropIntent(JUnitTestGURLs.MAPS_URL.getSpec(), lastAccessedInstanceId);
         mContext.startActivity(newIntent);
         mTabAddedCallback.waitForCallback(0);
 
@@ -140,7 +135,7 @@ public class DragAndDropLauncherActivityTest {
             Tab activityTab = lastAccessedActivity.getActivityTab();
             Criteria.checkThat("Activity tab URL should match the dragged link URL.",
                     ChromeTabUtils.getUrlOnUiThread(activityTab).getSpec(),
-                    Matchers.is(JUnitTestGURLs.getGURL(JUnitTestGURLs.MAPS_URL).getSpec()));
+                    Matchers.is(JUnitTestGURLs.MAPS_URL.getSpec()));
         });
     }
 

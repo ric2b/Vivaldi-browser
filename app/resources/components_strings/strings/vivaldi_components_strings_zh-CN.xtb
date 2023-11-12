@@ -165,7 +165,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
 <translation id="7219179957768738017">该连接使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">显示通知</translation>
-<translation id="7260504762447901703">撤消访问权限</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7364115444476960850">您尝试访问的页面被Vivaldi的<ph name="BLOCKER_NAME" />阻止</translation>
 <translation id="7419106976560586862">个人资料路径</translation>

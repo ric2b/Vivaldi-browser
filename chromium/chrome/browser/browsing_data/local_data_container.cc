@@ -35,11 +35,11 @@ LocalDataContainer::CreateFromStoragePartition(
     content::StoragePartition* storage_partition,
     browsing_data::CookieHelper::IsDeletionDisabledCallback
         is_cookie_deletion_disabled_callback) {
-  // Deprecating CookiesTreeModel excludes all related helpers from local data
-  // container that are handled by the `BrowsingDataModel`.
+  // Migrating storage handling to the `BrowsingDataModel` excludes all related
+  // helpers that are handled by the model from the `LocalDataContainer` .
   // This works independently whether partitioned storage is enabled or not.
   if (base::FeatureList::IsEnabled(
-          browsing_data::features::kDeprecateCookiesTreeModel)) {
+          browsing_data::features::kMigrateStorageToBDM)) {
     return std::make_unique<LocalDataContainer>(
         base::MakeRefCounted<browsing_data::CookieHelper>(
             storage_partition, is_cookie_deletion_disabled_callback),
@@ -50,8 +50,7 @@ LocalDataContainer::CreateFromStoragePartition(
         /*file_system_helper=*/nullptr,
         /*quota_helper=*/nullptr,
         /*service_worker_helper=*/nullptr,
-        base::MakeRefCounted<browsing_data::SharedWorkerHelper>(
-            storage_partition),
+        /*shared_worker_helper=*/nullptr,
         /*cache_storage_helper=*/nullptr);
   }
 

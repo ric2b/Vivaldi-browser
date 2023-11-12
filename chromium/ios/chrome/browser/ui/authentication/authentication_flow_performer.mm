@@ -53,10 +53,6 @@
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using signin_ui::CompletionCallback;
 
 namespace {
@@ -66,6 +62,42 @@ NSString* const kAuthenticationSnackbarCategory =
     @"AuthenticationSnackbarCategory";
 
 }  // namespace
+
+// Content of the managed account confirmation dialog.
+@interface ManagedConfirmationDialogContent : NSObject
+
+// Title of the dialog.
+@property(nonatomic, readonly, copy) NSString* title;
+// Subtitle of the dialog.
+@property(nonatomic, readonly, copy) NSString* subtitle;
+// Label of the accept button in the dialog.
+@property(nonatomic, readonly, copy) NSString* acceptLabel;
+// Label of the cancel button in the dialog.
+@property(nonatomic, readonly, copy) NSString* cancelLabel;
+
+- (instancetype)initWithTitle:(NSString*)title
+                     subtitle:(NSString*)subtitle
+                  acceptLabel:(NSString*)acceptLabel
+                  cancelLabel:(NSString*)cancelLabel;
+
+@end
+
+@implementation ManagedConfirmationDialogContent
+
+- (instancetype)initWithTitle:(NSString*)title
+                     subtitle:(NSString*)subtitle
+                  acceptLabel:(NSString*)acceptLabel
+                  cancelLabel:(NSString*)cancelLabel {
+  if (self = [super init]) {
+    _title = title;
+    _subtitle = subtitle;
+    _acceptLabel = acceptLabel;
+    _cancelLabel = cancelLabel;
+  }
+  return self;
+}
+
+@end
 
 @interface AuthenticationFlowPerformer () <ImportDataControllerDelegate,
                                            SettingsNavigationControllerDelegate>
@@ -90,14 +122,40 @@ NSString* const kAuthenticationSnackbarCategory =
   return self;
 }
 
-- (void)cancelAndDismissAnimated:(BOOL)animated {
-  [_alertCoordinator executeCancelHandler];
+- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
+                 completion:(ProceduralBlock)completion {
   [_alertCoordinator stop];
+  _alertCoordinator = nil;
   if (_navigationController) {
     [_navigationController cleanUpSettings];
     _navigationController = nil;
-    [_delegate dismissPresentingViewControllerAnimated:animated completion:nil];
+    switch (action) {
+      case SigninCoordinatorInterrupt::UIShutdownNoDismiss:
+        if (completion) {
+          completion();
+        }
+        break;
+      case SigninCoordinatorInterrupt::DismissWithAnimation:
+        if (_delegate) {
+          [_delegate dismissPresentingViewControllerAnimated:YES
+                                                  completion:completion];
+        } else if (completion) {
+          completion();
+        }
+        break;
+      case SigninCoordinatorInterrupt::DismissWithoutAnimation:
+        if (_delegate) {
+          [_delegate dismissPresentingViewControllerAnimated:NO
+                                                  completion:completion];
+        } else if (completion) {
+          completion();
+        }
+        break;
+    }
+  } else if (completion) {
+    completion();
   }
+  _delegate = nil;
   [self stopWatchdogTimer];
 }
 
@@ -151,6 +209,10 @@ NSString* const kAuthenticationSnackbarCategory =
       IdentityManagerFactory::GetForBrowserState(browserState);
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
+  // TODO(crbug.com/1462552): After phase 3 migration usage of
+  // `lastSyncingEmail` to avoid cross-sync incidents should become obsolete.
+  // Delete the usage of ConsentLevel::kSync in this method afterwards.
+  // See ConsentLevel::kSync documentation for more details.
   NSString* lastSyncingEmail =
       authenticationService->GetPrimaryIdentity(signin::ConsentLevel::kSync)
           .userEmail;
@@ -259,28 +321,63 @@ NSString* const kAuthenticationSnackbarCategory =
          !gaia::AreEmailsSame(currentSignedInEmail, lastSignedInEmail);
 }
 
+// Retuns the ManagedConfirmationDialogContent that corresponds to the
+// provided `hostedDomain`, `syncConsent`, and the activation state of User
+// Policy.
+- (ManagedConfirmationDialogContent*)
+    managedConfirmationDialogContentForHostedDomain:(NSString*)hostedDomain
+                                        syncConsent:(BOOL)syncConsent {
+  if (!policy::IsAnyUserPolicyFeatureEnabled()) {
+    // Show the legacy managed confirmation dialog if User Policy is disabled.
+    return [[ManagedConfirmationDialogContent alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_MANAGED_SIGNIN_TITLE)
+             subtitle:l10n_util::GetNSStringF(
+                          IDS_IOS_MANAGED_SIGNIN_SUBTITLE,
+                          base::SysNSStringToUTF16(hostedDomain))
+          acceptLabel:l10n_util::GetNSString(
+                          IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON)
+          cancelLabel:l10n_util::GetNSString(IDS_CANCEL)];
+  } else if (syncConsent) {
+    // Show the first version of the managed confirmation dialog for User Policy
+    // if User Policy is enabled and there is Sync consent.
+    return [[ManagedConfirmationDialogContent alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_MANAGED_SYNC_TITLE)
+             subtitle:l10n_util::GetNSStringF(
+                          IDS_IOS_MANAGED_SYNC_WITH_USER_POLICY_SUBTITLE,
+                          base::SysNSStringToUTF16(hostedDomain))
+          acceptLabel:l10n_util::GetNSString(
+                          IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON)
+          cancelLabel:l10n_util::GetNSString(IDS_CANCEL)];
+  } else {
+    // Show the release version of the managed confirmation dialog for User
+    // Policy if User Policy is enabled and there is no Sync consent.
+    return [[ManagedConfirmationDialogContent alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_MANAGED_SIGNIN_TITLE)
+             subtitle:l10n_util::GetNSStringF(
+                          IDS_IOS_MANAGED_SIGNIN_WITH_USER_POLICY_SUBTITLE,
+                          base::SysNSStringToUTF16(hostedDomain))
+          acceptLabel:
+              l10n_util::GetNSString(
+                  IDS_IOS_MANAGED_SIGNIN_WITH_USER_POLICY_CONTINUE_BUTTON_LABEL)
+          cancelLabel:l10n_util::GetNSString(IDS_CANCEL)];
+  }
+}
+
 - (void)showManagedConfirmationForHostedDomain:(NSString*)hostedDomain
                                 viewController:(UIViewController*)viewController
-                                       browser:(Browser*)browser {
+                                       browser:(Browser*)browser
+                                   syncConsent:(BOOL)syncConsent {
   DCHECK(!_alertCoordinator);
-  BOOL userPolicyEnabled = policy::IsUserPolicyEnabled();
-  int titleID = userPolicyEnabled ? IDS_IOS_MANAGED_SYNC_TITLE
-                                  : IDS_IOS_MANAGED_SIGNIN_TITLE;
-  NSString* title = l10n_util::GetNSString(titleID);
-  int subtitleID = userPolicyEnabled
-                       ? IDS_IOS_MANAGED_SYNC_WITH_USER_POLICY_SUBTITLE
-                       : IDS_IOS_MANAGED_SIGNIN_SUBTITLE;
-  NSString* subtitle = l10n_util::GetNSStringF(
-      subtitleID, base::SysNSStringToUTF16(hostedDomain));
-  NSString* acceptLabel =
-      l10n_util::GetNSString(IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON);
-  NSString* cancelLabel = l10n_util::GetNSString(IDS_CANCEL);
+
+  ManagedConfirmationDialogContent* content =
+      [self managedConfirmationDialogContentForHostedDomain:hostedDomain
+                                                syncConsent:syncConsent];
 
   _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:viewController
                                                    browser:browser
-                                                     title:title
-                                                   message:subtitle];
+                                                     title:content.title
+                                                   message:content.subtitle];
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
   __weak AlertCoordinator* weakAlert = _alertCoordinator;
@@ -314,13 +411,13 @@ NSString* const kAuthenticationSnackbarCategory =
     [[strongSelf delegate] didCancelManagedConfirmation];
   };
 
-  [_alertCoordinator addItemWithTitle:cancelLabel
+  [_alertCoordinator addItemWithTitle:content.cancelLabel
                                action:cancelBlock
                                 style:UIAlertActionStyleCancel];
-  [_alertCoordinator addItemWithTitle:acceptLabel
+  [_alertCoordinator addItemWithTitle:content.acceptLabel
                                action:acceptBlock
                                 style:UIAlertActionStyleDefault];
-  [_alertCoordinator setCancelAction:cancelBlock];
+  _alertCoordinator.noInteractionAction = cancelBlock;
   [_alertCoordinator start];
 }
 
@@ -383,15 +480,13 @@ NSString* const kAuthenticationSnackbarCategory =
                                action:dismissAction
                                 style:UIAlertActionStyleDefault];
 
-  [_alertCoordinator setCancelAction:dismissAction];
-
   [_alertCoordinator start];
 }
 
 - (void)registerUserPolicy:(ChromeBrowserState*)browserState
                forIdentity:(id<SystemIdentity>)identity {
   // Should only fetch user policies when the feature is enabled.
-  DCHECK(policy::IsUserPolicyEnabled());
+  DCHECK(policy::IsAnyUserPolicyFeatureEnabled());
 
   std::string userEmail = base::SysNSStringToUTF8(identity.userEmail);
   CoreAccountId accountID =
@@ -425,7 +520,7 @@ NSString* const kAuthenticationSnackbarCategory =
                clientID:(NSString*)clientID
                identity:(id<SystemIdentity>)identity {
   // Should only fetch user policies when the feature is enabled.
-  DCHECK(policy::IsUserPolicyEnabled());
+  DCHECK(policy::IsAnyUserPolicyFeatureEnabled());
 
   // Need a `dmToken` and a `clientID` to fetch user policies.
   DCHECK([dmToken length] > 0);
@@ -523,7 +618,7 @@ NSString* const kAuthenticationSnackbarCategory =
 #pragma mark - Private
 
 - (void)updateUserPolicyNotificationStatusIfNeeded:(PrefService*)prefService {
-  if (!policy::IsUserPolicyEnabled()) {
+  if (!policy::IsAnyUserPolicyFeatureEnabled()) {
     // Don't set the notification pref if the User Policy feature isn't
     // enabled.
     return;
@@ -655,7 +750,7 @@ NSString* const kAuthenticationSnackbarCategory =
   [_alertCoordinator addItemWithTitle:acceptLabel
                                action:acceptBlock
                                 style:UIAlertActionStyleDefault];
-  [_alertCoordinator setCancelAction:cancelBlock];
+  _alertCoordinator.noInteractionAction = cancelBlock;
   [_alertCoordinator start];
 }
 

@@ -26,6 +26,12 @@ class FilePath;
 
 namespace privacy_sandbox {
 
+constexpr char kAttestationsFileParsingUMA[] =
+    "PrivacySandbox.Attestations.InitializationDuration.Parsing";
+
+constexpr char kAttestationsMapMemoryUsageUMA[] =
+    "PrivacySandbox.Attestations.EstimateMemoryUsage.AttestationsMap";
+
 using PrivacySandboxAttestationsGatedAPISet =
     base::EnumSet<PrivacySandboxAttestationsGatedAPI,
                   PrivacySandboxAttestationsGatedAPI::kTopics,
@@ -74,8 +80,10 @@ class PrivacySandboxAttestations {
   PrivacySandboxAttestations& operator=(PrivacySandboxAttestations&&);
 
   // Returns whether `site` is enrolled and attested for `invoking_api`.
-  // (If the `kEnforcePrivacySandboxAttestations` flag is disabled, returns
-  // true unconditionally.)
+  // This function returns true unconditionally if
+  // 1. The `kEnforcePrivacySandboxAttestations` flag is disabled.
+  // 2. Or `is_all_apis_attested_for_testing_` is set to true by
+  // `SetAllPrivacySandboxAttestedForTesting()` for testing.
   PrivacySandboxSettingsImpl::Status IsSiteAttested(
       const net::SchemefulSite& site,
       PrivacySandboxAttestationsGatedAPI invoking_api) const;
@@ -83,14 +91,21 @@ class PrivacySandboxAttestations {
   // Invoke `LoadAttestationsInternal()` to parse the attestations file
   // asynchronously on the SequencedTaskRunner `task_runner_` in the thread
   // pool. This function should only be invoked with a valid version and
-  // `kEnforcePrivacySandboxAttestations` enabled.
-  void LoadAttestations(base::Version version, base::FilePath install_dir);
+  // `kEnforcePrivacySandboxAttestations` enabled. `installed_file_path` should
+  // be the path to the attestations list file.
+  void LoadAttestations(base::Version version,
+                        base::FilePath installed_file_path);
 
   // Override the site to be attested for all the Privacy Sandbox APIs, even if
   // it is not officially enrolled. This allows developers to test Privacy
   // Sandbox APIs. The overriding is done using the devtools procotol.
   void AddOverride(const net::SchemefulSite& site);
   bool IsOverridden(const net::SchemefulSite& site) const;
+
+  // Tests can call this function to make all privacy sandbox APIS to be
+  // considered attested for any site. This is used to test APIs behaviors not
+  // related to attestations.
+  void SetAllPrivacySandboxAttestedForTesting(bool all_attested);
 
   // Tests can directly set the underlying `attestations_map_` through this test
   // only function. Note: tests should call `CreateAndSetForTesting()` before
@@ -106,6 +121,13 @@ class PrivacySandboxAttestations {
   // can use `base::RunLoop::Run()`, together with this callback, to make sure
   // the parsing and loading are completed.
   void SetLoadAttestationsDoneCallbackForTesting(base::OnceClosure callback);
+
+  // Set the callback to be invoked when attestations map starts to be parsed.
+  // (The parsing will be paused.) The typical usage is to set the callback to
+  // `base::RunLoop::QuitClosure()`. Tests then can use `base::RunLoop::Run()`,
+  // together with this callback, to inspect state once parsing starts.
+  void SetLoadAttestationsParsingStartedCallbackForTesting(
+      base::OnceClosure callback);
 
  private:
   friend class base::NoDestructor<PrivacySandboxAttestations>;
@@ -124,9 +146,10 @@ class PrivacySandboxAttestations {
   // is done, store the result to `attestations_map_`. If there is an existing
   // attestations map, only parse if the attestations file has a newer version.
   // This function should only be invoked with a valid version and
-  // `kEnforcePrivacySandboxAttestations` enabled.
+  // `kEnforcePrivacySandboxAttestations` enabled. `installed_file_path` should
+  // be the path to the attestations list file.
   void LoadAttestationsInternal(base::Version version,
-                                base::FilePath install_dir);
+                                base::FilePath installed_file_path);
 
   // Store the parsed attestations map and its version.
   void SetParsedAttestations(base::Version version,
@@ -135,11 +158,19 @@ class PrivacySandboxAttestations {
   // Invoke the `attestations_loaded_callback_` registered by tests, if any.
   void RunLoadAttestationsDoneCallbackForTesting();
 
+  // Invoke the `attestations_parsing_started_callback_` registered by tests,
+  // if any. If this function returns true, parsing should be paused (because
+  // we're in a test). If it returns false, do nothing.
+  bool RunLoadAttestationsParsingStartedCallbackForTesting();
+
   // Task runner used to execute the file opening and parsing.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // This callback is invoked at the end of the loading of the attestations map.
   base::OnceClosure load_attestations_done_callback_;
+
+  // This callback is invoked when parsing for the attestations map starts.
+  base::OnceClosure load_attestations_parsing_started_callback_;
 
   Progress attestations_parse_progress_ = kNotStarted;
 
@@ -156,6 +187,9 @@ class PrivacySandboxAttestations {
 
   // Overridden sites by DevTools are considered attested.
   std::vector<net::SchemefulSite> overridden_sites_;
+
+  // If true, all Privacy Sandbox APIs are considered attested for any site.
+  bool is_all_apis_attested_for_testing_ = false;
 };
 
 }  // namespace privacy_sandbox

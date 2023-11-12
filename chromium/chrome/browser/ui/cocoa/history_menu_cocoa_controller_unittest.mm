@@ -15,10 +15,6 @@
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface FakeHistoryMenuController : HistoryMenuCocoaController {
  @public
   // ivars are initialized to zero, so these all start out as NO.
@@ -41,8 +37,8 @@ class HistoryMenuCocoaControllerTest : public BrowserWithTestWindowTest {
     ASSERT_TRUE(profile());
 
     bridge_ = std::make_unique<HistoryMenuBridge>(profile());
-    bridge_->controller_.reset(
-        [[FakeHistoryMenuController alloc] initWithBridge:bridge_.get()]);
+    bridge_->controller_ =
+        [[FakeHistoryMenuController alloc] initWithBridge:bridge_.get()];
   }
 
   void TearDown() override {
@@ -70,7 +66,7 @@ class HistoryMenuCocoaControllerTest : public BrowserWithTestWindowTest {
   }
 
   FakeHistoryMenuController* controller() {
-    return static_cast<FakeHistoryMenuController*>(bridge_->controller_.get());
+    return static_cast<FakeHistoryMenuController*>(bridge_->controller_);
   }
 
  private:

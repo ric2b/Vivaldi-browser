@@ -10,6 +10,7 @@
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/ios/password_manager_driver_bridge.h"
+#include "url/gurl.h"
 
 namespace autofill {
 struct PasswordFormFillData;
@@ -56,7 +57,6 @@ class IOSPasswordManagerDriver
   password_manager::PasswordManagerInterface* GetPasswordManager() override;
   password_manager::PasswordAutofillManager* GetPasswordAutofillManager()
       override;
-  ::ui::AXTreeID GetAxTreeId() const override;
   int GetFrameId() const override;
   bool IsInPrimaryMainFrame() const override;
   bool CanShowAutofillUi() const override;

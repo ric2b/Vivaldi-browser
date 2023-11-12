@@ -8,10 +8,6 @@
 #import "ios/chrome/browser/signin/signin_util.h"
 #import "ios/chrome/browser/signin/system_identity_interaction_manager.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface AddAccountSigninManager ()
 
 // Presenting view controller.
@@ -58,23 +54,48 @@
                                }];
 }
 
-- (void)interruptAddAccountAnimated:(BOOL)animated
-                         completion:(ProceduralBlock)completion {
+- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
+                 completion:(ProceduralBlock)completion {
   self.signinInterrupted = YES;
-  __weak __typeof(self) weakSelf = self;
-  [self.identityInteractionManager
-      cancelAuthActivityAnimated:animated
-                      completion:^() {
-                        // If `identityInteractionManager` completion callback
-                        // has not been called yet, the add account needs to be
-                        // fully done by calling:
-                        // `operationCompletedWithIdentity:error:`, before
-                        // calling `completion` See crbug.com/1227658.
-                        [weakSelf operationCompletedWithIdentity:nil error:nil];
-                        if (completion) {
-                          completion();
-                        }
-                      }];
+  switch (action) {
+    case SigninCoordinatorInterrupt::UIShutdownNoDismiss:
+      // IdentityInteractionManager doesn't support interrupt with no dismiss.
+      // We need to stop with no animation to make sure dealloc are done with
+      // CHECK failures.
+      // When the interrupt is called with `NoDismiss`, the completion block
+      // needs to be synchronous. So we can't wait for the cancel completion
+      // block from `IdentityInteractionManager` to be called, to call the
+      // interrupt completion block.
+      // See crbug.com/1455216.
+      [self.identityInteractionManager cancelAuthActivityAnimated:NO
+                                                       completion:nil];
+      [self operationCompletedWithIdentity:nil error:nil];
+      if (completion) {
+        completion();
+      }
+      break;
+    case SigninCoordinatorInterrupt::DismissWithoutAnimation:
+    case SigninCoordinatorInterrupt::DismissWithAnimation: {
+      __weak __typeof(self) weakSelf = self;
+      BOOL animated =
+          action == SigninCoordinatorInterrupt::DismissWithAnimation;
+      [self.identityInteractionManager
+          cancelAuthActivityAnimated:animated
+                          completion:^() {
+                            // If `identityInteractionManager` completion
+                            // callback has not been called yet, the add account
+                            // needs to be fully done by calling:
+                            // `operationCompletedWithIdentity:error:`, before
+                            // calling `completion` See crbug.com/1227658.
+                            [weakSelf operationCompletedWithIdentity:nil
+                                                               error:nil];
+                            if (completion) {
+                              completion();
+                            }
+                          }];
+      break;
+    }
+  }
 }
 
 #pragma mark - Private

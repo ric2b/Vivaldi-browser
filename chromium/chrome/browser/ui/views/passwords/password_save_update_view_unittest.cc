@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/passwords/password_save_update_view.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/memory/ptr_util.h"
@@ -16,6 +17,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/mock_password_feature_manager.h"
 #include "components/password_manager/core/browser/mock_password_store_interface.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/sync/test/test_sync_service.h"
 #include "content/public/test/navigation_simulator.h"
@@ -23,6 +25,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/combobox/combobox.h"
+#include "ui/views/controls/editable_combobox/editable_password_combobox.h"
 
 using ::testing::Return;
 using ::testing::ReturnRef;
@@ -45,8 +48,9 @@ class PasswordSaveUpdateViewTest : public PasswordBubbleViewTestBase {
   void SimulateSignIn();
 
   void TearDown() override {
-    view_->GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kCloseButtonClicked);
+    std::exchange(view_, nullptr)
+        ->GetWidget()
+        ->CloseWithReason(views::Widget::ClosedReason::kCloseButtonClicked);
 
     PasswordBubbleViewTestBase::TearDown();
   }
@@ -60,7 +64,7 @@ class PasswordSaveUpdateViewTest : public PasswordBubbleViewTestBase {
   password_manager::PasswordForm pending_password_;
 
  private:
-  raw_ptr<PasswordSaveUpdateView, DanglingUntriaged> view_;
+  raw_ptr<PasswordSaveUpdateView> view_ = nullptr;
   std::vector<std::unique_ptr<password_manager::PasswordForm>> current_forms_;
 };
 
@@ -171,6 +175,24 @@ TEST_F(PasswordSaveUpdateViewTest,
 
   // Set the federation_origin to force a Federated Credentials bubble.
   pending_password_.federation_origin = kOrigin;
-
+  pending_password_.match_type =
+      password_manager::PasswordForm::MatchType::kExact;
   CreateViewAndShow();
+}
+
+// This is a regression test for crbug.com/1475021
+TEST_F(PasswordSaveUpdateViewTest, SaveButtonIsDisabledWhenPasswordIsEmpty) {
+  CreateViewAndShow();
+  const PasswordSaveUpdateView* save_bubble =
+      static_cast<const PasswordSaveUpdateView*>(view());
+  const views::DialogDelegate* dialog_delegate = view();
+
+  save_bubble->password_dropdown_for_testing()->SetText(u"password");
+  EXPECT_TRUE(dialog_delegate->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+
+  save_bubble->password_dropdown_for_testing()->SetText(u"");
+  EXPECT_FALSE(dialog_delegate->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+
+  save_bubble->password_dropdown_for_testing()->SetText(u"pass");
+  EXPECT_TRUE(dialog_delegate->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
 }

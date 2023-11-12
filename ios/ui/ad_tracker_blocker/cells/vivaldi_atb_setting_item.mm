@@ -185,9 +185,8 @@ const UIEdgeInsets imageViewPadding = UIEdgeInsetsMake(12.f, 0.f, 0.f, 0.f);
   // the options are rendered for global settings, such as main Ad and Tracker
   // blocker settings page.
   [self applyFontStyleToRange:item.title
-            showDefaultMarker:item.type == globalDefault &&
-                                  showDefaultMarker
-                     makeBold:item.type == userPreferred];
+            showDefaultMarker:item.type == globalDefault && showDefaultMarker
+                  setSelected:item.type == userPreferred];
 }
 
 #pragma mark - PRIVATE
@@ -195,7 +194,7 @@ const UIEdgeInsets imageViewPadding = UIEdgeInsetsMake(12.f, 0.f, 0.f, 0.f);
 /// 'Title' may become bold or regular based on the selection state.
 - (void)applyFontStyleToRange:(NSString*)title
             showDefaultMarker:(BOOL)showDefaultMarker
-                     makeBold:(BOOL)makeBold {
+                  setSelected:(BOOL)setSelected {
   // Default marker
   NSString* defaultMarker = l10n_util::GetNSString(IDS_DEFAULT_LEVEL_LABEL);
 
@@ -209,25 +208,20 @@ const UIEdgeInsets imageViewPadding = UIEdgeInsetsMake(12.f, 0.f, 0.f, 0.f);
 
   // Create attributed string from the full string.
   NSMutableAttributedString *attributedString =
-    [[NSMutableAttributedString alloc] initWithString:fullString];
+    [[NSMutableAttributedString alloc]
+        initWithString:fullString
+            attributes:@{
+              NSForegroundColorAttributeName: [UIColor colorNamed: kBlueColor],
+              NSFontAttributeName:
+                  [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
+            }];
 
-  // Make the title part bold by getting the range of it.
-  NSRange boldRange = [fullString rangeOfString:title];
-  [attributedString
-    addAttribute:NSFontAttributeName
-           value:makeBold ?
-               [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline] :
-               [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
-           range:boldRange];
-
-  // Not necessary but safe to make rest of the part regular style.
-  NSRange regularRange = [fullString rangeOfString:defaultMarker];
-  [attributedString
-    addAttribute:NSFontAttributeName
-           value:[UIFont preferredFontForTextStyle:UIFontTextStyleBody]
-           range:regularRange];
-
-  [self.titleLabel setAttributedText: attributedString];
+  if (setSelected) {
+    [self.titleLabel setAttributedText: attributedString];
+  } else {
+    self.titleLabel.text = fullString;
+    self.titleLabel.textColor = UIColor.labelColor;
+  }
 }
 
 @end

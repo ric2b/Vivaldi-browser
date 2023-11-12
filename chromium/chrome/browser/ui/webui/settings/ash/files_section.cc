@@ -10,10 +10,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
+#include "chrome/browser/chromeos/upload_office_to_cloud/upload_office_to_cloud.h"
+#include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/ash/smb_shares/smb_handler.h"
 #include "chrome/browser/ui/webui/ash/smb_shares/smb_shares_localized_strings_provider.h"
-#include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -92,10 +92,12 @@ FilesSection::FilesSection(Profile* profile,
     : OsSettingsSection(profile, search_tag_registry) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetFilesSearchConcepts());
-  if (cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud(profile)) {
+  if (chromeos::IsEligibleAndEnabledUploadOfficeToCloud(profile)) {
     updater.AddSearchTags(GetFilesOfficeSearchConcepts());
   }
-  if (drive::util::IsDriveFsBulkPinningEnabled(profile)) {
+  if (drive::util::IsDriveFsBulkPinningEnabled(profile) ||
+      base::FeatureList::IsEnabled(
+          ash::features::kFilesGoogleDriveSettingsPage)) {
     updater.AddSearchTags(GetFilesGoogleDriveSearchConcepts());
   }
 }
@@ -106,41 +108,71 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"disconnectGoogleDriveAccount", IDS_SETTINGS_DISCONNECT_GOOGLE_DRIVE},
       {"googleDriveLabel", IDS_SETTINGS_GOOGLE_DRIVE},
-      {"googleDriveDisabledLabel", IDS_SETTINGS_GOOGLE_DRIVE_DISABLED},
-      {"googleDriveDisconnectLabel", IDS_SETTINGS_GOOGLE_DRIVE_DISCONNECT},
       {"googleDriveConnectLabel", IDS_SETTINGS_GOOGLE_DRIVE_CONNECT},
-      {"googleDriveOfflineTitle", IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_TITLE},
-      {"googleDriveOfflineSubtitle",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_SUBTITLE},
+      {"googleDriveRemoveAccessDialogTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_REMOVE_ACCESS_DIALOG_TITLE},
+      {"googleDriveRemoveAccessDialogBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_REMOVE_ACCESS_DIALOG_BODY},
+      {"googleDriveRemoveButtonText",
+       IDS_SETTINGS_GOOGLE_DRIVE_REMOVE_BUTTON_TEXT},
+      {"googleDriveRemoveDriveAccessButtonText",
+       IDS_SETTINGS_GOOGLE_DRIVE_REMOVE_ACCESS_BUTTON_LABEL},
+      {"googleDriveFileSyncTitle", IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_TITLE},
+      {"googleDriveFileSyncSubtitleWithStorage",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_SUBTITLE_WITH_STORAGE},
+      {"googleDriveFileSyncSubtitleWithoutStorage",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_SUBTITLE_WITHOUT_STORAGE},
       {"googleDriveOfflineStorageTitle",
        IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_STORAGE_TITLE},
-      {"googleDriveOfflineSpaceSubtitle",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_STORAGE_REQUIRED_SUBTITLE},
+      {"googleDriveOfflineStorageSpaceTaken",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_STORAGE_SPACE_TAKEN},
       {"googleDriveOfflineClearCalculatingSubtitle",
        IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_CALCULATING_SUBTITLE},
       {"googleDriveOfflineClearErrorSubtitle",
        IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_ERROR_SUBTITLE},
-      {"googleDriveOfflineClearAction",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_ACTION},
-      {"googleDriveOfflineClearDialogTitle",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DIALOG_TITLE},
-      {"googleDriveOfflineClearDialogBody",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DIALOG_BODY},
-      {"googleDriveClearStorageDisabledTooltip",
-       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DISABLED_TOOLTIP},
+      {"googleDriveCleanUpStorageAction",
+       IDS_SETTINGS_GOOGLE_DRIVE_CLEAN_UP_STORAGE_ACTION},
+      {"googleDriveOfflineCleanStorageDialogTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAN_UP_STORAGE_TITLE},
+      {"googleDriveOfflineCleanStorageDialogBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAN_UP_STORAGE_BODY},
+      {"googleDriveCleanUpStorageDisabledTooltip",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAN_UP_STORAGE_DISABLED_TOOLTIP},
+      {"googleDriveCleanUpStorageDisabledUnknownStorageTooltip",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAN_UP_STORAGE_DISABLED_UNKNOWN_STORAGE_TOOLTIP},
       {"googleDriveTurnOffLabel",
        IDS_SETTINGS_GOOGLE_DRIVE_TURN_OFF_BUTTON_LABEL},
-      {"googleDriveTurnOffTitle",
-       IDS_SETTINGS_GOOGLE_DRIVE_TURN_OFF_TITLE_TEXT},
+      {"googleDriveFileSyncTurnOffTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_TURN_OFF_TITLE_TEXT},
+      {"googleDriveFileSyncTurnOffBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_TURN_OFF_BODY_TEXT},
+      {"googleDriveFileSyncListingFilesTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_LISTING_FILES_TITLE_TEXT},
+      {"googleDriveFileSyncListingFilesBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_LISTING_FILES_BODY_TEXT},
+      {"googleDriveFileSyncListingFilesItemsFoundBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_LISTING_FILES_ITEMS_FOUND_BODY_TEXT},
       {"googleDriveNotEnoughSpaceTitle",
        IDS_SETTINGS_GOOGLE_DRIVE_BULK_PINNING_NOT_ENOUGH_SPACE_TITLE_TEXT},
       {"googleDriveNotEnoughSpaceBody",
        IDS_SETTINGS_GOOGLE_DRIVE_BULK_PINNING_NOT_ENOUGH_SPACE_BODY_TEXT},
-      {"googleDriveUnexpectedErrorTitle",
-       IDS_SETTINGS_GOOGLE_DRIVE_BULK_PINNING_UNEXPECTED_ERROR_TITLE_TEXT},
-      {"googleDriveUnexpectedErrorBody",
-       IDS_SETTINGS_GOOGLE_DRIVE_BULK_PINNING_UNEXPECTED_ERROR_BODY_TEXT},
-      {"googleDriveTurnOffBody", IDS_SETTINGS_GOOGLE_DRIVE_TURN_OFF_BODY_TEXT},
+      {"googleDriveFileSyncUnexpectedErrorTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_UNEXPECTED_ERROR_TITLE_TEXT},
+      {"googleDriveFileSyncUnexpectedErrorBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_UNEXPECTED_ERROR_BODY_TEXT},
+      {"googleDriveFileSyncOfflineErrorTitle",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_OFFLINE_ERROR_TITLE_TEXT},
+      {"googleDriveFileSyncOfflineErrorBody",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_OFFLINE_ERROR_BODY_TEXT},
+      {"googleDriveDismissButtonText",
+       IDS_SETTINGS_GOOGLE_DRIVE_DISMISS_BUTTON_TEXT},
+      {"googleDriveOkButtonText", IDS_SETTINGS_GOOGLE_DRIVE_OK_BUTTON_TEXT},
+      {"googleDriveNotSignedInSublabel",
+       IDS_SETTINGS_GOOGLE_DRIVE_NOT_SIGNED_IN_SUBLABEL},
+      {"googleDriveFileSyncOnSublabel",
+       IDS_SETTINGS_GOOGLE_DRIVE_FILE_SYNC_ON_SUBLABEL},
+      {"googleDriveEnabledOnMeteredNetworkLabel",
+       IDS_SETTINGS_GOOGLE_DRIVE_ENABLED_ON_METERED_NETWORK_LABEL},
       {"filesPageTitle", IDS_OS_SETTINGS_FILES},
       {"smbSharesTitle", IDS_SETTINGS_DOWNLOADS_SMB_SHARES},
       {"smbSharesLearnMoreLabel",
@@ -177,7 +209,8 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_ALWAYS_MOVE_OFFICE_TO_DRIVE_PREFERENCE_LABEL},
       {"alwaysMoveToOneDrivePreferenceLabel",
        IDS_SETTINGS_ALWAYS_MOVE_OFFICE_TO_ONEDRIVE_PREFERENCE_LABEL},
-  };
+      {"smbSharesTitleDescription",
+       IDS_OS_SETTINGS_REVAMP_DOWNLOADS_SMB_SHARES_DESCRIPTION}};
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
   smb_dialog::AddLocalizedStrings(html_source);
@@ -185,9 +218,17 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString("smbSharesLearnMoreURL",
                          GetHelpUrlWithBoard(chrome::kSmbSharesLearnMoreURL));
 
+  html_source->AddString(
+      "googleDriveCleanUpStorageLearnMoreLink",
+      GetHelpUrlWithBoard(chrome::kGoogleDriveCleanUpStorageLearnMoreURL));
+
+  html_source->AddString(
+      "googleDriveFileSyncLearnMoreLink",
+      GetHelpUrlWithBoard(chrome::kGoogleDriveOfflineLearnMoreURL));
+
   html_source->AddBoolean(
       "showOfficeSettings",
-      cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud(profile()));
+      chromeos::cloud_upload::IsMicrosoftOfficeCloudUploadAllowed(profile()));
 
   const user_manager::User* user =
       ProfileHelper::Get()->GetUserByProfile(profile());
@@ -201,14 +242,18 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
             IDS_SETTINGS_GOOGLE_DRIVE_SIGNED_IN_AS,
             base::ASCIIToUTF16(user->GetAccountId().GetUserEmail())));
     html_source->AddString(
-        "googleDriveDisconnectedFrom",
+        "googleDriveReconnectAs",
         l10n_util::GetStringFUTF16(
-            IDS_SETTINGS_GOOGLE_DRIVE_DISCONNECTED_FROM,
+            IDS_SETTINGS_GOOGLE_DRIVE_RECONNECT_AS,
             base::ASCIIToUTF16(user->GetAccountId().GetUserEmail())));
   }
 
   html_source->AddBoolean("enableDriveFsBulkPinning",
                           drive::util::IsDriveFsBulkPinningEnabled(profile()));
+
+  html_source->AddBoolean("showGoogleDriveSettingsPage",
+                          base::FeatureList::IsEnabled(
+                              ash::features::kFilesGoogleDriveSettingsPage));
 }
 
 void FilesSection::AddHandlers(content::WebUI* web_ui) {
@@ -228,7 +273,7 @@ mojom::SearchResultIcon FilesSection::GetSectionIcon() const {
   return mojom::SearchResultIcon::kFolder;
 }
 
-std::string FilesSection::GetSectionPath() const {
+const char* FilesSection::GetSectionPath() const {
   return mojom::kFilesSectionPath;
 }
 

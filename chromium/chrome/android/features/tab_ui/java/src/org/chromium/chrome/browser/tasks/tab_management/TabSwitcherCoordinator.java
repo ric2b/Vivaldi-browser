@@ -14,11 +14,11 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Promise;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -108,6 +109,7 @@ public class TabSwitcherCoordinator
     private final boolean mUsesTabGridDialogCoordinator;
     @Nullable
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
+    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
     private final TabModelSelector mTabModelSelector;
     private final @TabListCoordinator.TabListMode int mMode;
     private final MessageCardProviderCoordinator mMessageCardProviderCoordinator;
@@ -130,6 +132,7 @@ public class TabSwitcherCoordinator
     private final ViewGroup mRootView;
     private TabContentManager mTabContentManager;
     private IncognitoReauthPromoMessageService mIncognitoReauthPromoMessageService;
+    private boolean mHasEmptyView;
     /**
      * TODO(crbug.com/1227656): Refactor this to pass a supplier instead to ensure we re-use the
      * same instance of {@link IncognitoReauthManager} across the codebase.
@@ -162,7 +165,8 @@ public class TabSwitcherCoordinator
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
-            @Nullable BackPressManager backPressManager) {
+            @Nullable BackPressManager backPressManager,
+            @Nullable OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier) {
         try (TraceEvent e = TraceEvent.scoped("TabSwitcherCoordinator.constructor")) {
             mActivity = activity;
 
@@ -173,6 +177,7 @@ public class TabSwitcherCoordinator
                 mMode = TabListCoordinator.TabListMode.GRID;
             else
             mMode = mode;
+            mBrowserControlsStateProvider = browserControls;
             mTabModelSelector = tabModelSelector;
             mContainer = container;
             mCoordinatorView = activity.findViewById(R.id.coordinator);
@@ -190,67 +195,64 @@ public class TabSwitcherCoordinator
             mTabSelectionEditorSnackbarManager = new SnackbarManager(activity, mRootView, null);
 
             PropertyModel containerViewModel =
-                    new PropertyModel(TabListContainerProperties.ALL_KEYS);
+                    new PropertyModel.Builder(TabListContainerProperties.ALL_KEYS)
+                            .with(TabListContainerProperties.BROWSER_CONTROLS_STATE_PROVIDER,
+                                    mBrowserControlsStateProvider)
+                            .build();
 
             OneshotSupplier<TabGridDialogMediator.DialogController> dialogControllerSupplier = null;
-            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(activity)) {
-                mGridDialogScrimCoordinator =
-                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mRootView.getContext())
-                        ? createScrimCoordinator()
-                        : scrimCoordinator;
-                mUsesTabGridDialogCoordinator = true;
-                dialogControllerSupplier =
-                        new OneshotSupplier<TabGridDialogMediator.DialogController>() {
-                            // Implementation is based on OneshotSupplierImpl with modifications
-                            // such that onAvailable does not invoke get() unless the object already
-                            // exists this prevents callers of onAvailable from triggering the lazy
-                            // creation of the TabGridDialogCoordinator before it is required.
-                            private final Promise<TabGridDialogMediator.DialogController> mPromise =
-                                    new Promise<>();
-                            private final ThreadUtils.ThreadChecker mThreadChecker =
-                                    new ThreadUtils.ThreadChecker();
+            mGridDialogScrimCoordinator =
+                    DeviceFormFactor.isNonMultiDisplayContextOnTablet(mRootView.getContext())
+                    ? createScrimCoordinator()
+                    : scrimCoordinator;
+            mUsesTabGridDialogCoordinator = true;
+            dialogControllerSupplier =
+                    new OneshotSupplier<TabGridDialogMediator.DialogController>() {
+                        // Implementation is based on OneshotSupplierImpl with modifications
+                        // such that onAvailable does not invoke get() unless the object already
+                        // exists this prevents callers of onAvailable from triggering the lazy
+                        // creation of the TabGridDialogCoordinator before it is required.
+                        private final Promise<TabGridDialogMediator.DialogController> mPromise =
+                                new Promise<>();
+                        private final ThreadUtils.ThreadChecker mThreadChecker =
+                                new ThreadUtils.ThreadChecker();
 
-                            @Override
-                            public TabGridDialogMediator.DialogController onAvailable(
-                                    Callback<TabGridDialogMediator.DialogController> callback) {
-                                mThreadChecker.assertOnValidThread();
-                                mPromise.then(callback);
-                                if (!hasValue()) return null;
+                        @Override
+                        public TabGridDialogMediator.DialogController onAvailable(
+                                Callback<TabGridDialogMediator.DialogController> callback) {
+                            mThreadChecker.assertOnValidThread();
+                            mPromise.then(callback);
+                            if (!hasValue()) return null;
 
-                                return get();
+                            return get();
+                        }
+
+                        @Override
+                        public TabGridDialogMediator.DialogController get() {
+                            mThreadChecker.assertOnValidThread();
+                            if (initTabGridDialogCoordinator()) {
+                                assert !mPromise.isFulfilled();
+                                mPromise.fulfill(mTabGridDialogCoordinator.getDialogController());
                             }
+                            assert mPromise.isFulfilled();
+                            return mPromise.getResult();
+                        }
 
-                            @Override
-                            public TabGridDialogMediator.DialogController get() {
-                                mThreadChecker.assertOnValidThread();
-                                if (initTabGridDialogCoordinator()) {
-                                    assert !mPromise.isFulfilled();
-                                    mPromise.fulfill(
-                                            mTabGridDialogCoordinator.getDialogController());
-                                }
-                                assert mPromise.isFulfilled();
-                                return mPromise.getResult();
-                            }
-
-                            @Override
-                            public boolean hasValue() {
-                                return mTabGridDialogCoordinator != null;
-                            }
-                        };
-            } else {
-                mGridDialogScrimCoordinator = null;
-                mUsesTabGridDialogCoordinator = false;
-                mTabGridDialogCoordinator = null;
-            }
+                        @Override
+                        public boolean hasValue() {
+                            return mTabGridDialogCoordinator != null;
+                        }
+                    };
             mMediator = new TabSwitcherMediator(activity, this, containerViewModel,
                     tabModelSelector, browserControls, container, tabContentManager, this, this,
                     multiWindowModeStateDispatcher, mode, incognitoReauthControllerSupplier,
-                    backPressManager, dialogControllerSupplier);
+                    backPressManager, dialogControllerSupplier, this::onTabSwitcherShown,
+                    layoutStateProviderSupplier);
 
             mTabSwitcherCustomViewManager = new TabSwitcherCustomViewManager(mMediator);
 
-            mMultiThumbnailCardProvider =
-                    new MultiThumbnailCardProvider(activity, tabContentManager, tabModelSelector);
+            mMultiThumbnailCardProvider = new MultiThumbnailCardProvider(
+                    activity, mBrowserControlsStateProvider, tabContentManager, tabModelSelector);
 
             PseudoTab.TitleProvider titleProvider = (context, tab) -> {
                 int numRelatedTabs =
@@ -278,10 +280,10 @@ public class TabSwitcherCoordinator
                     titleProvider =
                             (context, tab) -> tabSwitcherView.getTabTitle(tab, isIncognitoView != 0);
                     TabListCoordinator tabListCoordinator =
-                            new TabListCoordinator(mode, activity, tabModelSelector,
-                                    mMultiThumbnailCardProvider, titleProvider, true, mMediator, null,
-                                    TabProperties.UiType.CLOSABLE, null, this, container, false,
-                                    COMPONENT_NAME, mRootView, null);
+                            new TabListCoordinator(mode, activity, mBrowserControlsStateProvider,
+                                    tabModelSelector, mMultiThumbnailCardProvider, titleProvider,
+                                    true, mMediator, null, TabProperties.UiType.CLOSABLE, null,
+                                    this, container, false, COMPONENT_NAME, mRootView, null);
                     mTabGridCoordinators.add(tabListCoordinator);
                     mContainerViewChangeProcessors.add(PropertyModelChangeProcessor.create(
                             containerViewModel, tabListCoordinator.getContainerView(),
@@ -298,14 +300,36 @@ public class TabSwitcherCoordinator
                         mTabGridCoordinators.get(TabSwitcherView.PAGE.NORMAL);
             } else {
 
-            mTabListCoordinator = new TabListCoordinator(mode, activity, tabModelSelector,
-                    mMultiThumbnailCardProvider, titleProvider, true, mMediator, null,
-                    TabProperties.UiType.CLOSABLE, null, this, container, true, COMPONENT_NAME,
-                    mRootView, null);
+            mHasEmptyView = ChromeFeatureList.sEmptyStates.isEnabled()
+                    && (mMode == TabListMode.GRID || mMode == TabListMode.LIST);
+
+            if (mHasEmptyView) {
+                int emptyImageResId =
+                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mRootView.getContext())
+                        ? R.drawable.tablet_tab_switcher_empty_state_illustration
+                        : R.drawable.phone_tab_switcher_empty_state_illustration;
+                int emptyHeadingStringResId = R.string.tabswitcher_no_tabs_empty_state;
+                int emptySubheadingStringResId =
+                        R.string.tabswitcher_no_tabs_open_to_visit_different_pages;
+
+                mTabListCoordinator = new TabListCoordinator(mode, activity,
+                        mBrowserControlsStateProvider, tabModelSelector,
+                        mMultiThumbnailCardProvider, titleProvider, true, mMediator, null,
+                        TabProperties.UiType.CLOSABLE, null, this, container, true, COMPONENT_NAME,
+                        mRootView, null, mHasEmptyView, emptyImageResId, emptyHeadingStringResId,
+                        emptySubheadingStringResId);
+            } else {
+                mTabListCoordinator =
+                        new TabListCoordinator(mode, activity, mBrowserControlsStateProvider,
+                                tabModelSelector, mMultiThumbnailCardProvider, titleProvider, true,
+                                mMediator, null, TabProperties.UiType.CLOSABLE, null, this,
+                                container, true, COMPONENT_NAME, mRootView, null);
+            }
+
             mTabListCoordinator.setOnLongPressTabItemEventListener(this);
             mContainerViewChangeProcessor = PropertyModelChangeProcessor.create(containerViewModel,
                     mTabListCoordinator.getContainerView(), TabListContainerViewBinder::bind);
-        }
+            }
 
             RecordHistogram.recordTimesHistogram("Android.TabSwitcher.SetupRecyclerView.Time",
                     SystemClock.uptimeMillis() - startTimeMs);
@@ -384,6 +408,13 @@ public class TabSwitcherCoordinator
         }
     }
 
+    // @Todo(crbug.com/1464841) can use VisibilityListener instead of this callback.
+    public void onTabSwitcherShown() {
+        if (mHasEmptyView) {
+            mTabListCoordinator.attachEmptyView();
+        }
+    }
+
     /**
      * @return false if already initialized or true when first initialized.
      */
@@ -391,12 +422,12 @@ public class TabSwitcherCoordinator
         assert mUsesTabGridDialogCoordinator;
         if (mTabGridDialogCoordinator != null) return false;
 
-        mTabGridDialogCoordinator =
-                new TabGridDialogCoordinator(mActivity, mTabModelSelector, mTabContentManager,
-                        mTabCreatorManager, mCoordinatorView, TabSwitcherCoordinator.this,
-                        mMediator, TabSwitcherCoordinator.this::getTabGridDialogAnimationSourceView,
-                        mGridDialogScrimCoordinator, mTabListCoordinator.getTabGroupTitleEditor(),
-                        mRootView);
+        mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity,
+                mBrowserControlsStateProvider, mTabModelSelector, mTabContentManager,
+                mTabCreatorManager, mCoordinatorView, TabSwitcherCoordinator.this, mMediator,
+                TabSwitcherCoordinator.this::getTabGridDialogAnimationSourceView,
+                mGridDialogScrimCoordinator, mTabListCoordinator.getTabGroupTitleEditor(),
+                mRootView);
         return true;
     }
 
@@ -413,7 +444,6 @@ public class TabSwitcherCoordinator
                 coordinator.getContext().getColor(R.color.omnibox_focused_fading_background_color));
     }
 
-    @VisibleForTesting
     public static boolean hasAppendedMessagesForTesting() {
         return sAppendedMessagesForTesting;
     }
@@ -442,8 +472,7 @@ public class TabSwitcherCoordinator
                             tabSuggestionMessageService);
                 }
 
-                if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mActivity)
-                        && !TabSwitcherCoordinator.isShowingTabsInMRUOrder(mMode)) {
+                if (!TabSwitcherCoordinator.isShowingTabsInMRUOrder(mMode)) {
                     mTabGridIphDialogCoordinator = new TabGridIphDialogCoordinator(
                             mActivity, mContainer, mModalDialogManager);
                     IphMessageService iphMessageService =
@@ -482,8 +511,9 @@ public class TabSwitcherCoordinator
             // style.
             int selectionEditorMode = mMode == TabListMode.CAROUSEL ? TabListMode.GRID : mMode;
             mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(mActivity,
-                    mCoordinatorView, mTabModelSelector, mTabContentManager,
-                    mTabListCoordinator::setRecyclerViewPosition, selectionEditorMode, mRootView,
+                    mCoordinatorView, mBrowserControlsStateProvider, mTabModelSelector,
+                    mTabContentManager, mTabListCoordinator::setRecyclerViewPosition,
+                    selectionEditorMode, mRootView,
                     /*displayGroups=*/true, mTabSelectionEditorSnackbarManager);
             mMediator.setTabSelectionEditorController(
                     mTabSelectionEditorCoordinator.getController());
@@ -579,6 +609,16 @@ public class TabSwitcherCoordinator
     }
 
     @Override
+    public int getTabSwitcherTabListModelSize() {
+        return mTabListCoordinator.getTabListModelSize();
+    }
+
+    @Override
+    public void setTabSwitcherRecyclerViewPosition(RecyclerViewPosition recyclerViewPosition) {
+        mTabListCoordinator.setRecyclerViewPosition(recyclerViewPosition);
+    }
+
+    @Override
     public int getTabListTopOffset() {
         return mTabListCoordinator.getTabListTopOffset();
     }
@@ -597,6 +637,11 @@ public class TabSwitcherCoordinator
     }
 
     @Override
+    public void prepareTabGridView() {
+        mTabListCoordinator.prepareTabGridView();
+    }
+
+    @Override
     public boolean prepareTabSwitcherView() {
         boolean quick = mMediator.prepareTabSwitcherView();
         mTabListCoordinator.prepareTabSwitcherView();
@@ -608,6 +653,10 @@ public class TabSwitcherCoordinator
         if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.postHiding();
             return;
+        }
+
+        if (mHasEmptyView) {
+            mTabListCoordinator.destroyEmptyView();
         }
         mTabListCoordinator.postHiding();
         mMediator.postHiding();
@@ -638,31 +687,28 @@ public class TabSwitcherCoordinator
     }
 
     @Override
-    @VisibleForTesting
     public void setBitmapCallbackForTesting(Callback<Bitmap> callback) {
         TabListMediator.ThumbnailFetcher.sBitmapCallbackForTesting = callback;
+        ResettersForTesting.register(
+                () -> TabListMediator.ThumbnailFetcher.sBitmapCallbackForTesting = null);
     }
 
     @Override
-    @VisibleForTesting
     public int getBitmapFetchCountForTesting() {
         return TabListMediator.ThumbnailFetcher.sFetchCountForTesting;
     }
 
     @Override
-    @VisibleForTesting
     public void resetBitmapFetchCountForTesting() {
         TabListMediator.ThumbnailFetcher.sFetchCountForTesting = 0;
     }
 
     @Override
-    @VisibleForTesting
     public int getSoftCleanupDelayForTesting() {
         return mMediator.getSoftCleanupDelayForTesting();
     }
 
     @Override
-    @VisibleForTesting
     public int getCleanupDelayForTesting() {
         return mMediator.getCleanupDelayForTesting();
     }
@@ -849,8 +895,7 @@ public class TabSwitcherCoordinator
 
     private boolean shouldRegisterMessageItemType() {
         return ChromeFeatureList.sCloseTabSuggestions.isEnabled()
-                || (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mRootView.getContext())
-                        && !TabSwitcherCoordinator.isShowingTabsInMRUOrder(mMode));
+                || !TabSwitcherCoordinator.isShowingTabsInMRUOrder(mMode);
     }
 
     private boolean shouldRegisterLargeMessageItemType() {

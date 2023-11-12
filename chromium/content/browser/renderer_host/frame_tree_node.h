@@ -15,6 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "content/browser/renderer_host/navigation_discard_reason.h"
 #include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -36,6 +37,17 @@
 #include "base/time/time.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+namespace features {
+
+// Enable dumping when the a NavigationRequest with evicted RFH for BFCache
+// restore is moved to the FrameTreeNode.
+// This is a feature for debugging and should only be enabled on non-stable
+// channel.
+BASE_DECLARE_FEATURE(
+    kDumpWhenFrameTreeNodeTakesNavigationRequestWithEvictedBFCacheRFH);
+
+}  // namespace features
 
 namespace content {
 
@@ -280,6 +292,14 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // navigation requests on this frame should calculate and send the
   // `Sec-Browsing-Topics` header.
   bool browsing_topics() const { return attributes_->browsing_topics; }
+
+  // Tracks iframe's 'sharedstoragewritable' attribute, indicating what value
+  // the the corresponding `network::ResourceRequest::shared_storage_writable`
+  // should take for the navigation(s) on this frame. If true, the network
+  // service will send the `Shared-Storage-Write` request header.
+  bool shared_storage_writable() const {
+    return attributes_->shared_storage_writable;
+  }
   const absl::optional<std::string> html_id() const { return attributes_->id; }
   // This tracks iframe's 'name' attribute instead of window.name, which is
   // tracked in FrameReplicationState. See the comment for frame_name() for
@@ -440,9 +460,8 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   }
 
   // Sets the associated FrameTree for this node. The node can change FrameTrees
-  // when blink::features::Prerender2 is enabled, which allows a page loaded in
-  // the prerendered FrameTree to be used for a navigation in the primary frame
-  // tree.
+  // as part of prerendering, which allows a page loaded in the prerendered
+  // FrameTree to be used for a navigation in the primary frame tree.
   void SetFrameTree(FrameTree& frame_tree);
 
   using TraceProto = perfetto::protos::pbzero::FrameTreeNodeInfo;
@@ -561,18 +580,25 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
     fenced_frame_properties_ = fenced_frame_properties;
   }
 
-  // By default, this function checks the fenced frame root's properties if one
-  // exists, and then otherwise traverses the frame tree to find urn iframe
-  // roots. This doesn't work correctly for urn iframes nested inside of fenced
-  // frames. Enable `force_tree_traversal` to skip the fenced frame root short
-  // circuit and always traverse the tree.
-  // TODO(crbug.com/1355857): This function has the correct semantics when
-  // `force_tree_traversal` is set to true. It is set to false for urn iframes
-  // nested in fenced frames to work correctly in some cases. For example,
-  // storage partitioning. Once those issues are resolved, remove this parameter
-  // entirely.
+  // This function returns the fenced frame properties associated with the given
+  // source.
+  // - If `source_node` is set to `kClosestAncestor`, the fenced frame
+  // properties are obtained by a bottom-up traversal from this node.
+  // - If `source_node` is set tp `kFrameTreeRoot`, the fenced frame properties
+  // from the fenced frame tree root are returned.
+  // For example, for an urn iframe that is nested inside a fenced frame.
+  // Calling this function from the nested urn iframe with `source_node` set to:
+  // - `kClosestAncestor`: returns the fenced frame properties from the urn
+  // iframe.
+  // - `kFrameTreeRoot`: returns the fenced frame properties from the fenced
+  // frame.
+  // Clients should decide which one to use depending on how the application of
+  // the fenced frame properties interact with urn iframes.
+  // TODO(crbug.com/1355857): Once navigation support for urn::uuid in iframes
+  // is deprecated, remove the parameter `node_source`.
   const absl::optional<FencedFrameProperties>& GetFencedFrameProperties(
-      bool force_tree_traversal = false);
+      FencedFramePropertiesNodeSource node_source =
+          FencedFramePropertiesNodeSource::kClosestAncestor);
 
   // Called from the currently active document via the
   // `Fence.setReportEventDataForAutomaticBeacons` JS API.
@@ -703,6 +729,24 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
           receiver) override;
 #endif
 
+  // Restart the navigation restoring the page from the back-forward cache
+  // as a regular non-BFCached history navigation.
+  //
+  // The restart itself is asynchronous as it's dangerous to restart navigation
+  // with arbitrary state on the stack (another navigation might be starting),
+  // so this function only posts the actual task to do all the work (See
+  // `RestartBackForwardCachedNavigationImpl()`).
+  void RestartBackForwardCachedNavigationAsync(int nav_entry_id);
+
+  // Cancel the asynchronous task that would restart the BFCache navigation.
+  // This should be called whenever a FrameTreeNode's NavigationRequest would
+  // normally get cancelled, including when another NavigationRequest starts.
+  // This preserves the previous behavior where a restarting BFCache
+  // NavigationRequest is kept around until the task to create the new
+  // navigation is run, or until that NavigationRequest gets deleted (which
+  // cancels the task).
+  void CancelRestartingBackForwardCacheNavigation();
+
  private:
   friend class CSPEmbeddedEnforcementUnitTest;
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessPermissionsPolicyBrowserTest,
@@ -741,7 +785,11 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
 
   // See comments for `GetFencedFrameProperties()`.
   absl::optional<FencedFrameProperties>& GetFencedFramePropertiesForEditing(
-      bool force_tree_traversal = false);
+      FencedFramePropertiesNodeSource node_source =
+          FencedFramePropertiesNodeSource::kClosestAncestor);
+
+  // See `RestartBackForwardCachedNavigationAsync()`.
+  void RestartBackForwardCachedNavigationImpl(int nav_entry_id);
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;
@@ -863,6 +911,11 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // and urn iframes are gone.
   absl::optional<FencedFrameProperties> fenced_frame_properties_;
 
+  // The tracker of the task that restarts the BFCache navigation. It might be
+  // used to cancel the task.
+  // See `CancelRestartingBackForwardCacheNavigation()`.
+  base::CancelableTaskTracker restart_back_forward_cached_navigation_tracker_;
+
   // Manages creation and swapping of RenderFrameHosts for this frame.
   //
   // This field needs to be declared last, because destruction of
@@ -874,6 +927,8 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // before the RenderFrameHostManager's destructor runs.  See also
   // https://crbug.com/1157988.
   RenderFrameHostManager render_manager_;
+
+  base::WeakPtrFactory<FrameTreeNode> weak_factory_{this};
 };
 
 }  // namespace content

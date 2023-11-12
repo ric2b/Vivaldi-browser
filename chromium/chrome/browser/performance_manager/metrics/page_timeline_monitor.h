@@ -1,9 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_PERFORMANCE_MANAGER_METRICS_PAGE_TIMELINE_MONITOR_H_
 #define CHROME_BROWSER_PERFORMANCE_MANAGER_METRICS_PAGE_TIMELINE_MONITOR_H_
+
+#include <map>
+#include <memory>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -11,6 +14,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/performance_manager/metrics/page_timeline_cpu_monitor.h"
+#include "components/performance_manager/public/decorators/tab_page_decorator.h"
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/graph_registered.h"
 #include "components/performance_manager/public/graph/page_node.h"
@@ -23,9 +27,12 @@ class PageTimelineMonitorUnitTest;
 // over time.
 class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
                             public GraphOwned,
-                            public GraphRegisteredImpl<PageTimelineMonitor> {
+                            public GraphRegisteredImpl<PageTimelineMonitor>,
+                            public TabPageObserver {
  public:
-  // Keep in sync with PageState in enums.xml
+  // These values are logged to UKM. Entries should not be renumbered and
+  // numeric values should never be reused. Please keep in sync with PageState
+  // in enums.xml.
   enum class PageState {
     kFocused = 0,
     kVisible = 1,
@@ -34,6 +41,18 @@ class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
     kFrozen = 4,
     kDiscarded = 5,
     kMaxValue = kDiscarded,
+  };
+
+  // These values are logged to UKM. Entries should not be renumbered and
+  // numeric values should never be reused. Please keep in sync with
+  // PageMeasurementBackgroundState in enums.xml.
+  enum class PageMeasurementBackgroundState {
+    kForeground = 0,
+    kBackground = 1,
+    kAudibleInBackground = 2,
+    kBackgroundMixedAudible = 3,
+    kMixedForegroundBackground = 4,
+    kMaxValue = kMixedForegroundBackground,
   };
 
   PageTimelineMonitor();
@@ -45,15 +64,16 @@ class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
   void OnPassedToGraph(Graph* graph) override;
   void OnTakenFromGraph(Graph* graph) override;
 
+  // TabPageObserver:
+  void OnTabAdded(TabPageDecorator::TabHandle* tab_handle) override;
+  void OnTabAboutToBeDiscarded(
+      const PageNode* old_page_node,
+      TabPageDecorator::TabHandle* tab_handle) override;
+  void OnBeforeTabRemoved(TabPageDecorator::TabHandle* tab_handle) override;
+
   // PageNode::Observer:
-  void OnPageNodeAdded(const PageNode* page_node) override;
-  void OnBeforePageNodeRemoved(const PageNode* page_node) override;
   void OnIsVisibleChanged(const PageNode* page_node) override;
   void OnPageLifecycleStateChanged(const PageNode* page_node) override;
-  void OnTypeChanged(const PageNode* page_node,
-                     PageType previous_state) override;
-  void OnAboutToBeDiscarded(const PageNode* page_node,
-                            const PageNode* new_page_node) override;
 
   void SetBatterySaverEnabled(bool enabled);
 
@@ -104,22 +124,40 @@ class PageTimelineMonitor : public PageNode::ObserverDefaultImpl,
 
   bool ShouldCollectSlice() const;
 
+  // If this is called, CollectSlice() and CollectPageResourceUsage() will not
+  // be called on a timer. Tests can call them manually.
+  void SetTriggerCollectionManuallyForTesting();
+
+  // If this is called, the given callback will be called instead of
+  // ShouldCollectSlice().
   void SetShouldCollectSliceCallbackForTesting(base::RepeatingCallback<bool()>);
+
+  // CHECK's that `page_node` and `info` are in the right state to be
+  // mapped to each other in `page_node_info_map_`.
+  void CheckPageState(const PageNode* page_node, const PageNodeInfo& info);
 
   // Monotonically increasing counters for tabs and slices.
   int slice_id_counter_;
 
   // A map in which we store info about PageNodes to keep track of their state,
   // as well as the timing of their state transitions.
-  std::map<const PageNode*, std::unique_ptr<PageNodeInfo>> page_node_info_map_;
+  std::map<const TabPageDecorator::TabHandle*, std::unique_ptr<PageNodeInfo>>
+      page_node_info_map_;
 
   // Timer which is used to trigger CollectSlice(), which records the UKM.
   base::RepeatingTimer collect_slice_timer_;
+
+  // Timer which is used to trigger CollectPageResourceUsage().
+  base::RepeatingTimer collect_page_resource_usage_timer_;
+
   // Pointer to this process' graph.
   raw_ptr<Graph> graph_ = nullptr;
 
   // Time when last slice was run.
   base::TimeTicks time_of_last_slice_{base::TimeTicks::Now()};
+
+  // Time of last PageResourceUsage collection.
+  base::TimeTicks time_of_last_resource_usage_{base::TimeTicks::Now()};
 
   // Function which is called to determine whether a PageTimelineState slice
   // should be collected. Overridden in tests.

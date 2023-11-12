@@ -12,7 +12,6 @@
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/display/update_vsync_parameters_callback.h"
 #include "components/viz/common/gpu/gpu_vsync_callback.h"
-#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/service/display/pending_swap_params.h"
 #include "components/viz/service/display/software_output_device.h"
@@ -51,8 +50,7 @@ class VIZ_SERVICE_EXPORT OutputSurface {
  public:
   enum Type {
     kSoftware = 0,
-    kOpenGL = 1,
-    kVulkan = 2,
+    kSkia = 1,
   };
 
   enum class OrientationMode {
@@ -139,6 +137,8 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // Wayland backend is able to delegate these overlays without buffer
     // backings depending on the availability of a certain protocol.
     bool supports_non_backed_solid_color_overlays = false;
+    // Whether the platform supports single pixel buffer protocol.
+    bool supports_single_pixel_buffer = false;
 
     // SkColorType for all supported buffer formats.
     SkColorType sk_color_types[static_cast<int>(gfx::BufferFormat::LAST) + 1] =
@@ -149,7 +149,7 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   };
 
   // Constructor for skia-based compositing.
-  explicit OutputSurface(Type type);
+  OutputSurface();
   // Constructor for software compositing.
   explicit OutputSurface(std::unique_ptr<SoftwareOutputDevice> software_device);
 

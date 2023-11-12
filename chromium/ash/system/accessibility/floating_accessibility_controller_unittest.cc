@@ -23,6 +23,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
+#include "ui/compositor/layer.h"
 
 namespace ash {
 
@@ -102,7 +103,7 @@ class FloatingAccessibilityControllerTest : public AshTestBase {
 
   bool IsButtonVisible(FloatingAccessibilityView::ButtonId button_id) {
     views::View* button = GetMenuButton(button_id);
-    return button != nullptr;
+    return button != nullptr && button->layer()->opacity() > 0;
   }
 
   ImeMenuTray* GetImeTray() {
@@ -211,22 +212,20 @@ class FloatingAccessibilityControllerTest : public AshTestBase {
 };
 
 TEST_F(FloatingAccessibilityControllerTest, ImeButtonNotShowWhenDisabled) {
+  features_.InitAndDisableFeature(features::kKioskEnableImeButton);
+
   SetUpVisibleMenu();
 
   EXPECT_FALSE(IsButtonVisible(FloatingAccessibilityView::ButtonId::kIme));
 }
 
 TEST_F(FloatingAccessibilityControllerTest, ImeButtonShownWhenEnabled) {
-  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
-
   SetUpVisibleMenu();
 
   EXPECT_TRUE(IsButtonVisible(FloatingAccessibilityView::ButtonId::kIme));
 }
 
 TEST_F(FloatingAccessibilityControllerTest, ImeButtonHiddenWhenSingleLanguage) {
-  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
-
   SetSingleAvailableIme();
   SetUpVisibleMenu();
 
@@ -234,8 +233,6 @@ TEST_F(FloatingAccessibilityControllerTest, ImeButtonHiddenWhenSingleLanguage) {
 }
 
 TEST_F(FloatingAccessibilityControllerTest, KioskImeTrayVisibility) {
-  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
-
   SetUpVisibleMenu();
 
   // Tray bubble is visible when  a user taps on the IME icon.
@@ -248,16 +245,12 @@ TEST_F(FloatingAccessibilityControllerTest, KioskImeTrayVisibility) {
 }
 
 TEST_F(FloatingAccessibilityControllerTest, KioskImeTrayBottomButtons) {
-  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
-
   SetUpVisibleMenu();
-  EXPECT_FALSE(GetImeTray()->ShouldShowBottomButtons());
+  EXPECT_FALSE(GetImeTray()->AnyBottomButtonShownForTest());
 }
 
 TEST_F(FloatingAccessibilityControllerTest,
        ImeTrayNotOverlapWithFloatingBubble) {
-  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
-
   SetUpVisibleMenu();
 
   // Tray bubble is visible when  a user taps on the IME icon.
@@ -354,8 +347,8 @@ TEST_F(FloatingAccessibilityControllerTest, CanChangePosition) {
   // Loop through all positions twice.
   for (int i = 0; i < 2; i++) {
     for (const auto& test : kTestCases) {
-      SCOPED_TRACE(
-          base::StringPrintf("Testing position #[%d]", test.expected_position));
+      SCOPED_TRACE(base::StringPrintf(
+          "Testing position #[%d]", static_cast<int>(test.expected_position)));
       // Tap the position button.
       ui::GestureEvent event = CreateTapEvent();
       button->OnGestureEvent(&event);
@@ -520,8 +513,8 @@ TEST_F(FloatingAccessibilityControllerTest, CollisionWithAutoclicksMenu) {
   // Loop through all positions twice.
   for (int i = 0; i < 2; i++) {
     for (const auto& test : kTestCases) {
-      SCOPED_TRACE(
-          base::StringPrintf("Testing position #[%d]", test.expected_position));
+      SCOPED_TRACE(base::StringPrintf(
+          "Testing position #[%d]", static_cast<int>(test.expected_position)));
       // Tap the position button.
       {
         ui::GestureEvent event = CreateTapEvent();
@@ -630,7 +623,9 @@ TEST_F(FloatingAccessibilityControllerTest, ActiveFeaturesButtons) {
   EXPECT_EQ(GetMenuViewBounds(), original_bounds);
 }
 
-TEST_F(FloatingAccessibilityControllerTest, AccelatorFocusMenu) {
+TEST_F(FloatingAccessibilityControllerTest, AcceleratorFocusMenuImeDisabled) {
+  // The IME menu is not shown for a single language.
+  SetSingleAvailableIme();
   SetUpVisibleMenu();
 
   ASSERT_TRUE(widget());

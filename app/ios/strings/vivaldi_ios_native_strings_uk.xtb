@@ -23,6 +23,8 @@
 <translation id="1379470994139227452">Призначити Vivaldi типовим</translation>
 <translation id="1381484244248892686">Використовуйте паролі, збережені на інших пристроях. Вони збережені у менеджері паролів для <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Пошук</translation>
+<translation id="1397515084080510783">Немає синхронізованих вкладок</translation>
+<translation id="1410197035576869800">Іконка додатка</translation>
 <translation id="1430638949087011281">Вимкнено</translation>
 <translation id="1446108955355168157">Для захисту даних синхронізації (паролі закладки, нотатки та ін.) створіть пароль для шифрування. Ми не матимемо до нього доступу.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> нотатки</translation>
@@ -67,6 +69,7 @@
 <translation id="2391028308389203648">Турецька (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Активувати</translation>
 <translation id="2434910957904013691">Все</translation>
+<translation id="2448144008809286557">Забули <ph name="BEGIN_LINK" />Ім'я користувача<ph name="END_LINK" /> або <ph name="BEGIN_LINK" />Пароль<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">ВИНЯТКИ</translation>
 <translation id="2558801801411970131">Блокування трекерів</translation>
 <translation id="2577446409661931381">Нова нотатка</translation>
@@ -82,6 +85,7 @@
 <translation id="2842985007712546952">Рівень вище</translation>
 <translation id="2843343418360315034">Угорська (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Ініціалізація синхронізації...</translation>
+<translation id="2874111661876416905">Шукати з Vivaldi</translation>
 <translation id="2874121295511641364">Синхронізуйте введені адреси та відкриті вкладки</translation>
 <translation id="2898963176829412617">Нова тека…</translation>
 <translation id="2961573414320947355">Хочете відкривати всі посилання у Vivaldi? Призначте його основним.</translation>
@@ -146,12 +150,14 @@
 блоковано</translation>
 <translation id="4299298331965375737">Зробити Vivaldi типовим браузером?</translation>
 <translation id="4304224509867189079">Увійти</translation>
+<translation id="4316955624679873896">Додано у закладки</translation>
 <translation id="432696242656678770">Російська (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Іспанська (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">В'єтнамська (<ph name="ORIGIN" />)</translation>
 <translation id="4394049700291259645">Вимкнути</translation>
 <translation id="4413780690230851155">Видалення історії перегляду</translation>
 <translation id="4452878871193896747">Індонезійська (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Наразі у вас немає синхронізованих вкладок з інших пристроїв.</translation>
 <translation id="4493850495402472953">і</translation>
 <translation id="4497115807425788318">Розташування</translation>
 <translation id="4507213865286211606">Розмір ескізів</translation>
@@ -184,10 +190,12 @@
 <translation id="497942794017668482">Блокування трекерів і реклами</translation>
 <translation id="5037761343305489956">Скопійовано до нотаток</translation>
 <translation id="504986598654589766">Приватний перегляд дозволяє не зберігати в браузері історію перегляду та пошуку, тимчасові файли. Ніякого приховування або шифрування даних не відбувається.</translation>
+<translation id="5094376253685335202">Увімкнути синхронізацію</translation>
 <translation id="5116316489033177455">Синхронізуйте закладки та Експрес-панелі</translation>
 <translation id="5122095890854520072">Латвійська (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Помилка входу</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Надіслати код повторно<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Отримання вкладок та історії...</translation>
 <translation id="5238642303473095117">Видалити дані</translation>
 <translation id="5245732982828228444">Ваші нотатки будуть тут</translation>
 <translation id="5249199221558969362">Введіть реалістичний вік.</translation>
@@ -214,6 +222,7 @@
 <translation id="5857090052475505287">Нова тека</translation>
 <translation id="5859825823508296659">Редагувати сайт</translation>
 <translation id="5867841422488265304">Введіть пошуковий запит чи веб-адресу</translation>
+<translation id="5869217094746242845">Дізнайтеся більше про Приватність і Безпеку</translation>
 <translation id="5871497086027727873">1 нотатку перенесено</translation>
 <translation id="5898502570200301364">Ви можете використовувати паролі, збережені у менеджері паролів Vivaldi, в інших додатках на iPad.</translation>
 <translation id="5900160494089383343">Ім'я користувача недоступне.</translation>
@@ -255,8 +264,10 @@
 <translation id="6946395294519639514">За допомогою Панелей ви зможете тримати під рукою корисні інструменти.</translation>
 <translation id="6967884871145366229">Налаштування приватності</translation>
 <translation id="6973630695168034713">Теки</translation>
+<translation id="7006864796794806241">Відновити пароль</translation>
 <translation id="7029809446516969842">Паролі</translation>
 <translation id="7041964446309059643">Вручну</translation>
+<translation id="7110758301321962823">Відновити ім'я користувача</translation>
 <translation id="7194677467200983873">Остання синхронізація:</translation>
 <translation id="7196846668589096106">Звичайні вкладки</translation>
 <translation id="7210372243397300116">Шукати теку</translation>
@@ -266,6 +277,7 @@
 <translation id="7311118006561484338">За заголовком</translation>
 <translation id="7325310788570036874">Працюйте в мережі швидше та ефективніше разом з браузером Vivaldi.</translation>
 <translation id="734110743815267231">Іврит (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Відкрити у приватному режимі?</translation>
 <translation id="7362952245780030555">Виберіть звичайні вкладки або спрощений екран вкладок.</translation>
 <translation id="7379938540614588640">Данська (<ph name="ORIGIN" />)</translation>
 <translation id="7388525939184421699">Додати нове джерело</translation>
@@ -305,8 +317,10 @@
 <translation id="8275038454117074363">Імпорт</translation>
 <translation id="8329813750766387010">Оновлено: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Видалити попередження cookie <ph name="TYPE" /></translation>
+<translation id="8359194106448244241">Щоб побачити вкладки з інших пристроїв, увімкніть синхронізацію.</translation>
 <translation id="8366175803122817174">Відкрити всі адреси нотатки</translation>
 <translation id="8384409685584033392">Про сторінку</translation>
+<translation id="839736845446313156">Зареєструватися</translation>
 <translation id="8414685983518053656">Нотатки</translation>
 <translation id="8423076545503792640">Помилка при виконанні запиту. Повторіть пізніше.</translation>
 <translation id="8428213095426709021">Налаштування</translation>
@@ -322,6 +336,7 @@
 <translation id="8677007239430848917">Додайте свою першу нотатку, натиснувши нижче кнопку з плюсом</translation>
 <translation id="8684294196284714094">Готові призначити Vivaldi типовим браузером?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> нотаток видалено</translation>
+<translation id="8763006697839582351">Відкрити у приватному режимі Vivaldi</translation>
 <translation id="8804164990146287819">Політика конфіденційності</translation>
 <translation id="8819841443522803117">Хочете поміняти типовий браузер? Спробуйте Vivaldi.</translation>
 <translation id="8820817407110198400">Закладки</translation>
@@ -333,7 +348,6 @@
 <translation id="9043882097999887291">Реклами
 заблоковано</translation>
 <translation id="9065203028668620118">Редагувати</translation>
-<translation id="9078193189520575214">Застосування змін...</translation>
 <translation id="9079251484401922158">Фінська (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 нотатка</translation>
 <translation id="9091665118798175641">Синхронізуйте дані автозаповнення форм</translation>

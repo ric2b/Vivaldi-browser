@@ -85,7 +85,7 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
 
     case ITEM_GROUP_FRAME: {
       bool page_group_supported = SupportsGroupInternal(ITEM_GROUP_PAGE);
-      return page_group_supported && !params_.frame_url.is_empty();
+      return page_group_supported && params_.is_subframe;
     }
 
     case ITEM_GROUP_LINK:
@@ -156,8 +156,9 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
 #endif
 
     case ITEM_GROUP_PASSWORD:
-      return params_.input_field_type ==
-             blink::mojom::ContextMenuDataInputFieldType::kPassword;
+      return (params_.input_field_type ==
+              blink::mojom::ContextMenuDataInputFieldType::kPassword) ||
+             params_.is_password_type_by_heuristics;
 
     case ITEM_GROUP_AUTOFILL:
       return params_.input_field_type !=

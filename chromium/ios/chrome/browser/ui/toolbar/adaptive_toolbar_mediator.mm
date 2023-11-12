@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_mediator.h"
 
+#import "base/containers/contains.h"
 #import "base/memory/ptr_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -53,10 +54,6 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface AdaptiveToolbarMediator () <CRWWebStateObserver,
                                        OverlayPresenterObserving,
                                        WebStateListObserving>
@@ -74,7 +71,6 @@ using vivaldi::IsVivaldiRunning;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   std::unique_ptr<OverlayPresenterObserverBridge> _overlayObserver;
-  BOOL _inBatchOperation;
 }
 
 - (instancetype)init {
@@ -178,18 +174,20 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)didChangeWebStateList:(WebStateList*)webStateList
                        change:(const WebStateListChange&)change
-                    selection:(const WebStateSelection&)selection {
+                       status:(const WebStateListStatus&)status {
+  DCHECK_EQ(_webStateList, webStateList);
   switch (change.type()) {
-    case WebStateListChange::Type::kSelectionOnly:
-      // TODO(crbug.com/1442546): Move the implementation from
-      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason to
-      // here. Note that here is reachable only when `reason` ==
-      // ActiveWebStateChangeReason::Activated.
+    case WebStateListChange::Type::kStatusOnly:
+      // The activation is handled after this switch statement.
       break;
-    case WebStateListChange::Type::kDetach:
-      // TODO(crbug.com/1442546): Move the implementation from
-      // webStateList:didDetachWebState:atIndex: to here.
+    case WebStateListChange::Type::kDetach: {
+      if (webStateList->IsBatchInProgress()) {
+        return;
+      }
+
+      [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
       break;
+    }
     case WebStateListChange::Type::kMove:
       // Do nothing when a WebState is moved.
       break;
@@ -197,47 +195,23 @@ using vivaldi::IsVivaldiRunning;
       // Do nothing when a WebState is replaced.
       break;
     case WebStateListChange::Type::kInsert: {
-      DCHECK_EQ(_webStateList, webStateList);
-      if (_inBatchOperation) {
+      if (webStateList->IsBatchInProgress()) {
         return;
       }
 
       [self.consumer setTabCount:_webStateList->count()
-               addedInBackground:!selection.activating];
+               addedInBackground:!status.active_web_state_change()];
+      break;
     }
   }
-}
 
-- (void)webStateList:(WebStateList*)webStateList
-    didDetachWebState:(web::WebState*)webState
-              atIndex:(int)index {
-  DCHECK_EQ(_webStateList, webStateList);
-  if (_inBatchOperation) {
-    return;
+  if (status.active_web_state_change()) {
+    self.webState = status.new_active_web_state;
   }
-
-  [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
-}
-
-- (void)webStateList:(WebStateList*)webStateList
-    didChangeActiveWebState:(web::WebState*)newWebState
-                oldWebState:(web::WebState*)oldWebState
-                    atIndex:(int)atIndex
-                     reason:(ActiveWebStateChangeReason)reason {
-  DCHECK_EQ(_webStateList, webStateList);
-  self.webState = newWebState;
-}
-
-- (void)webStateListWillBeginBatchOperation:(WebStateList*)webStateList {
-  DCHECK_EQ(_webStateList, webStateList);
-  DCHECK(!_inBatchOperation);
-  _inBatchOperation = YES;
 }
 
 - (void)webStateListBatchOperationEnded:(WebStateList*)webStateList {
   DCHECK_EQ(_webStateList, webStateList);
-  DCHECK(_inBatchOperation);
-  _inBatchOperation = NO;
   [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
 }
 
@@ -538,14 +512,14 @@ using vivaldi::IsVivaldiRunning;
         clipboardContentType.value();
 
     if (search_engines::SupportsSearchByImage(self.templateURLService) &&
-        clipboardContentTypeValues.find(ClipboardContentType::Image) !=
-            clipboardContentTypeValues.end()) {
+        base::Contains(clipboardContentTypeValues,
+                       ClipboardContentType::Image)) {
       return [self.actionFactory actionToSearchCopiedImage];
-    } else if (clipboardContentTypeValues.find(ClipboardContentType::URL) !=
-               clipboardContentTypeValues.end()) {
+    } else if (base::Contains(clipboardContentTypeValues,
+                              ClipboardContentType::URL)) {
       return [self.actionFactory actionToSearchCopiedURL];
-    } else if (clipboardContentTypeValues.find(ClipboardContentType::Text) !=
-               clipboardContentTypeValues.end()) {
+    } else if (base::Contains(clipboardContentTypeValues,
+                              ClipboardContentType::Text)) {
       return [self.actionFactory actionToSearchCopiedText];
     }
   }

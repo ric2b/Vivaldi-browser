@@ -4,7 +4,7 @@
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
-import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorResultData, AcceleratorsUpdatedObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorResultData, AcceleratorsUpdatedObserverRemote, UserAction} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
 
 import {fakeAcceleratorConfig, fakeLayoutInfo} from './fake_data.js';
 import {FakeShortcutProvider} from './fake_shortcut_provider.js';
@@ -122,6 +122,21 @@ export class ShortcutProviderWrapper implements ShortcutProviderInterface {
       Promise<void> {
     return this.remote.preventProcessingAccelerators(
         preventProcessingAccelerators);
+  }
+
+  getConflictAccelerator(
+      source: AcceleratorSource, action: number,
+      accelerator: Accelerator): Promise<{result: AcceleratorResultData}> {
+    return this.remote.getConflictAccelerator(source, action, accelerator);
+  }
+
+  getDefaultAcceleratorsForId(action: number):
+      Promise<{accelerators: Accelerator[]}> {
+    return this.remote.getDefaultAcceleratorsForId(action);
+  }
+
+  recordUserAction(userAction: UserAction): void {
+    this.remote.recordUserAction(userAction);
   }
 }
 

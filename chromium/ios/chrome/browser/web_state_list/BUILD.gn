@@ -11,7 +11,6 @@ source_set("session_metrics") {
     "//base",
     "//ios/chrome/browser/shared/model/browser_state",
   ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("web_state_list") {
@@ -22,24 +21,16 @@ source_set("web_state_list") {
     "web_state_dependency_installer_bridge.mm",
     "web_state_list_favicon_driver_observer.h",
     "web_state_list_favicon_driver_observer.mm",
-    "web_state_list_order_controller.h",
-    "web_state_list_order_controller.mm",
-    "web_state_list_removing_indexes.h",
-    "web_state_list_removing_indexes.mm",
-    "web_state_list_serialization.h",
-    "web_state_list_serialization.mm",
   ]
   deps = [
     "//base",
     "//components/favicon/core",
     "//components/favicon/ios",
-    "//ios/chrome/browser/sessions:serialisation",
+    "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/web/public",
     "//ios/web/public:web_state_observer",
-    "//ios/web/public/session",
   ]
   frameworks = [ "Foundation.framework" ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("agents") {
@@ -72,11 +63,13 @@ source_set("agents") {
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/web:tab_helper_delegates",
     "//ios/components/security_interstitials:security_interstitials",
+    "//ios/web/common:features",
+    "//ios/web/common:user_agent",
     "//ios/web/public",
     "//ios/web/public/js_messaging:js_messaging",
+    "//ios/web/public/session",
   ]
   frameworks = [ "Foundation.framework" ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("unit_tests") {
@@ -87,7 +80,6 @@ source_set("unit_tests") {
     "web_state_dependency_installation_observer_unittest.mm",
     "web_state_dependency_installer_bridge_unittest.mm",
     "web_state_list_favicon_driver_observer_unittest.mm",
-    "web_state_list_order_controller_unittest.mm",
     "web_state_list_removing_indexes_unittest.mm",
     "web_state_list_serialization_unittest.mm",
   ]
@@ -110,5 +102,4 @@ source_set("unit_tests") {
     "//ios/web/public/test",
     "//testing/gtest",
   ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

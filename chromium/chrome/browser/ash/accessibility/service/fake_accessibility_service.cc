@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,8 +8,12 @@
 
 #include "base/functional/callback.h"
 #include "base/run_loop.h"
+#include "mojo/public/cpp/bindings/clone_traits.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/accessibility/public/mojom/accessibility_service.mojom.h"
 #include "services/accessibility/public/mojom/tts.mojom.h"
+#include "services/accessibility/public/mojom/user_interface.mojom.h"
 
 namespace ash {
 
@@ -24,9 +28,9 @@ void FakeAccessibilityService::BindAccessibilityServiceClient(
 }
 
 void FakeAccessibilityService::BindAnotherAutomation() {
-  mojo::PendingRemote<ax::mojom::Automation> automation_remote;
-  automation_receivers_.Add(this,
-                            automation_remote.InitWithNewPipeAndPassReceiver());
+  mojo::PendingAssociatedRemote<ax::mojom::Automation> automation_remote;
+  automation_receivers_.Add(
+      this, automation_remote.InitWithNewEndpointAndPassReceiver());
 
   mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client_receiver;
   automation_client_remotes_.Add(
@@ -42,12 +46,29 @@ void FakeAccessibilityService::BindAnotherTts() {
   accessibility_service_client_remote_->BindTts(std::move(tts_receiver));
 }
 
+void FakeAccessibilityService::BindAnotherUserInterface() {
+  mojo::PendingReceiver<ax::mojom::UserInterface> ux_receiver;
+  ux_remotes_.Add(ux_receiver.InitWithNewPipeAndPassRemote());
+  accessibility_service_client_remote_->BindUserInterface(
+      std::move(ux_receiver));
+}
+
 void FakeAccessibilityService::BindAssistiveTechnologyController(
     mojo::PendingReceiver<ax::mojom::AssistiveTechnologyController>
         at_controller_receiver,
     const std::vector<ax::mojom::AssistiveTechnologyType>& enabled_features) {
   at_controller_receivers_.Add(this, std::move(at_controller_receiver));
   EnableAssistiveTechnology(enabled_features);
+}
+
+void FakeAccessibilityService::ConnectDevToolsAgent(
+    mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent,
+    ax::mojom::AssistiveTechnologyType type) {
+  auto it = connect_devtools_counts.find(type);
+  if (it == connect_devtools_counts.end()) {
+    connect_devtools_counts[type] = 0;
+  }
+  connect_devtools_counts[type]++;
 }
 
 void FakeAccessibilityService::DispatchTreeDestroyedEvent(
@@ -84,6 +105,10 @@ void FakeAccessibilityService::DispatchAccessibilityLocationChange(
     std::move(automation_events_closure_).Run();
 }
 
+void FakeAccessibilityService::DispatchGetTextLocationResult(
+    const ui::AXActionData& data,
+    const absl::optional<gfx::Rect>& rect) {}
+
 void FakeAccessibilityService::EnableAssistiveTechnology(
     const std::vector<ax::mojom::AssistiveTechnologyType>& enabled_features) {
   enabled_ATs_ = std::set(enabled_features.begin(), enabled_features.end());
@@ -95,6 +120,15 @@ void FakeAccessibilityService::WaitForATChanged() {
   base::RunLoop runner;
   change_ATs_closure_ = runner.QuitClosure();
   runner.Run();
+}
+
+int FakeAccessibilityService::GetDevtoolsConnectionCount(
+    ax::mojom::AssistiveTechnologyType type) const {
+  auto it = connect_devtools_counts.find(type);
+  if (it == connect_devtools_counts.end()) {
+    return 0;
+  }
+  return it->second;
 }
 
 bool FakeAccessibilityService::IsBound() const {
@@ -163,6 +197,14 @@ void FakeAccessibilityService::RequestTtsVoices(
   CHECK_EQ(tts_remotes_.size(), 1u);
   for (auto& tts_client : tts_remotes_) {
     tts_client->GetVoices(std::move(callback));
+  }
+}
+
+void FakeAccessibilityService::RequestSetFocusRings(
+    std::vector<ax::mojom::FocusRingInfoPtr> focus_rings,
+    ax::mojom::AssistiveTechnologyType at_type) {
+  for (auto& ux_client : ux_remotes_) {
+    ux_client->SetFocusRings(mojo::Clone(focus_rings), at_type);
   }
 }
 

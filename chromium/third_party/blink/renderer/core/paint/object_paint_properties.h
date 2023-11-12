@@ -81,11 +81,12 @@ class CORE_EXPORT ObjectPaintProperties {
   // [ PaintOffsetTranslation ]
   // |   Normally paint offset is accumulated without creating a node until
   // |   we see, for example, transform or position:fixed.
+  // |
   // +-[ StickyTranslation ]
   //  /    This applies the sticky offset induced by position:sticky.
   // |
-  // +-[ AnchorScrollTranslation ]
-  //  /    This applies the scrolling offset induced by CSS anchor-scroll.
+  // +-[ AnchorPositionScrollTranslation ]
+  //  /    This applies the scrolling offset induced by CSS anchor positioning.
   // |
   // +-[ Translate ]
   //   |   The transform from CSS 'translate' (including the effects of
@@ -144,7 +145,7 @@ class CORE_EXPORT ObjectPaintProperties {
   AllCSSTransformPropertiesOutsideToInside() const = 0;
   ADD_TRANSFORM_DECL(PaintOffsetTranslation);
   ADD_TRANSFORM_DECL(StickyTranslation);
-  ADD_TRANSFORM_DECL(AnchorScrollTranslation);
+  ADD_TRANSFORM_DECL(AnchorPositionScrollTranslation);
   ADD_TRANSFORM_DECL(Translate);
   ADD_TRANSFORM_DECL(Rotate);
   ADD_TRANSFORM_DECL(Scale);
@@ -154,14 +155,17 @@ class CORE_EXPORT ObjectPaintProperties {
   ADD_TRANSFORM_DECL(ReplacedContentTransform);
   ADD_TRANSFORM_DECL(ScrollTranslation);
   using ScrollPaintPropertyNodeOrAlias = ScrollPaintPropertyNode;
-  ADD_NODE_DECL(Scroll, Scroll);
   ADD_ALIAS_NODE_DECL(Transform, TransformIsolationNode);
+
+  ADD_NODE_DECL(Scroll, Scroll);
 
   // Effect node method declarations.
   //
   // The hierarchy of the effect subtree created by a LayoutObject is as
   // follows:
-  // [ Effect ]
+  // [ ElementCaptureEffect ]
+  // |     Isolated group to force an element to be painted separately.
+  // +-[ Effect ]
   // |     Isolated group to apply various CSS effects, including opacity,
   // |     mix-blend-mode, backdrop-filter, and for isolation if a mask needs
   // |     to be applied or backdrop-dependent children are present.
@@ -177,22 +181,23 @@ class CORE_EXPORT ObjectPaintProperties {
   // |     clipped contents. If there is no Mask node, then this node is a
   // |     direct child of the Effect node.
   // +-[ VerticalScrollbarEffect / HorizontalScrollbarEffect / ScrollCorner ]
-  //       Overlay Scrollbars on Aura and Android need effect node for fade
-  //       animation. Also used in ViewTransitions to separate out scrollbars
-  //       from the root snapshot.
+  // |     Overlay Scrollbars on Aura and Android need effect node for fade
+  // |     animation. Also used in ViewTransitions to separate out scrollbars
+  // |     from the root snapshot.
   //
   // ... +-[ EffectIsolationNode ]
   //       This serves as a parent to subtree effects on an element with paint
   //       containment, It is the deepest child of any effect tree on the
   //       contain: paint element.
   virtual bool HasEffectNode() const = 0;
+  ADD_EFFECT_DECL(ElementCaptureEffect);
   ADD_EFFECT_DECL(Effect);
   ADD_EFFECT_DECL(Filter);
+  ADD_EFFECT_DECL(Mask);
+  ADD_EFFECT_DECL(ClipPathMask);
   ADD_EFFECT_DECL(VerticalScrollbarEffect);
   ADD_EFFECT_DECL(HorizontalScrollbarEffect);
   ADD_EFFECT_DECL(ScrollCornerEffect);
-  ADD_EFFECT_DECL(Mask);
-  ADD_EFFECT_DECL(ClipPathMask);
   ADD_ALIAS_NODE_DECL(Effect, EffectIsolationNode);
 
   // Clip node declarations.
@@ -245,15 +250,15 @@ class CORE_EXPORT ObjectPaintProperties {
   //       containment. It is the deepest child of any clip tree on the contain:
   //       paint element.
   virtual bool HasClipNode() const = 0;
-  ADD_CLIP_DECL(PixelMovingFilterClipExpander);
   ADD_CLIP_DECL(ClipPathClip);
   ADD_CLIP_DECL(MaskClip);
   ADD_CLIP_DECL(CssClip);
-  ADD_CLIP_DECL(CssClipFixedPosition);
   ADD_CLIP_DECL(OverflowControlsClip);
   ADD_CLIP_DECL(BackgroundClip);
+  ADD_CLIP_DECL(PixelMovingFilterClipExpander);
   ADD_CLIP_DECL(InnerBorderRadiusClip);
   ADD_CLIP_DECL(OverflowClip);
+  ADD_CLIP_DECL(CssClipFixedPosition);
   ADD_ALIAS_NODE_DECL(Clip, ClipIsolationNode);
 
 #undef ADD_CLIP_DECL

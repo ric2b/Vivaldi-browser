@@ -15,6 +15,7 @@
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
@@ -30,6 +31,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -73,7 +75,7 @@
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 
 #if BUILDFLAG(IS_MAC)
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #include "third_party/blink/renderer/core/editing/substring_util.h"
 #include "third_party/blink/renderer/platform/fonts/mac/attributed_string_type_converter.h"
 #include "ui/base/mojom/attributed_string.mojom-blink.h"
@@ -167,7 +169,7 @@ HitTestResult HitTestResultForRootFramePos(
       frame->View()->ConvertFromRootFrame(pos_in_root_frame));
   HitTestResult result = frame->GetEventHandler().HitTestResultAtLocation(
       location, HitTestRequest::kReadOnly | HitTestRequest::kActive);
-  result.SetToShadowHostIfInRestrictedShadowRoot();
+  result.SetToShadowHostIfInUAShadowRoot();
   return result;
 }
 
@@ -726,7 +728,7 @@ void LocalFrameMojoHandler::AdvanceFocusForIME(
     return;
 
   next_element->scrollIntoViewIfNeeded(true /*centerIfNeeded*/);
-  next_element->Focus();
+  next_element->Focus(FocusParams(FocusTrigger::kUserGesture));
 }
 
 void LocalFrameMojoHandler::ReportContentSecurityPolicyViolation(
@@ -983,7 +985,7 @@ void LocalFrameMojoHandler::GetStringForRange(
     GetStringForRangeCallback callback) {
   gfx::Point baseline_point;
   ui::mojom::blink::AttributedStringPtr attributed_string = nullptr;
-  base::ScopedCFTypeRef<CFAttributedStringRef> string =
+  base::apple::ScopedCFTypeRef<CFAttributedStringRef> string =
       SubstringUtil::AttributedSubstringInRange(
           frame_, base::checked_cast<WTF::wtf_size_t>(range.start()),
           base::checked_cast<WTF::wtf_size_t>(range.length()), baseline_point);
@@ -1376,6 +1378,11 @@ void LocalFrameMojoHandler::AddResourceTimingEntryForFailedSubframeNavigation(
 }
 
 void LocalFrameMojoHandler::RequestFullscreenDocumentElement() {
+  // Bail early and report failure if fullscreen is not enabled.
+  if (!Fullscreen::FullscreenEnabled(*frame_->GetDocument(),
+                                     ReportOptions::kReportOnFailure)) {
+    return;
+  }
   if (auto* document_element = frame_->GetDocument()->documentElement()) {
     // `kWindowOpen` assumes this function is only invoked for newly created
     // windows (e.g. fullscreen popups). Update this if additional callers are

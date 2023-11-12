@@ -15,10 +15,6 @@
 #import "ui/base/resource/resource_bundle.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace web {
 
 FakeWebClient::FakeWebClient() = default;
@@ -103,29 +99,6 @@ UIView* FakeWebClient::GetWindowedContainer() {
 UserAgentType FakeWebClient::GetDefaultUserAgent(web::WebState* web_state,
                                                  const GURL& url) const {
   return default_user_agent_;
-}
-
-void FakeWebClient::SetFindSessionPrototype(
-    CRWFakeFindSession* find_session_prototype) API_AVAILABLE(ios(16)) {
-  find_session_prototype_ = find_session_prototype;
-}
-
-id<CRWFindSession> FakeWebClient::CreateFindSessionForWebState(
-    web::WebState* web_state) const API_AVAILABLE(ios(16)) {
-  return find_session_prototype_ ? [find_session_prototype_ copy]
-                                 : [[CRWFakeFindSession alloc] init];
-}
-
-void FakeWebClient::StartTextSearchInWebState(web::WebState* web_state) {
-  text_search_started_ = true;
-}
-
-void FakeWebClient::StopTextSearchInWebState(web::WebState* web_state) {
-  text_search_started_ = false;
-}
-
-bool FakeWebClient::IsTextSearchStarted() const {
-  return text_search_started_;
 }
 
 }  // namespace web

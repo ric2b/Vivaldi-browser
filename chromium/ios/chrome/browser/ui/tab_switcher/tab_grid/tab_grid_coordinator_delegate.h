@@ -17,12 +17,9 @@ class Browser;
 @protocol TabGridCoordinatorDelegate
 
 // Informs the delegate the tab switcher that the given browser should be set to
-// active. If `dismissTabGrid` is YES, the tab grid itself should also be
-// dismissed. This should always be the case except when using the thumb strip,
-// where the tab grid is never dismissed
+// active.
 - (void)tabGrid:(TabGridCoordinator*)tabGrid
     shouldActivateBrowser:(Browser*)browser
-           dismissTabGrid:(BOOL)dismissTabGrid
              focusOmnibox:(BOOL)focusOmnibox;
 
 // Informs the delegate that the tab switcher is done and should be dismissed.
@@ -30,6 +27,11 @@ class Browser;
 
 // Asks the delegate for the page that should currently be active.
 - (TabGridPage)activePageForTabGrid:(TabGridCoordinator*)tabGrid;
+
+// Vivaldi
+- (void)didSelectLoginFromEmptyStateView;
+- (void)didSelectRegisterFromEmptyStateView;
+// End Vivaldi
 
 @end
 

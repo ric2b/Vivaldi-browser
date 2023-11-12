@@ -105,6 +105,9 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesEuiccClient {
         const dbus::ObjectPath& euicc_path,
         const dbus::ObjectPath& carrier_profile_path) = 0;
 
+    // Updates the SIM slot information cached by Shill to match Hermes' state.
+    virtual void UpdateShillDeviceSimSlotInfo() = 0;
+
     // Queues an error code that will be returned from a subsequent
     // method call.
     virtual void QueueHermesErrorStatus(HermesResponseStatus status) = 0;
@@ -115,6 +118,12 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesEuiccClient {
     // addition information about the installed profile on success.
     virtual void SetNextInstallProfileFromActivationCodeResult(
         HermesResponseStatus status) = 0;
+
+    // Sets the return for the next call to
+    // HermesEuiccClient::RefreshSmdxProfiles(). The caller is responsible for
+    // guaranteeing that fake profiles exist for each of the paths provided.
+    virtual void SetNextRefreshSmdxProfilesResult(
+        std::vector<dbus::ObjectPath> profiles) = 0;
 
     // Set delay for interactive methods.
     virtual void SetInteractiveDelay(base::TimeDelta delay) = 0;
@@ -283,7 +292,12 @@ class COMPONENT_EXPORT(HERMES_CLIENT) HermesEuiccClient {
   }
 
  private:
+  friend class HermesEuiccClientTest;
+  friend class HermesEuiccClientImpl;
+
   base::ObserverList<Observer>::Unchecked observers_;
+  static constexpr base::TimeDelta kInstallRetryDelay = base::Seconds(3);
+  static const int kMaxInstallAttempts = 4;
 };
 
 }  // namespace ash

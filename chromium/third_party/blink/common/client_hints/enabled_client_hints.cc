@@ -29,6 +29,12 @@ bool IsDisabledByFeature(const WebClientHintsType type) {
       if (!base::FeatureList::IsEnabled(features::kUserAgentClientHint))
         return true;
       break;
+    case WebClientHintsType::kUAFormFactor:
+      if (!base::FeatureList::IsEnabled(features::kUserAgentClientHint) ||
+          !base::FeatureList::IsEnabled(features::kClientHintsFormFactor)) {
+        return true;
+      }
+      break;
     case WebClientHintsType::kPrefersColorScheme:
       break;
     case WebClientHintsType::kViewportHeight:
@@ -81,6 +87,9 @@ bool IsDisabledByFeature(const WebClientHintsType type) {
       break;
     case WebClientHintsType::kPrefersReducedMotion:
       break;
+    case WebClientHintsType::kPrefersReducedTransparency:
+      return !base::FeatureList::IsEnabled(
+          features::kClientHintsPrefersReducedTransparency);
     default:
       break;
   }

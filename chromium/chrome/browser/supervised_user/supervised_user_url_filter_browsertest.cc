@@ -75,10 +75,10 @@ class SupervisedUserURLFilterTest : public MixinBasedInProcessBrowserTest {
     // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
     // disable this feature.
     feature_list_.InitWithFeatures(
-        {supervised_user::kEnableSupervisionOnDesktopAndIOS,
-         supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS,
+        {supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS,
          supervised_user::kSupervisedPrefsControlledBySupervisedStore},
         {features::kHttpsUpgrades});
+    supervision_mixin_.InitFeatures();
   }
   ~SupervisedUserURLFilterTest() override = default;
 
@@ -143,8 +143,8 @@ class SupervisedUserURLFilterTest : public MixinBasedInProcessBrowserTest {
       this,
       embedded_test_server(),
       {
-          .account_type =
-              supervised_user::SupervisionMixin::AccountType::kSupervised,
+          .sign_in_mode =
+              supervised_user::SupervisionMixin::SignInMode::kSupervised,
           .embedded_test_server_options =
               {.resolver_rules_map_host_list =
                    "*.example.com, *.new-example.com"},

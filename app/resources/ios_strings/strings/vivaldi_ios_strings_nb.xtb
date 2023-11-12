@@ -2,6 +2,25 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
 <translation id="1063263220330818888">Privat søk</translation>
+<translation id="1137850887415122856">For å låse dine privatfaner, sett opp Touch ID, Face ID eller en kode.</translation>
+<translation id="1310184829257917508">Spør om å åpne lenker fra andre apper i privatmodus</translation>
 <translation id="1512201558627495343">Ny privatfane</translation>
+<translation id="1786453623676543866">Start et søk i en ny Vivaldi-fane.</translation>
+<translation id="207677936531967364">Ny privatfaneside</translation>
+<translation id="3372807273343182542">Åpne nettadresser i Vivaldi i privatmodus</translation>
+<translation id="3473652525653758699">Nytt privatvindu</translation>
+<translation id="3501504415290398157">Bruk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> for å låse opp dine privatfaner.</translation>
+<translation id="3692650606013198282">Åpne i privatmodus</translation>
+<translation id="3709782636417497984">Åpne i ny privatfane</translation>
+<translation id="3981599532037327317">Åpne ${url} i privatmodus</translation>
+<translation id="4755216899422789286">Åpne nettadresser i Vivaldi</translation>
+<translation id="6233792867654386826">Åpner angitte nettadresser i Vivaldi.</translation>
 <translation id="6827597288286078054">Privat søk</translation>
+<translation id="7175743738896712454">Åpner angitte nettadresser i Vivaldi i privatmodus.</translation>
+<translation id="7307970171564921489">Lås opp privatfaner med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Åpne i privatmodus?</translation>
+<translation id="7549299604720382000">Ny privatfane</translation>
+<translation id="8326104954595890674">Ny privatfane</translation>
+<translation id="8763006697839582351">Åpne i Vivaldi i privatmodus</translation>
+<translation id="9060728682512999830">Søk med Vivaldi</translation>
 </translationbundle>

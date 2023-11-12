@@ -11,6 +11,7 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/ash/shimless_rma/diagnostics_app_profile_helper.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
 #include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
 
@@ -37,12 +38,19 @@ class ChromeShimlessRmaDelegate : public ShimlessRmaDelegate {
   void GenerateQrCode(const std::string& url,
                       base::OnceCallback<void(const std::string& qr_code_image)>
                           callback) override;
+  void PrepareDiagnosticsAppBrowserContext(
+      const base::FilePath& crx_path,
+      const base::FilePath& swbn_path,
+      PrepareDiagnosticsAppBrowserContextCallback callback) override;
 
   void SetQRCodeServiceForTesting(
       base::RepeatingCallback<
           void(qrcode_generator::mojom::GenerateQRCodeRequestPtr request,
                qrcode_generator::QRImageGenerator::ResponseCallback callback)>
           qrcode_service_override);
+
+  void SetDiagnosticsAppProfileHelperDelegateForTesting(
+      DiagnosticsAppProfileHelperDelegate* delegate);
 
  private:
   void OnQrCodeGenerated(
@@ -67,6 +75,11 @@ class ChromeShimlessRmaDelegate : public ShimlessRmaDelegate {
       qrcode_generator::mojom::GenerateQRCodeRequestPtr request,
       qrcode_generator::QRImageGenerator::ResponseCallback callback)>
       qrcode_service_override_;
+
+  DiagnosticsAppProfileHelperDelegate diagnostics_app_profile_helper_delegete_;
+  raw_ptr<DiagnosticsAppProfileHelperDelegate>
+      diagnostics_app_profile_helper_delegete_ptr_{
+          &diagnostics_app_profile_helper_delegete_};
 
   base::WeakPtrFactory<ChromeShimlessRmaDelegate> weak_ptr_factory_{this};
 };

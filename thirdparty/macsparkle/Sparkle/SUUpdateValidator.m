@@ -18,21 +18,14 @@
 
 #include "AppKitPrevention.h"
 
-@interface SUUpdateValidator ()
-
-@property (nonatomic, readonly) SUHost *host;
-@property (nonatomic) BOOL prevalidatedSignature;
-@property (strong, nonatomic, readonly) SUSignatures *signatures;
-@property (nonatomic, readonly) NSString *downloadPath;
-
-@end
-
 @implementation SUUpdateValidator
-
-@synthesize host = _host;
-@synthesize prevalidatedSignature = _prevalidatedSignature;
-@synthesize signatures = _signatures;
-@synthesize downloadPath = _downloadPath;
+{
+    SUHost *_host;
+    SUSignatures *_signatures;
+    NSString *_downloadPath;
+    
+    BOOL _prevalidatedSignature;
+}
 
 - (instancetype)initWithDownloadPath:(NSString *)downloadPath signatures:(SUSignatures *)signatures host:(SUHost *)host
 {
@@ -47,8 +40,8 @@
 
 - (BOOL)validateDownloadPathWithError:(NSError * __autoreleasing *)error
 {
-    SUPublicKeys *publicKeys = self.host.publicKeys;
-    SUSignatures *signatures = self.signatures;
+    SUPublicKeys *publicKeys = _host.publicKeys;
+    SUSignatures *signatures = _signatures;
 
     if (!publicKeys.hasAnyKeys) {
         if (error != NULL) {
@@ -56,12 +49,12 @@
         }
     } else {
         NSError *innerError = nil;
-        if ([SUSignatureVerifier validatePath:self.downloadPath withSignatures:signatures withPublicKeys:publicKeys error:&innerError]) {
-            self.prevalidatedSignature = YES;
+        if ([SUSignatureVerifier validatePath:_downloadPath withSignatures:signatures withPublicKeys:publicKeys error:&innerError]) {
+            _prevalidatedSignature = YES;
             return YES;
         }
         if (error != NULL) {
-            *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"(Ed)DSA signature validation before unarchiving failed for update %@", self.downloadPath], NSUnderlyingErrorKey: innerError }];
+            *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"(Ed)DSA signature validation before unarchiving failed for update %@", _downloadPath], NSUnderlyingErrorKey: innerError }];
         }
     }
     return NO;
@@ -69,15 +62,21 @@
 
 - (BOOL)validateWithUpdateDirectory:(NSString *)updateDirectory error:(NSError * __autoreleasing *)error
 {
-    SUSignatures *signatures = self.signatures;
-    SUPublicKeys *publicKeys = self.host.publicKeys;
-    NSString *downloadPath = self.downloadPath;
-    SUHost *host = self.host;
+    SUSignatures *signatures = _signatures;
+    NSString *downloadPath = _downloadPath;
+    SUHost *host = _host;
 
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
     BOOL isPackage = NO;
+#endif
 
     // install source could point to a new bundle or a package
-    NSString *installSource = [SUInstaller installSourcePathInUpdateFolder:updateDirectory forHost:host isPackage:&isPackage isGuided:NULL];
+    NSString *installSource = [SUInstaller installSourcePathInUpdateFolder:updateDirectory forHost:host
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
+                                                                 isPackage:&isPackage isGuided:NULL
+#endif
+    ];
+    
     if (installSource == nil) {
         if (error != NULL) {
             *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUValidationError userInfo:@{ NSLocalizedDescriptionKey: @"No suitable install is found in the update. The update will be rejected." }];
@@ -87,12 +86,14 @@
 
     NSURL *installSourceURL = [NSURL fileURLWithPath:installSource];
 
-    if (!self.prevalidatedSignature) {
+    if (!_prevalidatedSignature) {
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
         // Check to see if we have a package or bundle to validate
         if (isPackage) {
             // If we get here, then the appcast installation type was lying to us.. This error will be caught later when starting the installer.
             // For package type updates, all we do is check if the EdDSA signature is valid
             NSError *innerError = nil;
+            SUPublicKeys *publicKeys = host.publicKeys;
             BOOL validationCheckSuccess = [SUSignatureVerifier validatePath:downloadPath withSignatures:signatures withPublicKeys:publicKeys error:&innerError];
             if (!validationCheckSuccess) {
                 if (error != NULL) {
@@ -100,17 +101,25 @@
                 }
             }
             return validationCheckSuccess;
-        } else {
+        } else
+#endif
+        {
             // For application bundle updates, we check both the EdDSA and Apple code signing signatures
             return [self validateUpdateForHost:host downloadedToPath:downloadPath newBundleURL:installSourceURL signatures:signatures error:error];
         }
-    } else if (isPackage) {
+    }
+#if SPARKLE_BUILD_PACKAGE_SUPPORT
+    else if (isPackage) {
         // We already prevalidated the package and nothing else needs to be done
         return YES;
-    } else {
+    }
+#endif
+    else
+    {
         // Because we already validated the EdDSA signature, this is just a consistency check to see
         // if the developer signed their application properly with their Apple ID
         // Currently, this case only gets hit for binary delta updates
+        
         NSError *innerError = nil;
         if ([SUCodeSigningVerifier bundleAtURLIsCodeSigned:installSourceURL] && ![SUCodeSigningVerifier codeSignatureIsValidAtBundleURL:installSourceURL error:&innerError]) {
             if (error != NULL) {
@@ -132,7 +141,7 @@
  *  * old and new Code Signing identity are the same and valid
  *
  */
-- (BOOL)validateUpdateForHost:(SUHost *)host downloadedToPath:(NSString *)downloadedPath newBundleURL:(NSURL *)newBundleURL signatures:(SUSignatures *)signatures error:(NSError * __autoreleasing *)error
+- (BOOL)validateUpdateForHost:(SUHost *)host downloadedToPath:(NSString *)downloadedPath newBundleURL:(NSURL *)newBundleURL signatures:(SUSignatures *)signatures error:(NSError * __autoreleasing *)error SPU_OBJC_DIRECT
 {
     NSBundle *newBundle = [NSBundle bundleWithURL:newBundleURL];
     if (newBundle == nil) {
@@ -150,6 +159,7 @@
 
     SUHost *newHost = [[SUHost alloc] initWithBundle:newBundle];
     SUPublicKeys *newPublicKeys = newHost.publicKeys;
+    
     BOOL oldHasLegacyDSAKey = publicKeys.dsaPubKeyStatus != SUSigningInputStatusAbsent;
     BOOL oldHasEdDSAKey = publicKeys.ed25519PubKeyStatus != SUSigningInputStatusAbsent;
     BOOL oldHasAnyDSAKey = oldHasLegacyDSAKey || oldHasEdDSAKey;
@@ -180,7 +190,7 @@
 
     NSError *codeSignedError = nil;
     if (hostIsCodeSigned) {
-        passedCodeSigning = [SUCodeSigningVerifier codeSignatureAtBundleURL:host.bundle.bundleURL matchesSignatureAtBundleURL:newHost.bundle.bundleURL error:&codeSignedError];
+        passedCodeSigning = [SUCodeSigningVerifier codeSignatureIsValidAtBundleURL:newHost.bundle.bundleURL andMatchesSignatureAtBundleURL:host.bundle.bundleURL error:&codeSignedError];
     }
     // End of security-critical part
 
@@ -196,8 +206,9 @@
         }
     }
 
+    // If the new update is code signed but it's not validly code signed, we reject it
     NSError *innerError = nil;
-    if (passedDSACheck && updateIsCodeSigned && ![SUCodeSigningVerifier codeSignatureIsValidAtBundleURL:newHost.bundle.bundleURL error:&innerError]) {
+    if (passedDSACheck && updateIsCodeSigned && !passedCodeSigning && ![SUCodeSigningVerifier codeSignatureIsValidAtBundleURL:newHost.bundle.bundleURL error:&innerError]) {
         if (error != NULL) {
             *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUValidationError userInfo:@{ NSLocalizedDescriptionKey: @"The update archive has a valid (Ed)DSA signature, but the app is also signed with Code Signing, which is corrupted. The update will be rejected.", NSUnderlyingErrorKey: innerError }];
         }

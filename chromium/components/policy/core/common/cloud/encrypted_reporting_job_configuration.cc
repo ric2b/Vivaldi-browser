@@ -24,7 +24,9 @@ constexpr char kSequenceInformationKey[] = "sequenceInformation";
 constexpr char kSequenceId[] = "sequencingId";
 constexpr char kGenerationId[] = "generationId";
 constexpr char kPriority[] = "priority";
+constexpr char kAttachConfigurationFileKey[] = "attachConfigurationFile";
 constexpr char kAttachEncryptionSettingsKey[] = "attachEncryptionSettings";
+constexpr char kSourceKey[] = "source";
 constexpr char kDeviceKey[] = "device";
 constexpr char kBrowserKey[] = "browser";
 constexpr char kRequestId[] = "requestId";
@@ -148,8 +150,9 @@ EncryptedReportingJobConfiguration::EncryptedReportingJobConfiguration(
                                     factory,
                                     std::move(auth_data),
                                     server_url,
-                                    std::move(complete_cb)) {
-  if (cloud_policy_client) {
+                                    std::move(complete_cb)),
+      is_device_managed_(cloud_policy_client != nullptr) {
+  if (is_device_managed_) {
     // Payload for managed device
     InitializePayloadWithDeviceInfo(cloud_policy_client->dm_token(),
                                     cloud_policy_client->client_id());
@@ -311,14 +314,22 @@ void EncryptedReportingJobConfiguration::OnURLLoadComplete(
 }
 
 std::string EncryptedReportingJobConfiguration::GetUmaString() const {
-  return "Browser.ERP.";
+  if (is_device_managed_) {
+    return "Browser.ERP.Managed";
+  }
+  return "Browser.ERP.Unmanaged";
 }
 
 std::set<std::string>
 EncryptedReportingJobConfiguration::GetTopLevelKeyAllowList() {
   static std::set<std::string> kTopLevelKeyAllowList{
-      kEncryptedRecordListKey, kAttachEncryptionSettingsKey, kDeviceKey,
-      kBrowserKey, kRequestId};
+      kAttachConfigurationFileKey,
+      kAttachEncryptionSettingsKey,
+      kBrowserKey,
+      kDeviceKey,
+      kEncryptedRecordListKey,
+      kRequestId,
+      kSourceKey};
   return kTopLevelKeyAllowList;
 }
 

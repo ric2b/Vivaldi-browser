@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/whats_new/data_source/whats_new_data_source.h"
 
 #import "base/apple/bundle_locations.h"
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/notreached.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -15,14 +15,9 @@
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
-#import "ios/chrome/grit/ios_google_chrome_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -48,7 +43,6 @@ NSString* const kDictionaryHeroBannerImageKey = @"HeroBannerImageName";
 NSString* const kDictionaryIconImageKey = @"IconImageName";
 NSString* const kDictionaryBackgroundColorKey = @"IconBackgroundColor";
 NSString* const kDictionaryInstructionsKey = @"InstructionSteps";
-NSString* const kDictionaryHasPrimaryActionKey = @"HasPrimaryAction";
 NSString* const kDictionaryPrimaryActionKey = @"PrimaryActionTitle";
 NSString* const kDictionaryLearnMoreURLKey = @"LearnMoreUrlString";
 
@@ -86,7 +80,7 @@ NSArray<NSString*>* GenerateLocalizedInstructions(NSArray* instructions) {
   NSMutableArray<NSString*>* localized_instructions =
       [[NSMutableArray alloc] init];
   for (NSObject* instruction in instructions) {
-    NSNumber* instruction_id = base::mac::ObjCCast<NSNumber>(instruction);
+    NSNumber* instruction_id = base::apple::ObjCCast<NSNumber>(instruction);
     if (!instruction_id) {
       return nil;
     }
@@ -120,7 +114,7 @@ NSArray<WhatsNewItem*>* WhatsNewItemsFromFileAndKey(NSString* path,
   }
 
   for (NSObject* entry_key in keys) {
-    NSDictionary* entry = base::mac::ObjCCast<NSDictionary>(entry_key);
+    NSDictionary* entry = base::apple::ObjCCast<NSDictionary>(entry_key);
     if (!entry) {
       continue;
     }
@@ -165,7 +159,7 @@ NSArray<WhatsNewItem*>* WhatsNewChromeTipEntries(NSString* path) {
 WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
   // Load the entry type.
   NSNumber* type_value =
-      base::mac::ObjCCast<NSNumber>(entry[kDictionaryTypeKey]);
+      base::apple::ObjCCast<NSNumber>(entry[kDictionaryTypeKey]);
   if (!type_value) {
     return nil;
   }
@@ -179,7 +173,7 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
   whats_new_item.type = type;
 
   // Load the entry title.
-  NSNumber* title = base::mac::ObjCCast<NSNumber>(entry[kDictionaryTitleKey]);
+  NSNumber* title = base::apple::ObjCCast<NSNumber>(entry[kDictionaryTitleKey]);
   if (!title) {
     return nil;
   }
@@ -187,7 +181,7 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
 
   // Load the entry subtitle.
   NSNumber* subtitle =
-      base::mac::ObjCCast<NSNumber>(entry[kDictionarySubtitleKey]);
+      base::apple::ObjCCast<NSNumber>(entry[kDictionarySubtitleKey]);
   if (!subtitle) {
     return nil;
   }
@@ -203,8 +197,10 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
             : GenerateImage(false, hero_banner_image, false);
 
     // Load the entry banner image.
+    NSString* banner_image = entry[kDictionaryBannerImageKey];
     whats_new_item.bannerImage =
-        GenerateImage(false, entry[kDictionaryBannerImageKey], false);
+        [banner_image length] == 0 ? nil
+                                   : GenerateImage(false, banner_image, false);
   }
 
   // Load the entry icon.
@@ -233,13 +229,9 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
     whats_new_item.instructionSteps = instructions;
   }
 
-  // Load the entry primary action bool.
-  whats_new_item.hasPrimaryAction =
-      [entry[kDictionaryHasPrimaryActionKey] boolValue];
-
   // Load the entry primary action title.
   NSNumber* primary_action_title =
-      base::mac::ObjCCast<NSNumber>(entry[kDictionaryPrimaryActionKey]);
+      base::apple::ObjCCast<NSNumber>(entry[kDictionaryPrimaryActionKey]);
   if (!primary_action_title) {
     whats_new_item.primaryActionTitle = nil;
   } else {
@@ -267,7 +259,7 @@ WhatsNewItem* ConstructWhatsNewItem(NSDictionary* entry) {
         [NSMutableDictionary dictionaryWithCapacity:screenshot_texts.count];
     for (id key in screenshot_texts) {
       NSNumber* val =
-          base::mac::ObjCCast<NSNumber>([screenshot_texts objectForKey:key]);
+          base::apple::ObjCCast<NSNumber>([screenshot_texts objectForKey:key]);
       [screenshot_text_provider setValue:l10n_util::GetNSString([val intValue])
                                   forKey:key];
     }

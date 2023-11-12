@@ -32,6 +32,7 @@ using AddressComponentTestValues = std::vector<AddressComponentTestValue>;
 struct AddressLineParsingTestCase {
   std::string country_code;
   std::string street_address;
+  std::string street_location;
   std::string street_name;
   std::string house_number;
   std::string floor;
@@ -45,6 +46,7 @@ std::ostream& operator<<(std::ostream& out,
                          const AddressLineParsingTestCase& test_case) {
   out << "Country: " << test_case.country_code << std::endl;
   out << "Street address: " << test_case.street_address << std::endl;
+  out << "Street location: " << test_case.street_location << std::endl;
   out << "Street name: " << test_case.street_name << std::endl;
   out << "House number: " << test_case.house_number << std::endl;
   out << "Floor: " << test_case.floor << std::endl;
@@ -54,6 +56,20 @@ std::ostream& operator<<(std::ostream& out,
   out << "Admin level 2: " << test_case.admin_level_2 << std::endl;
   return out;
 }
+
+class AutofillStructuredAddress : public testing::Test {
+ public:
+  AutofillStructuredAddress() {
+    features_.InitWithFeatures(
+        {features::kAutofillEnableSupportForLandmark,
+         features::kAutofillEnableSupportForBetweenStreets,
+         features::kAutofillEnableSupportForAdminLevel2},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
 
 void TestAddressLineParsing(const AddressLineParsingTestCase& test_case) {
   AddressNode address(nullptr);
@@ -73,6 +89,9 @@ void TestAddressLineParsing(const AddressLineParsingTestCase& test_case) {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
        .value = test_case.street_address,
        .status = VerificationStatus::kObserved},
+      {.type = ADDRESS_HOME_STREET_LOCATION,
+       .value = test_case.street_location,
+       .status = VerificationStatus::kParsed},
       {.type = ADDRESS_HOME_STREET_NAME,
        .value = test_case.street_name,
        .status = VerificationStatus::kParsed},
@@ -127,6 +146,9 @@ void TestAddressLineFormatting(const AddressLineParsingTestCase& test_case) {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
        .value = test_case.street_address,
        .status = VerificationStatus::kFormatted},
+      {.type = ADDRESS_HOME_STREET_LOCATION,
+       .value = test_case.street_location,
+       .status = VerificationStatus::kFormatted},
       {.type = ADDRESS_HOME_STREET_NAME,
        .value = test_case.street_name,
        .status = VerificationStatus::kObserved},
@@ -155,77 +177,94 @@ using AddressComponentTestValues = std::vector<AddressComponentTestValue>;
 
 namespace {
 
-TEST(AutofillStructuredAddress, ParseStreetAddress) {
+TEST_F(AutofillStructuredAddress, ParseStreetAddress) {
   std::vector<AddressLineParsingTestCase> test_cases = {
       {.street_address = "Erika-Mann-Str. 33",
+       .street_location = "Erika-Mann-Str. 33",
        .street_name = "Erika-Mann-Str.",
        .house_number = "33"},
       {.street_address = "Implerstr. 73a",
+       .street_location = "Implerstr. 73a",
        .street_name = "Implerstr.",
        .house_number = "73a"},
       {.street_address = "Implerstr. 73a Obergeschoss 2 Wohnung 3",
+       .street_location = "Implerstr. 73a ",
        .street_name = "Implerstr.",
        .house_number = "73a",
        .floor = "2",
        .apartment = "3"},
       {.street_address = "Implerstr. 73a OG 2",
+       .street_location = "Implerstr. 73a ",
        .street_name = "Implerstr.",
        .house_number = "73a",
        .floor = "2"},
       {.street_address = "Implerstr. 73a 2. OG",
+       .street_location = "Implerstr. 73a ",
        .street_name = "Implerstr.",
        .house_number = "73a",
        .floor = "2"},
       {.street_address = "Implerstr. no 73a",
+       .street_location = "Implerstr. no 73a",
        .street_name = "Implerstr.",
        .house_number = "73a"},
       {.street_address = "Implerstr. °73a",
+       .street_location = "Implerstr. °73a",
        .street_name = "Implerstr.",
        .house_number = "73a"},
       {.street_address = "Implerstr. number 73a",
+       .street_location = "Implerstr. number 73a",
        .street_name = "Implerstr.",
        .house_number = "73a"},
       {.street_address = "1600 Amphitheatre Parkway",
+       .street_location = "1600 Amphitheatre Parkway",
        .street_name = "Amphitheatre Parkway",
        .house_number = "1600"},
       {.street_address = "1600 Amphitheatre Parkway, Floor 6 Apt 12",
+       .street_location = "1600 Amphitheatre Parkway, ",
        .street_name = "Amphitheatre Parkway",
        .house_number = "1600",
        .floor = "6",
        .apartment = "12"},
       {.street_address = "Av. Paulista, 1098, 1º andar, apto. 101",
+       .street_location = "Av. Paulista, 1098, ",
        .street_name = "Av. Paulista",
        .house_number = "1098",
        .floor = "1",
        .apartment = "101"},
       // Examples for Mexico.
       {.street_address = "Street Name 12 - Piso 13 - 14",
+       .street_location = "Street Name 12 ",
        .street_name = "Street Name",
        .house_number = "12",
        .floor = "13",
        .apartment = "14"},
       {.street_address = "Street Name 12 - 14",
+       .street_location = "Street Name 12 ",
        .street_name = "Street Name",
        .house_number = "12",
        .floor = "",
        .apartment = "14"},
       {.street_address = "Street Name 12 - Piso 13",
+       .street_location = "Street Name 12 ",
        .street_name = "Street Name",
        .house_number = "12",
        .floor = "13",
        .apartment = ""},
       // Examples for Spain.
       {.street_address = "Street Name 1, 2º, 3ª",
+       .street_location = "Street Name 1, ",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "2",
        .apartment = "3"},
       {.street_address = "Street Name 1, 2º",
+       .street_location = "Street Name 1, ",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "2",
        .apartment = ""},
       {.street_address = "Street Name 1, 3ª",
+       .street_location = "Street Name 1, ",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "",
@@ -236,25 +275,30 @@ TEST(AutofillStructuredAddress, ParseStreetAddress) {
     TestAddressLineParsing(test_case);
 }
 
-TEST(AutofillStructuredAddress, ParseMultiLineStreetAddress) {
+TEST_F(AutofillStructuredAddress, ParseMultiLineStreetAddress) {
   std::vector<AddressLineParsingTestCase> test_cases = {
       {.street_address = "Implerstr. 73a\nObergeschoss 2 Wohnung 3",
+       .street_location = "Implerstr. 73a\n",
        .street_name = "Implerstr.",
        .house_number = "73a",
        .floor = "2",
        .apartment = "3"},
       {.street_address = "Implerstr. 73a\nSome Unparsable Text",
+       .street_location = "Implerstr. 73a",
        .street_name = "Implerstr.",
        .house_number = "73a"},
       {.street_address = "1600 Amphitheatre Parkway\nFloor 6 Apt 12",
+       .street_location = "1600 Amphitheatre Parkway\n",
        .street_name = "Amphitheatre Parkway",
        .house_number = "1600",
        .floor = "6",
        .apartment = "12"},
       {.street_address = "1600 Amphitheatre Parkway\nSome UnparsableText",
+       .street_location = "1600 Amphitheatre Parkway",
        .street_name = "Amphitheatre Parkway",
        .house_number = "1600"},
       {.street_address = "Av. Paulista, 1098\n1º andar, apto. 101",
+       .street_location = "Av. Paulista, 1098\n",
        .street_name = "Av. Paulista",
        .house_number = "1098",
        .floor = "1",
@@ -264,13 +308,14 @@ TEST(AutofillStructuredAddress, ParseMultiLineStreetAddress) {
     TestAddressLineParsing(test_case);
 }
 
-TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
+TEST_F(AutofillStructuredAddress, TestStreetAddressFormatting) {
   AddressNode address;
 
   std::vector<AddressLineParsingTestCase> test_cases = {
       {
           .country_code = "BR",
           .street_address = "Av. Brigadeiro Faria Lima, 3477, 1º andar, apto 2",
+          .street_location = "Av. Brigadeiro Faria Lima 3477",
           .street_name = "Av. Brigadeiro Faria Lima",
           .house_number = "3477",
           .floor = "1",
@@ -278,15 +323,18 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
       },
       {.country_code = "DE",
        .street_address = "Erika-Mann-Str. 33",
+       .street_location = "Erika-Mann-Str. 33",
        .street_name = "Erika-Mann-Str.",
        .house_number = "33"},
       {.country_code = "DE",
        .street_address = "Erika-Mann-Str. 33, 2. Stock, 12. Wohnung",
+       .street_location = "Erika-Mann-Str. 33",
        .street_name = "Erika-Mann-Str.",
        .house_number = "33",
        .floor = "2",
        .apartment = "12"},
       {.street_address = "1600 Amphitheatre Parkway FL 6 APT 12",
+       .street_location = "Amphitheatre Parkway 1600",
        .street_name = "Amphitheatre Parkway",
        .house_number = "1600",
        .floor = "6",
@@ -294,6 +342,7 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
       // Examples for Mexico.
       {.country_code = "MX",
        .street_address = "StreetName 12 - Piso 13 - 14",
+       .street_location = "StreetName 12",
        .street_name = "StreetName",
        .house_number = "12",
        .floor = "13",
@@ -303,6 +352,7 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
        .admin_level_2 = "Guanajuato"},
       {.country_code = "MX",
        .street_address = "StreetName 12 - 14",
+       .street_location = "StreetName 12",
        .street_name = "StreetName",
        .house_number = "12",
        .floor = "",
@@ -312,6 +362,7 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
        .admin_level_2 = "Oaxaca"},
       {.country_code = "MX",
        .street_address = "StreetName 12 - Piso 13",
+       .street_location = "StreetName 12",
        .street_name = "StreetName",
        .house_number = "12",
        .floor = "13",
@@ -322,18 +373,21 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
       // Examples for Spain.
       {.country_code = "ES",
        .street_address = "Street Name 1, 3ª",
+       .street_location = "Street Name 1",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "",
        .apartment = "3"},
       {.country_code = "ES",
        .street_address = "Street Name 1, 2º",
+       .street_location = "Street Name 1",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "2",
        .apartment = ""},
       {.country_code = "ES",
        .street_address = "Street Name 1, 2º, 3ª",
+       .street_location = "Street Name 1",
        .street_name = "Street Name",
        .house_number = "1",
        .floor = "2",
@@ -345,7 +399,7 @@ TEST(AutofillStructuredAddress, TestStreetAddressFormatting) {
 }
 
 // Test setting the first address line.
-TEST(AutofillStructuredAddress, TestSettingsAddressLine1) {
+TEST_F(AutofillStructuredAddress, TestSettingsAddressLine1) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_LINE1,
@@ -366,7 +420,7 @@ TEST(AutofillStructuredAddress, TestSettingsAddressLine1) {
 }
 
 // Test settings all three address lines.
-TEST(AutofillStructuredAddress, TestSettingsAddressLines) {
+TEST_F(AutofillStructuredAddress, TestSettingsAddressLines) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_LINE1,
@@ -399,7 +453,7 @@ TEST(AutofillStructuredAddress, TestSettingsAddressLines) {
 }
 
 // Test setting the home street address and retrieving the address lines.
-TEST(AutofillStructuredAddress, TestGettingAddressLines) {
+TEST_F(AutofillStructuredAddress, TestGettingAddressLines) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
@@ -426,7 +480,8 @@ TEST(AutofillStructuredAddress, TestGettingAddressLines) {
 }
 
 // Test setting the home street address and retrieving the address lines.
-TEST(AutofillStructuredAddress, TestGettingAddressLines_JoinedAdditionalLines) {
+TEST_F(AutofillStructuredAddress,
+       TestGettingAddressLines_JoinedAdditionalLines) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
@@ -454,7 +509,7 @@ TEST(AutofillStructuredAddress, TestGettingAddressLines_JoinedAdditionalLines) {
 
 // Tests that a structured address gets successfully migrated and subsequently
 // completed.
-TEST(AutofillStructuredAddress, TestMigrationAndFinalization) {
+TEST_F(AutofillStructuredAddress, TestMigrationAndFinalization) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
@@ -465,12 +520,6 @@ TEST(AutofillStructuredAddress, TestMigrationAndFinalization) {
        .status = VerificationStatus::kNoStatus},
       {.type = ADDRESS_HOME_STATE,
        .value = "CA",
-       .status = VerificationStatus::kNoStatus},
-      {.type = ADDRESS_HOME_LANDMARK,
-       .value = "Red tree",
-       .status = VerificationStatus::kNoStatus},
-      {.type = ADDRESS_HOME_BETWEEN_STREETS,
-       .value = "Rosario y Alfonso",
        .status = VerificationStatus::kNoStatus}};
 
   SetTestValues(&address, test_values, /*finalize=*/false);
@@ -488,12 +537,6 @@ TEST(AutofillStructuredAddress, TestMigrationAndFinalization) {
        .status = VerificationStatus::kObserved},
       {.type = ADDRESS_HOME_STATE,
        .value = "CA",
-       .status = VerificationStatus::kObserved},
-      {.type = ADDRESS_HOME_LANDMARK,
-       .value = "Red tree",
-       .status = VerificationStatus::kObserved},
-      {.type = ADDRESS_HOME_BETWEEN_STREETS,
-       .value = "Rosario y Alfonso",
        .status = VerificationStatus::kObserved},
       {.type = ADDRESS_HOME_ADDRESS,
        .value = "",
@@ -518,14 +561,8 @@ TEST(AutofillStructuredAddress, TestMigrationAndFinalization) {
       {.type = ADDRESS_HOME_STATE,
        .value = "CA",
        .status = VerificationStatus::kObserved},
-      {.type = ADDRESS_HOME_LANDMARK,
-       .value = "Red tree",
-       .status = VerificationStatus::kObserved},
-      {.type = ADDRESS_HOME_BETWEEN_STREETS,
-       .value = "Rosario y Alfonso",
-       .status = VerificationStatus::kObserved},
       {.type = ADDRESS_HOME_ADDRESS,
-       .value = "123 Street name CA US Rosario y Alfonso Red tree",
+       .value = "123 Street name CA US",
        .status = VerificationStatus::kFormatted},
       {.type = ADDRESS_HOME_CITY,
        .value = "",
@@ -543,7 +580,8 @@ TEST(AutofillStructuredAddress, TestMigrationAndFinalization) {
 
 // Tests that the migration does not happen of the root node
 // (ADDRESS_HOME_ADDRESS) already has a verification status.
-TEST(AutofillStructuredAddress, TestMigrationAndFinalization_AlreadyMigrated) {
+TEST_F(AutofillStructuredAddress,
+       TestMigrationAndFinalization_AlreadyMigrated) {
   AddressNode address;
   AddressComponentTestValues test_values = {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
@@ -570,8 +608,8 @@ TEST(AutofillStructuredAddress, TestMigrationAndFinalization_AlreadyMigrated) {
 }
 
 // Tests that a valid address structure is not wiped.
-TEST(AutofillStructuredAddress,
-     TestWipingAnInvalidSubstructure_ValidStructure) {
+TEST_F(AutofillStructuredAddress,
+       TestWipingAnInvalidSubstructure_ValidStructure) {
   AddressNode address;
   AddressComponentTestValues address_with_valid_structure = {
       // This structure is valid because all structured components are contained
@@ -594,13 +632,16 @@ TEST(AutofillStructuredAddress,
 }
 
 // Tests that an invalid address structure is wiped.
-TEST(AutofillStructuredAddress,
-     TestWipingAnInvalidSubstructure_InValidStructure) {
+TEST_F(AutofillStructuredAddress,
+       TestWipingAnInvalidSubstructure_InValidStructure) {
   AddressNode address;
   AddressComponentTestValues address_with_valid_structure = {
       {.type = ADDRESS_HOME_STREET_ADDRESS,
        .value = "Some other name",
        .status = VerificationStatus::kObserved},
+      {.type = ADDRESS_HOME_STREET_LOCATION,
+       .value = "Street name 123",
+       .status = VerificationStatus::kParsed},
       {.type = ADDRESS_HOME_STREET_NAME,
        .value = "Street name",
        .status = VerificationStatus::kParsed},
@@ -631,7 +672,7 @@ TEST(AutofillStructuredAddress,
 
 // Test that the correct common country between structured addresses is
 // computed.
-TEST(AutofillStructuredAddress, TestGetCommonCountry) {
+TEST_F(AutofillStructuredAddress, TestGetCommonCountry) {
   CountryCodeNode country1(nullptr);
   CountryCodeNode country2(nullptr);
 
@@ -656,7 +697,7 @@ TEST(AutofillStructuredAddress, TestGetCommonCountry) {
 }
 
 // Tests retrieving a value for comparison for a field type.
-TEST(AutofillStructuredAddress, TestGetValueForComparisonForType) {
+TEST_F(AutofillStructuredAddress, TestGetValueForComparisonForType) {
   CountryCodeNode country_code(nullptr);
   country_code.SetValue(u"US", VerificationStatus::kObserved);
   StreetAddressNode street_address(&country_code);
@@ -844,9 +885,6 @@ class MergeStatesWithCanonicalNamesTest
           MergeStatesWithCanonicalNamesTestCase> {
  private:
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(
-        autofill::features::kAutofillUseAlternativeStateNameMap);
-
     AlternativeStateNameMap::GetInstance()
         ->ClearAlternativeStateNameMapForTesting();
 
@@ -861,8 +899,6 @@ class MergeStatesWithCanonicalNamesTest
           .abbreviations = {"OS"},
           .alternative_names = {""}}});
   }
-
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // Test that the correct country for merging structured addresses is computed.

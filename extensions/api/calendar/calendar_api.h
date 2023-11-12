@@ -566,10 +566,28 @@ class CalendarGetAllAccountsFunction : public CalendarFunctionWithCallback {
   void GetAllAccountsComplete(calendar::AccountRows results);
 };
 
+class CalendarCreateEventTemplateFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.createEventTemplate",
+                             CALENDAR_CREATE_EVENT_TEMPLATE)
+  CalendarCreateEventTemplateFunction() = default;
+
+ private:
+  ~CalendarCreateEventTemplateFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the calendar function to provide results.
+  void CreateEventTemplateComplete(calendar::EventTemplateResultCB result);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+};
+
 class CalendarGetAllEventTemplatesFunction
     : public CalendarFunctionWithCallback {
   DECLARE_EXTENSION_FUNCTION("calendar.getAllEventTemplates",
-                             CALENDAR_GETALLEVENT_TEMPLATES)
+                             CALENDAR_GETALL_EVENT_TEMPLATES)
  public:
   CalendarGetAllEventTemplatesFunction() = default;
 
@@ -580,7 +598,39 @@ class CalendarGetAllEventTemplatesFunction
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllEventTemplatesComplete(std::vector<calendar::EventRow> results);
+  void GetAllEventTemplatesComplete(calendar::EventTemplateRows results);
+};
+
+class CalendarUpdateEventTemplateFunction
+    : public CalendarFunctionWithCallback {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.updateEventTemplate",
+                             CALENDAR_UPDATE_EVENT_TEMPLATE)
+  CalendarUpdateEventTemplateFunction() = default;
+
+ private:
+  ~CalendarUpdateEventTemplateFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void UpdateEventTemplateComplete(calendar::EventTemplateResultCB results);
+};
+
+class CalendarDeleteEventTemplateFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.deleteEventTemplate",
+                             CALENDAR_DELETE_EVENT_TEMPLATE)
+  CalendarDeleteEventTemplateFunction() = default;
+
+ private:
+  ~CalendarDeleteEventTemplateFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void DeleteEventTemplateComplete(bool result);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
 };
 
 }  // namespace extensions

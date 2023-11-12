@@ -5,6 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#import "base/strings/sys_string_conversions.h"
 #import "chromium/base/containers/stack.h"
 #import "components/bookmarks/browser/base_bookmark_model_observer.h"
 #import "components/bookmarks/browser/bookmark_model_observer.h"
@@ -16,21 +17,26 @@
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
-#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
+#import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_url_view_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
-#import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_container_cell.h"
 #import "ios/ui/ntp/top_menu/vivaldi_ntp_top_menu.h"
@@ -42,15 +48,16 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller.h"
 #import "ios/ui/ntp/vivaldi_start_page_prefs.h"
+#import "ios/ui/thumbnail/vivaldi_thumbnail_service.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/web/public/web_state_observer_bridge.h"
+#import "ios/web/public/web_state.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+using bookmarks::BookmarkModel;
 
 // Namespace
 namespace {
@@ -71,9 +78,12 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                                         VivaldiSpeedDialContainerDelegate,
                                   VivaldiBookmarkAddEditControllerDelegate,
                                               BookmarkModelBridgeObserver,
-                                                    SpeedDialHomeConsumer> {
+                                                    SpeedDialHomeConsumer,
+                                                      CRWWebStateObserver> {
   // Bridge to register for bookmark changes.
   std::unique_ptr<BookmarkModelBridge> _bridge;
+  // Bridges C++ WebStateObserver methods to this new tab page coordinator.
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
 }
 // Collection view that holds the children of speed dial folder.
 @property (weak, nonatomic) UICollectionView *collectionView;
@@ -107,6 +117,10 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   VivaldiSpeedDialSharedState* speedDialSharedState;
 // The user's browser state model used.
 @property(nonatomic, assign) ChromeBrowserState* browserState;
+// The Webstate associated with this coordinator.
+@property(nonatomic, assign) web::WebState* webState;
+// Thumbnail service to download and update SD item thumbnail if needed
+@property(nonatomic, strong) VivaldiThumbnailService* vivaldiThumbnailService;
 // The mediator that provides data for this view controller.
 @property(nonatomic, strong) VivaldiSpeedDialHomeMediator* mediator;
 
@@ -114,16 +128,17 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @property (strong, nonatomic) NSMutableArray *speedDialMenuItems;
 // Array to hold the speed dial folders children
 @property (strong, nonatomic) NSMutableArray *speedDialChildItems;
+// Array to hold the sort button context menu options
+@property (strong, nonatomic) NSMutableArray *speedDialSortActions;
+// Speed dial item to observe to download and update thumbnail.
+@property(nonatomic, assign) VivaldiSpeedDialItem* itemToObserve;
 // A boolean to keep track when the scrolling is taking place due to tap in the
-// top menu item. There are two types of scroll even. One happens when user
+// top menu item. There are two types of scroll event. One happens when user
 // swipes the collection view left or right by pan/swipe gesture. The other one
 // is when taps on the menu item.
 @property (assign, nonatomic) BOOL scrollFromMenuTap;
 // Height constraint of the top menu container
 @property (assign, nonatomic) NSLayoutConstraint* menuContainerHeight;
-
-// Array to hold the sort button context menu options
-@property (strong, nonatomic) NSMutableArray *speedDialSortActions;
 
 // Sort button context menu options
 @property(nonatomic, strong) UIAction* manualSortAction;
@@ -167,6 +182,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
         IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
     _bookmarks = ios::LocalOrSyncableBookmarkModelFactory::
                       GetForBrowserState(_browserState);
+    _vivaldiThumbnailService = [VivaldiThumbnailService new];
     _bridge.reset(new BookmarkModelBridge(self, _bookmarks));
   }
   return self;
@@ -177,6 +193,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   _bookmarkFolderAddEditorController.delegate = nil;
   _bookmarkURLAddEditorController.delegate = nil;
   _topScrollMenu.delegate = nil;
+  _webState = nullptr;
+  _webStateObserverBridge = nullptr;
+  _vivaldiThumbnailService = nullptr;
   self.mediator.consumer = nil;
   [self.mediator disconnect];
 }
@@ -679,6 +698,81 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                                            animated:YES];
 }
 
+- (void)didTapSpeedDialWithItem:(VivaldiSpeedDialItem*)item
+                captureSnapshot:(BOOL)captureSnapshot {
+
+  if (captureSnapshot) {
+    [self stopObservingWebState];
+
+    _itemToObserve = item;
+
+    // Observe the active web state
+    _webState = _browser->GetWebStateList()->GetActiveWebState();
+    _webStateObserverBridge =
+        std::make_unique<web::WebStateObserverBridge>(self);
+    _webState->AddObserver(_webStateObserverBridge.get());
+  }
+
+  // Resign the edit mode of omnibox
+  id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), OmniboxCommands);
+  [omniboxCommandHandler cancelOmniboxEdit];
+
+  // Go to the website
+  UrlLoadParams params = UrlLoadParams::InCurrentTab(item.url);
+  params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+}
+
+- (void)stopObservingWebState {
+  if (_webState && _webStateObserverBridge) {
+    _webState->RemoveObserver(_webStateObserverBridge.get());
+    _webStateObserverBridge.reset();
+  }
+}
+
+#pragma mark - CRWWebStateObserver methods.
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  if (!success || webState != _webState ||
+      !_itemToObserve || !_itemToObserve.bookmarkNode)
+    return;
+
+  // Extract the host from URLs and compare them
+  NSURL *intentedPageURL = [NSURL URLWithString:_itemToObserve.urlString];
+  NSString* lastCommittedURLString =
+      base::SysUTF8ToNSString(webState->GetLastCommittedURL().spec());
+  NSURL *webStateCommittedURL = [NSURL URLWithString:lastCommittedURLString];
+
+  if (!intentedPageURL || !webStateCommittedURL)
+    return;
+
+  if (![VivaldiGlobalHelpers
+          areHostsEquivalentForURL:intentedPageURL
+                              bURL:webStateCommittedURL]) {
+    // Hosts do not match, return early.
+    // This means user moved to a different host before page is loaded.
+    return;
+  }
+
+  // Usually this stored correct thumbnails pretty much correctly.
+  // But, sometimes this method returns success although page rendering did not
+  // finish visibly on the screen. And, that leads to capture incorrect
+  // thumbnail (speed dial page) for the URL. Therefore, we will wait a second
+  // before triggering the snapshot.
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW,
+                    (int64_t)(1.0 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+        [self.vivaldiThumbnailService
+            generateAndStoreThumbnailForSDItem:self.itemToObserve
+                                      webState:webState
+                                     bookmarks:self.bookmarks];
+      });
+
+  // Stop observing the webstate after thumbnail is stored for the webstate.
+  [self stopObservingWebState];
+}
+
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
@@ -745,12 +839,6 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   return CGSizeMake(width, height);
 }
 
-#pragma mark - PUBLIC SETTERS
-- (void)popPushedViewControllers {
-  self.speedDialViewController = nil;
-  [self.navigationController popToRootViewControllerAnimated:NO];
-}
-
 #pragma mark - SPEED DIAL HOME CONSUMER
 - (void)refreshContents {
   [self.mediator computeSpeedDialFolders];
@@ -804,12 +892,13 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
                parent:(VivaldiSpeedDialItem*)parent {
-  // Hide the top menu before navigating
-  if (self.topScrollMenuContainer.alpha == 1) {
-    [self.topScrollMenuContainer setAlpha:0];
-  }
   // Navigate to the folder if the selected speed dial is a folder.
   if (item.isFolder) {
+    // Hide the top menu before navigating
+    if (self.topScrollMenuContainer.alpha == 1) {
+      [self.topScrollMenuContainer setAlpha:0];
+    }
+
     VivaldiSpeedDialViewController *controller =
       [VivaldiSpeedDialViewController initWithItem:item
                                             parent:parent
@@ -821,12 +910,10 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                                          animated:YES];
     self.speedDialViewController = controller;
   } else {
-    // Pass it to delegate to open the URL.
-    BOOL captureSnapshot = item.thumbnail.length == 0;
-    if (self.delegate)
-      [self.delegate didTapSpeedDialWithItem:item
-                             captureSnapshot:captureSnapshot];
-    [self.navigationController popToRootViewControllerAnimated:NO];
+    BOOL isOffTheRecord = _browserState->IsOffTheRecord();
+    BOOL captureSnapshot = item.thumbnail.length == 0 && !isOffTheRecord;
+    [self didTapSpeedDialWithItem:item
+                  captureSnapshot:captureSnapshot];
   }
 }
 
@@ -896,7 +983,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     std::set<const BookmarkNode*> nodes;
     nodes.insert(item.bookmarkNode);
     bookmark_utils_ios::DeleteBookmarks(nodes, self.bookmarks);
-    [[NSFileManager defaultManager] removeThumbnailForSDItem:item];
+    [_vivaldiThumbnailService removeThumbnailForSDItem:item];
   }
 }
 

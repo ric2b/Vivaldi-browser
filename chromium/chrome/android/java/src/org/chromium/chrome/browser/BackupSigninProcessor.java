@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,7 +51,7 @@ public final class BackupSigninProcessor {
         final AccountManagerFacade accountManagerFacade =
                 AccountManagerFacadeProvider.getInstance();
         accountManagerFacade.getAccounts().then(accounts -> {
-            AccountUtils.checkChildAccountStatus(
+            AccountUtils.checkChildAccountStatusLegacy(
                     accountManagerFacade, accounts, (isChild, unused) -> {
                         if (isChild) {
                             // TODO(crbug.com/1318350): Pre-AllowSyncOffForChildAccounts, the backup

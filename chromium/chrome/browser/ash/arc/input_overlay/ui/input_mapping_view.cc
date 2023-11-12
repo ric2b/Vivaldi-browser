@@ -18,8 +18,8 @@ namespace {
 // UI specs.
 constexpr SkColor kEditModeBgColor = SkColorSetA(SK_ColorBLACK, 0x66 /*40%*/);
 
-// Return true if |v1| is on top than |v2|, or |v1| is on the left side of |v2|
-// when |v1| has the same y position as |v2|.
+// Return true if `v1` is on top than `v2`, or `v1` is on the left side of `v2`
+// when `v1` has the same y position as `v2`.
 bool CompareActionViewPosition(const ActionView* v1, const ActionView* v2) {
   auto center1 = v1->GetTouchCenterInWindow();
   auto center2 = v2->GetTouchCenterInWindow();
@@ -35,11 +35,11 @@ bool CompareActionViewPosition(const ActionView* v1, const ActionView* v2) {
 InputMappingView::InputMappingView(
     DisplayOverlayController* display_overlay_controller)
     : controller_(display_overlay_controller) {
-  auto content_bounds = controller_->touch_injector()->content_bounds();
-  auto& actions = controller_->touch_injector()->actions();
-  SetBounds(content_bounds.x(), content_bounds.y(), content_bounds.width(),
-            content_bounds.height());
-  for (auto& action : actions) {
+  SetSize(controller_->touch_injector()->content_bounds().size());
+  for (auto& action : controller_->touch_injector()->actions()) {
+    if (action->IsDeleted()) {
+      continue;
+    }
     auto view = action->CreateView(controller_);
     if (view) {
       AddChildView(std::move(view));
@@ -123,6 +123,16 @@ void InputMappingView::SortChildren() {
   }
 }
 
+void InputMappingView::OnActionAddedInternal(Action& action) {
+  // No add function for pre-beta version.
+  DCHECK(IsBeta());
+
+  auto view = action.CreateView(controller_);
+  if (view) {
+    AddChildView(std::move(view))->SetDisplayMode(current_display_mode_);
+  }
+}
+
 void InputMappingView::OnMouseEvent(ui::MouseEvent* event) {
   if (event->type() == ui::ET_MOUSE_PRESSED) {
     ProcessPressedEvent(*event);
@@ -140,10 +150,10 @@ void InputMappingView::OnActionAdded(Action& action) {
   // No add function for pre-beta version.
   DCHECK(IsBeta());
 
-  auto view = action.CreateView(controller_);
-  if (view) {
-    AddChildView(std::move(view))->SetDisplayMode(current_display_mode_);
-  }
+  OnActionAddedInternal(action);
+  // A new button options menu corresponding to the action is
+  // added when the action is first added.
+  controller_->AddButtonOptionsMenuWidget(&action);
 }
 
 void InputMappingView::OnActionRemoved(const Action& action) {
@@ -159,14 +169,14 @@ void InputMappingView::OnActionRemoved(const Action& action) {
   }
 }
 
-void InputMappingView::OnActionTypeChanged(const Action& action,
-                                           const Action& new_action) {
+void InputMappingView::OnActionTypeChanged(Action* action, Action* new_action) {
   // No action type change function for pre-beta version.
   DCHECK(IsBeta());
-  NOTIMPLEMENTED();
+  OnActionRemoved(*action);
+  OnActionAddedInternal(*new_action);
 }
 
-void InputMappingView::OnActionUpdated(const Action& action) {
+void InputMappingView::OnActionInputBindingUpdated(const Action& action) {
   // Action is updated in another function already for pre-beta version.
   if (!IsBeta()) {
     return;
@@ -175,10 +185,19 @@ void InputMappingView::OnActionUpdated(const Action& action) {
   for (auto* const child : children()) {
     auto* action_view = static_cast<ActionView*>(child);
     if (action_view->action() == &action) {
-      action_view->OnActionUpdated();
+      action_view->OnActionInputBindingUpdated();
       break;
     }
   }
 }
 
+void InputMappingView::OnContentBoundsSizeChanged() {
+  if (!IsBeta()) {
+    return;
+  }
+
+  for (auto* const child : children()) {
+    static_cast<ActionView*>(child)->OnContentBoundsSizeChanged();
+  }
+}
 }  // namespace arc::input_overlay

@@ -17,16 +17,6 @@ struct SkColorSpacePrimaries;
 
 namespace gfx {
 
-// High dynamic range mode.
-enum class HDRMode : uint8_t {
-  // HLG and PQ content is HDR and tone mapped. All other content is clipped to
-  // SDR luminance.
-  kDefault,
-  // Values that extend beyond SDR luminance are shown as HDR. No tone mapping
-  // is performed.
-  kExtended,
-};
-
 // Content light level info (CLLI) metadata from CTA 861.3.
 struct COLOR_SPACE_EXPORT HdrMetadataCta861_3 {
   constexpr HdrMetadataCta861_3() = default;
@@ -105,6 +95,10 @@ struct COLOR_SPACE_EXPORT HdrMetadataExtendedRange {
   // to be tonemapped to fit into `current_headroom`.
   float desired_headroom = 1.f;
 
+  // For HDR content that does not specify a headroom, this value is the
+  // headroom of HLG and most PQ content.
+  static constexpr float kDefaultHdrHeadroom = 1000.f / 203.f;
+
   std::string ToString() const;
 
   bool operator==(const HdrMetadataExtendedRange& rhs) const {
@@ -119,11 +113,13 @@ struct COLOR_SPACE_EXPORT HdrMetadataExtendedRange {
 
 // HDR metadata common for HDR10 and WebM/VP9-based HDR formats.
 struct COLOR_SPACE_EXPORT HDRMetadata {
+  // Mastering display color volume (MDCV) metadata.
   absl::optional<HdrMetadataSmpteSt2086> smpte_st_2086;
+
+  // Content light level information (CLLI) metadata.
   absl::optional<HdrMetadataCta861_3> cta_861_3;
 
   // Brightness points for extended range color spaces.
-  // NOTE: Is not serialized over IPC.
   absl::optional<HdrMetadataExtendedRange> extended_range;
 
   HDRMetadata() = default;

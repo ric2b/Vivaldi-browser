@@ -41,16 +41,6 @@
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #endif
 
-namespace wl {
-
-bool g_disallow_setting_decoration_insets_for_testing = false;
-
-void AllowClientSideDecorationsForTesting(bool allow) {
-  g_disallow_setting_decoration_insets_for_testing = !allow;
-}
-
-}  // namespace wl
-
 namespace ui {
 
 namespace {
@@ -138,6 +128,10 @@ void WaylandToplevelWindow::DispatchHostWindowDragMovement(
     shell_toplevel_->SurfaceResize(connection(), hittest);
 
   connection()->Flush();
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+  // TODO(crbug.com/1454893): Revisit to resolve the correct impl.
+  connection()->event_source()->ResetPointerFlags();
+#endif
 }
 
 void WaylandToplevelWindow::Show(bool inactive) {
@@ -360,24 +354,18 @@ bool WaylandToplevelWindow::ShouldUpdateWindowShape() const {
 }
 
 bool WaylandToplevelWindow::CanSetDecorationInsets() const {
-  return connection()->SupportsSetWindowGeometry() &&
-         !wl::g_disallow_setting_decoration_insets_for_testing;
+  return connection()->SupportsSetWindowGeometry();
 }
 
 void WaylandToplevelWindow::SetOpaqueRegion(
-    const std::vector<gfx::Rect>* region_px) {
-  if (region_px)
-    opaque_region_px_ = *region_px;
-  else
-    opaque_region_px_ = absl::nullopt;
+    absl::optional<std::vector<gfx::Rect>> region_px) {
+  opaque_region_px_ = region_px;
   root_surface()->set_opaque_region(region_px);
 }
 
-void WaylandToplevelWindow::SetInputRegion(const gfx::Rect* region_px) {
-  if (region_px)
-    input_region_px_ = *region_px;
-  else
-    input_region_px_ = absl::nullopt;
+void WaylandToplevelWindow::SetInputRegion(
+    absl::optional<gfx::Rect> region_px) {
+  input_region_px_ = region_px;
   root_surface()->set_input_region(region_px);
 }
 
@@ -435,6 +423,12 @@ void WaylandToplevelWindow::OnRotateFocus(uint32_t serial,
       serial, rotated ? ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_HANDLED
                       : ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED);
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+void WaylandToplevelWindow::OnOverviewModeChanged(bool in_overview) {
+  delegate()->OnOverviewModeChanged(in_overview);
+}
+#endif
 
 void WaylandToplevelWindow::LockFrame() {
   OnFrameLockingChanged(true);
@@ -505,6 +499,8 @@ void WaylandToplevelWindow::HandleAuraToplevelConfigure(
     int32_t width_dip,
     int32_t height_dip,
     const WindowStates& window_states) {
+  VLOG(1) << "Wayland XDG/Aura toplevel configure: states="
+          << window_states.ToString();
   // Store the old state to propagte state changes if Wayland decides to change
   // the state to something else.
   PlatformWindowState old_state = state_;
@@ -794,6 +790,12 @@ void WaylandToplevelWindow::SetImmersiveFullscreenStatus(bool status) {
     NOTIMPLEMENTED_LOG_ONCE();
   }
 }
+
+void WaylandToplevelWindow::SetTopInset(int height) {
+  if (shell_toplevel_) {
+    shell_toplevel_->SetTopInset(height);
+  }
+}
 #endif
 
 void WaylandToplevelWindow::ShowSnapPreview(
@@ -1030,6 +1032,9 @@ void WaylandToplevelWindow::SetSizeConstraints() {
   if (max_size_dip.has_value())
     shell_toplevel_->SetMaxSize(max_size_dip->width(), max_size_dip->height());
 
+  shell_toplevel_->SetCanMaximize(delegate()->CanMaximize());
+  shell_toplevel_->SetCanFullscreen(delegate()->CanFullscreen());
+
   connection()->Flush();
 }
 
@@ -1134,10 +1139,12 @@ void WaylandToplevelWindow::SetInitialWorkspace() {
 void WaylandToplevelWindow::UpdateWindowMask() {
   std::vector<gfx::Rect> region{gfx::Rect({}, latched_state().size_px)};
   root_surface()->set_opaque_region(
-      opaque_region_px_.has_value() ? &*opaque_region_px_
-                                    : (IsOpaqueWindow() ? &region : nullptr));
-  root_surface()->set_input_region(input_region_px_ ? &*input_region_px_
-                                                    : &*region.begin());
+      opaque_region_px_.has_value()
+          ? opaque_region_px_
+          : (IsOpaqueWindow() ? absl::optional<std::vector<gfx::Rect>>(region)
+                              : absl::nullopt));
+  root_surface()->set_input_region(input_region_px_ ? input_region_px_
+                                                    : *region.begin());
 }
 
 bool WaylandToplevelWindow::GetTabletMode() {

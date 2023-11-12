@@ -9,6 +9,8 @@ import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
+import android.os.Build.VERSION;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.InputDevice;
@@ -25,6 +27,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.widget.TooltipCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
@@ -211,7 +214,7 @@ public abstract class ToolbarLayout
     /**
      * @param toolbarColorObserver The observer that observes toolbar color change.
      */
-    void setToolbarColorObserver(@NonNull ToolbarColorObserver toolbarColorObserver) {
+    public void setToolbarColorObserver(@NonNull ToolbarColorObserver toolbarColorObserver) {
         mToolbarColorObserver = toolbarColorObserver;
     }
 
@@ -258,6 +261,26 @@ public abstract class ToolbarLayout
      */
     @CallSuper
     protected void onMenuButtonDisabled() {}
+
+    // Set hover tooltip text for buttons shared between phones and tablets.
+    public void setTooltipTextForToolbarButtons() {
+        // Set hover tooltip text for home and tab switcher buttons.
+        setTooltipText(((View) getHomeButton()),
+                getContext().getString(R.string.accessibility_toolbar_btn_home));
+        setTooltipText(((View) getTabSwitcherButton()),
+                getContext().getString(
+                        R.string.accessibility_toolbar_btn_tabswitcher_toggle_default));
+    }
+
+    /**
+     * Set hover tooltip text for buttons shared between phones and tablets.
+     * @TODO: Remove and use the method in UiUtils.java instead once JaCoCo issue is resolved.
+     */
+    protected void setTooltipText(View button, String text) {
+        if (button != null && VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            TooltipCompat.setTooltipText(button, text);
+        }
+    }
 
     @Override
     protected void onFinishInflate() {
@@ -386,7 +409,6 @@ public abstract class ToolbarLayout
         return mMenuButtonCoordinator;
     }
 
-    @VisibleForTesting
     void setMenuButtonCoordinatorForTesting(MenuButtonCoordinator menuButtonCoordinator) {
         mMenuButtonCoordinator = menuButtonCoordinator;
     }
@@ -631,9 +653,10 @@ public abstract class ToolbarLayout
      * @param isShowingStartSurfaceHomepage Whether start surface homepage is showing.
      * @param isShowingStartSurfaceTabSwitcher Whether the StartSurface-controlled TabSwitcher is
      *         showing.
+     * @param isRealSearchBoxFocused Whether the real search box is focused.
      */
     void onStartSurfaceStateChanged(boolean shouldBeVisible, boolean isShowingStartSurfaceHomepage,
-            boolean isShowingStartSurfaceTabSwitcher) {}
+            boolean isShowingStartSurfaceTabSwitcher, boolean isRealSearchBoxFocused) {}
 
     /**
      * Force to hide toolbar shadow.
@@ -805,7 +828,6 @@ public abstract class ToolbarLayout
     /**
      * @return Optional button view.
      */
-    @VisibleForTesting
     public View getOptionalButtonViewForTesting() {
         return null;
     }
@@ -824,9 +846,15 @@ public abstract class ToolbarLayout
     }
 
     /**
+     * @return {@link ToggleTabStackButton} this {@link ToolbarLayout} contains.
+     */
+    public ToggleTabStackButton getTabSwitcherButton() {
+        return null;
+    }
+
+    /**
      * Returns whether there are any ongoing animations.
      */
-    @VisibleForTesting
     public boolean isAnimationRunningForTesting() {
         return false;
     }

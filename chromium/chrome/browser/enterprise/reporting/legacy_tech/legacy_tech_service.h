@@ -47,16 +47,20 @@ class LegacyTechServiceFactory : public ProfileKeyedServiceFactory {
   void SetReportTrigger(LegacyTechReportTrigger&& trigger);
 
  protected:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 
  private:
+  void ReportEventImpl(const LegacyTechReportGenerator::LegacyTechData& data);
+
   friend base::NoDestructor<LegacyTechServiceFactory>;
 
   LegacyTechServiceFactory();
   ~LegacyTechServiceFactory() override;
 
   LegacyTechReportTrigger trigger_;
+
+  std::vector<LegacyTechReportGenerator::LegacyTechData> pending_data_;
 };
 
 }  // namespace enterprise_reporting

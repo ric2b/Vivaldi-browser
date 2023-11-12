@@ -19,9 +19,7 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
-#include "components/invalidation/public/invalidator_state.h"
 #include "components/sync/base/command_line_switches.h"
-#include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/service/sync_token_status.h"
 #include "components/sync_device_info/local_device_info_util.h"
@@ -156,13 +154,17 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
     case syncer::UserSelectableType::kAutofill:
       return vivaldi::sync::DataType::DATA_TYPE_AUTOFILL;
     case syncer::UserSelectableType::kHistory:
-      return vivaldi::sync::DataType::DATA_TYPE_TYPED_URLS;
+      return vivaldi::sync::DataType::DATA_TYPE_HISTORY;
     case syncer::UserSelectableType::kExtensions:
       return vivaldi::sync::DataType::DATA_TYPE_EXTENSIONS;
-    case syncer::UserSelectableType::kNotes:
-      return vivaldi::sync::DataType::DATA_TYPE_NOTES;
+    case syncer::UserSelectableType::kApps:
+      return vivaldi::sync::DataType::DATA_TYPE_APPS;
     case syncer::UserSelectableType::kReadingList:
       return vivaldi::sync::DataType::DATA_TYPE_READING_LIST;
+    case syncer::UserSelectableType::kTabs:
+      return vivaldi::sync::DataType::DATA_TYPE_TABS;
+    case syncer::UserSelectableType::kNotes:
+      return vivaldi::sync::DataType::DATA_TYPE_NOTES;
     default:
       NOTREACHED();
       return vivaldi::sync::DataType::DATA_TYPE_NONE;
@@ -174,20 +176,24 @@ absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
   switch (data_type) {
     case vivaldi::sync::DataType::DATA_TYPE_BOOKMARKS:
       return syncer::UserSelectableType::kBookmarks;
-    case vivaldi::sync::DataType::DATA_TYPE_PASSWORDS:
-      return syncer::UserSelectableType::kPasswords;
     case vivaldi::sync::DataType::DATA_TYPE_PREFERENCES:
       return syncer::UserSelectableType::kPreferences;
+    case vivaldi::sync::DataType::DATA_TYPE_PASSWORDS:
+      return syncer::UserSelectableType::kPasswords;
     case vivaldi::sync::DataType::DATA_TYPE_AUTOFILL:
       return syncer::UserSelectableType::kAutofill;
-    case vivaldi::sync::DataType::DATA_TYPE_TYPED_URLS:
+    case vivaldi::sync::DataType::DATA_TYPE_HISTORY:
       return syncer::UserSelectableType::kHistory;
     case vivaldi::sync::DataType::DATA_TYPE_EXTENSIONS:
       return syncer::UserSelectableType::kExtensions;
-    case vivaldi::sync::DataType::DATA_TYPE_NOTES:
-      return syncer::UserSelectableType::kNotes;
+    case vivaldi::sync::DataType::DATA_TYPE_APPS:
+      return syncer::UserSelectableType::kApps;
     case vivaldi::sync::DataType::DATA_TYPE_READING_LIST:
       return syncer::UserSelectableType::kReadingList;
+    case vivaldi::sync::DataType::DATA_TYPE_TABS:
+      return syncer::UserSelectableType::kTabs;
+    case vivaldi::sync::DataType::DATA_TYPE_NOTES:
+      return syncer::UserSelectableType::kNotes;
     default:
       NOTREACHED();
       return absl::nullopt;
@@ -304,14 +310,11 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   std::vector<vivaldi::sync::DataType> data_types;
   for (const syncer::UserSelectableType data_type :
        syncer::UserSelectableTypeSet::All()) {
-    // Skip the model types that don't make sense for us to synchronize.
+    // We do not use chrome themes and the saved tab groups feature is currently
+    // disabled
     if (data_type == syncer::UserSelectableType::kThemes ||
-        data_type == syncer::UserSelectableType::kApps ||
-        // Syncing typedUrls already syncs sessions anyway and it
-        // doesn't make much sense to show saved tab groups if we don't
-        // show tabs. For now we group all three in our UI
-        data_type == syncer::UserSelectableType::kTabs ||
-        data_type == syncer::UserSelectableType::kSavedTabGroups) {
+        data_type == syncer::UserSelectableType::kSavedTabGroups ||
+        data_type == syncer::UserSelectableType::kPayments) {
       continue;
     }
 
@@ -566,9 +569,6 @@ ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
       chosen_types.Put(
           FromVivaldiSyncDataType(type_selection.data_type).value());
     }
-  }
-  if (chosen_types.Has(syncer::UserSelectableType::kHistory)) {
-    chosen_types.Put(syncer::UserSelectableType::kTabs);
   }
 
   sync_service->GetUserSettings()->SetSelectedTypes(params->sync_everything,

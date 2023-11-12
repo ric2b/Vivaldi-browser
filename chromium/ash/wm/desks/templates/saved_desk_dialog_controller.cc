@@ -17,6 +17,7 @@
 #include "ash/wm/desks/templates/saved_desk_metrics_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
+#include "base/memory/raw_ptr.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/env.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -95,7 +96,7 @@ class SavedDeskDialog : public views::DialogDelegateView {
   }
 
  private:
-  views::Label* description_label_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> description_label_ = nullptr;
 };
 
 BEGIN_VIEW_BUILDER(/* no export */, SavedDeskDialog, views::DialogDelegateView)
@@ -375,7 +376,7 @@ void SavedDeskDialogController::CreateDialogWidget(
   if (chromeos::features::IsJellyEnabled()) {
     views::Widget::InitParams params;
     params.type = views::Widget::InitParams::Type::TYPE_WINDOW_FRAMELESS;
-    params.parent = root_window;
+    params.context = root_window;
     params.delegate = dialog.release();
 
     dialog_widget_ = new views::Widget();
@@ -396,6 +397,14 @@ void SavedDeskDialogController::CreateDialogWidget(
     accessibility_controller->SetA11yOverrideWindow(
         dialog_widget_->GetNativeWindow());
   }
+}
+
+const SystemDialogDelegateView*
+SavedDeskDialogController::GetSystemDialogViewForTesting() const {
+  CHECK(chromeos::features::IsJellyEnabled());
+  CHECK(dialog_widget_);
+  return static_cast<SystemDialogDelegateView*>(
+      dialog_widget_->GetContentsView());
 }
 
 bool SavedDeskDialogController::CanShowDialog() const {

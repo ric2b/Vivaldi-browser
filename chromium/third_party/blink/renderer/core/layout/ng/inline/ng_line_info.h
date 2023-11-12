@@ -150,6 +150,9 @@ class CORE_EXPORT NGLineInfo {
   bool HasOverflow() const { return has_overflow_; }
   void SetHasOverflow(bool value = true) { has_overflow_ = value; }
 
+  // True if this line is hyphenated.
+  bool IsHyphenated() const;
+
   void SetBfcOffset(const NGBfcOffset& bfc_offset) { bfc_offset_ = bfc_offset; }
   void SetWidth(LayoutUnit available_width, LayoutUnit width) {
     available_width_ = available_width;
@@ -244,7 +247,7 @@ class CORE_EXPORT NGLineInfo {
       unsigned* end_offset_out = nullptr) const;
 
   const NGInlineItemsData* items_data_ = nullptr;
-  scoped_refptr<const ComputedStyle> line_style_;
+  const ComputedStyle* line_style_{nullptr};
   NGInlineItemResults results_;
 
   NGBfcOffset bfc_offset_;

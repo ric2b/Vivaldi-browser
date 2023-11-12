@@ -23,8 +23,8 @@
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/fuchsia/fuchsia_logging.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/no_destructor.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/notreached.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/partition_alloc_notreached.h"
 
 namespace partition_alloc::internal {
 
@@ -44,7 +44,7 @@ zx::resource GetVmexResource() {
   auto result = sync_vmex_resource_client->Get();
   if (result.is_error()) {
     PA_LOG(ERROR) << "VmexResource.Get():"
-                  << result.error_value().FormatDescription();
+                  << result.error_value().FormatDescription().c_str();
     return {};
   }
 
@@ -67,7 +67,6 @@ const char* PageTagToName(PageTag tag) {
       return "cr_chromium";
     case PageTag::kV8:
       return "cr_v8";
-    case PageTag::kFirst:
     case PageTag::kSimulation:
       PA_NOTREACHED();
   }
@@ -224,7 +223,9 @@ void DecommitSystemPagesInternal(
   DiscardSystemPagesInternal(address, length);
 }
 
-void DecommitAndZeroSystemPagesInternal(uintptr_t address, size_t length) {
+void DecommitAndZeroSystemPagesInternal(uintptr_t address,
+                                        size_t length,
+                                        PageTag page_tag) {
   SetSystemPagesAccess(address, length,
                        PageAccessibilityConfiguration(
                            PageAccessibilityConfiguration::kInaccessible));

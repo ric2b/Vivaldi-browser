@@ -47,6 +47,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/schemeful_site.h"
 #include "services/device/public/cpp/device_features.h"
+#include "services/device/public/cpp/geolocation/geolocation_manager.h"
 #include "services/device/public/cpp/geolocation/location_system_permission_status.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/pointer/touch_ui_controller.h"
@@ -357,9 +358,13 @@ void GetIconChromeRefresh(ContentSettingsType type,
       *icon = blocked ? &vector_icons::kSensorsOffChromeRefreshIcon
                       : &vector_icons::kSensorsChromeRefreshIcon;
       return;
+    case ContentSettingsType::STORAGE_ACCESS:
+      *icon = blocked ? &vector_icons::kStorageAccessOffIcon
+                      : &vector_icons::kStorageAccessIcon;
+      return;
     case ContentSettingsType::POPUPS:
-      *icon = blocked ? &kOpenInNewOffChromeRefreshIcon
-                      : &kOpenInNewChromeRefreshIcon;
+      *icon =
+          blocked ? &vector_icons::kIframeOffIcon : &vector_icons::kIframeIcon;
       return;
     default:
       NOTREACHED();
@@ -430,6 +435,9 @@ void GetIconFromType(ContentSettingsType type,
       return;
     case ContentSettingsType::SENSORS:
       *icon = &vector_icons::kSensorsIcon;
+      return;
+    case ContentSettingsType::STORAGE_ACCESS:
+      *icon = &vector_icons::kStorageAccessIcon;
       return;
     case ContentSettingsType::POPUPS:
       *icon = &kWebIcon;
@@ -615,9 +623,13 @@ void ContentSettingImageModel::SetIcon(ContentSettingsType type, bool blocked) {
 }
 
 void ContentSettingImageModel::SetFramebustBlockedIcon() {
-  // TODO(https://crbug.com/1447073): Set a cr23 icon for blocked redirect.
-  icon_ = &kBlockedRedirectIcon;
-  icon_badge_ = &vector_icons::kBlockedBadgeIcon;
+  if (features::IsChromeRefresh2023()) {
+    icon_ = &kOpenInNewOffChromeRefreshIcon;
+    icon_badge_ = &gfx::kNoneIcon;
+  } else {
+    icon_ = &kBlockedRedirectIcon;
+    icon_badge_ = &vector_icons::kBlockedBadgeIcon;
+  }
 }
 
 // Generic blocked content settings --------------------------------------------
@@ -713,8 +725,20 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
       base::RecordAction(base::UserMetricsAction(
           "ContentSettings.Geolocation.BlockedIconShown"));
       set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
-      if (content_settings->geolocation_was_just_granted_on_site_level())
+      if (content_settings->geolocation_was_just_granted_on_site_level()) {
+#if BUILDFLAG(IS_MAC)
+        if (IsGeolocationPermissionDetermined()) {
+          // If the system permission is already denied then requesting the
+          // system permission will not show a prompt. Show the bubble instead.
+          set_should_auto_open_bubble(true);
+        } else {
+          // Ask the system to display a permission prompt for location access.
+          device::GeolocationManager::GetInstance()->RequestSystemPermission();
+        }
+#else
         set_should_auto_open_bubble(true);
+#endif  // BUILDFLAG(IS_MAC)
+      }
       // At this point macOS may not have told us whether location permission
       // has been allowed or blocked. Wait until the permission state is
       // determined before displaying this message since it triggers an
@@ -932,8 +956,9 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
   // If neither the microphone nor the camera stream was accessed then no icon
   // is displayed in the omnibox.
-  if (state_ == PageSpecificContentSettings::MICROPHONE_CAMERA_NOT_ACCESSED)
+  if (state_.Empty()) {
     return false;
+  }
 
 #if BUILDFLAG(IS_MAC)
   // Don't show an icon when the user has not made a decision yet for
@@ -1050,19 +1075,19 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 }
 
 bool ContentSettingMediaImageModel::IsMicAccessed() {
-  return ((state_ & PageSpecificContentSettings::MICROPHONE_ACCESSED) != 0);
+  return state_.Has(PageSpecificContentSettings::kMicrophoneAccessed);
 }
 
 bool ContentSettingMediaImageModel::IsCamAccessed() {
-  return ((state_ & PageSpecificContentSettings::CAMERA_ACCESSED) != 0);
+  return state_.Has(PageSpecificContentSettings::kCameraAccessed);
 }
 
 bool ContentSettingMediaImageModel::IsMicBlockedOnSiteLevel() {
-  return ((state_ & PageSpecificContentSettings::MICROPHONE_BLOCKED) != 0);
+  return state_.Has(PageSpecificContentSettings::kMicrophoneBlocked);
 }
 
 bool ContentSettingMediaImageModel::IsCameraBlockedOnSiteLevel() {
-  return ((state_ & PageSpecificContentSettings::CAMERA_BLOCKED) != 0);
+  return state_.Has(PageSpecificContentSettings::kCameraBlocked);
 }
 
 #if BUILDFLAG(IS_MAC)
@@ -1209,10 +1234,12 @@ bool ContentSettingStorageAccessImageModel::UpdateAndGetVisibility(
   bool has_blocked_requests =
       base::ranges::any_of(entries, [](auto& entry) { return !entry.second; });
 
-  // TODO(crbug.com/1433644): Update icon and tooltips.
-  SetIcon(ContentSettingsType::COOKIES, /*blocked=*/has_blocked_requests);
+  SetIcon(ContentSettingsType::STORAGE_ACCESS,
+          /*blocked=*/has_blocked_requests);
   // set_explanatory_string_id(IDS_BLOCKED_POPUPS_EXPLANATORY_TEXT);
-  // set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_POPUPS_TOOLTIP));
+  set_tooltip(l10n_util::GetStringUTF16(
+      has_blocked_requests ? IDS_STORAGE_ACCESS_PERMISSION_BLOCKED_TOOLTIP
+                           : IDS_STORAGE_ACCESS_PERMISSION_ALLOWED_TOOLTIP));
   return true;
 }
 
@@ -1284,7 +1311,7 @@ ContentSettingNotificationsImageModel::CreateBubbleModelImpl(
 // Base class ------------------------------------------------------------------
 
 gfx::Image ContentSettingImageModel::GetIcon(SkColor icon_color) const {
-  int icon_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
+  int icon_size = GetLayoutConstant(LOCATION_BAR_TRAILING_ICON_SIZE);
   return gfx::Image(gfx::CreateVectorIconWithBadge(*icon_, icon_size,
                                                    icon_color, *icon_badge_));
 }

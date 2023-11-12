@@ -7,13 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accelerators/accelerator_prefs_delegate.h"
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/game_dashboard/game_dashboard_delegate.h"
+#include "ash/public/cpp/app_types_util.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system_sounds_delegate.h"
+#include "ash/wm/window_state.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -37,6 +40,7 @@
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/ash/back_gesture_contextual_nudge_delegate.h"
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
+#include "chrome/browser/ui/ash/chrome_accelerator_prefs_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accessibility_delegate.h"
 #include "chrome/browser/ui/ash/desks/chrome_saved_desk_delegate.h"
 #include "chrome/browser/ui/ash/game_dashboard/chrome_game_dashboard_delegate.h"
@@ -62,6 +66,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/services/multidevice_setup/multidevice_setup_service.h"
 #include "components/ui_devtools/devtools_server.h"
 #include "components/user_manager/user_manager.h"
@@ -135,6 +140,11 @@ ChromeShellDelegate::CreateCaptureModeDelegate() const {
 std::unique_ptr<ash::GameDashboardDelegate>
 ChromeShellDelegate::CreateGameDashboardDelegate() const {
   return std::make_unique<ChromeGameDashboardDelegate>();
+}
+
+std::unique_ptr<ash::AcceleratorPrefsDelegate>
+ChromeShellDelegate::CreateAcceleratorPrefsDelegate() const {
+  return std::make_unique<ChromeAcceleratorPrefsDelegate>();
 }
 
 std::unique_ptr<ash::GlanceablesDelegate>
@@ -271,11 +281,24 @@ ChromeShellDelegate::GetMediaSessionService() {
 }
 
 bool ChromeShellDelegate::IsSessionRestoreInProgress() const {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  return SessionRestore::IsRestoring(profile);
+  // Must be called with an active user.
+  const user_manager::User* active_user =
+      user_manager::UserManager::Get()->GetActiveUser();
+  CHECK(active_user);
+
+  // User profile is not yet loaded. Consider loading user profile is part of
+  // session restore.
+  if (!active_user->is_profile_created()) {
+    return true;
+  }
+
+  return SessionRestore::IsRestoring(Profile::FromBrowserContext(
+      ash::BrowserContextHelper::Get()->GetBrowserContextByUser(active_user)));
 }
 
-void ChromeShellDelegate::SetUpEnvironmentForLockedFullscreen(bool locked) {
+void ChromeShellDelegate::SetUpEnvironmentForLockedFullscreen(
+    const ash::WindowState& window_state) {
+  bool locked = window_state.IsPinned();
   // Reset the clipboard and kill dev tools when entering or exiting locked
   // fullscreen (security concerns).
   ui::Clipboard::GetForCurrentThread()->Clear(ui::ClipboardBuffer::kCopyPaste);
@@ -296,7 +319,8 @@ void ChromeShellDelegate::SetUpEnvironmentForLockedFullscreen(bool locked) {
   // Disable ARC while in the locked fullscreen mode.
   arc::ArcSessionManager* const arc_session_manager =
       arc::ArcSessionManager::Get();
-  if (arc_session_manager && arc::IsArcAllowedForProfile(profile)) {
+  if (!ash::IsArcWindow(window_state.window()) && arc_session_manager &&
+      arc::IsArcAllowedForProfile(profile)) {
     if (locked) {
       // Disable ARC, preserve data.
       arc_session_manager->RequestDisable();

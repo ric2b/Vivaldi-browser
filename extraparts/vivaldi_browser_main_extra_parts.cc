@@ -140,7 +140,6 @@ void VivaldiBrowserMainExtraParts::
   vivaldi::RequestFilterProxyingURLLoaderFactory::
       EnsureAssociatedFactoryBuilt();
   vivaldi::RequestFilterProxyingWebSocket::EnsureAssociatedFactoryBuilt();
-  vivaldi::VivaldiInvalidationServiceFactory::GetInstance();
   vivaldi::NotesModelFactory::GetInstance();
   VivaldiImageStore::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -258,6 +257,13 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
                                                      default_setting);
     }
   }
+
+  auto *image_store = VivaldiImageStore::FromBrowserContext(profile);
+  DCHECK(image_store);
+  if (image_store) {
+    image_store->ScheduleThumbnalSanitizer();
+  }
+
 #else
   // Disable background media suspend
   PrefService* prefs = profile->GetPrefs();

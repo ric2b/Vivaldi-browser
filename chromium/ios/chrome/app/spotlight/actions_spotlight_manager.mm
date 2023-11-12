@@ -6,10 +6,11 @@
 
 #import <CoreSpotlight/CoreSpotlight.h>
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/app/app_startup_parameters.h"
+#import "ios/chrome/app/spotlight/searchable_item_factory.h"
 #import "ios/chrome/app/spotlight/spotlight_interface.h"
 #import "ios/chrome/app/spotlight/spotlight_logger.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
@@ -19,10 +20,6 @@
 #import "net/base/mac/url_conversions.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 
@@ -127,26 +124,30 @@ BOOL SetStartupParametersForSpotlightAction(
 
 }  // namespace spotlight
 
-@interface ActionsSpotlightManager ()
-// Creates a new Spotlight entry with title `title` for the given `action`.
-- (CSSearchableItem*)itemForAction:(NSString*)action title:(NSString*)title;
-
-// Clears and re-inserts all Spotlight actions.
-- (void)clearAndAddSpotlightActionsWithIsGoogleDefaultSearchEngine:
-    (BOOL)isGoogleDefaultSearchEngine;
-
-@end
-
 @implementation ActionsSpotlightManager
 
 + (ActionsSpotlightManager*)actionsSpotlightManager {
   return [[ActionsSpotlightManager alloc]
-      initWithLargeIconService:nil
-                        domain:spotlight::DOMAIN_ACTIONS
-            spotlightInterface:[SpotlightInterface defaultInterface]];
+      initWithSpotlightInterface:[SpotlightInterface defaultInterface]
+           searchableItemFactory:
+               [[SearchableItemFactory alloc]
+                   initWithLargeIconService:nil
+                                     domain:spotlight::DOMAIN_ACTIONS
+                      useTitleInIdentifiers:YES]];
 }
 
 #pragma mark public methods
+
+- (instancetype)
+    initWithSpotlightInterface:(SpotlightInterface*)spotlightInterface
+         searchableItemFactory:(SearchableItemFactory*)searchableItemFactory {
+  self = [super init];
+  if (self) {
+    _spotlightInterface = spotlightInterface;
+    _searchableItemFactory = searchableItemFactory;
+  }
+  return self;
+}
 
 - (void)indexActionsWithIsGoogleDefaultSearchEngine:
     (BOOL)isGoogleDefaultSearchEngine {
@@ -162,87 +163,100 @@ BOOL SetStartupParametersForSpotlightAction(
 
 #pragma mark private methods
 
+// Clears and re-inserts all Spotlight actions.
 - (void)clearAndAddSpotlightActionsWithIsGoogleDefaultSearchEngine:
     (BOOL)isGoogleDefaultSearchEngine {
   __weak ActionsSpotlightManager* weakSelf = self;
-  [self clearAllSpotlightItems:^(NSError* error) {
-    dispatch_after(
-        dispatch_time(DISPATCH_TIME_NOW,
-                      static_cast<int64_t>(1 * NSEC_PER_SEC)),
-        dispatch_get_main_queue(), ^{
-          ActionsSpotlightManager* strongSelf = weakSelf;
 
-          if (!strongSelf) {
-            return;
-          }
+  [self.searchableItemFactory cancelItemsGeneration];
+  [self.spotlightInterface
+      deleteSearchableItemsWithDomainIdentifiers:@[
+        spotlight::StringFromSpotlightDomain(spotlight::DOMAIN_ACTIONS)
+      ]
+                               completionHandler:^(NSError* error) {
+                                 dispatch_after(
+                                     dispatch_time(DISPATCH_TIME_NOW,
+                                                   static_cast<int64_t>(
+                                                       1 * NSEC_PER_SEC)),
+                                     dispatch_get_main_queue(), ^{
+                                       ActionsSpotlightManager* strongSelf =
+                                           weakSelf;
 
-          NSString* voiceSearchTitle = l10n_util::GetNSString(
-              IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE);
-          NSString* voiceSearchAction =
-              base::SysUTF8ToNSString(spotlight::kSpotlightActionVoiceSearch);
+                                       if (!strongSelf) {
+                                         return;
+                                       }
 
-          NSString* newTabTitle = l10n_util::GetNSString(
-              IDS_IOS_APPLICATION_SHORTCUT_NEWSEARCH_TITLE);
-          NSString* newTabAction =
-              base::SysUTF8ToNSString(spotlight::kSpotlightActionNewTab);
-
-          NSString* incognitoTitle = l10n_util::GetNSString(
-              IDS_IOS_APPLICATION_SHORTCUT_INCOGNITOSEARCH_TITLE);
-          NSString* incognitoAction = base::SysUTF8ToNSString(
-              spotlight::kSpotlightActionNewIncognitoTab);
-
-          NSString* qrScannerTitle = l10n_util::GetNSString(
-              IDS_IOS_APPLICATION_SHORTCUT_QR_SCANNER_TITLE);
-          NSString* qrScannerAction =
-              base::SysUTF8ToNSString(spotlight::kSpotlightActionQRScanner);
-
-          NSString* defaultBrowserTitle = l10n_util::GetNSString(
-              IDS_IOS_APPLICATION_SHORTCUT_SET_DEFAULT_BROWSER);
-          NSString* defaultBrowserAction = base::SysUTF8ToNSString(
-              spotlight::kSpotlightActionSetDefaultBrowser);
-
-          NSMutableArray<CSSearchableItem*>* spotlightItems =
-              [NSMutableArray array];
-
-          [spotlightItems addObjectsFromArray:@[
-            [strongSelf itemForAction:voiceSearchAction title:voiceSearchTitle],
-            [strongSelf itemForAction:newTabAction title:newTabTitle],
-            [strongSelf itemForAction:incognitoAction title:incognitoTitle],
-            [strongSelf itemForAction:qrScannerAction title:qrScannerTitle],
-            [strongSelf itemForAction:defaultBrowserAction
-                                title:defaultBrowserTitle],
-          ]];
-
-          const BOOL useLens =
-              lens_availability::CheckAndLogAvailabilityForLensEntryPoint(
-                  LensEntrypoint::Spotlight, isGoogleDefaultSearchEngine);
-          if (useLens) {
-            NSString* lensTitle =
-                l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_LENS_TITLE);
-            NSString* lensAction =
-                base::SysUTF8ToNSString(spotlight::kSpotlightActionLens);
-            [spotlightItems addObject:[strongSelf itemForAction:lensAction
-                                                          title:lensTitle]];
-          }
-
-          [self.spotlightInterface indexSearchableItems:spotlightItems];
-        });
-  }];
+                                       [strongSelf
+                                           reindexActionsToSpotlight:
+                                               isGoogleDefaultSearchEngine];
+                                     });
+                               }];
 }
 
-- (CSSearchableItem*)itemForAction:(NSString*)action title:(NSString*)title {
-  CSSearchableItemAttributeSet* attributeSet =
-      [[CSSearchableItemAttributeSet alloc]
-          initWithItemContentType:spotlight::StringFromSpotlightDomain(
-                                      spotlight::DOMAIN_ACTIONS)];
-  [attributeSet setTitle:title];
-  [attributeSet setDisplayName:title];
+- (void)reindexActionsToSpotlight:(BOOL)isGoogleDefaultSearchEngine {
+  NSString* voiceSearchTitle =
+      l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE);
+  NSString* voiceSearchAction =
+      base::SysUTF8ToNSString(spotlight::kSpotlightActionVoiceSearch);
 
+  NSString* newTabTitle =
+      l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_NEWSEARCH_TITLE);
+  NSString* newTabAction =
+      base::SysUTF8ToNSString(spotlight::kSpotlightActionNewTab);
+
+  NSString* incognitoTitle = l10n_util::GetNSString(
+      IDS_IOS_APPLICATION_SHORTCUT_INCOGNITOSEARCH_TITLE);
+  NSString* incognitoAction =
+      base::SysUTF8ToNSString(spotlight::kSpotlightActionNewIncognitoTab);
+
+  NSString* qrScannerTitle =
+      l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_QR_SCANNER_TITLE);
+  NSString* qrScannerAction =
+      base::SysUTF8ToNSString(spotlight::kSpotlightActionQRScanner);
+
+  NSString* defaultBrowserTitle =
+      l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_SET_DEFAULT_BROWSER);
+  NSString* defaultBrowserAction =
+      base::SysUTF8ToNSString(spotlight::kSpotlightActionSetDefaultBrowser);
+
+  NSMutableArray<CSSearchableItem*>* spotlightItems = [NSMutableArray array];
+
+  [spotlightItems addObjectsFromArray:@[
+    [self itemForAction:voiceSearchAction title:voiceSearchTitle],
+    [self itemForAction:newTabAction title:newTabTitle],
+    [self itemForAction:incognitoAction title:incognitoTitle],
+    [self itemForAction:qrScannerAction title:qrScannerTitle],
+    [self itemForAction:defaultBrowserAction title:defaultBrowserTitle],
+  ]];
+
+  const BOOL useLens =
+      lens_availability::CheckAndLogAvailabilityForLensEntryPoint(
+          LensEntrypoint::Spotlight, isGoogleDefaultSearchEngine);
+  if (useLens) {
+    NSString* lensTitle =
+        l10n_util::GetNSString(IDS_IOS_APPLICATION_SHORTCUT_LENS_TITLE);
+    NSString* lensAction =
+        base::SysUTF8ToNSString(spotlight::kSpotlightActionLens);
+    [spotlightItems addObject:[self itemForAction:lensAction title:lensTitle]];
+  }
+
+  [self.spotlightInterface indexSearchableItems:spotlightItems];
+}
+
+// Creates a new Spotlight entry with title `title` for the given `action`.
+- (CSSearchableItem*)itemForAction:(NSString*)action title:(NSString*)title {
   NSString* domainID =
       spotlight::StringFromSpotlightDomain(spotlight::DOMAIN_ACTIONS);
+
   NSString* itemID = [NSString stringWithFormat:@"%@.%@", domainID, action];
 
-  return [self spotlightItemWithItemID:itemID attributeSet:attributeSet];
+  return [self.searchableItemFactory searchableItem:title
+                                             itemID:itemID
+                                 additionalKeywords:@[]];
+}
+
+- (void)shutdown {
+  [self.searchableItemFactory cancelItemsGeneration];
 }
 
 @end

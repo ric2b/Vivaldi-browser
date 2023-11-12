@@ -9,8 +9,8 @@
 
 #include <memory>
 
+#include "base/apple/scoped_nsautorelease_pool.h"
 #include "base/compiler_specific.h"
-#include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -18,10 +18,6 @@
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/geometry/rect.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 // AcceleratedTestView provides an NSView class that delegates drawing to a
 // ui::Compositor delegate, setting up the NSOpenGLContext as required.
@@ -64,11 +60,11 @@ class FoundationHost {
 
  protected:
   FoundationHost()
-      : pool_(std::make_unique<base::mac::ScopedNSAutoreleasePool>()) {}
+      : pool_(std::make_unique<base::apple::ScopedNSAutoreleasePool>()) {}
   virtual ~FoundationHost() = default;
 
  private:
-  std::unique_ptr<base::mac::ScopedNSAutoreleasePool> pool_;
+  std::unique_ptr<base::apple::ScopedNSAutoreleasePool> pool_;
 };
 
 // Tests that use the AppKit framework need to have the NSApplication

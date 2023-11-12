@@ -5,11 +5,13 @@
 #import "ios/chrome/test/app/signin_test_util.h"
 
 #import "base/check.h"
+#import "base/feature_list.h"
 #import "base/notreached.h"
 #import "base/test/ios/wait_util.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_pref_names.h"
+#import "components/sync/base/features.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "google_apis/gaia/gaia_constants.h"
@@ -27,11 +29,8 @@
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
+#import "ios/chrome/browser/ui/authentication/history_sync/history_sync_utils.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace chrome_test_util {
 
@@ -49,6 +48,13 @@ void StartForgetAllIdentities(ChromeBrowserState* browser_state,
       ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state);
 
   NSArray* identities_to_remove = account_manager_service->GetAllIdentities();
+  if (identities_to_remove.count == 0) {
+    if (completion) {
+      completion();
+    }
+    return;
+  }
+
   __block int pending_tasks_count =
       static_cast<int>(identities_to_remove.count);
   ProceduralBlock tasks_completion = ^{
@@ -173,16 +179,28 @@ void SignInWithoutSync(id<SystemIdentity> identity) {
   }];
 }
 
+void ResetHistorySyncPreferencesForTesting() {
+  ChromeBrowserState* browser_state = GetOriginalBrowserState();
+  PrefService* prefs = browser_state->GetPrefs();
+  history_sync::ResetDeclinePrefs(prefs);
+}
+
 void ResetSyncSelectedDataTypes() {
   ChromeBrowserState* browserState =
       chrome_test_util::GetOriginalBrowserState();
   syncer::SyncService* syncService =
       SyncServiceFactory::GetForBrowserState(browserState);
   syncer::SyncUserSettings* settings = syncService->GetUserSettings();
-  // Explicitly enable all selectable types, this ensures that
-  // BookmarksAndReadingListAccountStorageOptIn works as expected.
-  settings->SetSelectedTypes(
-      /*sync_everything=*/true, settings->GetRegisteredSelectableTypes());
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    // Clear the new per-account settings.
+    settings->KeepAccountSettingsPrefsOnlyForUsers({});
+  } else {
+    // Explicitly enable all selectable types, this ensures that
+    // BookmarksAndReadingListAccountStorageOptIn works as expected.
+    settings->SetSelectedTypes(
+        /*sync_everything=*/true, settings->GetRegisteredSelectableTypes());
+  }
 }
 
 }  // namespace chrome_test_util

@@ -34,15 +34,11 @@
 #import <math.h>
 
 #include "base/apple/bridging.h"
-#include "base/mac/foundation_util.h"
-#include "base/mac/scoped_cftyperef.h"
+#include "base/apple/foundation_util.h"
+#include "base/apple/scoped_cftyperef.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #import "third_party/blink/renderer/platform/wtf/hash_set.h"
 #import "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace blink {
 
@@ -130,11 +126,11 @@ NSFont* MatchUniqueFont(const AtomicString& unique_font_name, float size) {
     base::apple::CFToNSPtrCast(kCTFontNameAttribute) : desired_name,
     base::apple::CFToNSPtrCast(kCTFontSizeAttribute) : @(size)
   };
-  base::ScopedCFTypeRef<CTFontDescriptorRef> descriptor(
+  base::apple::ScopedCFTypeRef<CTFontDescriptorRef> descriptor(
       CTFontDescriptorCreateWithAttributes(
           base::apple::NSToCFPtrCast(attributes)));
 
-  base::ScopedCFTypeRef<CTFontRef> matched_font(
+  base::apple::ScopedCFTypeRef<CTFontRef> matched_font(
       CTFontCreateWithFontDescriptor(descriptor, 0, nullptr));
   DCHECK(matched_font);
 

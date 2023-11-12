@@ -102,6 +102,8 @@ std::string GetConfiguration(SyncAllDataConfig sync_all,
              types.Has(syncer::UserSelectableType::kExtensions));
   result.Set("passwordsSynced",
              types.Has(syncer::UserSelectableType::kPasswords));
+  result.Set("paymentsSynced",
+             types.Has(syncer::UserSelectableType::kPayments));
   result.Set("preferencesSynced",
              types.Has(syncer::UserSelectableType::kPreferences));
   result.Set("readingListSynced",
@@ -112,7 +114,6 @@ std::string GetConfiguration(SyncAllDataConfig sync_all,
   result.Set("themesSynced", types.Has(syncer::UserSelectableType::kThemes));
   result.Set("typedUrlsSynced",
              types.Has(syncer::UserSelectableType::kHistory));
-  result.Set("paymentsIntegrationEnabled", false);
 
   // Reading list doesn't really have a UI and is supported on ios only.
   result.Set("readingListSynced",
@@ -887,12 +888,12 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   ExpectHasBoolKey(dictionary, "bookmarksRegistered", true);
   ExpectHasBoolKey(dictionary, "extensionsRegistered", true);
   ExpectHasBoolKey(dictionary, "passwordsRegistered", true);
+  ExpectHasBoolKey(dictionary, "paymentsRegistered", true);
   ExpectHasBoolKey(dictionary, "preferencesRegistered", true);
   ExpectHasBoolKey(dictionary, "readingListRegistered", true);
   ExpectHasBoolKey(dictionary, "tabsRegistered", true);
   ExpectHasBoolKey(dictionary, "themesRegistered", true);
   ExpectHasBoolKey(dictionary, "typedUrlsRegistered", true);
-  ExpectHasBoolKey(dictionary, "paymentsIntegrationEnabled", true);
   ExpectHasBoolKey(dictionary, "passphraseRequired", false);
   ExpectHasBoolKey(dictionary, "encryptAllData", false);
   CheckConfigDataTypeArguments(dictionary, SYNC_ALL_DATA, GetAllTypes());
@@ -1286,8 +1287,7 @@ TEST(PeopleHandlerMainProfile, Signout) {
 
   std::unique_ptr<TestingProfile> profile =
       IdentityTestEnvironmentProfileAdaptor::
-          CreateProfileForIdentityTestEnvironment(
-              builder, signin::AccountConsistencyMethod::kMirror);
+          CreateProfileForIdentityTestEnvironment(builder);
 
   auto identity_test_env_adaptor =
       std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile.get());
@@ -1321,8 +1321,7 @@ TEST(PeopleHandlerMainProfile, DeleteProfileCrashes) {
 
   std::unique_ptr<TestingProfile> profile =
       IdentityTestEnvironmentProfileAdaptor::
-          CreateProfileForIdentityTestEnvironment(
-              builder, signin::AccountConsistencyMethod::kMirror);
+          CreateProfileForIdentityTestEnvironment(builder);
 
   PeopleHandler handler(profile.get());
   base::Value::List args;
@@ -1339,8 +1338,7 @@ TEST(PeopleHandlerSecondaryProfile, SignoutWhenSyncing) {
 
   std::unique_ptr<TestingProfile> profile =
       IdentityTestEnvironmentProfileAdaptor::
-          CreateProfileForIdentityTestEnvironment(
-              builder, signin::AccountConsistencyMethod::kMirror);
+          CreateProfileForIdentityTestEnvironment(builder);
 
   auto identity_test_env_adaptor =
       std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile.get());
@@ -1370,8 +1368,7 @@ TEST(PeopleHandlerMainProfile, GetStoredAccountsList) {
 
   std::unique_ptr<TestingProfile> profile =
       IdentityTestEnvironmentProfileAdaptor::
-          CreateProfileForIdentityTestEnvironment(
-              builder, signin::AccountConsistencyMethod::kMirror);
+          CreateProfileForIdentityTestEnvironment(builder);
 
   auto identity_test_env_adaptor =
       std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile.get());
@@ -1402,8 +1399,7 @@ TEST(PeopleHandlerSecondaryProfile, GetStoredAccountsList) {
 
   std::unique_ptr<TestingProfile> profile =
       IdentityTestEnvironmentProfileAdaptor::
-          CreateProfileForIdentityTestEnvironment(
-              builder, signin::AccountConsistencyMethod::kMirror);
+          CreateProfileForIdentityTestEnvironment(builder);
 
   auto identity_test_env_adaptor =
       std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile.get());
@@ -1512,8 +1508,7 @@ class PeopleHandlerSignoutTest : public BrowserWithTestWindowTest {
  private:
   TestingProfile::TestingFactories GetTestingFactories() override {
     return IdentityTestEnvironmentProfileAdaptor::
-        GetIdentityTestEnvironmentFactories(
-            signin::AccountConsistencyMethod::kDice);
+        GetIdentityTestEnvironmentFactories();
   }
 
   void TearDown() override {

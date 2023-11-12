@@ -53,10 +53,6 @@ class MockSuggestionsHandler
   base::WeakPtrFactory<MockSuggestionsHandler> weak_ptr_factory_{this};
 };
 
-FormStructureTestApi test_api(FormStructure* form_structure) {
-  return FormStructureTestApi(form_structure);
-}
-
 }  // namespace
 
 class SingleFieldFormFillRouterTest : public testing::Test {
@@ -76,7 +72,7 @@ class SingleFieldFormFillRouterTest : public testing::Test {
         std::make_unique<MockAutocompleteHistoryManager>();
     autocomplete_history_manager_->Init(web_data_service_, prefs_.get(), false);
     iban_manager_ =
-        std::make_unique<MockIBANManager>(personal_data_manager_.get());
+        std::make_unique<MockIbanManager>(personal_data_manager_.get());
     merchant_promo_code_manager_ =
         std::make_unique<MockMerchantPromoCodeManager>();
     merchant_promo_code_manager_->Init(personal_data_manager_.get(),
@@ -85,8 +81,8 @@ class SingleFieldFormFillRouterTest : public testing::Test {
         std::make_unique<SingleFieldFormFillRouter>(
             autocomplete_history_manager_.get(), iban_manager_.get(),
             merchant_promo_code_manager_.get());
-    test::CreateTestFormField(/*label=*/"", "Some Field Name", "SomePrefix",
-                              "SomeType", &test_field_);
+    test_field_ = test::CreateTestFormField(/*label=*/"", "Some Field Name",
+                                            "SomePrefix", "SomeType");
   }
 
   base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
@@ -98,7 +94,7 @@ class SingleFieldFormFillRouterTest : public testing::Test {
   scoped_refptr<MockAutofillWebDataService> web_data_service_;
   std::unique_ptr<PrefService> prefs_;
   std::unique_ptr<MockAutocompleteHistoryManager> autocomplete_history_manager_;
-  std::unique_ptr<MockIBANManager> iban_manager_;
+  std::unique_ptr<MockIbanManager> iban_manager_;
   std::unique_ptr<MockMerchantPromoCodeManager> merchant_promo_code_manager_;
   FormFieldData test_field_;
 };
@@ -135,7 +131,7 @@ TEST_F(SingleFieldFormFillRouterTest,
 
 // Ensure that the router routes to all SingleFieldFormFillers for this
 // OnWillSubmitForm call, and call OnWillSubmitFormWithFields
-// if corresponding manager (e.g., IBANManager) presents.
+// if corresponding manager (e.g., IbanManager) presents.
 TEST_F(SingleFieldFormFillRouterTest,
        RouteToAllSingleFieldFormFillers_OnWillSubmitForm) {
   FormData form_data;
@@ -149,12 +145,12 @@ TEST_F(SingleFieldFormFillRouterTest,
   FormStructure form_structure{form_data};
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  test_api(&form_structure)
+  test_api(form_structure)
       .SetFieldTypes({UNKNOWN_TYPE, UNKNOWN_TYPE, UNKNOWN_TYPE,
                       MERCHANT_PROMO_CODE, MERCHANT_PROMO_CODE,
                       MERCHANT_PROMO_CODE, IBAN_VALUE, IBAN_VALUE, IBAN_VALUE});
 #else
-  test_api(&form_structure)
+  test_api(form_structure)
       .SetFieldTypes({UNKNOWN_TYPE, UNKNOWN_TYPE, UNKNOWN_TYPE,
                       MERCHANT_PROMO_CODE, MERCHANT_PROMO_CODE,
                       MERCHANT_PROMO_CODE});
@@ -244,9 +240,6 @@ TEST_F(SingleFieldFormFillRouterTest,
   for (bool test_field_should_autocomplete : {true, false}) {
     SCOPED_TRACE(testing::Message() << "test_field_should_autocomplete = "
                                     << test_field_should_autocomplete);
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitWithFeatures(
-        {features::kAutofillFillMerchantPromoCodeFields}, {});
     auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
     test_field_.should_autocomplete = test_field_should_autocomplete;
 
@@ -268,9 +261,6 @@ TEST_F(SingleFieldFormFillRouterTest,
 // Ensure that the router routes to AutocompleteHistoryManager for this
 // OnGetSingleFieldSuggestions call if MerchantPromoCodeManager is not present.
 TEST_F(SingleFieldFormFillRouterTest, MerchantPromoCodeManagerNotPresent) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {features::kAutofillFillMerchantPromoCodeFields}, {});
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
 
   // This also invalidates the WeakPtr that the `single_field_form_fill_router_`
@@ -296,9 +286,6 @@ TEST_F(SingleFieldFormFillRouterTest, MerchantPromoCodeManagerNotPresent) {
 // OnGetSingleFieldSuggestions call if
 // MerchantPromoCodeManager::OnGetSingleFieldSuggestions() returns false.
 TEST_F(SingleFieldFormFillRouterTest, MerchantPromoCodeManagerReturnedFalse) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {features::kAutofillFillMerchantPromoCodeFields}, {});
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
 
   // Mock MerchantPromoCodeManager::OnGetSingleFieldSuggestions() returning
@@ -350,9 +337,6 @@ TEST_F(SingleFieldFormFillRouterTest,
 TEST_F(
     SingleFieldFormFillRouterTest,
     FieldNotEligibleForAnySingleFieldFormFiller_OnGetSingleFieldSuggestions) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {features::kAutofillFillMerchantPromoCodeFields}, {});
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
 
   EXPECT_CALL(*merchant_promo_code_manager_, OnGetSingleFieldSuggestions)
@@ -372,17 +356,15 @@ TEST_F(
 }
 
 // Ensure that the router routes to AutocompleteHistoryManager for this
-// OnGetSingleFieldSuggestions call if IBANManager is not present.
-TEST_F(SingleFieldFormFillRouterTest, IBANManagerNotPresent) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kAutofillParseIBANFields}, {});
+// OnGetSingleFieldSuggestions call if IbanManager is not present.
+TEST_F(SingleFieldFormFillRouterTest, IbanManagerNotPresent) {
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
 
   // This also invalidates the WeakPtr that the |single_field_form_fill_router_|
   // holds on the iban manager.
   iban_manager_.reset();
 
-  // As the IBANmanager is gone, we should call
+  // As the IbanManager is gone, we should call
   // AutocompleteHistoryManager::OnGetSingleFieldSuggestions().
   EXPECT_CALL(*autocomplete_history_manager_, OnGetSingleFieldSuggestions)
       .Times(1)
@@ -399,19 +381,17 @@ TEST_F(SingleFieldFormFillRouterTest, IBANManagerNotPresent) {
 
 // Ensure that the router routes to AutocompleteHistoryManager for this
 // OnGetSingleFieldSuggestions call if
-// IBANManager::OnGetSingleFieldSuggestions() returns false.
-TEST_F(SingleFieldFormFillRouterTest, IBANManagerReturnedFalse) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kAutofillParseIBANFields}, {});
+// IbanManager::OnGetSingleFieldSuggestions() returns false.
+TEST_F(SingleFieldFormFillRouterTest, IbanManagerReturnedFalse) {
   auto suggestions_handler = std::make_unique<MockSuggestionsHandler>();
 
-  // Mock IBANManager::OnGetSingleFieldSuggestions() returning
+  // Mock IbanManager::OnGetSingleFieldSuggestions() returning
   // false.
   EXPECT_CALL(*iban_manager_, OnGetSingleFieldSuggestions)
       .Times(1)
       .WillOnce(testing::Return(false));
 
-  // Since IBANManager::OnGetSingleFieldSuggestions() returned
+  // Since IbanManager::OnGetSingleFieldSuggestions() returned
   // false, we should call
   // AutocompleteHistoryManager::OnGetSingleFieldSuggestions().
   EXPECT_CALL(*autocomplete_history_manager_, OnGetSingleFieldSuggestions)
@@ -427,10 +407,10 @@ TEST_F(SingleFieldFormFillRouterTest, IBANManagerReturnedFalse) {
       SuggestionsContext()));
 }
 
-// Ensure that the router routes to IBANManager for this
+// Ensure that the router routes to IbanManager for this
 // OnRemoveCurrentSingleFieldSuggestion call.
 TEST_F(SingleFieldFormFillRouterTest,
-       RouteToIBANManager_OnRemoveCurrentSingleFieldSuggestion) {
+       RouteToIbanManager_OnRemoveCurrentSingleFieldSuggestion) {
   EXPECT_CALL(*iban_manager_, OnRemoveCurrentSingleFieldSuggestion);
 
   single_field_form_fill_router_->OnRemoveCurrentSingleFieldSuggestion(

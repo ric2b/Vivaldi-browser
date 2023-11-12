@@ -42,9 +42,17 @@ class BookmarkToolbarViewBinder {
         } else if (key == BookmarkToolbarProperties.NEW_FOLDER_BUTTON_VISIBLE) {
             bookmarkToolbar.setNewFolderButtonVisible(
                     model.get(BookmarkToolbarProperties.NEW_FOLDER_BUTTON_VISIBLE));
+        } else if (key == BookmarkToolbarProperties.NEW_FOLDER_BUTTON_ENABLED) {
+            bookmarkToolbar.setNewFolderButtonEnabled(
+                    model.get(BookmarkToolbarProperties.NEW_FOLDER_BUTTON_ENABLED));
         } else if (key == BookmarkToolbarProperties.NAVIGATION_BUTTON_STATE) {
             bookmarkToolbar.setNavigationButtonState(
                     model.get(BookmarkToolbarProperties.NAVIGATION_BUTTON_STATE));
+        } else if (key == BookmarkToolbarProperties.SORT_MENU_IDS) {
+            bookmarkToolbar.setSortMenuIds(model.get(BookmarkToolbarProperties.SORT_MENU_IDS));
+        } else if (key == BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED) {
+            bookmarkToolbar.setSortMenuIdsEnabled(
+                    model.get(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED));
         } else if (key == BookmarkToolbarProperties.CHECKED_SORT_MENU_ID) {
             bookmarkToolbar.setCheckedSortMenuId(
                     model.get(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID));
@@ -53,9 +61,9 @@ class BookmarkToolbarViewBinder {
                     model.get(BookmarkToolbarProperties.CHECKED_VIEW_MENU_ID));
         } else if (key == BookmarkToolbarProperties.CURRENT_FOLDER) {
             bookmarkToolbar.setCurrentFolder(model.get(BookmarkToolbarProperties.CURRENT_FOLDER));
-        } else if (key == BookmarkToolbarProperties.OPEN_FOLDER_CALLBACK) {
-            bookmarkToolbar.setOpenFolderCallback(
-                    model.get(BookmarkToolbarProperties.OPEN_FOLDER_CALLBACK));
+        } else if (key == BookmarkToolbarProperties.NAVIGATE_BACK_RUNNABLE) {
+            bookmarkToolbar.setNavigateBackRunnable(
+                    model.get(BookmarkToolbarProperties.NAVIGATE_BACK_RUNNABLE));
         } else if (key == BookmarkToolbarProperties.MENU_ID_CLICKED_FUNCTION) {
             bookmarkToolbar.setMenuIdClickedFunction(
                     model.get(BookmarkToolbarProperties.MENU_ID_CLICKED_FUNCTION));

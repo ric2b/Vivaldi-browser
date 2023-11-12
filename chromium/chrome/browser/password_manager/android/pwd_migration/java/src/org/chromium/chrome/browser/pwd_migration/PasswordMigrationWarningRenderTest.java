@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.pwd_migration;
 
+import static org.junit.Assert.fail;
+
 import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.chrome.browser.pwd_migration.PasswordMigrationWarningProperties.CURRENT_SCREEN;
 import static org.chromium.chrome.browser.pwd_migration.PasswordMigrationWarningProperties.VISIBLE;
@@ -35,6 +37,8 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.pwd_migration.PasswordMigrationWarningProperties.ScreenType;
+import org.chromium.chrome.browser.pwd_migration.PasswordMigrationWarningView.OnSheetClosedCallback;
+import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -53,6 +57,7 @@ import java.util.List;
  * standard.
  */
 @RunWith(ParameterizedRunner.class)
+@ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class PasswordMigrationWarningRenderTest {
@@ -66,6 +71,9 @@ public class PasswordMigrationWarningRenderTest {
     private Callback<Integer> mDismissCallback;
     @Mock
     private PasswordMigrationWarningOnClickHandler mOnClickHandler;
+    // This callback should never be called as part of the render tests.
+    private OnSheetClosedCallback mOnEmptySheetClosedCallback =
+            (reason, setFragmentWasCalled) -> fail();
     private BottomSheetController mBottomSheetController;
     private PasswordMigrationWarningView mView;
     private PropertyModel mModel;
@@ -100,9 +108,10 @@ public class PasswordMigrationWarningRenderTest {
                                          .getBottomSheetController();
         runOnUiThreadBlocking(() -> {
             mModel = PasswordMigrationWarningProperties.createDefaultModel(
-                    mDismissCallback, mOnClickHandler);
-            mView = new PasswordMigrationWarningView(
-                    mActivityTestRule.getActivity(), mBottomSheetController, () -> {});
+                    () -> {}, mDismissCallback, mOnClickHandler);
+            mView = new PasswordMigrationWarningView(mActivityTestRule.getActivity(),
+                    mBottomSheetController,
+                    () -> {}, (Throwable exception) -> fail(), mOnEmptySheetClosedCallback);
             PropertyModelChangeProcessor.create(mModel, mView,
                     PasswordMigrationWarningViewBinder::bindPasswordMigrationWarningView);
         });

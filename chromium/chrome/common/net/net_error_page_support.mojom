@@ -18,4 +18,8 @@ interface NetErrorPageSupport {
   // Called to show the captive portal signin page.
   [EnableIf=is_chromeos]
   ShowPortalSignin();
+
+  // Vivaldi: Open a new tab with vivaldi://game/
+  OpenVivaldia();
+
 };

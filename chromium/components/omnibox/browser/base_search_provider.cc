@@ -514,8 +514,7 @@ void BaseSearchProvider::AddMatchToMap(
     // plain-text matches (i.e., with no additional query params) as expected.
     const auto& added_match_query = match_key.first;
     const auto& added_match_query_params = match_key.second;
-    if (base::FeatureList::IsEnabled(omnibox::kDisambiguateEntitySuggestions) &&
-        !added_match_query_params.empty()) {
+    if (!added_match_query_params.empty()) {
       for (const auto& entry : *map) {
         const auto& existing_match_query = entry.first.first;
         const auto& existing_match_query_params = entry.first.second;
@@ -605,6 +604,19 @@ void BaseSearchProvider::AddMatchToMap(
         existing_match.image_url = less_relevant_duplicate_match.image_url;
       }
     }
+    // This is to avoid having shopping categorical queries lose their subtypes
+    // to higher-relevance local history and verbatim matches. The subtypes are
+    // sent to the backend in the ChromeSearchboxStats proto via the gs_lcrp=
+    // param when the user selects a suggestion. The subtypes may be used to
+    // identify what the user selected so they can be suggested the next time,
+    // i.e., if the user selects a decorated suggestion - which is accompanied
+    // by specific subtypes - we want to show a decorated suggestion next time.
+    if (base::FeatureList::IsEnabled(omnibox::kCategoricalSuggestions) &&
+        base::FeatureList::IsEnabled(omnibox::kMergeSubtypes)) {
+      existing_match.subtypes.insert(
+          less_relevant_duplicate_match.subtypes.begin(),
+          less_relevant_duplicate_match.subtypes.end());
+    }
     // This is to avoid having `stripped_destination_url` being later set by
     // `AutocompleteResult::ComputeStrippedDestinationURL()` which strips away
     // the additional query params from `destination_url` leaving only the
@@ -649,9 +661,9 @@ void BaseSearchProvider::DeleteMatchFromMatches(
 
 void BaseSearchProvider::OnDeletionComplete(
     const network::SimpleURLLoader* source,
-    const bool response_received,
+    const int response_code,
     std::unique_ptr<std::string> response_body) {
-  RecordDeletionResult(response_received);
+  RecordDeletionResult(response_code == 200);
   base::EraseIf(
       deletion_loaders_,
       [source](const std::unique_ptr<network::SimpleURLLoader>& loader) {

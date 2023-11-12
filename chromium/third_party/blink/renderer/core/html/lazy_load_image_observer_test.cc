@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/testing/sim/sim_compositor.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
+#include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
@@ -456,7 +457,7 @@ TEST_F(LazyLoadImagesTest, LoadAllImagesIfPrinting) {
   EXPECT_TRUE(ConsoleMessages().Contains("main body onload"));
   EXPECT_FALSE(ConsoleMessages().Contains("child frame element onload"));
 
-  Element* img = GetDocument().getElementById("my_image");
+  Element* img = GetDocument().getElementById(AtomicString("my_image"));
   ASSERT_TRUE(img);
 
   test::RunPendingTasks();
@@ -486,8 +487,8 @@ TEST_F(LazyLoadImagesTest, AttributeChangedFromLazyToEager) {
   SimSubresourceRequest full_resource("https://example.com/image.png",
                                       "image/png");
   GetDocument()
-      .getElementById("my_image")
-      ->setAttribute(html_names::kLoadingAttr, "eager");
+      .getElementById(AtomicString("my_image"))
+      ->setAttribute(html_names::kLoadingAttr, AtomicString("eager"));
 
   Compositor().BeginFrame();
   test::RunPendingTasks();
@@ -511,8 +512,8 @@ TEST_F(LazyLoadImagesTest, AttributeChangedFromAutoToEager) {
   SimSubresourceRequest full_resource("https://example.com/image.png",
                                       "image/png");
   GetDocument()
-      .getElementById("my_image")
-      ->setAttribute(html_names::kLoadingAttr, "eager");
+      .getElementById(AtomicString("my_image"))
+      ->setAttribute(html_names::kLoadingAttr, AtomicString("eager"));
 
   EXPECT_TRUE(ConsoleMessages().Contains("main body onload"));
   EXPECT_TRUE(ConsoleMessages().Contains("image onload"));
@@ -528,8 +529,8 @@ TEST_F(LazyLoadImagesTest, AttributeChangedFromUnsetToEager) {
   SimSubresourceRequest full_resource("https://example.com/image.png",
                                       "image/png");
   GetDocument()
-      .getElementById("my_image")
-      ->setAttribute(html_names::kLoadingAttr, "eager");
+      .getElementById(AtomicString("my_image"))
+      ->setAttribute(html_names::kLoadingAttr, AtomicString("eager"));
 
   EXPECT_TRUE(ConsoleMessages().Contains("main body onload"));
   EXPECT_TRUE(ConsoleMessages().Contains("image onload"));
@@ -709,17 +710,19 @@ TEST_F(LazyLoadImagesTest, AboveTheFoldCachedImageMetrics) {
   Compositor().BeginFrame();
   test::RunPendingTasks();
 
-  auto* image = To<HTMLImageElement>(GetDocument().getElementById("image"));
+  auto* image =
+      To<HTMLImageElement>(GetDocument().getElementById(AtomicString("image")));
   EXPECT_TRUE(image->CachedImage()->IsLoaded());
 
   // Insert a lazy loaded image with a src that is already cached.
-  auto* container = GetDocument().getElementById("container");
+  auto* container = GetDocument().getElementById(AtomicString("container"));
   container->setInnerHTML(R"HTML(
     <img src='https://example.com/image.png' loading='lazy' id='lazy'/>
   )HTML");
 
   // The lazy image should have completed loading.
-  auto* lazy_image = To<HTMLImageElement>(GetDocument().getElementById("lazy"));
+  auto* lazy_image =
+      To<HTMLImageElement>(GetDocument().getElementById(AtomicString("lazy")));
   EXPECT_TRUE(lazy_image->CachedImage()->IsLoaded());
 
   // We should have a load time, but not yet `is_initially_intersecting`.
@@ -766,7 +769,7 @@ TEST_F(LazyLoadImagesTest, CachedImageVisibleBeforeLoadedMetrics) {
   test::RunPendingTasks();
 
   // Insert a lazy loaded image with a src that is already cached.
-  auto* container = GetDocument().getElementById("container");
+  auto* container = GetDocument().getElementById(AtomicString("container"));
   container->setInnerHTML("<img src='https://a.com/image.png' loading='lazy'>");
 
   Compositor().BeginFrame();
@@ -1006,7 +1009,8 @@ TEST_F(LazyLoadImagesTest, LazyLoadFileUrls) {
   Compositor().BeginFrame();
   test::RunPendingTasks();
 
-  auto* lazy = To<HTMLImageElement>(GetDocument().getElementById("lazy"));
+  auto* lazy =
+      To<HTMLImageElement>(GetDocument().getElementById(AtomicString("lazy")));
   EXPECT_FALSE(lazy->CachedImage()->IsLoading());
 
   // Scroll down such that the image is visible.
@@ -1018,6 +1022,38 @@ TEST_F(LazyLoadImagesTest, LazyLoadFileUrls) {
   test::RunPendingTasks();
 
   EXPECT_TRUE(lazy->CachedImage()->IsLoading());
+}
+
+// This is a regression test added for https://crbug.com/1213045, which was
+// filed for a memory leak whereby lazy loaded images currently being deferred
+// but that were removed from the DOM were never actually garbage collected.
+TEST_F(LazyLoadImagesTest, GarbageCollectDeferredLazyLoadImages) {
+  SimRequest main_resource("https://example.com/", "text/html");
+  LoadURL("https://example.com/");
+  main_resource.Complete(String::Format(
+      R"HTML(
+        <body>
+        <div style='height: %dpx;'></div>
+        <img src='https://example.com/image.png' loading='lazy'>
+        </body>)HTML",
+      kViewportHeight + kLoadingDistanceThreshold + 100));
+
+  Compositor().BeginFrame();
+  test::RunPendingTasks();
+
+  WeakPersistent<HTMLImageElement> image =
+      To<HTMLImageElement>(GetDocument().QuerySelector(AtomicString("img")));
+  EXPECT_FALSE(image->complete());
+  image->remove();
+  EXPECT_FALSE(image->isConnected());
+  EXPECT_FALSE(image->complete());
+  EXPECT_NE(image, nullptr);
+
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
+  test::RunPendingTasks();
+  ThreadState::Current()->CollectAllGarbageForTesting();
+
+  EXPECT_EQ(nullptr, image);
 }
 
 class DelayOutOfViewportLazyImagesTest : public SimTest {
@@ -1076,12 +1112,12 @@ TEST_F(DelayOutOfViewportLazyImagesTest, DelayOutOfViewportLazyLoads) {
   Compositor().BeginFrame();
   test::RunPendingTasks();
 
-  auto* in_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("in_viewport"));
-  auto* near_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("near_viewport"));
-  auto* far_from_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("far_from_viewport"));
+  auto* in_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("in_viewport")));
+  auto* near_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("near_viewport")));
+  auto* far_from_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("far_from_viewport")));
 
   // While loading (`main_resource` is not yet complete), only the in-viewport
   // image should be loading.
@@ -1134,12 +1170,12 @@ TEST_F(DelayOutOfViewportLazyImagesTest, DoNotDelayAfterDocumentLoads) {
   Compositor().BeginFrame();
   test::RunPendingTasks();
 
-  auto* in_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("in_viewport"));
-  auto* near_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("near_viewport"));
-  auto* far_from_viewport =
-      To<HTMLImageElement>(GetDocument().getElementById("far_from_viewport"));
+  auto* in_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("in_viewport")));
+  auto* near_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("near_viewport")));
+  auto* far_from_viewport = To<HTMLImageElement>(
+      GetDocument().getElementById(AtomicString("far_from_viewport")));
 
   EXPECT_TRUE(in_viewport->CachedImage()->IsLoading());
   EXPECT_TRUE(near_viewport->CachedImage()->IsLoading());

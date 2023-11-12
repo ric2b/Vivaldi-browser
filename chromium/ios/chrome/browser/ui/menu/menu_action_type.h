@@ -51,6 +51,7 @@ enum class MenuActionType {
   PinTab = 39,
   UnpinTab = 40,
   LensCameraSearch = 41,
+  SaveImageToGooglePhotos = 42,
 
   // Vivaldi
   NewNote,

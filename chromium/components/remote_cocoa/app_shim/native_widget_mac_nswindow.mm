@@ -4,9 +4,9 @@
 
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 
+#include "base/apple/foundation_util.h"
 #include "base/auto_reset.h"
 #include "base/debug/dump_without_crashing.h"
-#include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/trace_event/trace_event.h"
@@ -51,8 +51,9 @@ void OrderChildWindow(NSWindow* child_window,
   // `ordered_children` sorts children windows back to front.
   NSArray<NSWindow*>* children = [[child_window parentWindow] childWindows];
   std::vector<std::pair<NSInteger, NSWindow*>> ordered_children;
-  for (NSWindow* child in children)
-    ordered_children.push_back({[child orderedIndex], child});
+  for (NSWindow* child in children) {
+    ordered_children.emplace_back([child orderedIndex], child);
+  }
   std::sort(ordered_children.begin(), ordered_children.end(), std::greater<>());
 
   // If `other_window` is nullptr, place `child_window` in front of (or behind)
@@ -63,20 +64,23 @@ void OrderChildWindow(NSWindow* child_window,
                        : parent;
   }
 
-  if (child_window == other_window)
+  if (child_window == other_window) {
     return;
+  }
 
   const bool relative_to_parent = parent == other_window;
   DCHECK(ordering_mode != NSWindowBelow || !relative_to_parent)
       << "Placing a child window behind its parent is not supported.";
 
-  for (NSWindow* child in children)
+  for (NSWindow* child in children) {
     [parent removeChildWindow:child];
+  }
 
   // If `relative_to_parent` is true, `child_window` is the first child of its
   // parent.
-  if (relative_to_parent)
+  if (relative_to_parent) {
     [parent addChildWindow:child_window ordered:NSWindowAbove];
+  }
 
   // Re-parent children windows in the desired order.
   for (auto [ordered_index, child] : ordered_children) {
@@ -163,9 +167,9 @@ void OrderChildWindow(NSWindow* child_window,
 
 @implementation NativeWidgetMacNSWindow {
  @private
-  base::scoped_nsobject<CommandDispatcher> _commandDispatcher;
-  base::scoped_nsprotocol<id<UserInterfaceItemCommandHandler>> _commandHandler;
-  id<WindowTouchBarDelegate> _touchBarDelegate;  // Weak.
+  CommandDispatcher* __strong _commandDispatcher;
+  id<UserInterfaceItemCommandHandler> __strong _commandHandler;
+  id<WindowTouchBarDelegate> __weak _touchBarDelegate;
   uint64_t _bridgedNativeWidgetId;
   // This field is not a raw_ptr<> because it requires @property rewrite.
   RAW_PTR_EXCLUSION remote_cocoa::NativeWidgetNSWindowBridge* _bridge;
@@ -174,14 +178,17 @@ void OrderChildWindow(NSWindow* child_window,
   BOOL _preventKeyWindow;
   BOOL _isTooltip;
   BOOL _isHeadless;
+  BOOL _isShufflingForOrdering;
   BOOL _miniaturizationInProgress;
 }
 @synthesize bridgedNativeWidgetId = _bridgedNativeWidgetId;
 @synthesize bridge = _bridge;
 @synthesize isTooltip = _isTooltip;
 @synthesize isHeadless = _isHeadless;
+@synthesize isShufflingForOrdering = _isShufflingForOrdering;
 @synthesize childWindowAddedHandler = _childWindowAddedHandler;
 @synthesize childWindowRemovedHandler = _childWindowRemovedHandler;
+@synthesize commandDispatchParentOverride = _commandDispatchParentOverride;
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
                           styleMask:(NSUInteger)windowStyle
@@ -192,7 +199,8 @@ void OrderChildWindow(NSWindow* child_window,
                                styleMask:windowStyle
                                  backing:bufferingType
                                    defer:deferCreation])) {
-    _commandDispatcher.reset([[CommandDispatcher alloc] initWithOwner:self]);
+    _commandDispatcher = [[CommandDispatcher alloc] initWithOwner:self];
+    self.releasedWhenClosed = NO;
   }
   return self;
 }
@@ -220,9 +228,6 @@ void OrderChildWindow(NSWindow* child_window,
   }
   _willUpdateRestorableState = YES;
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
-  [_childWindowAddedHandler dealloc];
-  [_childWindowRemovedHandler dealloc];
-  [super dealloc];
 }
 
 - (void)addChildWindow:(NSWindow*)childWin ordered:(NSWindowOrderingMode)place {
@@ -237,6 +242,9 @@ void OrderChildWindow(NSWindow* child_window,
 }
 
 - (void)removeChildWindow:(NSWindow*)childWin {
+  if (self != childWin.parentWindow) {
+    return;
+  }
   [super removeChildWindow:childWin];
   if (self.childWindowRemovedHandler) {
     self.childWindowRemovedHandler(childWin);
@@ -280,17 +288,6 @@ void OrderChildWindow(NSWindow* child_window,
   [_commandDispatcher setDelegate:delegate];
 }
 
-- (void)sheetDidEnd:(NSWindow*)sheet
-         returnCode:(NSInteger)returnCode
-        contextInfo:(void*)contextInfo {
-  // Note NativeWidgetNSWindowBridge may have cleared [self delegate], in which
-  // case this will no-op. This indirection is necessary to handle AppKit
-  // invoking this selector via a posted task. See https://crbug.com/851376.
-  [[self viewsNSWindowDelegate] sheetDidEnd:sheet
-                                 returnCode:returnCode
-                                contextInfo:contextInfo];
-}
-
 - (void)setWindowTouchBarDelegate:(id<WindowTouchBarDelegate>)delegate {
   _touchBarDelegate = delegate;
 }
@@ -306,15 +303,14 @@ void OrderChildWindow(NSWindow* child_window,
   // Temporarily prevent the window from becoming the key window until after
   // the space change completes.
   _preventKeyWindow = ![self isKeyWindow];
-  NSNotificationCenter* notificationCenter =
-      [[NSWorkspace sharedWorkspace] notificationCenter];
-  __block id observer = [notificationCenter
+  __block id observer = [NSWorkspace.sharedWorkspace.notificationCenter
       addObserverForName:NSWorkspaceActiveSpaceDidChangeNotification
                   object:[NSWorkspace sharedWorkspace]
                    queue:[NSOperationQueue mainQueue]
               usingBlock:^(NSNotification* notification) {
-                _preventKeyWindow = NO;
-                [notificationCenter removeObserver:observer];
+                self->_preventKeyWindow = NO;
+                [NSWorkspace.sharedWorkspace.notificationCenter
+                    removeObserver:observer];
               }];
   [self orderWindow:NSWindowAbove relativeTo:0];
 }
@@ -331,7 +327,7 @@ void OrderChildWindow(NSWindow* child_window,
 // Private methods.
 
 - (ViewsNSWindowDelegate*)viewsNSWindowDelegate {
-  return base::mac::ObjCCastStrict<ViewsNSWindowDelegate>([self delegate]);
+  return base::apple::ObjCCastStrict<ViewsNSWindowDelegate>([self delegate]);
 }
 
 - (BOOL)hasViewsMenuActive {
@@ -344,7 +340,7 @@ void OrderChildWindow(NSWindow* child_window,
 - (id<NSAccessibility>)rootAccessibilityObject {
   id<NSAccessibility> obj =
       _bridge ? _bridge->host_helper()->GetNativeViewAccessible() : nil;
-  // We should like to DCHECK that the object returned implemements the
+  // We should like to DCHECK that the object returned implements the
   // NSAccessibility protocol, but the NSAccessibilityRemoteUIElement interface
   // does not conform.
   // TODO(https://crbug.com/944698): Create a sub-class that does.
@@ -473,8 +469,8 @@ void OrderChildWindow(NSWindow* child_window,
   [super sendEvent:event];
 }
 
-- (void)reallyOrderWindow:(NSWindowOrderingMode)orderingMode
-               relativeTo:(NSInteger)otherWindowNumber {
+- (void)orderWindowByShuffling:(NSWindowOrderingMode)orderingMode
+                    relativeTo:(NSInteger)otherWindowNumber {
   NativeWidgetMacNSWindow* parent =
       static_cast<NativeWidgetMacNSWindow*>([self parentWindow]);
 
@@ -484,12 +480,15 @@ void OrderChildWindow(NSWindow* child_window,
     return;
   }
 
+  base::AutoReset<BOOL> shuffling(&_isShufflingForOrdering, YES);
+
   // `otherWindow` is nil if `otherWindowNumber` is 0. In this case, place
   // `self` at the top / bottom, depending on `orderingMode`.
   NSWindow* otherWindow = [NSApp windowWithWindowNumber:otherWindowNumber];
   if (otherWindow == nullptr || parent == [otherWindow parentWindow] ||
-      parent == otherWindow)
+      parent == otherWindow) {
     OrderChildWindow(self, otherWindow, orderingMode);
+  }
 
   [[self viewsNSWindowDelegate] onWindowOrderChanged:nil];
 }
@@ -499,7 +498,7 @@ void OrderChildWindow(NSWindow* child_window,
 // hardly ever calls display, and reports -[NSWindow isVisible] incorrectly
 // when ordering in a window for the first time.
 // Note that this methods has no effect for children windows. Use
-// -reallyOrderWindow:relativeTo: instead.
+// -orderWindowByShuffling:relativeTo: instead.
 - (void)orderWindow:(NSWindowOrderingMode)orderingMode
          relativeTo:(NSInteger)otherWindowNumber {
   [super orderWindow:orderingMode relativeTo:otherWindowNumber];
@@ -507,7 +506,7 @@ void OrderChildWindow(NSWindow* child_window,
 }
 
 - (void)miniaturize:(id)sender {
-  static const BOOL isMacOS13OrHigher = base::mac::IsAtLeastOS13();
+  static const BOOL isMacOS13OrHigher = base::mac::MacOSMajorVersion() >= 13;
   // On macOS 13, the miniaturize operation appears to no longer be "atomic"
   // because of non-blocking roundtrip IPC with the Dock. We want to note here
   // that miniaturization is in progress. The process completes when we
@@ -534,7 +533,7 @@ void OrderChildWindow(NSWindow* child_window,
   // _miniaturizationInProgress is NO, the miniaturization process was
   // cancelled by a call to -makeKeyAndOrderFront:. In that case, we don't want
   // to proceed with miniaturization.
-  static const BOOL isMacOS13OrHigher = base::mac::IsAtLeastOS13();
+  static const BOOL isMacOS13OrHigher = base::mac::MacOSMajorVersion() >= 13;
   if (isMacOS13OrHigher && !_miniaturizationInProgress) {
     return;
   }
@@ -609,12 +608,12 @@ void OrderChildWindow(NSWindow* child_window,
   // the article at
   // https://sector7.computest.nl/post/2022-08-process-injection-breaking-all-macos-security-layers-with-a-single-vulnerability/
   // for more details.
-  base::scoped_nsobject<NSKeyedArchiver> encoder([[NSKeyedArchiver alloc]
-      initRequiringSecureCoding:base::mac::IsAtLeastOS12()]);
-  encoder.get().delegate = self;
+  NSKeyedArchiver* encoder = [[NSKeyedArchiver alloc]
+      initRequiringSecureCoding:base::mac::MacOSMajorVersion() >= 12];
+  encoder.delegate = self;
   [self encodeRestorableStateWithCoder:encoder];
   [encoder finishEncoding];
-  NSData* restorableStateData = encoder.get().encodedData;
+  NSData* restorableStateData = encoder.encodedData;
 
   auto* bytes = static_cast<uint8_t const*>(restorableStateData.bytes);
   _bridge->host()->OnWindowStateRestorationDataChanged(
@@ -654,7 +653,7 @@ void OrderChildWindow(NSWindow* child_window,
       aSelector == @selector(commandDispatch:) ||
       aSelector == @selector(commandDispatchUsingKeyModifiers:);
   if (isCommandDispatch && _commandHandler == nil &&
-      [_commandDispatcher bubbleParent] == nil) {
+      self.commandDispatchParent == nil) {
     return NO;
   }
 
@@ -664,11 +663,11 @@ void OrderChildWindow(NSWindow* child_window,
 // CommandDispatchingWindow implementation.
 
 - (void)setCommandHandler:(id<UserInterfaceItemCommandHandler>)commandHandler {
-  _commandHandler.reset([commandHandler retain]);
+  _commandHandler = commandHandler;
 }
 
 - (CommandDispatcher*)commandDispatcher {
-  return _commandDispatcher.get();
+  return _commandDispatcher;
 }
 
 - (BOOL)defaultPerformKeyEquivalent:(NSEvent*)event {
@@ -729,6 +728,18 @@ void OrderChildWindow(NSWindow* child_window,
   // from NSWindow's behavior can easily break VoiceOver integration.
   NSString* viewsValue = self.rootAccessibilityObject.accessibilityTitle;
   return viewsValue ? viewsValue : [super accessibilityTitle];
+}
+
+- (NSWindow<CommandDispatchingWindow>*)commandDispatchParent {
+  if (_commandDispatchParentOverride) {
+    return _commandDispatchParentOverride;
+  }
+  NSWindow* parent = self.parentWindow;
+  if (parent && [parent hasKeyAppearance] &&
+      [parent conformsToProtocol:@protocol(CommandDispatchingWindow)]) {
+    return static_cast<NSWindow<CommandDispatchingWindow>*>(parent);
+  }
+  return nil;
 }
 
 @end

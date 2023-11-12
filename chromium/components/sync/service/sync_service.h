@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_SERVICE_SYNC_SERVICE_H_
 #define COMPONENTS_SYNC_SERVICE_SYNC_SERVICE_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,6 +30,7 @@ class GURL;
 
 namespace syncer {
 
+struct LocalDataDescription;
 class ProtocolEventObserver;
 class SyncCycleSnapshot;
 struct TypeEntitiesCount;
@@ -297,6 +299,9 @@ class SyncService : public KeyedService {
   // Whether the primary account has consented to Sync (see IdentityManager). If
   // this is false, then IsSyncFeatureEnabled will also be false, but
   // Sync-the-transport might still run.
+  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // deleted from the codebase. See ConsentLevel::kSync documentation for
+  // details.
   virtual bool HasSyncConsent() const = 0;
 
   // Returns whether the SyncService has completed at least one Sync cycle since
@@ -327,6 +332,9 @@ class SyncService : public KeyedService {
   // TODO(crbug.com/1443446): Consider removing this API, for example by
   // reporting IsInitialSyncFeatureSetupComplete()==false which is otherwise
   // unreachable on ChromeOS Ash.
+  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // deleted from the codebase. See ConsentLevel::kSync documentation for
+  // details.
   virtual bool IsSyncFeatureDisabledViaDashboard() const = 0;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -339,6 +347,9 @@ class SyncService : public KeyedService {
   // first-time Sync setup has been completed by the user.
   // Note: This does not imply that Sync is actually running. Check
   // IsSyncFeatureActive or GetTransportState to get the current state.
+  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // deleted from the codebase. See ConsentLevel::kSync documentation for
+  // details.
   bool IsSyncFeatureEnabled() const;
 
   // Equivalent to "HasDisableReason(DISABLE_REASON_UNRECOVERABLE_ERROR)".
@@ -358,6 +369,9 @@ class SyncService : public KeyedService {
   // even if this is false.
   // TODO(crbug.com/1444344): Remove this API, in favor of
   // IsSyncFeatureEnabled().
+  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // deleted from the codebase. See ConsentLevel::kSync documentation for
+  // details.
   bool CanSyncFeatureStart() const;
 
   // Returns whether Sync-the-feature is active, which means
@@ -366,6 +380,9 @@ class SyncService : public KeyedService {
   // To see which datatypes are actually syncing, see GetActiveDataTypes().
   // Note: This refers to Sync-the-feature. Sync-the-transport may be active
   // even if this is false.
+  // TODO(crbug.com/1462552): Remove once kSync becomes unreachable or is
+  // deleted from the codebase. See ConsentLevel::kSync documentation for
+  // details.
   bool IsSyncFeatureActive() const;
 
   //////////////////////////////////////////////////////////////////////////////
@@ -408,6 +425,31 @@ class SyncService : public KeyedService {
   // implementation may return a sensible likely value.
   virtual ModelTypeSet GetTypesWithPendingDownloadForInitialSync() const = 0;
 
+  // Returns the datatypes which have local changes that have not yet been
+  // synced with the server.
+  // Note: This includes deletions as well.
+  virtual void GetTypesWithUnsyncedData(
+      base::OnceCallback<void(ModelTypeSet)> callback) const = 0;
+
+  // Queries the count and description/preview of existing local data for
+  // `types` data types. This is an asynchronous method which returns the result
+  // via the callback `callback` once the information for all the data types in
+  // `types` is available.
+  // Note: Only data types that are enabled and support this functionality are
+  // part of the response.
+  virtual void GetLocalDataDescriptions(
+      ModelTypeSet types,
+      base::OnceCallback<void(std::map<ModelType, LocalDataDescription>)>
+          callback) = 0;
+
+  // Requests sync service to move all local data to account for `types` data
+  // types. This is an asynchronous method which moves the local data for all
+  // `types` to the account store locally. Upload to the server will happen as
+  // part of the regular commit process, and is NOT part of this method.
+  // Note: Only data types that are enabled and support this functionality are
+  // triggered for upload.
+  virtual void TriggerLocalDataMigration(ModelTypeSet types) = 0;
+
   //////////////////////////////////////////////////////////////////////////////
   // ACTIONS / STATE CHANGE REQUESTS
   //////////////////////////////////////////////////////////////////////////////
@@ -442,23 +484,6 @@ class SyncService : public KeyedService {
   // only when user is interested in session sync data, e.g. the history sync
   // page is opened.
   virtual void SetInvalidationsForSessionsEnabled(bool enabled) = 0;
-
-  // Processes trusted vault encryption keys retrieved from the web. Unused and
-  // ignored on platforms where keys are retrieved by other means.
-  // |last_key_version| represents the key version of the last element in
-  // |keys| (unused if empty).
-  virtual void AddTrustedVaultDecryptionKeysFromWeb(
-      const std::string& gaia_id,
-      const std::vector<std::vector<uint8_t>>& keys,
-      int last_key_version) = 0;
-
-  // Registers a new trusted recovery method that can be used to retrieve
-  // trusted vault encryption keys.
-  virtual void AddTrustedVaultRecoveryMethodFromWeb(
-      const std::string& gaia_id,
-      const std::vector<uint8_t>& public_key,
-      int method_type_hint,
-      base::OnceClosure callback) = 0;
 
   //////////////////////////////////////////////////////////////////////////////
   // OBSERVERS

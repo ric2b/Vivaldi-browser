@@ -38,13 +38,14 @@ class IdentityLaunchWebAuthFlowFunction : public ExtensionFunction,
     kUnexpectedError = 5,
     kPageLoadTimedOut = 6,
     kCannotCreateWindow = 7,
-    kMaxValue = kCannotCreateWindow,
+    kInvalidURLScheme = 8,
+    kMaxValue = kInvalidURLScheme,
   };
 
   IdentityLaunchWebAuthFlowFunction();
 
   // Tests may override extension_id.
-  void InitFinalRedirectURLPrefixForTest(const std::string& extension_id);
+  void InitFinalRedirectURLDomainsForTest(const std::string& extension_id);
 
   WebAuthFlow* GetWebAuthFlowForTesting();
 
@@ -60,10 +61,11 @@ class IdentityLaunchWebAuthFlowFunction : public ExtensionFunction,
   void OnAuthFlowTitleChange(const std::string& title) override {}
 
   // Helper to initialize final URL prefix.
-  void InitFinalRedirectURLPrefix(const std::string& extension_id);
+  void InitFinalRedirectURLDomains(const std::string& extension_id,
+                                   const base::Value::List* redirect_urls);
 
   std::unique_ptr<WebAuthFlow> auth_flow_;
-  GURL final_url_prefix_;
+  std::vector<GURL> final_url_domains_;
 };
 
 }  // namespace extensions

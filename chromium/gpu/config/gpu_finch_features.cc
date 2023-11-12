@@ -129,6 +129,12 @@ const base::FeatureParam<std::string>
         "DisableIncreaseBufferCountForHighFrameRate", ""};
 #endif
 
+// Use shorter timeout when performDeferredCleanup, and enable
+// performDeferredCleanup for Android WebView.
+BASE_FEATURE(kAggressiveSkiaGpuResourcePurge,
+             "AggressiveSkiaGpuResourcePurge",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enable GPU Rasterization by default. This can still be overridden by
 // --enable-gpu-rasterization or --disable-gpu-rasterization.
 // DefaultEnableGpuRasterization has launched on Mac, Windows, ChromeOS,
@@ -147,7 +153,7 @@ BASE_FEATURE(kDefaultEnableGpuRasterization,
 BASE_FEATURE(kCanvasOopRasterization,
              "CanvasOopRasterization",
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN) || \
-    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64))
+    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -170,6 +176,11 @@ BASE_FEATURE(kEnableMSAAOnNewIntelGPUs,
 // Enables the use of ANGLE validation for non-WebGL contexts.
 BASE_FEATURE(kDefaultEnableANGLEValidation,
              "DefaultEnableANGLEValidation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Disables MSAA in Graphite if MSAA is reported as being slow for the device.
+BASE_FEATURE(kDisableSlowMSAAInGraphite,
+             "DisableSlowMSAAInGraphite",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables canvas to free its resources by default when it's running in
@@ -278,6 +289,8 @@ BASE_FEATURE(kWebGPUService, "WebGPUService", WEBGPU_ENABLED);
 BASE_FEATURE(kWebGPUBlobCache, "WebGPUBlobCache", WEBGPU_ENABLED);
 #undef WEBGPU_ENABLED
 
+BASE_FEATURE(kWebGPUUseDXC, "WebGPUUseDXC", base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 
 const base::FeatureParam<std::string> kVulkanBlockListByHardware{
@@ -339,7 +352,14 @@ const base::FeatureParam<std::string> kDrDcBlockListByAndroidBuildFP{
 // Enable Skia Graphite. This will use the Dawn backend by default, but can be
 // overridden with command line flags for testing on non-official developer
 // builds. See --skia-graphite-backend flag in gpu_switches.h.
-BASE_FEATURE(kSkiaGraphite, "SkiaGraphite", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSkiaGraphite,
+             "SkiaGraphite",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
@@ -414,6 +434,14 @@ BASE_FEATURE(kPassthroughYuvRgbConversion,
 BASE_FEATURE(kGpuCleanupInBackground,
              "GpuCleanupInBackground",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_ANDROID)
+// When enabled, the validating command decoder always returns true
+// from IsGL_REDSupportedOnFBOs in feature_info.cc on Android.
+BASE_FEATURE(kCmdDecoderSkipGLRedMesaWorkaroundOnAndroid,
+             "CmdDecoderSkipGLRedMesaWorkaroundOnAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 bool UseGles2ForOopR() {
 #if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_X86_FAMILY)
@@ -573,6 +601,8 @@ bool IsAImageReaderEnabled() {
   // Device Hammer_Energy_2 seems to be very crash with image reader during
   // gl::GLImageEGL::BindTexImage(). Disable image reader on that device for
   // now. crbug.com/1323921
+  // TODO(crbug.com/1323921): Can we revisit this now that GLImage no longer
+  // exists?
   if (IsDeviceBlocked(base::android::BuildInfo::GetInstance()->device(),
                       "Hammer_Energy_2")) {
     return false;

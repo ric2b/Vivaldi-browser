@@ -27,18 +27,6 @@ namespace views::corewm {
 enum class TooltipTrigger;
 }  // namespace views::corewm
 
-namespace wl {
-
-// Client-side decorations on Wayland take some portion of the window surface,
-// and when they are turned on or off, the window geometry is changed.  That
-// happens only once at the moment of switching the decoration mode, and has
-// no further impact on the user experience, but the initial geometry of a
-// top-level window is different on Wayland if compared to other platforms,
-// which affects certain tests.
-void AllowClientSideDecorationsForTesting(bool allow);
-
-}  // namespace wl
-
 namespace ui {
 
 class GtkSurface1;
@@ -109,7 +97,11 @@ class WaylandToplevelWindow : public WaylandWindow,
   void PropagateBufferScale(float new_scale) override;
   void OnRotateFocus(uint32_t serial, uint32_t direction, bool restart);
 
-  // WmDragHandler overrides:
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  void OnOverviewModeChanged(bool in_overview);
+#endif
+
+  // WmDragHandler:
   bool ShouldReleaseCaptureForDrag(ui::OSExchangeData* data) const override;
 
   // WmMoveResizeHandler
@@ -143,8 +135,9 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool ShouldUseNativeFrame() const override;
   bool ShouldUpdateWindowShape() const override;
   bool CanSetDecorationInsets() const override;
-  void SetOpaqueRegion(const std::vector<gfx::Rect>* region_px) override;
-  void SetInputRegion(const gfx::Rect* region_px) override;
+  void SetOpaqueRegion(
+      absl::optional<std::vector<gfx::Rect>> region_px) override;
+  void SetInputRegion(absl::optional<gfx::Rect> region_px) override;
   bool IsClientControlledWindowMovementSupported() const override;
   void NotifyStartupComplete(const std::string& startup_id) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
@@ -161,6 +154,7 @@ class WaylandToplevelWindow : public WaylandWindow,
       bool allow_system_drag) override;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   void SetImmersiveFullscreenStatus(bool status) override;
+  void SetTopInset(int height) override;
 #endif
   void ShowSnapPreview(WaylandWindowSnapDirection snap,
                        bool allow_haptic_feedback) override;

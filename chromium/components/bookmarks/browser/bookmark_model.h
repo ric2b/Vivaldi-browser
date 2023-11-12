@@ -485,8 +485,6 @@ class BookmarkModel final : public BookmarkUndoProvider,
                                          const base::Time delete_begin,
                                          const base::Time delete_end);
 
-  const std::unique_ptr<BookmarkClient> client_;
-
   // Whether the initial set of data has been loaded.
   bool loaded_ = false;
 
@@ -498,18 +496,27 @@ class BookmarkModel final : public BookmarkUndoProvider,
   // |owned_root_|. Once loading has completed, |owned_root_| is destroyed and
   // this is set to url_index_->root(). |owned_root_| is done as lots of
   // existing code assumes the root is non-null while loading.
-  raw_ptr<BookmarkNode, DanglingUntriaged> root_ = nullptr;
+  raw_ptr<BookmarkNode, AcrossTasksDanglingUntriaged> root_ = nullptr;
 
-  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> bookmark_bar_node_ =
+  raw_ptr<BookmarkPermanentNode, AcrossTasksDanglingUntriaged>
+      bookmark_bar_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode, AcrossTasksDanglingUntriaged> other_node_ =
       nullptr;
-  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> other_node_ = nullptr;
-  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> mobile_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode, AcrossTasksDanglingUntriaged> mobile_node_ =
+      nullptr;
 
   // The maximum ID assigned to the bookmark nodes in the model.
   int64_t next_node_id_ = 1;
 
   // The observers.
-  base::ObserverList<BookmarkModelObserver>::Unchecked observers_;
+#if BUILDFLAG(IS_IOS)
+  // TODO(crbug.com/1470748) Set the parameter to `true` on all platforms.
+  base::ObserverList<BookmarkModelObserver, true> observers_;
+#else
+  base::ObserverList<BookmarkModelObserver> observers_;
+#endif
+
+  std::unique_ptr<BookmarkClient> client_;
 
   // Used for loading favicons.
   base::CancelableTaskTracker cancelable_task_tracker_;

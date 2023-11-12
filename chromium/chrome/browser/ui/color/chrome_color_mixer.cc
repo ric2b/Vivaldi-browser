@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/color/chrome_color_provider_utils.h"
 #include "chrome_color_id.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
@@ -88,82 +89,29 @@ constexpr SkAlpha kTabGroupChipAlpha = 61;
 
 // Apply updates to the Omnibox background color tokens per GM3 spec.
 void ApplyGM3OmniboxBackgroundColor(ui::ColorMixer& mixer,
-                                    const ui::ColorProviderManager::Key& key) {
+                                    const ui::ColorProviderKey& key) {
   const bool gm3_background_color_enabled =
-      features::GetChromeRefresh2023Level() ==
-          features::ChromeRefresh2023Level::kLevel2 ||
-      base::FeatureList::IsEnabled(omnibox::kOmniboxSteadyStateBackgroundColor);
+      omnibox::IsOmniboxCr23CustomizeGuardedFeatureEnabled(
+          omnibox::kOmniboxSteadyStateBackgroundColor);
 
   // Apply omnibox background color updates only to non-themed clients.
   if (gm3_background_color_enabled && !key.custom_theme) {
-    // Retrieve GM3 omnibox background color params (Dark Mode).
-    const std::string dark_background_color_param =
-        omnibox::kOmniboxDarkBackgroundColor.Get();
-    const std::string dark_background_color_hovered_param =
-        omnibox::kOmniboxDarkBackgroundColorHovered.Get();
+    mixer[kColorLocationBarBackground] = {ui::kColorSysOmniboxContainer};
+    mixer[kColorLocationBarBackgroundHovered] =
+        ui::GetResultingPaintColor(ui::kColorSysStateHoverBrightBlendProtection,
+                                   kColorLocationBarBackground);
 
-    // Retrieve GM3 omnibox background color params (Light Mode).
-    const std::string light_background_color_param =
-        omnibox::kOmniboxLightBackgroundColor.Get();
-    const std::string light_background_color_hovered_param =
-        omnibox::kOmniboxLightBackgroundColorHovered.Get();
-
-    const auto string_to_skcolor = [](const std::string& rgb_str,
-                                      SkColor* result) {
-      // Valid color strings are of the form 0xRRGGBB or 0xAARRGGBB.
-      const bool valid =
-          result && (rgb_str.size() == 8 || rgb_str.size() == 10);
-      if (!valid) {
-        return false;
-      }
-
-      uint32_t parsed = 0;
-      const bool success = base::HexStringToUInt(rgb_str, &parsed);
-      if (success) {
-        *result = SkColorSetA(static_cast<SkColor>(parsed), SK_AlphaOPAQUE);
-      }
-      return success;
-    };
-
-    SkColor dark_background_color = 0;
-    SkColor dark_background_color_hovered = 0;
-
-    SkColor light_background_color = 0;
-    SkColor light_background_color_hovered = 0;
-
-    const bool success = string_to_skcolor(dark_background_color_param,
-                                           &dark_background_color) &&
-                         string_to_skcolor(dark_background_color_hovered_param,
-                                           &dark_background_color_hovered) &&
-                         string_to_skcolor(light_background_color_param,
-                                           &light_background_color) &&
-                         string_to_skcolor(light_background_color_hovered_param,
-                                           &light_background_color_hovered);
-
-    if (!success) {
-      return;
-    }
-
-    const auto selected_background_color = ui::SelectBasedOnDarkInput(
-        kColorToolbar, dark_background_color, light_background_color);
-
-    mixer[kColorLocationBarBackground] = {selected_background_color};
-
-    const auto selected_background_color_hovered =
-        ui::SelectBasedOnDarkInput(kColorToolbar, dark_background_color_hovered,
-                                   light_background_color_hovered);
-
-    mixer[kColorLocationBarBackgroundHovered] = {
-        selected_background_color_hovered};
+    // Update colors to account for "mismatched input/URL" in the omnibox.
+    mixer[kColorLocationBarBorderOnMismatch] = {ui::kColorSysNeutralOutline};
   }
 }
 
 }  // namespace
 
 void AddChromeColorMixer(ui::ColorProvider* provider,
-                         const ui::ColorProviderManager::Key& key) {
+                         const ui::ColorProviderKey& key) {
   const bool dark_mode =
-      key.color_mode == ui::ColorProviderManager::ColorMode::kDark;
+      key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
   ui::ColorMixer& mixer = provider->AddMixer();
 
   mixer[kColorAppMenuHighlightSeverityLow] = AdjustHighlightColorForContrast(
@@ -181,6 +129,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorAvatarStrokeLight] = {SK_ColorWHITE};
   mixer[kColorBookmarkBarBackground] = {kColorToolbar};
   mixer[kColorBookmarkBarForeground] = {kColorToolbarText};
+  // Uses the alpha of kColorToolbarButtonIconInactive.
+  mixer[kColorBookmarkBarForegroundDisabled] =
+      ui::SetAlpha(kColorBookmarkBarForeground, gfx::kGoogleGreyAlpha500);
   mixer[kColorBookmarkButtonIcon] = {kColorToolbarButtonIcon};
   mixer[kColorBookmarkDialogProductImageBorder] =
       ui::SetAlpha(gfx::kGoogleGrey900, 0x24);
@@ -206,6 +157,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorDownloadBubbleInfoBackground] = {
       ui::kColorSubtleEmphasisBackground};
   mixer[kColorDownloadBubbleInfoIcon] = {ui::kColorIcon};
+  mixer[kColorDownloadBubbleShowAllDownloadsIcon] = {ui::kColorIconSecondary};
   mixer[kColorDownloadItemForeground] = {kColorDownloadShelfForeground};
   mixer[kColorDownloadItemForegroundDangerous] = ui::PickGoogleColor(
       ui::kColorAlertHighSeverity, kColorDownloadShelfBackground,
@@ -218,12 +170,20 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       ui::kColorAlertLowSeverity, kColorDownloadShelfBackground,
       color_utils::kMinimumReadableContrastRatio);
   mixer[kColorDownloadItemIconDangerous] = {ui::kColorAlertHighSeverity};
-  mixer[kColorDownloadItemIconWarning] = {ui::kColorAlertMediumSeverityIcon};
+  mixer[kColorDownloadItemIconWarning] = {
+      base::FeatureList::IsEnabled(
+          safe_browsing::kImprovedDownloadBubbleWarnings)
+          ? ui::kColorSecondaryForeground
+          : ui::kColorAlertMediumSeverityIcon};
   mixer[kColorDownloadItemProgressRingBackground] = ui::SetAlpha(
       kColorDownloadItemProgressRingForeground, gfx::kGoogleGreyAlpha400);
   mixer[kColorDownloadItemProgressRingForeground] = {ui::kColorThrobber};
   mixer[kColorDownloadItemTextDangerous] = {ui::kColorAlertHighSeverity};
-  mixer[kColorDownloadItemTextWarning] = {ui::kColorAlertMediumSeverityText};
+  mixer[kColorDownloadItemTextWarning] = {
+      base::FeatureList::IsEnabled(
+          safe_browsing::kImprovedDownloadBubbleWarnings)
+          ? ui::kColorSecondaryForeground
+          : ui::kColorAlertMediumSeverityText};
   mixer[kColorDownloadShelfBackground] = {kColorToolbar};
   mixer[kColorDownloadShelfButtonBackground] = {kColorDownloadShelfBackground};
   mixer[kColorDownloadShelfButtonIcon] = {kColorToolbarButtonIcon};
@@ -323,12 +283,15 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorLocationBarBackgroundHovered] = {
       kColorToolbarBackgroundSubtleEmphasisHovered};
 
-  // Override Omnibox background color tokens per GM3 spec when appropriate.
-  ApplyGM3OmniboxBackgroundColor(mixer, key);
-
   mixer[kColorLocationBarBorder] = {SkColorSetA(SK_ColorBLACK, 0x4D)};
   mixer[kColorLocationBarBorderOpaque] =
       ui::GetResultingPaintColor(kColorLocationBarBorder, kColorToolbar);
+
+  mixer[kColorLocationBarBorderOnMismatch] = {kColorLocationBarBorder};
+
+  // Override Omnibox background color tokens per GM3 spec when appropriate.
+  ApplyGM3OmniboxBackgroundColor(mixer, key);
+
   mixer[kColorMediaRouterIconActive] =
       PickGoogleColor(ui::kColorAccent, kColorToolbar,
                       color_utils::kMinimumVisibleContrastRatio);
@@ -347,6 +310,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       ui::SetAlpha(kColorToolbarButtonIcon, std::ceil(0.10f * 255.0f))};
   mixer[kColorOmniboxChipInkDropRipple] = {
       ui::SetAlpha(kColorToolbarButtonIcon, std::ceil(0.16f * 255.0f))};
+  mixer[kColorOmniboxIntentChipBackground] = {
+      ui::kColorSysBaseContainerElevated};
+  mixer[kColorOmniboxIntentChipIcon] = {ui::kColorSysOnSurfaceSubtle};
   mixer[kColorPageInfoChosenObjectDeleteButtonIcon] = {ui::kColorIcon};
   mixer[kColorPageInfoChosenObjectDeleteButtonIconDisabled] = {
       ui::kColorIconDisabled};
@@ -408,6 +374,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorSidePanelBackground] = {kColorToolbar};
   mixer[kColorSidePanelContentAreaSeparator] = {ui::kColorSeparator};
   mixer[kColorSidePanelEntryIcon] = {ui::kColorIcon};
+  mixer[kColorSidePanelEntryDropdownIcon] = {ui::kColorIcon};
   mixer[kColorSidePanelHeaderButtonIcon] = {ui::kColorIcon};
   mixer[kColorSidePanelHeaderButtonIconDisabled] = {ui::kColorIconDisabled};
   mixer[kColorSidePanelResizeAreaHandle] = {kColorToolbarContentAreaSeparator};
@@ -428,8 +395,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
       kColorTabForegroundInactiveFrameActive};
   mixer[kColorTabAlertAudioPlayingInactiveFrameInactive] = {
       kColorTabForegroundInactiveFrameInactive};
-  mixer[kColorTabAlertAudioPlayingIcon] = ui::SelectBasedOnDarkInput(
-      ui::kColorBubbleFooterBackground, SK_ColorWHITE, gfx::kGoogleGrey800);
   mixer[kColorTabAlertMediaRecordingActiveFrameActive] =
       ui::SelectBasedOnDarkInput(kColorTabForegroundActiveFrameActive,
                                  gfx::kGoogleRed600, gfx::kGoogleRed300);
@@ -442,8 +407,6 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorTabAlertMediaRecordingInactiveFrameInactive] =
       ui::SelectBasedOnDarkInput(kColorTabForegroundInactiveFrameInactive,
                                  gfx::kGoogleRed600, gfx::kGoogleRed300);
-  mixer[kColorTabAlertMediaRecordingIcon] = ui::SelectBasedOnDarkInput(
-      ui::kColorBubbleFooterBackground, gfx::kGoogleRed300, gfx::kGoogleRed600);
   mixer[kColorTabAlertPipPlayingActiveFrameActive] = ui::PickGoogleColor(
       ui::kColorAccent, kColorTabBackgroundActiveFrameActive,
       color_utils::kMinimumVisibleContrastRatio);
@@ -456,7 +419,11 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorTabAlertPipPlayingInactiveFrameInactive] = ui::PickGoogleColor(
       ui::kColorAccent, kColorTabBackgroundInactiveFrameInactive,
       color_utils::kMinimumVisibleContrastRatio);
-  mixer[kColorTabAlertPipPlayingIcon] =
+  mixer[kColorHoverCardTabAlertAudioPlayingIcon] = ui::SelectBasedOnDarkInput(
+      ui::kColorBubbleFooterBackground, SK_ColorWHITE, gfx::kGoogleGrey800);
+  mixer[kColorHoverCardTabAlertMediaRecordingIcon] = ui::SelectBasedOnDarkInput(
+      ui::kColorBubbleFooterBackground, gfx::kGoogleRed300, gfx::kGoogleRed600);
+  mixer[kColorHoverCardTabAlertPipPlayingIcon] =
       ui::PickGoogleColor(ui::kColorAccent, ui::kColorBubbleFooterBackground,
                           color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorTabCloseButtonFocusRingActive] = ui::PickGoogleColor(
@@ -606,6 +573,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
                                                    : gfx::kGoogleGrey050};
   mixer[kColorTabHoverCardForeground] = {dark_mode ? gfx::kGoogleGrey700
                                                    : gfx::kGoogleGrey300};
+  mixer[kColorTabHoverCardSecondaryText] = {ui::kColorLabelForeground};
   mixer[kColorTabStrokeFrameActive] = {kColorToolbarTopSeparatorFrameActive};
   mixer[kColorTabStrokeFrameInactive] = {
       kColorToolbarTopSeparatorFrameInactive};
@@ -715,6 +683,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorToolbarFeaturePromoHighlight] =
       ui::PickGoogleColor(ui::kColorAccent, kColorToolbar,
                           color_utils::kMinimumVisibleContrastRatio);
+  mixer[kColorToolbarIconContainerBorder] = {kColorToolbarButtonBorder};
   mixer[kColorToolbarInkDrop] = ui::GetColorWithMaxContrast(kColorToolbar);
   mixer[kColorToolbarInkDropHover] =
       ui::SetAlpha(kColorToolbarInkDrop, kToolbarInkDropHighlightVisibleAlpha);
@@ -743,6 +712,7 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
                                            ui::kColorFrameInactive);
   mixer[kColorWebAuthnBackArrowButtonIcon] = {ui::kColorIcon};
   mixer[kColorWebAuthnBackArrowButtonIconDisabled] = {ui::kColorIconDisabled};
+  mixer[kColorWebAuthnIconColor] = {ui::kColorAccent};
   mixer[kColorWebAuthnPinTextfieldBottomBorder] =
       PickGoogleColor(ui::kColorAccent, ui::kColorDialogBackground,
                       color_utils::kMinimumVisibleContrastRatio);
@@ -804,6 +774,27 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
   mixer[kColorReadAnythingDropdownSelectedDark] = {gfx::kGoogleGrey800};
   mixer[kColorReadAnythingDropdownSelectedLight] = {gfx::kGoogleGrey200};
   mixer[kColorReadAnythingDropdownSelectedYellow] = {gfx::kGoogleYellow200};
+  mixer[kColorReadAnythingTextSelection] = {
+      dark_mode ? kColorReadAnythingTextSelectionDark
+                : kColorReadAnythingTextSelectionLight};
+  mixer[kColorReadAnythingTextSelectionBlue] = {gfx::kGoogleYellow100};
+  mixer[kColorReadAnythingTextSelectionDark] = {gfx::kGoogleBlue200};
+  mixer[kColorReadAnythingTextSelectionLight] = {gfx::kGoogleYellow100};
+  mixer[kColorReadAnythingTextSelectionYellow] = {gfx::kGoogleBlue100};
+  mixer[kColorReadAnythingLinkDefault] = {
+      dark_mode ? kColorReadAnythingLinkDefaultDark
+                : kColorReadAnythingLinkDefaultLight};
+  mixer[kColorReadAnythingLinkDefaultBlue] = {gfx::kGoogleBlue900};
+  mixer[kColorReadAnythingLinkDefaultDark] = {gfx::kGoogleBlue300};
+  mixer[kColorReadAnythingLinkDefaultLight] = {gfx::kGoogleBlue800};
+  mixer[kColorReadAnythingLinkDefaultYellow] = {gfx::kGoogleBlue900};
+  mixer[kColorReadAnythingLinkVisited] = {
+      dark_mode ? kColorReadAnythingLinkVisitedDark
+                : kColorReadAnythingLinkVisitedLight};
+  mixer[kColorReadAnythingLinkVisitedBlue] = {gfx::kGooglePurple900};
+  mixer[kColorReadAnythingLinkVisitedDark] = {gfx::kGooglePurple200};
+  mixer[kColorReadAnythingLinkVisitedLight] = {gfx::kGooglePurple900};
+  mixer[kColorReadAnythingLinkVisitedYellow] = {gfx::kGooglePurple900};
   // Read Anything UX has decided to prefer hard-coded blue values over the
   // adaptive focus ring color to ensure that the contrast with our custom
   // colors is always correct.

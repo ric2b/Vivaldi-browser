@@ -120,11 +120,10 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override {}
 
-  void DidPreviewAutofillFormData() override {}
-
   void DidEndTextFieldEditing() override {}
 
-  void SelectFieldOptionsDidChange(const autofill::FormData& form) override {}
+  void SelectOrSelectListFieldOptionsDidChange(
+      const autofill::FormData& form) override {}
 
   // Records whether FocusNoLongerOnForm() get called.
   bool did_unfocus_form_{false};
@@ -215,14 +214,14 @@ FormData CreateAutofillFormData(blink::WebLocalFrame* main_frame) {
       FieldRendererId(fname_element.UniqueRendererFormControlId());
   data.fields.push_back(field_data);
 
-  field_data.name = u"lname";
-  field_data.value = u"Smith";
-  field_data.is_autofilled = true;
   if (!lname_element.IsNull()) {
+    field_data.name = u"lname";
+    field_data.value = u"Smith";
+    field_data.is_autofilled = true;
     field_data.unique_renderer_id =
         FieldRendererId(lname_element.UniqueRendererFormControlId());
+    data.fields.push_back(field_data);
   }
-  data.fields.push_back(field_data);
 
   return data;
 }
@@ -242,7 +241,7 @@ void SimulateFillForm(const FormData& form_data,
       fname_element.To<WebInputElement>());
 
   autofill_agent->FillOrPreviewForm(form_data,
-                                    mojom::RendererFormDataAction::kFill);
+                                    mojom::AutofillActionPersistence::kFill);
 }
 
 // Simulates receiving a message from the browser to fill a form.
@@ -305,7 +304,8 @@ void SimulateFillFormWithNonFillableFields(
   autofill_agent->FormControlElementClicked(
       fname_element.To<WebInputElement>());
 
-  autofill_agent->FillOrPreviewForm(data, mojom::RendererFormDataAction::kFill);
+  autofill_agent->FillOrPreviewForm(data,
+                                    mojom::AutofillActionPersistence::kFill);
 }
 
 }  // end namespace

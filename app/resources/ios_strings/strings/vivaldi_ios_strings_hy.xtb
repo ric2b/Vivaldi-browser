@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
-<translation id="3866249974567520381">Նկարագրություն</translation>
+<translation id="1063263220330818888">Գաղտնի որոնում</translation>
+<translation id="1137850887415122856">Ձեր գաղտնի ներդիրները կողպելու համար սահմանեք Touch ID, Face ID կամ անցակոդ։</translation>
+<translation id="1310184829257917508">Հարցնել՝ այլ հավելվածներից հղումները գաղտնի ռեժիմում բացելու համար</translation>
+<translation id="1512201558627495343">Նոր գաղտնի ներդիր</translation>
+<translation id="1786453623676543866">Սկսել որոնումը Vivaldi-ի նոր ներդիրում։</translation>
+<translation id="207677936531967364">Նոր գաղտնի ներդիրի էջ</translation>
+<translation id="3372807273343182542">Բացել URL-ները Vivaldi-ի գաղտնի ռեժիմում</translation>
+<translation id="3473652525653758699">Նոր գաղտնի պատուհան</translation>
+<translation id="3501504415290398157">Օգտագործեք <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />՝ Ձեր գաղտնի ներդիրների կողպումը բացելու համար։</translation>
+<translation id="3692650606013198282">Բացել գաղտնի ռեժիմում</translation>
+<translation id="3709782636417497984">Բացել նոր գաղտնի ներդիրով</translation>
+<translation id="3981599532037327317">Բացել ${url}-ը գաղտնի ռեժիմում</translation>
+<translation id="4755216899422789286">Բացել URL-ները Vivaldi-ում</translation>
+<translation id="6233792867654386826">Բացում է մուտքագրված URL-ները Vivaldi-ում։</translation>
+<translation id="6827597288286078054">Գաղտնի որոնում</translation>
+<translation id="7175743738896712454">Բացում է մուտքագրված URL-ները Vivaldi-ում գաղտնի ռեժիմով։</translation>
+<translation id="7307970171564921489">Գաղտնի ներդիրների կողպումը բացեք <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />-ով</translation>
+<translation id="7347289093190902150">Բացե՞լ գաղտնի ռեժիմում։</translation>
+<translation id="7549299604720382000">Նոր գաղտնի ներդիր</translation>
+<translation id="8326104954595890674">Նոր գաղտնի ներդիր</translation>
+<translation id="8763006697839582351">Բացել Vivaldi-ի գաղտնի ռեժիմում</translation>
+<translation id="9060728682512999830">Որոնել Vivaldi-ում</translation>
 </translationbundle>

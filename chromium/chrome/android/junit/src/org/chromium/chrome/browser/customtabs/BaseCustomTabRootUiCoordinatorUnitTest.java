@@ -9,7 +9,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -17,19 +16,16 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.components.sync.SyncService;
 
 /** JUnit tests for BaseCustomTabRootUiCoordinator. */
 @RunWith(BaseRobolectricTestRunner.class)
+@Batch(Batch.UNIT_TESTS)
 @Config(manifest = Config.NONE)
 public final class BaseCustomTabRootUiCoordinatorUnitTest {
-    @After
-    public void tearDown() {
-        CustomTabsConnection.setInstanceForTesting(null);
-    }
-
     private void enablePageInsights(FeatureList.TestValues testValues,
             CustomTabsConnection connection, SyncService syncService) {
         testValues.addFeatureFlagOverride(ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB, true);
@@ -38,7 +34,7 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
     }
 
     private boolean isPageInsightsEnabledSync() {
-        return BaseCustomTabRootUiCoordinator.isPageInsightsHubEnabledSync(null);
+        return BaseCustomTabRootUiCoordinator.isPageInsightsHubEnabledSync(null, () -> null);
     }
 
     @Test
@@ -51,7 +47,7 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
         CustomTabsConnection.setInstanceForTesting(connection);
 
         SyncService syncService = Mockito.mock(SyncService.class);
-        SyncServiceFactory.overrideForTests(syncService);
+        SyncServiceFactory.setInstanceForTesting(syncService);
 
         enablePageInsights(testValues, connection, syncService);
         assertTrue("PageInsightsHub should be enabled", isPageInsightsEnabledSync());

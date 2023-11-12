@@ -17,6 +17,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/tray/tray_container.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -25,12 +26,14 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_list.h"
+#include "ui/views/controls/image_view.h"
 
 namespace ash {
 
@@ -63,9 +66,7 @@ class MockMessageCenterObserver : public message_center::MessageCenterObserver {
 
 class ProjectorUiControllerTest : public AshTestBase {
  public:
-  ProjectorUiControllerTest() {
-    scoped_feature_list_.InitWithFeatures({features::kProjector}, {});
-  }
+  ProjectorUiControllerTest() = default;
 
   ProjectorUiControllerTest(const ProjectorUiControllerTest&) = delete;
   ProjectorUiControllerTest& operator=(const ProjectorUiControllerTest&) =
@@ -81,11 +82,9 @@ class ProjectorUiControllerTest : public AshTestBase {
   }
 
  protected:
-  raw_ptr<ProjectorUiController, ExperimentalAsh> controller_;
+  raw_ptr<ProjectorUiController, DanglingUntriaged | ExperimentalAsh>
+      controller_;
   MockProjectorClient projector_client_;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(ProjectorUiControllerTest, ShowAndHideTray) {
@@ -193,6 +192,12 @@ TEST_F(ProjectorUiControllerTest, SetAnnotatorTool) {
 
   controller_->ShowAnnotationTray(Shell::GetPrimaryRootWindow());
   controller_->OnCanvasInitialized(true);
+  // Assert that the icon image for the annotator is set.
+  ASSERT_EQ(projector_annotation_tray->tray_container()->children().size(), 1u);
+  const views::ImageView* image_view = static_cast<views::ImageView*>(
+      projector_annotation_tray->tray_container()->children()[0]);
+  EXPECT_FALSE(image_view->GetImageModel().IsEmpty());
+
   LeftClickOn(projector_annotation_tray);
   EXPECT_TRUE(controller_->is_annotator_enabled());
 

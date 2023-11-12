@@ -14,10 +14,6 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface WhatsNewSceneAgent ()
 
 @property(nonatomic, assign) PromosManager* promosManager;
@@ -46,6 +42,7 @@
       break;
     }
     case SceneActivationLevelUnattached:
+    case SceneActivationLevelDisconnected:
       break;
     case SceneActivationLevelBackground: {
       id<BrowserCoordinatorCommands> handler = HandlerForProtocol(

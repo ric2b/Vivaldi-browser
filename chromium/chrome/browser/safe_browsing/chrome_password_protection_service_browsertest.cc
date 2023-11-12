@@ -325,8 +325,6 @@ IN_PROC_BROWSER_TEST_F(ChromePasswordProtectionServiceBrowserTest,
 class ChromePasswordProtectionServiceBrowserWithFakeBackendPasswordStoreTest
     : public ChromePasswordProtectionServiceBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        password_manager::features::kPasswordManagerRedesign);
     ChromePasswordProtectionServiceBrowserTest::
         SetUpInProcessBrowserTestFixture();
     create_services_subscription_ =
@@ -342,7 +340,6 @@ class ChromePasswordProtectionServiceBrowserWithFakeBackendPasswordStoreTest
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   base::CallbackListSubscription create_services_subscription_;
 };
 
@@ -1123,7 +1120,7 @@ class ChromePasswordProtectionServiceDeferActivationBrowserTest
   }
 
   void SetUp() override {
-    prerender_helper_.SetUp(embedded_test_server());
+    prerender_helper_.RegisterServerRequestMonitor(embedded_test_server());
     ChromePasswordProtectionServiceNavigationDeferralBrowserTest::SetUp();
   }
 

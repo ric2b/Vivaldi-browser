@@ -7,7 +7,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/android/customtabs/custom_tab_session_state_tracker.h"
-#include "chrome/browser/android/locale/locale_manager.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 #include "chrome/browser/flags/android/chrome_session_state.h"
 #include "chrome/browser/notifications/jni_headers/NotificationSystemStatusUtil_jni.h"
@@ -88,7 +87,7 @@ void ChromeAndroidMetricsProvider::OnDidCreateMetricsLog() {
 
   metrics::AndroidMetricsHelper::GetInstance()->EmitHistograms(
       local_state_,
-      /*current_session=*/true);
+      /*on_did_create_metrics_log=*/true);
 }
 
 void ChromeAndroidMetricsProvider::ProvidePreviousSessionData(
@@ -104,7 +103,7 @@ void ChromeAndroidMetricsProvider::ProvidePreviousSessionData(
 
   metrics::AndroidMetricsHelper::GetInstance()->EmitHistograms(
       local_state_,
-      /*current_session=*/false);
+      /*on_did_create_metrics_log=*/false);
 }
 
 void ChromeAndroidMetricsProvider::ProvideCurrentSessionData(
@@ -128,10 +127,9 @@ void ChromeAndroidMetricsProvider::ProvideCurrentSessionData(
 
   UmaSessionStats::GetInstance()->ProvideCurrentSessionData();
   EmitAppNotificationStatusHistogram();
-  LocaleManager::RecordUserTypeMetrics();
 }
 
 // static
 void ChromeAndroidMetricsProvider::ResetGlobalStateForTesting() {
-  metrics::AndroidMetricsHelper::GetInstance()->ResetForTesting();  // IN-TEST
+  metrics::AndroidMetricsHelper::ResetGlobalStateForTesting();
 }

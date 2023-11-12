@@ -44,6 +44,4 @@ source_set("vivaldi_ad_tracker_blocker") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

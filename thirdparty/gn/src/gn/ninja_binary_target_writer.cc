@@ -105,26 +105,6 @@ std::vector<OutputFile> NinjaBinaryTargetWriter::WriteInputsStampAndGetDep(
   return {stamp_file};
 }
 
-void NinjaBinaryTargetWriter::WriteSourceSetStamp(
-    const std::vector<OutputFile>& object_files) {
-  // The stamp rule for source sets is generally not used, since targets that
-  // depend on this will reference the object files directly. However, writing
-  // this rule allows the user to type the name of the target and get a build
-  // which can be convenient for development.
-  ClassifiedDeps classified_deps = GetClassifiedDeps();
-
-  // The classifier should never put extra object files in a source sets: any
-  // source sets that we depend on should appear in our non-linkable deps
-  // instead.
-  DCHECK(classified_deps.extra_object_files.empty());
-
-  std::vector<OutputFile> order_only_deps;
-  for (auto* dep : classified_deps.non_linkable_deps)
-    order_only_deps.push_back(dep->dependency_output_file());
-
-  WriteStampForTarget(object_files, order_only_deps);
-}
-
 NinjaBinaryTargetWriter::ClassifiedDeps
 NinjaBinaryTargetWriter::GetClassifiedDeps() const {
   ClassifiedDeps classified_deps;

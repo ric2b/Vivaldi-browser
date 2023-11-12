@@ -16,6 +16,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/mojom/automation_registry.mojom.h"
 #include "extensions/common/mojom/event_router.mojom.h"
 #include "extensions/common/mojom/frame.mojom.h"
 #include "extensions/common/mojom/renderer_host.mojom.h"
@@ -30,6 +31,7 @@
 #include "extensions/renderer/worker_thread_dispatcher.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
@@ -60,11 +62,23 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
                        weak_ptr_factory_.GetWeakPtr(), request_id));
   }
 
-  mojom::EventListenerParamPtr GetEventListenerParam(ScriptContext* context) {
+  void SendResponseAckIPC(ScriptContext* context,
+                          const base::Uuid& request_uuid) override {
+    CHECK(!context->IsForServiceWorker());
+    CHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
+
+    content::RenderFrame* frame = context->GetRenderFrame();
+    CHECK(frame);
+
+    ExtensionFrameHelper::Get(frame)->GetLocalFrameHost()->ResponseAck(
+        request_uuid);
+  }
+
+  mojom::EventListenerOwnerPtr GetEventListenerOwner(ScriptContext* context) {
     return !context->GetExtensionID().empty()
-               ? mojom::EventListenerParam::NewExtensionId(
+               ? mojom::EventListenerOwner::NewExtensionId(
                      context->GetExtensionID())
-               : mojom::EventListenerParam::NewListenerUrl(context->url());
+               : mojom::EventListenerOwner::NewListenerUrl(context->url());
   }
 
   void SendAddUnfilteredEventListenerIPC(
@@ -73,7 +87,7 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK(!context->IsForServiceWorker());
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
-    GetEventRouter()->AddListenerForMainThread(GetEventListenerParam(context),
+    GetEventRouter()->AddListenerForMainThread(GetEventListenerOwner(context),
                                                event_name);
   }
 
@@ -84,7 +98,7 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
     GetEventRouter()->RemoveListenerForMainThread(
-        GetEventListenerParam(context), event_name);
+        GetEventListenerOwner(context), event_name);
   }
 
   void SendAddUnfilteredLazyEventListenerIPC(
@@ -115,7 +129,7 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
     GetEventRouter()->AddFilteredListenerForMainThread(
-        GetEventListenerParam(context), event_name, filter.Clone(), is_lazy);
+        GetEventListenerOwner(context), event_name, filter.Clone(), is_lazy);
   }
 
   void SendRemoveFilteredEventListenerIPC(ScriptContext* context,
@@ -126,8 +140,17 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     DCHECK_EQ(kMainThreadId, content::WorkerThread::GetCurrentId());
 
     GetEventRouter()->RemoveFilteredListenerForMainThread(
-        GetEventListenerParam(context), event_name, filter.Clone(),
+        GetEventListenerOwner(context), event_name, filter.Clone(),
         remove_lazy_listener);
+  }
+
+  void SendBindAutomationIPC(
+      ScriptContext* context,
+      mojo::PendingAssociatedRemote<ax::mojom::Automation> pending_remote)
+      override {
+    CHECK(!context->IsForServiceWorker());
+
+    GetRendererAutomationRegistry()->BindAutomation(std::move(pending_remote));
   }
 
   void SendOpenMessageChannel(ScriptContext* script_context,
@@ -269,6 +292,15 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
     return event_router_remote_.get();
   }
 
+  extensions::mojom::RendererAutomationRegistry*
+  GetRendererAutomationRegistry() {
+    if (!renderer_automation_registry_remote_.is_bound()) {
+      render_thread_->GetChannel()->GetRemoteAssociatedInterface(
+          &renderer_automation_registry_remote_);
+    }
+    return renderer_automation_registry_remote_.get();
+  }
+
   mojom::RendererHost* GetRendererHost() {
     if (!renderer_host_.is_bound()) {
       render_thread_->GetChannel()->GetRemoteAssociatedInterface(
@@ -280,6 +312,8 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
   content::RenderThread* const render_thread_;
   mojo::AssociatedRemote<mojom::EventRouter> event_router_remote_;
   mojo::AssociatedRemote<mojom::RendererHost> renderer_host_;
+  mojo::AssociatedRemote<extensions::mojom::RendererAutomationRegistry>
+      renderer_automation_registry_remote_;
 
   base::WeakPtrFactory<MainThreadIPCMessageSender> weak_ptr_factory_{this};
 };
@@ -308,6 +342,15 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     params->service_worker_version_id = service_worker_version_id_;
 
     dispatcher_->RequestWorker(std::move(params));
+  }
+
+  void SendResponseAckIPC(ScriptContext* context,
+                          const base::Uuid& request_uuid) override {
+    CHECK(!context->GetRenderFrame());
+    CHECK(context->IsForServiceWorker());
+    CHECK_NE(kMainThreadId, content::WorkerThread::GetCurrentId());
+
+    dispatcher_->SendResponseAck(request_uuid);
   }
 
   void SendAddUnfilteredEventListenerIPC(
@@ -387,6 +430,17 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
         context->service_worker_version_id(),
         content::WorkerThread::GetCurrentId(), filter.Clone(),
         remove_lazy_listener);
+  }
+
+  void SendBindAutomationIPC(
+      ScriptContext* context,
+      mojo::PendingAssociatedRemote<ax::mojom::Automation> pending_remote)
+      override {
+    // TODO(b:260590502): May need to update this when migrating extensions to
+    // Manifest V3.
+    // Only the main thread may register an automation, so if we reached this
+    // path, this should raise a problem.
+    NOTREACHED_NORETURN();
   }
 
   void SendOpenMessageChannel(ScriptContext* script_context,

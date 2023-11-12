@@ -38,11 +38,14 @@
 namespace {
 
 const char kExpirationKey[] = "expiration";
+const char kLastUsedKey[] = "last_used";
 const char kLastVisitKey[] = "last_visit";
 const char kSessionModelKey[] = "model";
 const char kSettingKey[] = "setting";
 const char kLastModifiedKey[] = "last_modified";
 const char kLifetimeKey[] = "lifetime";
+
+const base::TimeDelta kLastUsedPermissionExpiration = base::Hours(24);
 
 bool IsValueAllowedForType(const base::Value& value, ContentSettingsType type) {
   const content_settings::ContentSettingsInfo* info =
@@ -84,6 +87,12 @@ base::Time GetLastModified(const base::Value::Dict& dictionary) {
 // Will return base::Time() if no timestamp exists.
 base::Time GetExpiration(const base::Value::Dict& dictionary) {
   return GetTimeFromDictKey(dictionary, kExpirationKey);
+}
+
+// Extract a timestamp from `dictionary[kLastUsedKey]`.
+// Will return base::Time() if no timestamp exists.
+base::Time GetLastUsed(const base::Value::Dict& dictionary) {
+  return GetTimeFromDictKey(dictionary, kLastUsedKey);
 }
 
 // Extract a timestamp from `dictionary[kLastVisit]`.
@@ -285,6 +294,10 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
   // will remove the expired entries.
   std::vector<std::string> expired_patterns_to_remove;
 
+  // Keeps track of pattern strings with expired last used permission found in
+  // Prefs, in these cases we will remove the expired field.
+  std::vector<std::string> expired_permission_usage_to_remove;
+
   // Accumulates non-canonical pattern strings found in Prefs for which the
   // canonical pattern is not found in Prefs. The exception data for these
   // patterns is to be re-keyed under the canonical pattern.
@@ -330,12 +343,8 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
       expired_patterns_to_remove.push_back(pattern_str);
       continue;
     }
-    // TODO(https://crbug.com/1455435): The use of ComputeLifetime here should
-    // be temporary. Once all persisted RuleMetaData instances include
-    // lifetimes, we can remove this, and just use the stored lifetime directly.
-    // We can do this after all lifetime-less settings have expired.
-    // Realistically this will take only one or two milestones, so this can
-    // safely be removed in M118 or M119.
+    // Users may edit the stored fields directly, so we cannot assume their
+    // presence and validity.
     base::TimeDelta lifetime = content_settings::RuleMetaData::ComputeLifetime(
         /*lifetime=*/GetLifetime(settings_dictionary),
         /*expiration=*/expiration);
@@ -343,20 +352,29 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
     const base::Value* value = settings_dictionary.Find(kSettingKey);
     if (value) {
       base::Time last_modified;
+      base::Time last_used;
       base::Time last_visited;
       if (!off_the_record_) {
         // Don't copy over timestamps for OTR profiles because some features
         // rely on this to differentiate inherited from fresh OTR permissions.
         // See RecentSiteSettingsHelperTest.IncognitoPermissionTimestamps
         last_modified = GetLastModified(settings_dictionary);
+        last_used = GetLastUsed(settings_dictionary);
+        if (last_used != base::Time() &&
+            base::Time::Now() - last_used >= kLastUsedPermissionExpiration) {
+          expired_permission_usage_to_remove.push_back(pattern_str);
+          last_used = base::Time();
+        }
         last_visited = GetLastVisit(settings_dictionary);
       }
       DCHECK(IsValueAllowedForType(*value, content_type_));
       RuleMetaData metadata;
       metadata.set_last_modified(last_modified);
+      metadata.set_last_used(last_used);
       metadata.set_last_visited(last_visited);
       metadata.SetExpirationAndLifetime(expiration, lifetime);
       metadata.set_session_model(session_model);
+
       value_map_.SetValue(std::move(pattern_pair.first),
                           std::move(pattern_pair.second), content_type_,
                           value->Clone(), metadata);
@@ -377,6 +395,15 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
 
     for (const auto& pattern : expired_patterns_to_remove) {
       mutable_settings.get()->RemoveWithoutPathExpansion(pattern, nullptr);
+    }
+
+    for (const auto& pattern : expired_permission_usage_to_remove) {
+      if (mutable_settings.get()->HasKey(pattern)) {
+        std::unique_ptr<prefs::DictionaryValueUpdate> dict;
+        mutable_settings.get()->GetDictionaryWithoutPathExpansion(pattern,
+                                                                  &dict);
+        dict->RemoveWithoutPathExpansion(kLastUsedKey, nullptr);
+      }
     }
 
     for (const auto& old_to_new_pattern :
@@ -456,6 +483,10 @@ void ContentSettingsPref::UpdatePref(
           settings_dictionary->SetKey(
               kSessionModelKey,
               base::Value(static_cast<int>(metadata.session_model())));
+        }
+        if (metadata.last_used() != base::Time()) {
+          settings_dictionary->SetKey(kLastUsedKey,
+                                      base::TimeToValue(metadata.last_used()));
         }
         if (metadata.last_visited() != base::Time()) {
           settings_dictionary->SetKey(

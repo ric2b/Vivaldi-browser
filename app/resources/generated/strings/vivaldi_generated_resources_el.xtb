@@ -272,7 +272,6 @@
 <translation id="5431318178759467895">Χρώμα</translation>
 <translation id="5485102783864353244">Προσθήκη εφαρμογής</translation>
 <translation id="5486561344817861625">Προσομοίωση Επανεκκίνησης Προγράμματος Περιήγησης</translation>
-<translation id="5487521232677179737">Διαγραφή δεδομένων</translation>
 <translation id="5509693895992845810">Αποθήκευση &amp;Ως...</translation>
 <translation id="5521078259930077036">Είναι αυτή η αρχική σελίδα που περιμένατε;</translation>
 <translation id="5542132724887566711">Προφίλ</translation>
@@ -298,7 +297,6 @@
 <translation id="583281660410589416">Άγνωστο</translation>
 <translation id="5851868085455377790">Εκδότης</translation>
 <translation id="5860491529813859533">Ενεργοποίηση</translation>
-<translation id="5867841422488265304">Αναζητήστε ή πληκτρ. μια διεύθ. ιστού</translation>
 <translation id="5910363049092958439">Απο&amp;θήκευση Εικόνας Ως...</translation>
 <translation id="5914724413750400082">Συντελεστής (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -371,7 +369,6 @@
 <translation id="7186088072322679094">Διατήρηση στη Γραμμή Εργαλείων</translation>
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="73786666777299047">Άνοιγμα του Chrome Web Store</translation>
 <translation id="7385854874724088939">Παρουσιάστηκε σφάλμα κατά την προσπάθεια εκτύπωσης.  Ελέγξτε τον εκτυπωτή σας και προσπαθήστε ξανά.</translation>
 <translation id="7412226954991670867">Μνήμη GPU</translation>
 <translation id="7421925624202799674">&amp;Προβολή Πηγαίου Κώδικα Σελίδας</translation>

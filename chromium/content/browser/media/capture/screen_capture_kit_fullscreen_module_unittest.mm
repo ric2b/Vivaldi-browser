@@ -13,10 +13,6 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "ui/gfx/geometry/rect.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace content {
 namespace {
 MATCHER_P(MatchesScWindow, ID, "") {
@@ -178,7 +174,7 @@ class API_AVAILABLE(macos(12.3)) MockResetStreamInterface
 
 class SCKFullscreenModuleTest : public testing::Test {
  public:
-  SCKFullscreenModuleTest() {}
+  SCKFullscreenModuleTest() = default;
 
   void SetUp() override {}
   SCWindow* API_AVAILABLE(macos(12.3)) AddWindow(WindowConfig window_config) {
@@ -206,7 +202,7 @@ class SCKFullscreenModuleTest : public testing::Test {
     OCMStub([content windows]).andReturn(windows);
     OCMStub([content displays]).andReturn(displays);
 
-    std::move(handler).Run(base::scoped_nsobject<SCShareableContent>(content));
+    std::move(handler).Run(content);
   }
 
  protected:

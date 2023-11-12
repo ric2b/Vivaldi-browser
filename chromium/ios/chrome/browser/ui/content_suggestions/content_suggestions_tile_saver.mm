@@ -23,10 +23,6 @@
 #import "ios/chrome/browser/widget_kit/widget_kit_swift.h"
 #endif
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace content_suggestions_tile_saver {
 
 // Write the `most_visited_sites` to disk.
@@ -162,6 +158,7 @@ void UpdateShortcutsWidget() {
 }
 
 void WriteSavedMostVisited(NSDictionary<NSURL*, NTPTile*>* most_visited_data) {
+  NSDate* last_modification_date = NSDate.date;
   NSError* error = nil;
   NSData* data = [NSKeyedArchiver archivedDataWithRootObject:most_visited_data
                                        requiringSecureCoding:NO
@@ -175,6 +172,8 @@ void WriteSavedMostVisited(NSDictionary<NSURL*, NTPTile*>* most_visited_data) {
   NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
 
   [sharedDefaults setObject:data forKey:app_group::kSuggestedItems];
+  [sharedDefaults setObject:last_modification_date
+                     forKey:app_group::kSuggestedItemsLastModificationDate];
   UpdateShortcutsWidget();
 }
 

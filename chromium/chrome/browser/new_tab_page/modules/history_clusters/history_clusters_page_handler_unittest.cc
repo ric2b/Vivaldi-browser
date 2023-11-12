@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -15,10 +14,12 @@
 #include "base/time/time.h"
 #include "chrome/browser/cart/cart_service.h"
 #include "chrome/browser/cart/cart_service_factory.h"
+#include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
-#include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_module_service.h"
+#include "chrome/browser/new_tab_page/modules/history_clusters/discount/discount.mojom.h"
 #include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_module_service_factory.h"
+#include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_test_support.h"
 #include "chrome/browser/new_tab_page/modules/history_clusters/ranking/history_clusters_module_ranking_signals.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/side_panel/history_clusters/history_clusters_tab_helper.h"
@@ -27,6 +28,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/commerce/core/mock_shopping_service.h"
 #include "components/history/core/browser/history_context.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/test/history_service_test_util.h"
@@ -42,59 +44,9 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-#include <vector>
-
 namespace {
-
-class MockHistoryClustersTabHelper
-    : public side_panel::HistoryClustersTabHelper {
- public:
-  static MockHistoryClustersTabHelper* CreateForWebContents(
-      content::WebContents* contents) {
-    DCHECK(contents);
-    DCHECK(!contents->GetUserData(UserDataKey()));
-    contents->SetUserData(
-        UserDataKey(),
-        base::WrapUnique(new MockHistoryClustersTabHelper(contents)));
-    return static_cast<MockHistoryClustersTabHelper*>(
-        contents->GetUserData(UserDataKey()));
-  }
-
-  MOCK_METHOD(void, ShowJourneysSidePanel, (const std::string&), (override));
-
- private:
-  explicit MockHistoryClustersTabHelper(content::WebContents* web_contents)
-      : HistoryClustersTabHelper(web_contents) {}
-};
-
-class MockHistoryClustersModuleService : public HistoryClustersModuleService {
- public:
-  MockHistoryClustersModuleService()
-      : HistoryClustersModuleService(nullptr, nullptr, nullptr, nullptr) {}
-
-  MOCK_METHOD1(
-      GetClusters,
-      void(base::OnceCallback<
-           void(std::vector<history::Cluster>,
-                base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
-               callback));
-};
-
-class MockHistoryService : public history::HistoryService {
- public:
-  MockHistoryService() : HistoryService() {}
-
-  MOCK_METHOD1(ClearCachedDataForContextID,
-               void(history::ContextID context_id));
-  MOCK_METHOD3(HideVisits,
-               base::CancelableTaskTracker::TaskId(
-                   const std::vector<history::VisitID>& visit_ids,
-                   base::OnceClosure callback,
-                   base::CancelableTaskTracker* tracker));
-};
 
 class MockCartService : public CartService {
  public:
@@ -102,9 +54,6 @@ class MockCartService : public CartService {
 
   MOCK_METHOD1(LoadAllActiveCarts, void(CartDB::LoadCallback callback));
 };
-
-constexpr char kSampleNonSearchUrl[] = "https://www.foo.com/";
-constexpr char kSampleSearchUrl[] = "https://www.google.com/search?q=foo";
 
 class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
  public:
@@ -125,6 +74,8 @@ class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
             profile(), ServiceAccessType::EXPLICIT_ACCESS));
     mock_cart_service_ = static_cast<MockCartService*>(
         CartServiceFactory::GetForProfile(profile()));
+    mock_shopping_service_ = static_cast<commerce::MockShoppingService*>(
+        commerce::ShoppingServiceFactory::GetForBrowserContext(profile()));
     handler_ = std::make_unique<HistoryClustersPageHandler>(
         mojo::PendingReceiver<ntp::history_clusters::mojom::PageHandler>(),
         web_contents_.get());
@@ -132,6 +83,7 @@ class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
   }
 
   void TearDown() override {
+    handler_.reset();
     web_contents_.reset();
     BrowserWithTestWindowTest::TearDown();
   }
@@ -147,6 +99,10 @@ class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
   MockCartService& mock_cart_service() { return *mock_cart_service_; }
 
   MockHistoryService& mock_history_service() { return *mock_history_service_; }
+
+  commerce::MockShoppingService& mock_shopping_service() {
+    return *mock_shopping_service_;
+  }
 
   HistoryClustersPageHandler& handler() { return *handler_; }
 
@@ -174,9 +130,14 @@ class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
                                      -> std::unique_ptr<KeyedService> {
                return std::make_unique<MockCartService>(
                    Profile::FromBrowserContext(context));
+             })},
+            {commerce::ShoppingServiceFactory::GetInstance(),
+             base::BindRepeating([](content::BrowserContext* context) {
+               return commerce::MockShoppingService::Build();
              })}};
   }
 
+  // TODO(crbug.com/1476124): Clean up the dangling pointers here.
   raw_ptr<MockHistoryClustersModuleService, DanglingUntriaged>
       mock_history_clusters_module_service_;
   std::unique_ptr<content::WebContents> web_contents_;
@@ -184,64 +145,11 @@ class HistoryClustersPageHandlerTest : public BrowserWithTestWindowTest {
       mock_history_clusters_tab_helper_;
   raw_ptr<MockHistoryService, DanglingUntriaged> mock_history_service_;
   raw_ptr<MockCartService, DanglingUntriaged> mock_cart_service_;
+  raw_ptr<commerce::MockShoppingService, DisableDanglingPtrDetection>
+      mock_shopping_service_;
   std::unique_ptr<HistoryClustersPageHandler> handler_;
   ukm::SourceId ukm_source_id_;
 };
-
-history::ClusterVisit SampleVisitForURL(
-    GURL url,
-    bool has_url_keyed_image = true,
-    const std::vector<std::string>& related_searches = {}) {
-  history::VisitRow visit_row;
-  visit_row.visit_id = 1;
-  visit_row.visit_time = base::Time::Now();
-  visit_row.is_known_to_sync = true;
-  auto content_annotations = history::VisitContentAnnotations();
-  content_annotations.has_url_keyed_image = has_url_keyed_image;
-  content_annotations.related_searches = related_searches;
-  history::AnnotatedVisit annotated_visit;
-  annotated_visit.visit_row = std::move(visit_row);
-  annotated_visit.content_annotations = std::move(content_annotations);
-  std::string kSampleUrl = url.spec();
-  history::ClusterVisit sample_visit;
-  sample_visit.url_for_display = base::UTF8ToUTF16(kSampleUrl);
-  sample_visit.normalized_url = url;
-  sample_visit.annotated_visit = std::move(annotated_visit);
-  sample_visit.score = 1.0f;
-  return sample_visit;
-}
-
-history::Cluster SampleCluster(int id,
-                               int srp_visits,
-                               int non_srp_visits,
-                               const std::vector<std::string> related_searches =
-                                   {"fruits", "red fruits", "healthy fruits"}) {
-  history::ClusterVisit sample_srp_visit =
-      SampleVisitForURL(GURL(kSampleSearchUrl), false);
-  history::ClusterVisit sample_non_srp_visit =
-      SampleVisitForURL(GURL(kSampleNonSearchUrl), true, related_searches);
-
-  std::vector<history::ClusterVisit> visits;
-  visits.insert(visits.end(), srp_visits, sample_srp_visit);
-  visits.insert(visits.end(), non_srp_visits, sample_non_srp_visit);
-
-  std::string kSampleLabel = "LabelOne";
-  return history::Cluster(id, std::move(visits),
-                          {{u"apples", history::ClusterKeywordData()},
-                           {u"Red Oranges", history::ClusterKeywordData()}},
-                          /*should_show_on_prominent_ui_surfaces=*/true,
-                          /*label=*/
-                          l10n_util::GetStringFUTF16(
-                              IDS_HISTORY_CLUSTERS_CLUSTER_LABEL_SEARCH_TERMS,
-                              base::UTF8ToUTF16(kSampleLabel)));
-}
-
-history::Cluster SampleCluster(int srp_visits,
-                               int non_srp_visits,
-                               const std::vector<std::string> related_searches =
-                                   {"fruits", "red fruits", "healthy fruits"}) {
-  return SampleCluster(1, srp_visits, non_srp_visits, related_searches);
-}
 
 TEST_F(HistoryClustersPageHandlerTest, GetClusters) {
   const int kSampleClusterCount = 3;
@@ -252,9 +160,12 @@ TEST_F(HistoryClustersPageHandlerTest, GetClusters) {
         SampleCluster(i, /*srp_visits=*/1, /*non_srp_visits=*/2));
     ranking_signals[i] = HistoryClustersModuleRankingSignals();
   }
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
           [&sample_clusters, &ranking_signals](
+              const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
               base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
@@ -339,7 +250,8 @@ TEST_F(HistoryClustersPageHandlerTest,
 
   const history::Cluster kSampleCluster =
       SampleCluster(/*srp_visits=*/1, /*non_srp_visits=*/2);
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .Times(0);
 
   std::vector<history_clusters::mojom::ClusterPtr> clusters_mojom;
@@ -356,9 +268,12 @@ TEST_F(HistoryClustersPageHandlerTest,
 }
 
 TEST_F(HistoryClustersPageHandlerTest, NoClusters) {
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
-          [&](base::OnceCallback<void(
+          [&](const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
+              base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
                   callback) { std::move(callback).Run({}, {}); }));
@@ -411,9 +326,12 @@ TEST_F(HistoryClustersPageHandlerTest, DismissCluster) {
   std::vector<history::Cluster> sample_clusters = {SampleCluster(0, 1, 2)};
   base::flat_map<int64_t, HistoryClustersModuleRankingSignals> ranking_signals =
       {{cluster_id, HistoryClustersModuleRankingSignals()}};
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
           [&sample_clusters, &ranking_signals](
+              const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
               base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
@@ -464,9 +382,12 @@ TEST_F(HistoryClustersPageHandlerTest, RecordClick) {
   std::vector<history::Cluster> sample_clusters = {SampleCluster(0, 1, 2)};
   base::flat_map<int64_t, HistoryClustersModuleRankingSignals> ranking_signals =
       {{cluster_id, HistoryClustersModuleRankingSignals()}};
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
           [&sample_clusters, &ranking_signals](
+              const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
               base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
@@ -502,9 +423,12 @@ TEST_F(HistoryClustersPageHandlerTest, RecordDisabled) {
   std::vector<history::Cluster> sample_clusters = {SampleCluster(0, 1, 2)};
   base::flat_map<int64_t, HistoryClustersModuleRankingSignals> ranking_signals =
       {{cluster_id, HistoryClustersModuleRankingSignals()}};
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
           [&sample_clusters, &ranking_signals](
+              const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
               base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
@@ -537,9 +461,12 @@ TEST_F(HistoryClustersPageHandlerTest, RecordLayoutTypeShown) {
   std::vector<history::Cluster> sample_clusters = {SampleCluster(0, 1, 2)};
   base::flat_map<int64_t, HistoryClustersModuleRankingSignals> ranking_signals =
       {{cluster_id, HistoryClustersModuleRankingSignals()}};
-  EXPECT_CALL(mock_history_clusters_module_service(), GetClusters(testing::_))
+  EXPECT_CALL(mock_history_clusters_module_service(),
+              GetClusters(testing::_, testing::_, testing::_))
       .WillOnce(testing::Invoke(
           [&sample_clusters, &ranking_signals](
+              const history_clusters::QueryClustersFilterParams filter_params,
+              size_t min_required_related_searches,
               base::OnceCallback<void(
                   std::vector<history::Cluster>,
                   base::flat_map<int64_t, HistoryClustersModuleRankingSignals>)>
@@ -575,6 +502,14 @@ TEST_F(HistoryClustersPageHandlerTest, NotLoadCartWithoutFeature) {
   handler().GetCartForCluster(std::move(cluster_mojom), base::DoNothing());
 }
 
+TEST_F(HistoryClustersPageHandlerTest, NotLoadDiscountWithoutFeature) {
+  history_clusters::mojom::ClusterPtr cluster_mojom;
+  EXPECT_CALL(mock_shopping_service(),
+              GetDiscountInfoForUrls(testing::_, testing::_))
+      .Times(0);
+  handler().GetDiscountsForCluster(std::move(cluster_mojom), base::DoNothing());
+}
+
 class HistoryClustersPageHandlerCartInQuestTest
     : public HistoryClustersPageHandlerTest {
  public:
@@ -593,4 +528,23 @@ TEST_F(HistoryClustersPageHandlerCartInQuestTest, LoadCartWithFeature) {
   handler().GetCartForCluster(std::move(cluster_mojom), base::DoNothing());
 }
 
+class HistoryClustersPageHandlerDiscountInQuestTest
+    : public HistoryClustersPageHandlerTest {
+ public:
+  HistoryClustersPageHandlerDiscountInQuestTest() {
+    features_.InitAndEnableFeature(
+        ntp_features::kNtpHistoryClustersModuleDiscounts);
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+TEST_F(HistoryClustersPageHandlerDiscountInQuestTest, LoadDiscountWithFeature) {
+  auto cluster_mojom = history_clusters::mojom::Cluster::New();
+  EXPECT_CALL(mock_shopping_service(),
+              GetDiscountInfoForUrls(testing::_, testing::_))
+      .Times(1);
+  handler().GetDiscountsForCluster(std::move(cluster_mojom), base::DoNothing());
+}
 }  // namespace

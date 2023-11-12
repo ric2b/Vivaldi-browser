@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "base/android/jni_android.h"
+// #include "base/android/jni_android.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
 #include "components/device_reauth/device_authenticator.h"
@@ -77,11 +77,6 @@ class AccountChooserDialogAndroid : public content::WebContentsObserver {
   // of the chosen credential and |auth_succeeded| is the result of the
   // re-authentication. Destroys |this|.
   void OnReauthCompleted(size_t index, bool auth_succeded);
-
-  // Logs |action| depending on how many credentials are displayed in the
-  // dialog.
-  void LogAction(
-      password_manager::metrics_util::AccountChooserUserAction action);
 
   raw_ptr<content::WebContents> web_contents_ = nullptr;
 

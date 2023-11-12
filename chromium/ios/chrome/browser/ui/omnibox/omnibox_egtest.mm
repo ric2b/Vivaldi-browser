@@ -4,9 +4,10 @@
 
 #import <XCTest/XCTest.h>
 
+#import "base/apple/foundation_util.h"
+#import "base/containers/contains.h"
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "build/build_config.h"
@@ -32,10 +33,6 @@
 #import "net/test/embedded_test_server/http_request.h"
 #import "net/test/embedded_test_server/http_response.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using base::test::ios::kWaitForUIElementTimeout;
 using chrome_test_util::WebViewMatcher;
@@ -87,7 +84,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   if (request.relative_url == kHeaderPageURL) {
     std::string result = kHeaderPageFailure;
-    if (request.headers.find("X-Client-Data") != request.headers.end()) {
+    if (base::Contains(request.headers, "X-Client-Data")) {
       result = kHeaderPageSuccess;
     }
     http_response->set_content("<html><body>" + result + "</body></html>");
@@ -162,18 +159,57 @@ id<GREYMatcher> PasteToSearchButton() {
   return grey_accessibilityHint(a11yHintPasteButton);
 }
 
-// Returns Copy button from the context menu.
+#pragma mark LocationBar context menu buttons
+
+// LocationBar context menu buttons can be showed in different orders depending
+// on the omnibox position (top or bottom toolbar). The context menu is
+// configured with UIContextMenuConfigurationElementOrderPriority that will
+// create the buttons two times (one for earch ordering) with one of them
+// hidden. The added `grey_hidden(NO)` prevents conflict when matching with
+// GREYMatcher.
+
+// Returns Copy button from the location bar context menu.
 id<GREYMatcher> CopyContextMenuButton() {
+  int copyButtonId = IDS_IOS_SHARE_MENU_COPY;
+  if ([ChromeEarlGrey isBottomOmniboxSteadyStateEnabled]) {
+    copyButtonId = IDS_IOS_COPY_LINK_ACTION_TITLE;
+  }
   return grey_allOf(
-      grey_accessibilityLabel(l10n_util::GetNSString(IDS_IOS_SHARE_MENU_COPY)),
-      grey_accessibilityTrait(UIAccessibilityTraitButton), nil);
+      chrome_test_util::ContextMenuItemWithAccessibilityLabelId(copyButtonId),
+      grey_accessibilityTrait(UIAccessibilityTraitButton), grey_hidden(NO),
+      nil);
 }
 
-// Returns Visit Copied Link button from the context menu.
+// Returns Visit Copied Link button from the location bar context menu.
 id<GREYMatcher> VisitCopiedLinkContextMenuButton() {
-  return grey_allOf(grey_accessibilityLabel(
-                        l10n_util::GetNSString(IDS_IOS_VISIT_COPIED_LINK)),
-                    grey_accessibilityTrait(UIAccessibilityTraitButton), nil);
+  return grey_allOf(chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
+                        IDS_IOS_VISIT_COPIED_LINK),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    grey_hidden(NO), nil);
+}
+
+// Returns Search Copied Text button from the location bar context menu.
+id<GREYMatcher> SearchCopiedTextContextMenuButton() {
+  return grey_allOf(chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
+                        IDS_IOS_SEARCH_COPIED_TEXT),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    grey_hidden(NO), nil);
+}
+
+// Returns Search Copied Image button from the location bar context menu.
+id<GREYMatcher> SearchCopiedImageContextMenuButton() {
+  return grey_allOf(chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
+                        IDS_IOS_SEARCH_COPIED_IMAGE),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    grey_hidden(NO), nil);
+}
+
+// Returns Search Copied Image button from the location bar context menu.
+id<GREYMatcher> SearchCopiedImageWithLensContextMenuButton() {
+  return grey_allOf(chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
+                        IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton),
+                    grey_hidden(NO), nil);
 }
 
 // Taps the fake omnibox and waits for the real omnibox to be visible.
@@ -227,9 +263,9 @@ void FocusFakebox() {
                         [ElementSelector
                             selectorWithElementID:kLogoPageChromiumImageId],
                         true /* menu should appear */)];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_IOS_CONTENT_CONTEXT_COPYIMAGE)]
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
+                     IDS_IOS_CONTENT_CONTEXT_COPYIMAGE)]
       performAction:grey_tap()];
 
   GREYCondition* copyCondition =
@@ -365,7 +401,8 @@ void FocusFakebox() {
 
 // Tests that Search Copied Image menu button is shown with an image in the
 // clipboard and is starting an image search.
-- (void)testOmniboxMenuPasteImageToSearch {
+// TODO(crbug.com/1476912): Fix flakiness and re-enable.
+- (void)DISABLED_testOmniboxMenuPasteImageToSearch {
   [self copyImageIntoClipboard];
 
   // Wait for the context menu to dismiss, so the omnibox can be tapped.
@@ -557,9 +594,12 @@ void FocusFakebox() {
   // Verify that system text selection callout is not displayed.
   [[EarlGrey selectElementWithMatcher:VisitCopiedLinkContextMenuButton()]
       assertWithMatcher:grey_nil()];
-  [[EarlGrey selectElementWithMatcher:SearchCopiedTextButton()]
+  [[EarlGrey selectElementWithMatcher:SearchCopiedTextContextMenuButton()]
       assertWithMatcher:grey_nil()];
-  [[EarlGrey selectElementWithMatcher:PasteButton()]
+  [[EarlGrey selectElementWithMatcher:SearchCopiedImageContextMenuButton()]
+      assertWithMatcher:grey_nil()];
+  [[EarlGrey
+      selectElementWithMatcher:SearchCopiedImageWithLensContextMenuButton()]
       assertWithMatcher:grey_nil()];
 
   [self checkLocationBarSteadyState];
@@ -618,9 +658,13 @@ void FocusFakebox() {
                  @"Context menu is still visible.");
 }
 
-// TODO(crbug.com/1453240): Re-enable when fixed.
-- (void)DISABLED_testOmniboxDefocusesOnTabSwitch {
+// Tests that the omnibox defocuses when switching to another tab.
+- (void)testOmniboxDefocusesOnTabSwitch {
+  [ChromeEarlGrey closeAllTabs];
+
+  [ChromeEarlGrey openNewTab];
   [self openPage1];
+
   [ChromeEarlGrey openNewTab];
   [ChromeEarlGrey waitForMainTabCount:2];
   [self openPage2];
@@ -643,13 +687,10 @@ void FocusFakebox() {
       assertWithMatcher:grey_notVisible()];
 }
 
+// Tests that the omnibox defocuses when switching to another incognito tab.
 - (void)testOmniboxDefocusesOnTabSwitchIncognito {
-#if !TARGET_IPHONE_SIMULATOR
-  // Test flaky, see TODO:(crbug.com/1211373).
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_DISABLED(@"Test disable on iPad device.");
-  }
-#endif
+  [ChromeEarlGrey closeAllTabs];
+
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey waitForIncognitoTabCount:1];
   [self openPage1];
@@ -674,6 +715,9 @@ void FocusFakebox() {
   [self checkLocationBarSteadyState];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxPopupList()]
       assertWithMatcher:grey_notVisible()];
+
+  // Exit incognito.
+  [ChromeEarlGrey closeAllTabs];
 }
 
 #pragma mark - Helpers
@@ -1302,7 +1346,8 @@ void FocusFakebox() {
   // TODO(crbug.com/1454516): This should use grey_typeText when fixed.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::DefocusedLocationView()]
       performAction:grey_tap()];
-  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"127" flags:0];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+      performAction:grey_replaceText(@"127")];
 
   // We expect to have an autocomplete.
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:

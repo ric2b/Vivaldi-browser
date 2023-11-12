@@ -124,6 +124,7 @@ class CORE_EXPORT InspectorPageAgent final
       const String& source,
       Maybe<String> world_name,
       Maybe<bool> include_command_line_api,
+      Maybe<bool> runImmediately,
       String* identifier) override;
   protocol::Response removeScriptToEvaluateOnNewDocument(
       const String& identifier) override;
@@ -209,7 +210,6 @@ class CORE_EXPORT InspectorPageAgent final
       LocalFrame*,
       const absl::optional<AdScriptIdentifier>& ad_script_on_stack);
   void FrameDetachedFromParent(LocalFrame*, FrameDetachType);
-  void FrameStartedLoading(LocalFrame*);
   void FrameStoppedLoading(LocalFrame*);
   void FrameRequestedNavigation(Frame* target_frame,
                                 const KURL&,

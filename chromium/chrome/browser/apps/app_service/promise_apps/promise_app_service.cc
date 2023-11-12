@@ -9,7 +9,11 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/package_id.h"
+#include "chrome/browser/apps/app_service/package_id_util.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_almanac_connector.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
@@ -17,13 +21,20 @@
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/image_fetcher/core/image_fetcher_impl.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/icon_types.h"
+#include "components/services/app_service/public/cpp/types_util.h"
+#include "google_apis/google_api_keys.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
 namespace {
+
 const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("promise_app_service_download_icon",
                                         R"(
@@ -64,7 +75,8 @@ const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 }  // namespace
 
 namespace apps {
-PromiseAppService::PromiseAppService(Profile* profile)
+PromiseAppService::PromiseAppService(Profile* profile,
+                                     AppRegistryCache& app_registry_cache)
     : promise_app_registry_cache_(
           std::make_unique<apps::PromiseAppRegistryCache>()),
       promise_app_almanac_connector_(
@@ -72,7 +84,10 @@ PromiseAppService::PromiseAppService(Profile* profile)
       promise_app_icon_cache_(std::make_unique<apps::PromiseAppIconCache>()),
       image_fetcher_(std::make_unique<image_fetcher::ImageFetcherImpl>(
           std::make_unique<ImageDecoderImpl>(),
-          profile->GetURLLoaderFactory())) {}
+          profile->GetURLLoaderFactory())),
+      app_registry_cache_(&app_registry_cache) {
+  app_registry_cache_observation_.Observe(&app_registry_cache);
+}
 
 PromiseAppService::~PromiseAppService() = default;
 
@@ -90,6 +105,18 @@ void PromiseAppService::OnPromiseApp(PromiseAppPtr delta) {
   const PackageId package_id = delta->package_id;
   bool is_existing_registration =
       promise_app_registry_cache_->HasPromiseApp(package_id);
+
+  // If the app is in the AppRegistryCache, then it already has an item in the
+  // Launcher/ Shelf and we don't need to create a new promise app item to
+  // represent it. This scenario happens when we start installing a default ARC
+  // app (which is a stubbed app in App Registry Cache to show an icon in the
+  // Launcher/ Shelf but uses legacy ARC default apps implementation).
+  // TODO(b/286981938): Remove this check after refactoring to allow the Promise
+  // App Service to manage ARC default app icons.
+  if (!is_existing_registration && IsRegisteredInAppRegistryCache(package_id)) {
+    return;
+  }
+
   promise_app_registry_cache_->OnPromiseApp(std::move(delta));
 
   if (is_existing_registration) {
@@ -101,6 +128,13 @@ void PromiseAppService::OnPromiseApp(PromiseAppPtr delta) {
     return;
   }
 
+  // Ensure that the build uses the Google-internal file containing the
+  // official API keys, which are required to make queries to the Almanac.
+  if (!google_apis::IsGoogleChromeAPIKeyUsed() &&
+      !skip_api_key_check_for_testing_) {
+    return;
+  }
+
   // If this is a new promise app, send an Almanac request to fetch more
   // details.
   promise_app_almanac_connector_->GetPromiseAppInfo(
@@ -109,44 +143,63 @@ void PromiseAppService::OnPromiseApp(PromiseAppPtr delta) {
                      weak_ptr_factory_.GetWeakPtr(), package_id));
 }
 
+void PromiseAppService::LoadIcon(const PackageId& package_id,
+                                 int32_t size_hint_in_dip,
+                                 apps::IconEffects icon_effects,
+                                 apps::LoadIconCallback callback) {
+  promise_app_icon_cache_->GetIconAndApplyEffects(
+      package_id, size_hint_in_dip, icon_effects, std::move(callback));
+}
+
+void PromiseAppService::OnAppUpdate(const apps::AppUpdate& update) {
+  if (update.AppType() != AppType::kArc && update.AppType() != AppType::kWeb) {
+    return;
+  }
+  // Check that the update is for a new installation.
+  if (!update.ReadinessChanged() ||
+      update.Readiness() != apps::Readiness::kReady ||
+      apps_util::IsInstalled(update.PriorReadiness())) {
+    return;
+  }
+
+  // TODO(b/288832707): Find a way to match installed web-only TWAs to their
+  // promise apps, which will have different package IDs.
+
+  // Check that the update corresponds to a registered promise app.
+  const PackageId package_id(update.AppType(), update.PublisherId());
+  if (!promise_app_registry_cache_->HasPromiseApp(package_id)) {
+    return;
+  }
+  // Delete the promise app.
+  RemovePromiseApp(package_id);
+}
+
+void PromiseAppService::OnAppRegistryCacheWillBeDestroyed(
+    apps::AppRegistryCache* cache) {
+  app_registry_cache_observation_.Reset();
+  app_registry_cache_ = nullptr;
+}
+
 void PromiseAppService::SetSkipAlmanacForTesting(bool skip_almanac) {
   skip_almanac_for_testing_ = skip_almanac;
 }
 
-void PromiseAppService::SetImageFetcherForTesting(
-    std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher) {
-  image_fetcher_ = std::move(image_fetcher);
+void PromiseAppService::SetSkipApiKeyCheckForTesting(bool skip_api_key_check) {
+  skip_api_key_check_for_testing_ = skip_api_key_check;
+}
+
+void PromiseAppService::RemovePromiseApp(const PackageId& package_id) {
+  PromiseAppPtr promise_app = std::make_unique<PromiseApp>(package_id);
+  promise_app->status = PromiseStatus::kRemove;
+  promise_app->should_show = false;
+  OnPromiseApp(std::move(promise_app));
+  promise_app_icon_cache_->RemoveIconsForPackageId(package_id);
 }
 
 void PromiseAppService::OnGetPromiseAppInfoCompleted(
     const PackageId& package_id,
     absl::optional<PromiseAppWrapper> promise_app_info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (!promise_app_info.has_value()) {
-    LOG(ERROR) << "Request for app details from the Almanac Promise App API "
-                  "failed for package "
-               << package_id.ToString();
-
-    // TODO(b/276841106): Remove promise app from the cache and its observers.
-    return;
-  }
-  if (!promise_app_info->GetPackageId().has_value() ||
-      !promise_app_info->GetName().has_value() ||
-      promise_app_info->GetIcons().size() == 0) {
-    LOG(ERROR) << "Cannot update promise app " << package_id.ToString()
-               << " due to incomplete Almanac Promise App API response.";
-    return;
-  }
-
-  // The response's Package ID should match with our original request.
-  if (package_id != promise_app_info->GetPackageId().value()) {
-    LOG(ERROR) << "Cannot update promise app due to mismatching package IDs "
-                  "between the request ("
-               << package_id.ToString() << ") and response ("
-               << promise_app_info->GetPackageId().value().ToString() << ")";
-    return;
-  }
 
   // If the promise app doesn't exist in the registry, drop the update. The app
   // installation may have completed before the Almanac returned a response.
@@ -156,23 +209,24 @@ void PromiseAppService::OnGetPromiseAppInfoCompleted(
     return;
   }
 
-  PromiseAppPtr promise_app =
-      std::make_unique<PromiseApp>(promise_app_info->GetPackageId().value());
-  promise_app->name = promise_app_info->GetName().value();
-  OnPromiseApp(std::move(promise_app));
+  // If Almanac doesn't provide any meaningful response, continue to show the
+  // promise app item. When an icon is requested, the PromiseAppIconCache will
+  // fallback to returning a placeholder icon.
+  if (!promise_app_info.has_value() ||
+      promise_app_info->GetIcons().size() == 0) {
+    PromiseAppPtr promise_app = std::make_unique<PromiseApp>(package_id);
+    promise_app->should_show = true;
+    promise_app_registry_cache_->OnPromiseApp(std::move(promise_app));
+    return;
+  }
 
   pending_download_count_[package_id] = promise_app_info->GetIcons().size();
 
   for (auto icon : promise_app_info->GetIcons()) {
-    PromiseAppIconPtr promise_app_icon = std::make_unique<PromiseAppIcon>();
-    promise_app_icon->width_in_pixels = icon.GetWidthInPixels();
-    promise_app_icon->is_masking_allowed = icon.IsMaskingAllowed();
-
     image_fetcher_->FetchImage(
         icon.GetUrl(),
         base::BindOnce(&PromiseAppService::OnIconDownloaded,
-                       weak_ptr_factory_.GetWeakPtr(), package_id,
-                       std::move(promise_app_icon)),
+                       weak_ptr_factory_.GetWeakPtr(), package_id),
         image_fetcher::ImageFetcherParams(kTrafficAnnotation,
                                           "Promise App Service Icon Fetcher"));
   }
@@ -180,7 +234,6 @@ void PromiseAppService::OnGetPromiseAppInfoCompleted(
 
 void PromiseAppService::OnIconDownloaded(
     const PackageId& package_id,
-    PromiseAppIconPtr promise_app_icon,
     const gfx::Image& image,
     const image_fetcher::RequestMetadata& metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -201,7 +254,9 @@ void PromiseAppService::OnIconDownloaded(
 
   // Save valid icons to the icon cache.
   if (!image.IsEmpty()) {
-    promise_app_icon->icon = image.AsImageSkia();
+    PromiseAppIconPtr promise_app_icon = std::make_unique<PromiseAppIcon>();
+    promise_app_icon->icon = image.AsBitmap();
+    promise_app_icon->width_in_pixels = promise_app_icon->icon.width();
     promise_app_icon_cache_->SaveIcon(package_id, std::move(promise_app_icon));
   }
 
@@ -214,15 +269,28 @@ void PromiseAppService::OnIconDownloaded(
   }
   pending_download_count_.erase(package_id);
 
-  // If there are no successfully downloaded icons, we don't want to update or
-  // show the promise icon at all.
-  if (!promise_app_icon_cache_->DoesPackageIdHaveIcons(package_id)) {
-    return;
-  }
-
   // Update the promise app so it can show to the user.
   PromiseAppPtr promise_app = std::make_unique<PromiseApp>(package_id);
   promise_app->should_show = true;
   promise_app_registry_cache_->OnPromiseApp(std::move(promise_app));
 }
+
+bool PromiseAppService::IsRegisteredInAppRegistryCache(
+    const PackageId& package_id) {
+  if (!app_registry_cache_) {
+    return false;
+  }
+  bool is_registered = false;
+  app_registry_cache_->ForEachApp([&package_id,
+                                   &is_registered](const AppUpdate& update) {
+    absl::optional<PackageId> app_package_id =
+        apps_util::GetPackageIdForApp(update);
+    if (app_package_id.has_value() && app_package_id.value() == package_id) {
+      is_registered = true;
+      return;
+    }
+  });
+  return is_registered;
+}
+
 }  // namespace apps

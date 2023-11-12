@@ -6,11 +6,11 @@
 
 #include <algorithm>
 #include <set>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -92,7 +92,7 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
     // wpa_supplicant
     {"SSID", "(?i-s)(\\bssid[= ]')(.+)(')", PIIType::kSSID},
     {"SSID", "(?i-s)(\\bssid[= ]\")(.+)(\")", PIIType::kSSID},
-    {"SSID", "(\\* SSID=)(.+)($)", PIIType::kSSID},
+    {"SSID", "(\\* SSID=)([^\n]+)(.*)", PIIType::kSSID},
     {"SSIDHex", "(?-s)(\\bSSID - hexdump\\(len=[0-9]+\\): )(.+)()",
      PIIType::kSSID},
 
@@ -118,7 +118,7 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
     // PSM identifier is a 4-character brand code, which can be encoded as 8 hex
     // digits, followed by a slash ('/') and a serial number.
     {"PSM ID",
-     "(?i)(PSM.*\\s+.*\\b)((?:[a-z]{4}|[0-9a-f]{8})\\/"
+     "(?i)(PSM.*[\t ]+.*\\b)((?:[a-z]{4}|[0-9a-f]{8})\\/"
      "[0-9a-z\\-.:\\/\\\\\\x00-\\x09\\x0B-\\x1F]+)(\\b)",
      PIIType::kSerial},
 
@@ -126,6 +126,11 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
     {"GAIA", R"xxx((\"?\bgaia_id\"?[=:]['\"])(\d+)(\b['\"]))xxx",
      PIIType::kGaiaID},
     {"GAIA", R"xxx((\{id: )(\d+)(, email:))xxx", PIIType::kGaiaID},
+    // The next two patterns are used by support tool when exporting PII.
+    {"GAIA", R"xxx(("accountId":\s*")([^"]+)("))xxx", PIIType::kGaiaID},
+    {"GAIA",
+     R"xxx(("label":\s*"(?:Account|Gaia) Id",\s*"status":\s*")([^"]+)("))xxx",
+     PIIType::kGaiaID},
 
     // UUIDs given by the 'blkid' tool. These don't necessarily look like
     // standard UUIDs, so treat them specially.
@@ -150,6 +155,10 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
 
     // IPP (Internet Printing Protocol) Addresses
     {"IPP Address", R"xxx((ipp:\/\/)(.+?)(\/ipp))xxx", PIIType::kIPPAddress},
+    // Crash ID. This pattern only applies to ChromeOS and it matches the
+    // log entries from ChromeOS's crash_sender program.
+    {"Crash ID", R"xxx((Crash report receipt ID )([0-9a-fA-F]+)(.+?))xxx",
+     PIIType::kCrashId},
 };
 
 bool MaybeUnmapAddress(IPAddress* addr) {
@@ -274,24 +283,24 @@ std::string MaybeScrubIPAddress(const std::string& addr) {
 // This function can be used to determine if this was the case by evaluating
 // the skipped piece. It returns true, if the matched address was erroneous
 // and should be skipped instead.
-bool ShouldSkipIPAddress(const re2::StringPiece& skipped) {
+bool ShouldSkipIPAddress(std::string_view skipped) {
   // MomdemManager can dump out firmware revision fields that can also
   // confuse the IPv4 matcher e.g. "Revision: 81600.0000.00.29.19.16_DO"
   // so ignore the replacement if the skipped piece looks like
   // "Revision: .*<ipv4>". Note however that if this field contains
   // values delimited by multiple spaces, any matches after the first
   // will lose the context and be redacted.
-  static const re2::StringPiece rev("Revision: ");
-  static const re2::StringPiece space(" ");
+  static const std::string_view rev("Revision: ");
+  static const std::string_view space(" ");
   const auto pos = skipped.rfind(rev);
-  if (pos != re2::StringPiece::npos &&
-      skipped.find(space, pos + rev.length()) == re2::StringPiece::npos) {
+  if (pos != std::string_view::npos &&
+      skipped.find(space, pos + rev.length()) == std::string_view::npos) {
     return true;
   }
 
   // USB paths can be confused with IPv4 Addresses because they can look
   // similar: n-n.n.n.n . Ignore replacement if previous char is `-`
-  static const re2::StringPiece dash("-");
+  static const std::string_view dash("-");
   return skipped.ends_with(dash);
 }
 
@@ -480,12 +489,12 @@ CustomPatternWithAlias kCustomPatternsWithoutContext[] = {
 // only contains "c".
 // Example: input = "aaabbbc", pattern = "(z+)" leads to input = "aaabbbc",
 // the args values are not modified and skipped_input is not modified.
-bool FindAndConsumeAndGetSkippedN(re2::StringPiece* input,
+bool FindAndConsumeAndGetSkippedN(std::string_view* input,
                                   const re2::RE2& pattern,
-                                  re2::StringPiece* skipped_input,
-                                  re2::StringPiece* args[],
+                                  std::string_view* skipped_input,
+                                  std::string_view* args[],
                                   int argc) {
-  re2::StringPiece old_input = *input;
+  std::string_view old_input = *input;
 
   CHECK_GE(argc, 1);
   re2::RE2::Arg a0(argc > 0 ? args[0] : nullptr);
@@ -504,18 +513,18 @@ bool FindAndConsumeAndGetSkippedN(re2::StringPiece* input,
   return result;
 }
 
-// All |match_groups| need to be of type re2::StringPiece*.
+// All |match_groups| need to be of type std::string_view*.
 template <typename... Arg>
-bool FindAndConsumeAndGetSkipped(re2::StringPiece* input,
+bool FindAndConsumeAndGetSkipped(std::string_view* input,
                                  const re2::RE2& pattern,
-                                 re2::StringPiece* skipped_input,
+                                 std::string_view* skipped_input,
                                  Arg*... match_groups) {
-  re2::StringPiece* args[] = {match_groups...};
+  std::string_view* args[] = {match_groups...};
   return FindAndConsumeAndGetSkippedN(input, pattern, skipped_input, args,
                                       std::size(args));
 }
 
-bool HasRepeatedChar(re2::StringPiece text, char c) {
+bool HasRepeatedChar(std::string_view text, char c) {
   return std::adjacent_find(text.begin(), text.end(), [c](char c1, char c2) {
            return (c1 == c) && (c2 == c);
          }) != text.end();
@@ -529,26 +538,6 @@ const char* const kUnredactedMacAddresses[] = {
 };
 constexpr size_t kNumUnredactedMacs = std::size(kUnredactedMacAddresses);
 
-void RecordPIIRedactedHistogram(const PIIType pii_type) {
-  UMA_HISTOGRAM_ENUMERATION("Feedback.RedactionTool", pii_type);
-}
-
-// These values are logged to UMA. Entries should not be renumbered and
-// numeric values should never be reused. Please keep in sync with
-// "CreditCardDetection" in //tools/metrics/histograms/enums.xml.
-enum class CreditCardDetection {
-  kRegexMatch = 1,
-  kTimestamp = 2,
-  kRepeatedChars = 3,
-  kDoesntValidate = 4,
-  kValidated = 5,
-  kMaxValue = kValidated,
-};
-
-void RecordCreditCardRedactionHistogram(CreditCardDetection step) {
-  UMA_HISTOGRAM_ENUMERATION("Feedback.RedactionTool.CreditCardMatch", step);
-}
-
 bool IsFeatureEnabled(const base::Feature& feature) {
   return base::FeatureList::GetInstance()
              ? base::FeatureList::IsEnabled(feature)
@@ -557,7 +546,15 @@ bool IsFeatureEnabled(const base::Feature& feature) {
 }  // namespace
 
 RedactionTool::RedactionTool(const char* const* first_party_extension_ids)
-    : first_party_extension_ids_(first_party_extension_ids) {
+    : RedactionTool(first_party_extension_ids,
+                    RedactionToolMetricsRecorder::Create()) {}
+
+RedactionTool::RedactionTool(
+    const char* const* first_party_extension_ids,
+    std::unique_ptr<RedactionToolMetricsRecorder> metrics_recorder)
+    : first_party_extension_ids_(first_party_extension_ids),
+      metrics_recorder_(std::move(metrics_recorder)) {
+  CHECK(metrics_recorder_);
   DETACH_FROM_SEQUENCE(sequence_checker_);
   // Identity-map these, so we don't mangle them.
   for (const char* mac : kUnredactedMacAddresses) {
@@ -604,6 +601,8 @@ std::string RedactionTool::RedactAndKeepSelected(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::AssertLongCPUWorkAllowed();
 
+  const base::TimeTicks redaction_start = base::TimeTicks::Now();
+
   // Copy |input| so we can modify it.
   std::string redacted = input;
 
@@ -639,6 +638,10 @@ std::string RedactionTool::RedactAndKeepSelected(
       pii_types_to_keep.find(PIIType::kIBAN) == pii_types_to_keep.end()) {
     redacted = RedactIbans(std::move(redacted), nullptr);
   }
+
+  metrics_recorder_->RecordTimeSpentRedactingHistogram(base::TimeTicks::Now() -
+                                                       redaction_start);
+
   return redacted;
 }
 
@@ -680,8 +683,8 @@ std::string RedactionTool::RedactMACAddresses(
   result.reserve(input.size());
 
   // Keep consuming, building up a result string as we go.
-  re2::StringPiece text(input);
-  re2::StringPiece skipped, oui, nic;
+  std::string_view text(input);
+  std::string_view skipped, oui, nic;
   static const char kMacSeparatorChars[] = "-_";
   while (FindAndConsumeAndGetSkipped(&text, *mac_re, &skipped, &oui, &nic)) {
     // Look up the MAC address in the hash. Force the separator to be a colon
@@ -705,7 +708,7 @@ std::string RedactionTool::RedactMACAddresses(
     }
     result.append(skipped);
     result += replacement_mac;
-    RecordPIIRedactedHistogram(PIIType::kMACAddress);
+    metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kMACAddress);
   }
 
   result.append(text);
@@ -729,8 +732,8 @@ std::string RedactionTool::RedactHashes(
   result.reserve(input.size());
 
   // Keep consuming, building up a result string as we go.
-  re2::StringPiece text(input);
-  re2::StringPiece skipped, pre_whitespace, hash_prefix, hash_suffix;
+  std::string_view text(input);
+  std::string_view skipped, pre_whitespace, hash_prefix, hash_suffix;
   while (FindAndConsumeAndGetSkipped(&text, *hash_re, &skipped, &pre_whitespace,
                                      &hash_prefix, &hash_suffix)) {
     result.append(skipped);
@@ -763,7 +766,7 @@ std::string RedactionTool::RedactHashes(
 
     result += replacement_hash;
 
-    RecordPIIRedactedHistogram(PIIType::kStableIdentifier);
+    metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kStableIdentifier);
   }
 
   result.append(text);
@@ -795,12 +798,12 @@ std::string RedactionTool::RedactAndroidAppStoragePaths(
                 R"(/data/(data|app|user_de/\d+)/[^/\n]+)(/[^\n\s]+))");
 
   // Keep consuming, building up a result string as we go.
-  re2::StringPiece text(input);
-  re2::StringPiece skipped;
-  re2::StringPiece path_prefix;   // path before app_specific;
-  re2::StringPiece pre_data;      // (path=|exe=|/home/root/<hash>/android-data)
-  re2::StringPiece post_data;     // (data|app|user_de/\d+)
-  re2::StringPiece app_specific;  // (/[^\n\s]+)
+  std::string_view text(input);
+  std::string_view skipped;
+  std::string_view path_prefix;   // path before app_specific;
+  std::string_view pre_data;      // (path=|exe=|/home/root/<hash>/android-data)
+  std::string_view post_data;     // (data|app|user_de/\d+)
+  std::string_view app_specific;  // (/[^\n\s]+)
   while (FindAndConsumeAndGetSkipped(&text, *path_re, &skipped, &path_prefix,
                                      &pre_data, &post_data, &app_specific)) {
     // We can record these parts as-is.
@@ -830,7 +833,8 @@ std::string RedactionTool::RedactAndroidAppStoragePaths(
     if (detected != nullptr) {
       (*detected)[PIIType::kAndroidAppStoragePath].emplace(app_specific);
     }
-    RecordPIIRedactedHistogram(PIIType::kAndroidAppStoragePath);
+    metrics_recorder_->RecordPIIRedactedHistogram(
+        PIIType::kAndroidAppStoragePath);
   }
 
   result.append(text);
@@ -859,28 +863,31 @@ std::string RedactionTool::RedactCreditCardNumbers(
                                 // after the potential match should either be a
                                 // newline or 2-3 non digits.
 
-  re2::StringPiece text(input);
-  re2::StringPiece skipped;
-  re2::StringPiece sequence;
-  re2::StringPiece post_sequence;
+  std::string_view text(input);
+  std::string_view skipped;
+  std::string_view sequence;
+  std::string_view post_sequence;
 
   while (FindAndConsumeAndGetSkipped(&text, *cc_re, &skipped, &sequence,
                                      &post_sequence)) {
     result.append(skipped);
-    RecordCreditCardRedactionHistogram(CreditCardDetection::kRegexMatch);
+    metrics_recorder_->RecordCreditCardRedactionHistogram(
+        CreditCardDetection::kRegexMatch);
 
     // Timestamps in ms have a surprisingly high number of false positives.
     // Also log entries but those usually only match if there are several spaces
     // tying unrelated numbers together.
-    if (post_sequence.find("ms") != re2::StringPiece::npos) {
-      RecordCreditCardRedactionHistogram(CreditCardDetection::kTimestamp);
+    if (post_sequence.find("ms") != std::string_view::npos) {
+      metrics_recorder_->RecordCreditCardRedactionHistogram(
+          CreditCardDetection::kTimestamp);
       result.append(sequence);
       result.append(post_sequence);
       continue;
     }
 
     if (HasRepeatedChar(sequence, ' ') || HasRepeatedChar(sequence, '-')) {
-      RecordCreditCardRedactionHistogram(CreditCardDetection::kRepeatedChars);
+      metrics_recorder_->RecordCreditCardRedactionHistogram(
+          CreditCardDetection::kRepeatedChars);
       result.append(sequence);
       result.append(post_sequence);
       continue;
@@ -893,18 +900,21 @@ std::string RedactionTool::RedactCreditCardNumbers(
     if (cc_it != credit_cards_.cend()) {
       result += cc_it->second;
       result.append(post_sequence);
-      RecordCreditCardRedactionHistogram(CreditCardDetection::kValidated);
+      metrics_recorder_->RecordCreditCardRedactionHistogram(
+          CreditCardDetection::kValidated);
+      metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kCreditCard);
       continue;
     }
 
     if (redaction::IsValidCreditCardNumber(number)) {
-      RecordCreditCardRedactionHistogram(CreditCardDetection::kValidated);
+      metrics_recorder_->RecordCreditCardRedactionHistogram(
+          CreditCardDetection::kValidated);
       const auto& [it, success] = credit_cards_.emplace(
           number,
           base::StrCat({"(CREDITCARD: ",
                         base::NumberToString(credit_cards_.size() + 1), ")"}));
       if (redact_credit_cards_) {
-        RecordPIIRedactedHistogram(PIIType::kCreditCard);
+        metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kCreditCard);
         result += it->second;
       } else {
         result.append(sequence);
@@ -913,7 +923,8 @@ std::string RedactionTool::RedactCreditCardNumbers(
         (*detected)[PIIType::kCreditCard].insert(it->first);
       }
     } else {
-      RecordCreditCardRedactionHistogram(CreditCardDetection::kDoesntValidate);
+      metrics_recorder_->RecordCreditCardRedactionHistogram(
+          CreditCardDetection::kDoesntValidate);
       result.append(sequence);
     }
     result.append(post_sequence);
@@ -937,11 +948,11 @@ std::string RedactionTool::RedactIbans(
       "S[AEIKMN]|T[NR]|UA|VG|XK)(?:\\d{2})[ -]?(?:[ \\-A-Z0-9]){11,30})"
       "([^a-zA-Z0-9_\\-\\+=/])");
 
-  re2::StringPiece text(input);
-  re2::StringPiece skipped;
-  re2::StringPiece pre_separating_char;
-  re2::StringPiece iban;
-  re2::StringPiece post_separating_char;
+  std::string_view text(input);
+  std::string_view skipped;
+  std::string_view pre_separating_char;
+  std::string_view iban;
+  std::string_view post_separating_char;
   while (FindAndConsumeAndGetSkipped(&text, *iban_re, &skipped,
                                      &pre_separating_char, &iban,
                                      &post_separating_char)) {
@@ -961,6 +972,7 @@ std::string RedactionTool::RedactIbans(
         previous_iban != ibans_.end()) {
       result += previous_iban->second;
       result.append(post_separating_char);
+      metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kIBAN);
       continue;
     }
 
@@ -1027,7 +1039,7 @@ std::string RedactionTool::RedactIbans(
       (*detected)[PIIType::kIBAN].insert(it->first);
     }
 
-    RecordPIIRedactedHistogram(PIIType::kIBAN);
+    metrics_recorder_->RecordPIIRedactedHistogram(PIIType::kIBAN);
   }
 
   result.append(text);
@@ -1075,9 +1087,9 @@ std::string RedactionTool::RedactCustomPatternWithContext(
   result.reserve(input.size());
 
   // Keep consuming, building up a result string as we go.
-  re2::StringPiece text(input);
-  re2::StringPiece skipped;
-  re2::StringPiece pre_matched_id, matched_id, post_matched_id;
+  std::string_view text(input);
+  std::string_view skipped;
+  std::string_view pre_matched_id, matched_id, post_matched_id;
   while (FindAndConsumeAndGetSkipped(&text, *re, &skipped, &pre_matched_id,
                                      &matched_id, &post_matched_id)) {
     std::string matched_id_as_string(matched_id);
@@ -1099,7 +1111,7 @@ std::string RedactionTool::RedactCustomPatternWithContext(
     result.append(pre_matched_id);
     result += replacement_id;
     result.append(post_matched_id);
-    RecordPIIRedactedHistogram(pattern.pii_type);
+    metrics_recorder_->RecordPIIRedactedHistogram(pattern.pii_type);
   }
   result.append(text);
 
@@ -1108,10 +1120,10 @@ std::string RedactionTool::RedactCustomPatternWithContext(
 
 // This takes a |url| argument and returns true if the URL is exempt from
 // redaction, returns false otherwise.
-bool IsUrlExempt(re2::StringPiece url,
+bool IsUrlExempt(std::string_view url,
                  const char* const* first_party_extension_ids) {
   // We do not exempt anything with a query parameter.
-  if (url.find("?") != re2::StringPiece::npos) {
+  if (url.find("?") != std::string_view::npos) {
     return false;
   }
 
@@ -1152,7 +1164,7 @@ bool IsUrlExempt(re2::StringPiece url,
 
   int i = 0;
   const char* test_id = first_party_extension_ids[i];
-  const re2::StringPiece url_sub =
+  const std::string_view url_sub =
       url.substr(sizeof("chrome-extension://") - 1);
   while (test_id) {
     if (url_sub.starts_with(test_id)) {
@@ -1177,50 +1189,50 @@ std::string RedactionTool::RedactCustomPatternWithoutContext(
   result.reserve(input.size());
 
   // Keep consuming, building up a result string as we go.
-  re2::StringPiece text(input);
-  re2::StringPiece skipped;
-  re2::StringPiece matched_id;
+  std::string_view text(input);
+  std::string_view skipped;
+  std::string_view matched_id;
   while (FindAndConsumeAndGetSkipped(&text, *re, &skipped, &matched_id)) {
+    result.append(skipped);
+
     if (IsUrlExempt(matched_id, first_party_extension_ids_)) {
-      result.append(skipped);
       result.append(matched_id);
       continue;
     }
-    std::string matched_id_as_string(matched_id);
-    std::string replacement_id;
-    if (identifier_space->count(matched_id_as_string) == 0) {
-      replacement_id = MaybeScrubIPAddress(matched_id_as_string);
-      if (replacement_id != matched_id_as_string) {
-        // Double-check overly opportunistic IPv4 address matching.
-        if ((strcmp("IPv4", pattern.alias) == 0) &&
-            ShouldSkipIPAddress(skipped)) {
-          result.append(skipped);
-          result.append(matched_id);
-          continue;
-        }
 
-        // The weird NumberToString trick is because Windows does not like
-        // to deal with %zu and a size_t in printf, nor does it support %llu.
-        replacement_id = base::StringPrintf(
-            "(%s: %s)",
-            replacement_id.empty() ? pattern.alias : replacement_id.c_str(),
-            base::NumberToString(identifier_space->size() + 1).c_str());
-        (*identifier_space)[matched_id_as_string] = replacement_id;
-        if (detected != nullptr) {
-          (*detected)[pattern.pii_type].insert(matched_id_as_string);
-        }
-      }
-    } else {
-      replacement_id = (*identifier_space)[matched_id_as_string];
-      if (detected != nullptr) {
-        (*detected)[pattern.pii_type].insert(matched_id_as_string);
-      }
+    const std::string matched_id_as_string(matched_id);
+    if (const auto previous_replacement =
+            identifier_space->find(matched_id_as_string);
+        previous_replacement != identifier_space->end()) {
+      metrics_recorder_->RecordPIIRedactedHistogram(pattern.pii_type);
+      result.append(previous_replacement->second);
+      continue;
     }
 
-    result.append(skipped);
-    result += replacement_id;
+    const std::string scrubbed_match =
+        MaybeScrubIPAddress(matched_id_as_string);
+    if (scrubbed_match == matched_id_as_string ||
+        // Double-check overly opportunistic IPv4 address matching.
+        ((strcmp("IPv4", pattern.alias) == 0) &&
+         ShouldSkipIPAddress(skipped))) {
+      result.append(matched_id);
+      continue;
+    }
 
-    RecordPIIRedactedHistogram(pattern.pii_type);
+    // The weird NumberToString trick is because Windows does not like
+    // to deal with %zu and a size_t in printf, nor does it support %llu.
+    const auto [redacted_pair, success] = identifier_space->insert_or_assign(
+        matched_id_as_string,
+        base::StringPrintf(
+            "(%s: %s)",
+            scrubbed_match.empty() ? pattern.alias : scrubbed_match.c_str(),
+            base::NumberToString(identifier_space->size() + 1).c_str()));
+    if (detected != nullptr) {
+      (*detected)[pattern.pii_type].insert(matched_id_as_string);
+    }
+
+    result += redacted_pair->second;
+    metrics_recorder_->RecordPIIRedactedHistogram(pattern.pii_type);
   }
   result.append(text);
 
@@ -1231,6 +1243,14 @@ RedactionToolContainer::RedactionToolContainer(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     const char* const* first_party_extension_ids)
     : redactor_(new RedactionTool(first_party_extension_ids)),
+      task_runner_(task_runner) {}
+
+RedactionToolContainer::RedactionToolContainer(
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    const char* const* first_party_extension_ids,
+    std::unique_ptr<RedactionToolMetricsRecorder> metrics_recorder)
+    : redactor_(new RedactionTool(first_party_extension_ids,
+                                  std::move(metrics_recorder))),
       task_runner_(task_runner) {}
 
 RedactionToolContainer::~RedactionToolContainer() {

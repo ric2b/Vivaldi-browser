@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">設定を元に戻す</translation>
 <translation id="4478664379124702289">名前を付けてリンク先を保存... (&amp;K)</translation>
 <translation id="4520385623207007473">使用中の Cookie</translation>
+<translation id="456449593072900590">終了時に削除</translation>
 <translation id="4580596421317071374">パスワードは、このデバイスの <ph name="GOOGLE_PASSWORD_MANAGER" /> に保存されています。</translation>
 <translation id="4593021220803146968"><ph name="URL" /> に移動 (&amp;G)</translation>
 <translation id="4595560905247879544">アプリと拡張機能は管理者（<ph name="CUSTODIAN_NAME" />）だけが変更できます。</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">カラー</translation>
 <translation id="5485102783864353244">アプリを追加</translation>
 <translation id="5486561344817861625">ブラウザ再起動のシミュレート</translation>
-<translation id="5487521232677179737">データを消去</translation>
 <translation id="5509693895992845810">名前を付けて保存... (&amp;A)</translation>
 <translation id="5521078259930077036">これをホームページにしてもよろしいですか？</translation>
 <translation id="5542132724887566711">プロファイル</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">不明</translation>
 <translation id="5851868085455377790">発行元</translation>
 <translation id="5860491529813859533">オンにする</translation>
-<translation id="5867841422488265304">検索語句またはウェブアドレスを入力</translation>
 <translation id="5910363049092958439">名前を付けて画像を保存... (&amp;V)</translation>
 <translation id="5914724413750400082">モジュール（<ph name="MODULUS_NUM_BITS" /> ビット）:
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">アクセスが拒否されました。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">入力中にスペルチェック</translation>
-<translation id="73786666777299047">Chrome ウェブストアを開く</translation>
 <translation id="7385854874724088939">印刷中に問題が発生しました。プリンターを確認してからもう一度お試しください。</translation>
 <translation id="7412226954991670867">GPU メモリ</translation>
 <translation id="7421925624202799674">ページのソースを表示 (&amp;V)</translation>
@@ -441,6 +439,7 @@
 <translation id="8382913212082956454">メールアドレスをコピー (&amp;E)</translation>
 <translation id="8434480141477525001">NaCl デバッグポート</translation>
 <translation id="8449008133205184768">ペーストしてスタイルを合わせる</translation>
+<translation id="8477178913400731244">データを消去する</translation>
 <translation id="8477384620836102176">&amp; 全般</translation>
 <translation id="8496717697661868878">このプラグインを実行する</translation>
 <translation id="8512476990829870887">プロセスを終了</translation>

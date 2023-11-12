@@ -103,6 +103,8 @@ void PopulateBookmarkTreeNode(
       vivaldi_bookmark_kit::GetPartner(node).AsLowercaseString();
   out_bookmark_tree_node->trash =
       (node->type() == bookmarks::BookmarkNode::TRASH);
+  out_bookmark_tree_node->theme_color =
+      vivaldi_bookmark_kit::GetThemeColorForCSS(node);
 
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
     out_bookmark_tree_node->unmodifiable =

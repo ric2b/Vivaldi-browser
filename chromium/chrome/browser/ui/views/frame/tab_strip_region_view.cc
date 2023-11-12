@@ -21,7 +21,9 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_scroll_container.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -45,11 +47,13 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
 
-namespace {
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
 
-// TODO (1451400): This const should replace
-// TABSTRIP_REGION_VIEW_CONTROL_PADDING once ChromeRefresh launched.
-constexpr int kCRtabstripRegionViewControlPadding = 6;
+#include "base/metrics/histogram_functions.h"
+#endif
+
+namespace {
 
 class FrameGrabHandle : public views::View {
  public:
@@ -64,6 +68,13 @@ class FrameGrabHandle : public views::View {
 
 BEGIN_METADATA(FrameGrabHandle, views::View)
 END_METADATA
+
+bool ShouldShowNewTabButton(const Browser* browser) {
+  // `browser` can be null in tests and `app_controller` will be null if
+  // the browser is not for an app.
+  return !browser || !browser->app_controller() ||
+         !browser->app_controller()->ShouldHideNewTabButton();
+}
 
 }  // namespace
 
@@ -130,16 +141,42 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
                                       tab_strip_container_flex_spec);
   }
 
-  new_tab_button_ = AddChildView(std::make_unique<NewTabButton>(
-      tab_strip_, base::BindRepeating(&TabStrip::NewTabButtonPressed,
-                                      base::Unretained(tab_strip_))));
-  new_tab_button_->SetTooltipText(
-      l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
-  new_tab_button_->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_ACCNAME_NEWTAB));
-  new_tab_button_->SetImageVerticalAlignment(views::ImageButton::ALIGN_BOTTOM);
-  new_tab_button_->SetEventTargeter(
-      std::make_unique<views::ViewTargeter>(new_tab_button_));
+  if (ShouldShowNewTabButton(browser)) {
+    if (features::IsChromeRefresh2023()) {
+      new_tab_button_ = AddChildView(std::make_unique<TabStripControlButton>(
+          tab_strip_,
+          base::BindRepeating(&TabStrip::NewTabButtonPressed,
+                              base::Unretained(tab_strip_)),
+          vector_icons::kAddChromeRefreshIcon));
+      new_tab_button_->SetProperty(views::kElementIdentifierKey,
+                                   kNewTabButtonElementId);
+    } else {
+      std::unique_ptr<NewTabButton> new_tab_button =
+          std::make_unique<NewTabButton>(
+              tab_strip_, base::BindRepeating(&TabStrip::NewTabButtonPressed,
+                                              base::Unretained(tab_strip_)));
+      new_tab_button->SetImageVerticalAlignment(
+          views::ImageButton::ALIGN_BOTTOM);
+      new_tab_button->SetEventTargeter(
+          std::make_unique<views::ViewTargeter>(new_tab_button.get()));
+
+      new_tab_button_ = AddChildView(std::move(new_tab_button));
+    }
+
+    new_tab_button_->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
+    new_tab_button_->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_ACCNAME_NEWTAB));
+
+    // TODO(crbug.com/1052397): Revisit the macro expression once build flag
+    // switch of lacros-chrome is complete.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+    // The New Tab Button can be middle-clicked on Linux.
+    new_tab_button_->SetTriggerableEventFlags(
+        new_tab_button_->GetTriggerableEventFlags() |
+        ui::EF_MIDDLE_MOUSE_BUTTON);
+#endif
+  }
 
   reserved_grab_handle_space_ =
       AddChildView(std::make_unique<FrameGrabHandle>());
@@ -157,16 +194,15 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
 #endif
 
   if (browser && tab_search_button &&
-      !WindowFrameUtil::IsWin10TabSearchCaptionButtonEnabled(browser) &&
+      !WindowFrameUtil::IsWindowsTabSearchCaptionButtonEnabled(browser) &&
       !render_tab_search_before_tab_strip_) {
     tab_search_button_ = AddChildView(std::move(tab_search_button));
     if (features::IsChromeRefresh2023()) {
       tab_search_button_->SetProperty(
           views::kMarginsKey,
-          gfx::Insets::TLBR(0, 0, kCRtabstripRegionViewControlPadding,
-                            kCRtabstripRegionViewControlPadding));
+          gfx::Insets::TLBR(0, 0, 0, GetLayoutConstant(TAB_STRIP_PADDING)));
     } else {
-      const auto control_padding = gfx::Insets::TLBR(
+      const gfx::Insets control_padding = gfx::Insets::TLBR(
           0, 0, 0, GetLayoutConstant(TABSTRIP_REGION_VIEW_CONTROL_PADDING));
 
       tab_search_button_->SetProperty(views::kMarginsKey, control_padding);
@@ -177,17 +213,17 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
   //  tabstrip, then buttons are rendered to a layer, and the margins are set to
   //  take up the rest of the space under the buttons.
   absl::optional<int> tab_strip_right_margin;
-  if (render_new_tab_button_over_tab_strip_) {
-    new_tab_button_->SetPaintToLayer();
-    new_tab_button_->layer()->SetFillsBoundsOpaquely(false);
-    // Inset between the tabstrip and new tab button should be reduced to
-    // account for extra spacing.
-    layout_manager_->SetChildViewIgnoredByLayout(new_tab_button_, true);
+  if (new_tab_button_) {
+    if (render_new_tab_button_over_tab_strip_) {
+      new_tab_button_->SetPaintToLayer();
+      new_tab_button_->layer()->SetFillsBoundsOpaquely(false);
+      // Inset between the tabstrip and new tab button should be reduced to
+      // account for extra spacing.
+      layout_manager_->SetChildViewIgnoredByLayout(new_tab_button_, true);
 
-    tab_strip_right_margin = new_tab_button_->GetPreferredSize().width() +
-                             kCRtabstripRegionViewControlPadding;
-  } else {
-    UpdateNewTabButtonBorder();
+      tab_strip_right_margin = new_tab_button_->GetPreferredSize().width() +
+                               GetLayoutConstant(TAB_STRIP_PADDING);
+    }
   }
 
   absl::optional<int> tab_strip_left_margin;
@@ -199,9 +235,16 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
     // space for the `tab_search_button_`.
     gfx::Size tab_search_button_size = tab_search_button_->GetPreferredSize();
 
-    tab_strip_left_margin =
-        tab_search_button_size.width() + kCRtabstripRegionViewControlPadding;
+    // The TabSearchButton should be 6 pixels from the left and the tabstrip
+    // should have 6 px of padding between it and the tab_search button (not
+    // including the corner radius).
+    tab_strip_left_margin = tab_search_button_size.width() +
+                            GetLayoutConstant(TAB_STRIP_PADDING) +
+                            GetLayoutConstant(TAB_STRIP_PADDING) -
+                            TabStyle::Get()->GetBottomCornerRadius();
   }
+
+  UpdateButtonBorders();
 
   if (tab_strip_left_margin.has_value() || tab_strip_right_margin.has_value()) {
     tab_strip_container_->SetProperty(
@@ -220,6 +263,20 @@ bool TabStripRegionView::IsRectInWindowCaption(const gfx::Rect& rect) {
     return gfx::ToEnclosingRect(rect_in_target_coords_f);
   };
 
+  // Perform checks for buttons that should be rendered above the tabstrip.
+  if (render_new_tab_button_over_tab_strip_ && new_tab_button_ &&
+      new_tab_button_->GetLocalBounds().Intersects(
+          get_target_rect(new_tab_button_))) {
+    return !new_tab_button_->HitTestRect(get_target_rect(new_tab_button_));
+  }
+
+  if (render_tab_search_before_tab_strip_ && tab_search_button_ &&
+      tab_search_button_->GetLocalBounds().Intersects(
+          get_target_rect(tab_search_button_))) {
+    return !tab_search_button_->HitTestRect(
+        get_target_rect(tab_search_button_));
+  }
+
   // Perform a hit test against the |tab_strip_container_| to ensure that the
   // rect is within the visible portion of the |tab_strip_| before calling the
   // tab strip's |IsRectInWindowCaption()| for scrolling disabled. Defer to
@@ -228,7 +285,6 @@ bool TabStripRegionView::IsRectInWindowCaption(const gfx::Rect& rect) {
   // the |tab_strip_container_| and the |tab_strip_| but not over the same
   // pixels. This could lead to this returning false when it should be returning
   // true.
-
   if (tab_strip_container_->HitTestRect(
           get_target_rect(tab_strip_container_))) {
     if (base::FeatureList::IsEnabled(features::kScrollableTabStrip)) {
@@ -251,6 +307,13 @@ bool TabStripRegionView::IsRectInWindowCaption(const gfx::Rect& rect) {
       return !child->HitTestRect(get_target_rect(child));
     }
   }
+
+#if BUILDFLAG(IS_WIN)
+  bool rect_in_reserved_space =
+      reserved_grab_handle_space_->GetLocalBounds().Intersects(
+          get_target_rect(reserved_grab_handle_space_));
+  ReportCaptionHitTestInReservedGrabHandleSpace(rect_in_reserved_space);
+#endif
 
   return true;
 }
@@ -291,36 +354,36 @@ void TabStripRegionView::Layout() {
     const gfx::Size tab_search_button_size =
         tab_search_button_->GetPreferredSize();
 
-    const int x = tab_strip_container_->x() - tab_search_button_size.width() +
-                  kCRtabstripRegionViewControlPadding;
-
-    // The y position is measured from the bottom of the tabstrip, and then
-    // pading and button height are removed.
-    const int y = tab_strip_container_->y() + tab_strip_container_->height() -
-                  kCRtabstripRegionViewControlPadding -
-                  tab_search_button_size.height();
+    // The TabSearchButton is calculated as controls padding away from the first
+    // tab (not including bottom corner radius)
+    const int x =
+        tab_strip_container_->x() + TabStyle::Get()->GetBottomCornerRadius() -
+        GetLayoutConstant(TAB_STRIP_PADDING) - tab_search_button_size.width();
 
     const gfx::Rect tab_search_new_bounds =
-        gfx::Rect(gfx::Point(x, y), tab_search_button_size);
+        gfx::Rect(gfx::Point(x, 0), tab_search_button_size);
 
     tab_search_button_->SetBoundsRect(tab_search_new_bounds);
   }
 
-  if (render_new_tab_button_over_tab_strip_) {
+  if (render_new_tab_button_over_tab_strip_ && new_tab_button_) {
+    // The NTB needs to be layered on top of the tabstrip to achieve negative
+    // margins.
     gfx::Size new_tab_button_size = new_tab_button_->GetPreferredSize();
 
-    gfx::Point new_tab_button_new_position = gfx::Point(
-        tab_strip_container_->x() + tab_strip_container_->width() -
-            TabStyle::Get()->GetBottomCornerRadius() +
-            kCRtabstripRegionViewControlPadding,
-        tab_strip_container_->y() + tab_strip_container_->height() -
-            kCRtabstripRegionViewControlPadding - new_tab_button_size.height());
+    // The y position is measured from the bottom of the tabstrip, and then
+    // pading and button height are removed.
+    gfx::Point new_tab_button_new_position =
+        gfx::Point(tab_strip_container_->bounds().right() -
+                       TabStyle::Get()->GetBottomCornerRadius() +
+                       GetLayoutConstant(TAB_STRIP_PADDING),
+                   0);
 
     gfx::Rect new_tab_button_new_bounds =
         gfx::Rect(new_tab_button_new_position, new_tab_button_size);
 
     // If the tabsearch button is before the tabstrip container, then manually
-    // set the margins to the correct position.
+    // set the bounds.
     new_tab_button_->SetBoundsRect(new_tab_button_new_bounds);
   }
 }
@@ -375,15 +438,35 @@ views::View* TabStripRegionView::GetDefaultFocusableChild() {
                          : AccessiblePaneView::GetDefaultFocusableChild();
 }
 
+// static
+void TabStripRegionView::ReportCaptionHitTestInReservedGrabHandleSpace(
+    bool in_reserved_grab_handle_space) {
+#if BUILDFLAG(IS_WIN)
+  static bool button_down_previously = false;
+  int primary_mouse_button =
+      ::GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+  bool button_down_now =
+      (::GetAsyncKeyState(primary_mouse_button) & 0x8000) != 0;
+  if (button_down_now && !button_down_previously) {
+    base::UmaHistogramBoolean(
+        "Chrome.Frame.MouseDownCaptionHitTestInReservedGrabHandleSpace",
+        in_reserved_grab_handle_space);
+  }
+  button_down_previously = button_down_now;
+#endif
+}
+
 void TabStripRegionView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTabList;
 }
 
-void TabStripRegionView::UpdateNewTabButtonBorder() {
-  const int extra_vertical_space = GetLayoutConstant(TAB_HEIGHT) -
+void TabStripRegionView::UpdateButtonBorders() {
+  const int extra_vertical_space = GetLayoutConstant(TAB_STRIP_HEIGHT) -
                                    GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP) -
                                    NewTabButton::kButtonSize.height();
-  constexpr int kHorizontalInset = 8;
+  const int top_inset = extra_vertical_space / 2;
+  const int bottom_inset = extra_vertical_space - top_inset +
+                           GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP);
   // The new tab button is placed vertically exactly in the center of the
   // tabstrip. Extend the border of the button such that it extends to the top
   // of the tabstrip bounds. This is essential to ensure it is targetable on the
@@ -397,8 +480,16 @@ void TabStripRegionView::UpdateNewTabButtonBorder() {
   // definitely isn't what we want in the scrolling case, so this naive approach
   // should be improved, likely by taking the scroll state of the tabstrip into
   // account.
-  new_tab_button_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets::TLBR(extra_vertical_space / 2, 0, 0, kHorizontalInset)));
+  if (new_tab_button_) {
+    constexpr int kHorizontalInset = 8;
+    new_tab_button_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
+        top_inset, 0, bottom_inset,
+        features::IsChromeRefresh2023() ? 0 : kHorizontalInset)));
+  }
+  if (tab_search_button_) {
+    tab_search_button_->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets::TLBR(top_inset, 0, bottom_inset, 0)));
+  }
 }
 
 BEGIN_METADATA(TabStripRegionView, views::AccessiblePaneView)

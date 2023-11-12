@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "components/policy/policy_constants.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -23,10 +24,6 @@
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::IdentityCellMatcherForEmail;
@@ -49,6 +46,8 @@ using chrome_test_util::SettingsDoneButton;
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_disabled.push_back(kHideSettingsSyncPromo);
+  config.features_disabled.push_back(
+      syncer::kReplaceSyncPromosWithSignInPromos);
   return config;
 }
 

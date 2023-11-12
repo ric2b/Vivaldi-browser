@@ -7,6 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector_observer.h"
+#include "ui/events/event.h"
 #include "ui/views/view.h"
 
 namespace arc::input_overlay {
@@ -25,22 +26,27 @@ class DisplayOverlayController;
 //
 class EditingList : public views::View, public TouchInjectorObserver {
  public:
-  static EditingList* Show(DisplayOverlayController* controller);
-
   explicit EditingList(DisplayOverlayController* display_overlay_controller);
   EditingList(const EditingList&) = delete;
   EditingList& operator=(const EditingList&) = delete;
   ~EditingList() override;
 
+  // views::View:
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
+
  private:
   friend class ButtonOptionsMenuTest;
   friend class EditingListTest;
   friend class EditLabelTest;
+  friend class OverlayViewTestBase;
 
   void Init();
   bool HasControls() const;
 
-  // Add UI components to |container| as children.
+  // Add UI components to `container` as children.
   void AddHeader(views::View* container);
   // Add the zero state view when there are no actions / controls.
   void AddZeroStateContent();
@@ -57,9 +63,17 @@ class EditingList : public views::View, public TouchInjectorObserver {
   // TouchInjectorObserver:
   void OnActionAdded(Action& action) override;
   void OnActionRemoved(const Action& action) override;
-  void OnActionTypeChanged(const Action& action,
-                           const Action& new_action) override;
-  void OnActionUpdated(const Action& action) override;
+  void OnActionTypeChanged(Action* action, Action* new_action) override;
+  void OnActionInputBindingUpdated(const Action& action) override;
+  void OnActionNameUpdated(const Action& action) override;
+
+  // Drag operations.
+  void OnDragStart(const ui::LocatedEvent& event);
+  void OnDragUpdate(const ui::LocatedEvent& event);
+  void OnDragEnd(const ui::LocatedEvent& event);
+
+  // Clamp position.
+  void ClampPosition(gfx::Point& position);
 
   raw_ptr<DisplayOverlayController> controller_;
   // It wraps ActionViewListItem.
@@ -67,6 +81,13 @@ class EditingList : public views::View, public TouchInjectorObserver {
 
   // For test. Used to tell if the zero state view shows up.
   bool is_zero_state_ = false;
+
+  // LocatedEvent's position when drag starts.
+  gfx::Point start_drag_event_pos_;
+  // Initial position when drag starts.
+  gfx::Point start_drag_pos_;
+  // Window bounds, relative to the initial position of the editing list.
+  gfx::Rect window_bounds_;
 };
 
 }  // namespace arc::input_overlay

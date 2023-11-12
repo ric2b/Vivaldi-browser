@@ -26,13 +26,14 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/idle_bubble.h"
-#include "chrome/browser/ui/profile_picker.h"
-#include "chrome/browser/ui/profile_ui_test_utils.h"
+#include "chrome/browser/ui/profiles/profile_picker.h"
+#include "chrome/browser/ui/profiles/profile_ui_test_utils.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/enterprise/idle/idle_pref_names.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -218,7 +219,8 @@ class IdleServiceTest : public InProcessBrowserTest {
  private:
   testing::NiceMock<policy::MockConfigurationPolicyProvider>
       policy_providers_[2];
-  raw_ptr<MockIdleTimeProvider, DanglingUntriaged> idle_time_provider_;
+  raw_ptr<MockIdleTimeProvider, AcrossTasksDanglingUntriaged>
+      idle_time_provider_;
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   std::unique_ptr<ui::test::ScopedIdleProviderForTest> scoped_idle_provider_;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;

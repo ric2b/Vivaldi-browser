@@ -93,9 +93,9 @@ bool VivaldiQuitConfirmationDialog::Cancel() {
   return true;
 }
 
-void VivaldiQuitConfirmationDialog::RunCallback(bool close) {
+void VivaldiQuitConfirmationDialog::RunCallback(bool accepted) {
   bool stop_asking = checkbox_ && checkbox_->GetChecked();
-  std::move(quit_callback_).Run(close, stop_asking);
+  std::move(quit_callback_).Run(accepted, stop_asking);
 }
 
 ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {

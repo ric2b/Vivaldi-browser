@@ -41,6 +41,7 @@ constexpr char16_t kAlt[] = u"alt";
 constexpr char16_t kCtrl[] = u"ctrl";
 constexpr char16_t kShift[] = u"shift";
 constexpr char16_t kCap[] = u"cap";
+
 }  // namespace
 
 std::u16string GetDisplayText(const ui::DomCode code) {
@@ -126,6 +127,22 @@ std::u16string GetDisplayTextAccessibleName(const std::u16string& text) {
   } else {
     return text;
   }
+}
+
+int GetIndexOfActionName(const std::vector<std::u16string>& action_names,
+                         const std::u16string& action_name) {
+  auto it = std::find(action_names.begin(), action_names.end(), action_name);
+  return it == action_names.end() ? -1 : it - action_names.begin();
+}
+
+std::u16string GetActionNameAtIndex(
+    const std::vector<std::u16string>& action_names,
+    int index) {
+  if (index < 0 || index >= static_cast<int>(action_names.size())) {
+    // TODO(b/274690042): Replace placeholder text with localized strings.
+    return u"Unassigned";
+  }
+  return action_names[index];
 }
 
 }  // namespace arc::input_overlay

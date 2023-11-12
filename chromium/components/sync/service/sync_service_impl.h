@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_SERVICE_SYNC_SERVICE_IMPL_H_
 #define COMPONENTS_SYNC_SERVICE_SYNC_SERVICE_IMPL_H_
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -16,13 +17,13 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/base/sync_prefs.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/events/protocol_event_observer.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
@@ -34,6 +35,7 @@
 #include "components/sync/service/data_type_manager_observer.h"
 #include "components/sync/service/data_type_status_table.h"
 #include "components/sync/service/sync_client.h"
+#include "components/sync/service/sync_prefs.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_service_crypto.h"
 #include "components/sync/service/sync_stopped_reporter.h"
@@ -139,15 +141,6 @@ class SyncServiceImpl : public SyncService,
   void TriggerRefresh(const ModelTypeSet& types) override;
   void DataTypePreconditionChanged(ModelType type) override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
-  void AddTrustedVaultDecryptionKeysFromWeb(
-      const std::string& gaia_id,
-      const std::vector<std::vector<uint8_t>>& keys,
-      int last_key_version) override;
-  void AddTrustedVaultRecoveryMethodFromWeb(
-      const std::string& gaia_id,
-      const std::vector<uint8_t>& public_key,
-      int method_type_hint,
-      base::OnceClosure callback) override;
   void AddObserver(SyncServiceObserver* observer) override;
   void RemoveObserver(SyncServiceObserver* observer) override;
   bool HasObserver(const SyncServiceObserver* observer) const override;
@@ -167,6 +160,13 @@ class SyncServiceImpl : public SyncService,
   void GetAllNodesForDebugging(
       base::OnceCallback<void(base::Value::List)> callback) override;
   ModelTypeDownloadStatus GetDownloadStatusFor(ModelType type) const override;
+  void GetTypesWithUnsyncedData(
+      base::OnceCallback<void(ModelTypeSet)> callback) const override;
+  void GetLocalDataDescriptions(
+      ModelTypeSet types,
+      base::OnceCallback<void(std::map<ModelType, LocalDataDescription>)>
+          callback) override;
+  void TriggerLocalDataMigration(ModelTypeSet types) override;
 
   // SyncEngineHost implementation.
   void OnEngineInitialized(bool success,
@@ -188,8 +188,10 @@ class SyncServiceImpl : public SyncService,
   void CryptoStateChanged() override;
   void CryptoRequiredUserActionChanged() override;
   void ReconfigureDataTypesDueToCrypto() override;
+  void SetPassphraseType(PassphraseType passphrase_type) override;
+  absl::optional<PassphraseType> GetPassphraseType() const override;
   void SetEncryptionBootstrapToken(const std::string& bootstrap_token) override;
-  std::string GetEncryptionBootstrapToken() override;
+  std::string GetEncryptionBootstrapToken() const override;
 
   // IdentityManager::Observer implementation.
   void OnAccountsInCookieUpdated(
@@ -210,7 +212,8 @@ class SyncServiceImpl : public SyncService,
   void OnSyncManagedPrefChange(bool is_sync_managed) override;
   void OnFirstSetupCompletePrefChange(
       bool is_initial_sync_feature_setup_complete) override;
-  void OnPreferredDataTypesPrefChange() override;
+  void OnPreferredDataTypesPrefChange(
+      bool payments_integration_enabled_changed) override;
 
   // KeyedService implementation.  This must be called exactly
   // once (before this object is destroyed).
@@ -338,11 +341,6 @@ class SyncServiceImpl : public SyncService,
   // not tied to sync-the-feature).
   ModelTypeSet GetModelTypesForTransportOnlyMode() const;
 
-  // If in transport-only mode, returns only preferred data types which are
-  // allowed in transport-only mode. Otherwise, returns all preferred data
-  // types.
-  ModelTypeSet GetDataTypesToConfigure() const;
-
   void UpdateDataTypesForInvalidations();
 
  protected:
@@ -465,7 +463,7 @@ class SyncServiceImpl : public SyncService,
 
  private:
   // The global NetworkConnectionTracker instance.
-  raw_ptr<network::NetworkConnectionTracker> network_connection_tracker_;
+  const raw_ptr<network::NetworkConnectionTracker> network_connection_tracker_;
 
   // Indicates if this is the first time sync is being configured.
   // This is set to true if last synced time is not set at the time of
@@ -544,6 +542,9 @@ class SyncServiceImpl : public SyncService,
 
   // Used to track download status changes during browser startup.
   std::unique_ptr<DownloadStatusRecorder> download_status_recorder_;
+
+  base::ScopedObservation<SyncPrefs, SyncPrefObserver> sync_prefs_observation_{
+      this};
 
 #if BUILDFLAG(IS_ANDROID)
   // Manage and fetch the java object that wraps this SyncService on

@@ -29,15 +29,12 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "components/search_engines/template_url_service.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using base::UserMetricsAction;
 
@@ -53,6 +50,12 @@ const CGFloat kClearButtonImageSize = 17.0f;
                                      UIScribbleInteractionDelegate> {
   // Weak, acts as a delegate
   OmniboxTextChangeDelegate* _textChangeDelegate;
+
+  // Vivaldi
+  // The search engine list to trigger search engine shortcut if matched
+  std::vector<TemplateURL*> _templateURLs;
+  // End Vivaldi
+
 }
 
 // Override of UIViewController's view with a different type.
@@ -161,8 +164,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
   self.textField.placeholderTextColor = [self placeholderAndClearButtonColor];
 
   if (IsVivaldiRunning()) {
-    self.textField.placeholder =
-      l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
+    self.textField.placeholder = [self defaultPlaceholder];
   } else {
   self.textField.placeholder = l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
   } // End Vivaldi
@@ -275,6 +277,15 @@ const CGFloat kClearButtonImageSize = 17.0f;
     return YES;
   }
   self.processingUserEvent = _textChangeDelegate->OnWillChange(range, newText);
+
+  // Note: (prio@vivaldi.com) - Intercepts the omnibox input to check and
+  // trigger search engine shortcut if input is matched with a keyword.
+  if (IsVivaldiRunning()) {
+    [self interceptOmniboxInputForSearchEngineShortcut:textField
+                                               inRange:range
+                                     replacementString:newText];
+  } // End Vivaldi
+
   return self.processingUserEvent;
 }
 
@@ -710,7 +721,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 - (void)visitCopiedLink:(id)sender {
   // A search using clipboard link is activity that should indicate a user
   // that would be interested in setting Chrome as the default browser.
-  LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
+  LogCopyPasteInOmniboxForDefaultBrowserPromo();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.VisitCopiedLink"));
   self.omniboxInteractedWhileFocused = YES;
   [self.pasteDelegate didTapVisitCopiedLink];
@@ -719,7 +730,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 - (void)searchCopiedText:(id)sender {
   // A search using clipboard text is activity that should indicate a user
   // that would be interested in setting Chrome as the default browser.
-  LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeGeneral);
+  LogCopyPasteInOmniboxForDefaultBrowserPromo();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   self.omniboxInteractedWhileFocused = YES;
   [self.pasteDelegate didTapSearchCopiedText];
@@ -744,6 +755,71 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
   // Dismiss any inline autocomplete. The user expectation is to not have it.
   [self.textField clearAutocompleteText];
+}
+
+#pragma mark VIVALDI
+- (void)interceptOmniboxInputForSearchEngineShortcut:(UITextField*)textField
+                                             inRange:(NSRange)range
+                                   replacementString:(NSString*)newText {
+
+  // Combine the new string with the old text field content
+  NSString *currentString =
+      [textField.text stringByReplacingCharactersInRange:range
+                                              withString:newText];
+  // Find the range of the first space
+  NSRange firstSpaceRange = [currentString rangeOfString:@" "];
+  // If there's a space in the string
+  if (firstSpaceRange.location != NSNotFound) {
+    // Extract the substring up to the first space
+    NSString *potentialKeyword =
+        [currentString substringToIndex:firstSpaceRange.location];
+
+    for (TemplateURL* templateURL: _templateURLs) {
+      NSString* templateURLKeyword =
+          base::SysUTF16ToNSString(templateURL->keyword());
+      // Compare the potential keyword with the known keywords, case-insensitive
+      if ([[potentialKeyword lowercaseString]
+              isEqualToString:[templateURLKeyword lowercaseString]]) {
+        // Extracting the search string: text after the keyword and space
+        NSString *searchString =
+            [currentString substringFromIndex:firstSpaceRange.location + 1];
+        [self didMatchSearchEngineShortcut:templateURL
+                            withSearchText:searchString];
+        return;
+      }
+    }
+  }
+}
+
+- (void)didMatchSearchEngineShortcut:(TemplateURL*)templateURL
+                      withSearchText:(NSString*)searchText {
+  [self.textInputDelegate searchEngineShortcutActivatedForURL:templateURL];
+
+  self.textField.placeholder =
+      l10n_util::GetNSStringF(
+          IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS_WITH_SEARCH_ENGINE,
+                templateURL->short_name());
+
+  if (searchText == nil || [searchText isEqualToString:@""]) {
+    [self clearButtonPressed];
+  } else {
+    NSAttributedString *attributedSearchText =
+        [[NSAttributedString alloc] initWithString:searchText];
+    [self updateText:attributedSearchText];
+  }
+}
+
+- (NSString*)defaultPlaceholder {
+  return l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
+}
+
+#pragma mark - OmniboxConsumer - Vivaldi Method
+- (void)updateSearchEngineList:(std::vector<TemplateURL*>)templateURLs {
+  _templateURLs = templateURLs;
+}
+
+- (void)restorePlaceholderToDefault {
+  self.textField.placeholder = [self defaultPlaceholder];
 }
 
 @end

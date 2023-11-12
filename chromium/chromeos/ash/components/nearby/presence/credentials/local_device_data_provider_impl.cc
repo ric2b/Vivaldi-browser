@@ -7,8 +7,8 @@
 #include "base/containers/contains.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ash/components/nearby/presence/conversions/proto_conversions.h"
 #include "chromeos/ash/components/nearby/presence/credentials/prefs.h"
-#include "chromeos/ash/components/nearby/presence/credentials/proto_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -128,7 +128,7 @@ std::string LocalDeviceDataProviderImpl::GetDeviceName() const {
 
   // `mac_address` is empty for Nearby Presence MVP on ChromeOS since
   // broadcasting is not supported.
-  return BuildMetadata(
+  return proto::BuildMetadata(
       /*device_type=*/::nearby::internal::DeviceType::DEVICE_TYPE_CHROMEOS,
       /*account_name=*/GetAccountName(),
       /*device_name=*/GetDeviceName(),

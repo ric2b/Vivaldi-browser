@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Восстановить настройки</translation>
 <translation id="4478664379124702289">Сохранить &amp;ссылку как...</translation>
 <translation id="4520385623207007473">Используемые cookies</translation>
+<translation id="456449593072900590">Удалить при закрытии браузера</translation>
 <translation id="4580596421317071374">Место хранения паролей на этом устройстве: <ph name="GOOGLE_PASSWORD_MANAGER" />.</translation>
 <translation id="4593021220803146968">&amp;Перейти к <ph name="URL" /></translation>
 <translation id="4595560905247879544">Изменять приложения и расширения может только менеджер (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Цвет</translation>
 <translation id="5485102783864353244">Установить</translation>
 <translation id="5486561344817861625">Симулировать перезапуск браузера</translation>
-<translation id="5487521232677179737">Удалить данные</translation>
 <translation id="5509693895992845810">Сохранить &amp;как...</translation>
 <translation id="5521078259930077036">Установить новую домашнюю страницу?</translation>
 <translation id="5542132724887566711">Профиль</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Неизвестен</translation>
 <translation id="5851868085455377790">Издатель</translation>
 <translation id="5860491529813859533">Включить</translation>
-<translation id="5867841422488265304">Введите адрес или запрос</translation>
 <translation id="5910363049092958439">&amp;Сохранить картинку как...</translation>
 <translation id="5914724413750400082">Модуль (<ph name="MODULUS_NUM_BITS" /> бит):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Проверять правописание при наборе текста</translation>
-<translation id="73786666777299047">Открыть библиотеку расширений</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память ГП</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -441,6 +439,7 @@
 <translation id="8382913212082956454">&amp;Копировать адрес электронной почты</translation>
 <translation id="8434480141477525001">Порт отладки NaCl</translation>
 <translation id="8449008133205184768">Вставить с соблюдением стиля</translation>
+<translation id="8477178913400731244">Удалить данные</translation>
 <translation id="8477384620836102176">&amp;Общие</translation>
 <translation id="8496717697661868878">Запустить этот плагин</translation>
 <translation id="8512476990829870887">Завершить процесс</translation>

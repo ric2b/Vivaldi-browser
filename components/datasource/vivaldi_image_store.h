@@ -52,10 +52,8 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
     kPNG,
     kWEBP,
     kSVG,
+    kTIFF
   };
-
-  static constexpr int kImageFormatCount =
-      static_cast<int>(ImageFormat::kSVG) + 1;
 
   // Location where to store or update the image.
   class ImagePlace {
@@ -136,6 +134,8 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
       content::BrowserContext* browser_context,
       base::TimeDelta when);
 
+  void ScheduleThumbnalSanitizer();
+
   static bool ParseDataUrl(base::StringPiece url,
                            VivaldiImageStore::UrlKind& url_kind,
                            std::string& id);
@@ -213,7 +213,10 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
                                  StoreImageCallback callback);
 
   void FindUsedUrlsOnUIThread();
-  void FindUsedUrlsOnUIThreadWithLoadedBookmaks(
+  void FindUsedUrlsOnUIThreadWithLoadedBookmarks(
+      bookmarks::BookmarkModel* bookmark_model);
+
+  void SanitizeUrlsOnUIThreadWithLoadedBookmarks(
       bookmarks::BookmarkModel* bookmark_model);
 
   // Use std::array, not plain C array to get proper move semantics.

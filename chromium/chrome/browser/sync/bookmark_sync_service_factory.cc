@@ -6,6 +6,7 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
+#include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 
 #include "sync/file_sync/file_store_factory.h"
@@ -43,7 +44,7 @@ KeyedService* BookmarkSyncServiceFactory::BuildServiceInstanceFor(
   Profile* profile = Profile::FromBrowserContext(context);
   auto* sync_service = new sync_bookmarks::BookmarkSyncService(
       BookmarkUndoServiceFactory::GetForProfileIfExists(profile),
-      /*wipe_model_on_stopping_sync_with_clear_data=*/false);
+      syncer::WipeModelUponSyncDisabledBehavior::kNever);
   sync_service->SetVivaldiSyncedFileStore(
       SyncedFileStoreFactory::GetForBrowserContext(context));
   return sync_service;

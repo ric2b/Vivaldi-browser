@@ -5,13 +5,13 @@
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
+import("//build/config/python.gni")
 import("//build/config/ui.gni")
 import("//build/toolchain/toolchain.gni")
 import("//media/media_options.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/blink/renderer/bindings/bindings.gni")
-import("//third_party/blink/renderer/bindings/scripts/scripts.gni")
 import("//third_party/blink/renderer/build/scripts/scripts.gni")
 import("//third_party/blink/renderer/config.gni")
 import("//third_party/blink/renderer/core/accessibility/build.gni")
@@ -72,6 +72,7 @@ import("//third_party/blink/renderer/core/timing/build.gni")
 import("//third_party/blink/renderer/core/trustedtypes/build.gni")
 import("//third_party/blink/renderer/core/typed_arrays/build.gni")
 import("//third_party/blink/renderer/core/url/build.gni")
+import("//third_party/blink/renderer/core/url_pattern/build.gni")
 import("//third_party/blink/renderer/core/view_transition/build.gni")
 import("//third_party/blink/renderer/core/workers/build.gni")
 import("//third_party/blink/renderer/core/xml/build.gni")
@@ -169,7 +170,6 @@ source_set("prerequisites") {
     "//third_party/libxml",
     "//third_party/libxslt",
     "//third_party/ots",
-    "//third_party/snappy",
     "//third_party/zlib",
     "//ui/accessibility/mojom:mojom_blink",
     "//ui/base:features",
@@ -375,7 +375,6 @@ component("core") {
 
   if (is_mac) {
     deps += [ "//ui/base/mojom" ]
-    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (enable_printing) {
@@ -502,6 +501,8 @@ source_set("testing") {
     "testing/fake_remote_frame_host.h",
     "testing/fake_remote_main_frame_host.cc",
     "testing/fake_remote_main_frame_host.h",
+    "testing/file_backed_blob_factory_test_helper.cc",
+    "testing/file_backed_blob_factory_test_helper.h",
     "testing/garbage_collected_script_wrappable.cc",
     "testing/garbage_collected_script_wrappable.h",
     "testing/gc_object_liveness_observer.h",
@@ -579,55 +580,24 @@ if (is_ios) {
 
 # generate_event_interfaces ----------------------------------------------------
 
-generate_event_interfaces("core_event_interfaces") {
-  sources = [
-    "css/font_face_set_load_event.idl",
-    "css/media_query_list_event.idl",
-    "display_lock/content_visibility_auto_state_change_event.idl",
-    "dom/events/custom_event.idl",
-    "dom/events/event.idl",
-    "editing/ime/character_bounds_update_event.idl",
-    "editing/ime/text_format.idl",
-    "editing/ime/text_format_update_event.idl",
-    "editing/ime/text_update_event.idl",
-    "events/animation_event.idl",
-    "events/animation_playback_event.idl",
-    "events/before_create_policy_event.idl",
-    "events/before_unload_event.idl",
-    "events/clipboard_event.idl",
-    "events/composition_event.idl",
-    "events/drag_event.idl",
-    "events/error_event.idl",
-    "events/focus_event.idl",
-    "events/hash_change_event.idl",
-    "events/input_event.idl",
-    "events/keyboard_event.idl",
-    "events/message_event.idl",
-    "events/mouse_event.idl",
-    "events/mutation_event.idl",
-    "events/overscroll_event.idl",
-    "events/page_transition_event.idl",
-    "events/pointer_event.idl",
-    "events/pop_state_event.idl",
-    "events/progress_event.idl",
-    "events/promise_rejection_event.idl",
-    "events/resource_progress_event.idl",
-    "events/security_policy_violation_event.idl",
-    "events/text_event.idl",
-    "events/toggle_event.idl",
-    "events/touch_event.idl",
-    "events/transition_event.idl",
-    "events/ui_event.idl",
-    "events/wheel_event.idl",
-    "html/forms/form_data_event.idl",
-    "html/forms/submit_event.idl",
-    "html/track/track_event.idl",
-    "mojo/test/mojo_interface_request_event.idl",
-    "navigation_api/navigate_event.idl",
-    "navigation_api/navigation_current_entry_change_event.idl",
+action_with_pydeps("core_event_interfaces") {
+  script = "//third_party/blink/renderer/bindings/scripts/generate_event_interface_names.py"
+
+  inputs = [ web_idl_database_filepath ]
+  outputs = [ get_path_info(".", "gen_dir") + "/event_interface_names.json5" ]
+
+  args = [
+    "--web_idl_database",
+    rebase_path(web_idl_database_filepath, root_build_dir),
+    "--component",
+    "core",
+    "--export-macro",
+    "CORE_EXPORT",
+    "--output",
+    rebase_path(outputs[0], root_build_dir),
   ]
 
-  output_file = "core/event_interface_names.json5"
+  deps = [ "//third_party/blink/renderer/bindings:web_idl_database" ]
 }
 
 # generated_testing_idls -------------------------------------------------------
@@ -1410,6 +1380,7 @@ source_set("unit_tests") {
   sources += rebase_path(blink_core_tests_trustedtypes, "", "trustedtypes")
   sources += rebase_path(blink_core_tests_typed_arrays, "", "typed_arrays")
   sources += rebase_path(blink_core_tests_url, "", "url")
+  sources += rebase_path(blink_core_tests_url_pattern, "", "url_pattern")
   sources += rebase_path(blink_core_tests_workers, "", "workers")
   sources += rebase_path(blink_core_tests_xml, "", "xml")
   sources += rebase_path(blink_core_tests_xmlhttprequest, "", "xmlhttprequest")
@@ -1419,11 +1390,6 @@ source_set("unit_tests") {
     "//third_party/blink/renderer:config",
     "//third_party/blink/renderer:inside_blink",
   ]
-
-  if (is_apple) {
-    configs += [ "//build/config/compiler:enable_arc" ]
-  }
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 
   deps = [
     ":core",
@@ -1510,11 +1476,14 @@ copy("form_controls_pickers_js") {
   outputs = [ "{{source_gen_dir}}/{{source_file_part}}" ]
 }
 
-group("js_files_for_form_controls_web_tests") {
+group("gen_files_for_web_tests") {
   testonly = true
   visibility = []  # Allow re-assignment of list.
   visibility = [ "*" ]
-  data_deps = [ ":form_controls_pickers_js" ]
+  data_deps = [
+    ":element_locator_test_protobuf",
+    ":form_controls_pickers_js",
+  ]
 }
 
 source_set("perf_tests") {
@@ -1533,7 +1502,6 @@ source_set("perf_tests") {
     "//third_party/blink/renderer:config",
     "//third_party/blink/renderer:inside_blink",
   ]
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 
   deps = [
     ":core",
@@ -1585,7 +1553,6 @@ source_set("unit_test_support") {
     "//third_party/blink/renderer:config",
     "//third_party/blink/renderer:inside_blink",
   ]
-  defines = [ "ALLOW_IMPLICIT_ATOMIC_STRING_CONVERSIONS" ]
 
   deps = [
     ":core",
@@ -1595,6 +1562,8 @@ source_set("unit_test_support") {
     "//third_party/blink/renderer/core:testing",
     "//third_party/blink/renderer/platform:test_support",
   ]
+
+  data = [ "//third_party/blink/renderer/platform/testing/data/third_party/Noto/NotoNaskhArabic-regular.woff2" ]
 }
 
 # Fuzzer for blink::StyleSheetContents
@@ -1629,6 +1598,7 @@ fuzzer_test("html_preload_scanner_fuzzer") {
   seed_corpus = "//third_party/blink/web_tests/fast/parser"
   deps = [
     ":core",
+    ":element_locator_proto",
     "../platform:blink_fuzzer_test_support",
   ]
 }
@@ -1680,7 +1650,44 @@ proto_library("css_proto") {
 
 proto_library("element_locator_proto") {
   sources = [ "lcp_critical_path_predictor/element_locator.proto" ]
+
   proto_out_dir = "third_party/blink/renderer/core/lcp_critical_path_predictor"
+}
+
+# Builds a wire format proto to that is consumed from LCPP web_tests. Used in
+# third_party/blink/web_tests/http/tests/lcp_critical_path_predictor
+action_foreach("element_locator_test_protobuf") {
+  script =
+      "lcp_critical_path_predictor/generate_element_locator_binary_proto.py"
+
+  python_path_root = "${root_out_dir}/pyproto"
+  python_path_proto = "${python_path_root}/third_party/blink/renderer/core/lcp_critical_path_predictor"
+
+  mnemonic = "ELOC_PROTO"
+
+  source_dir = "lcp_critical_path_predictor/test_proto"
+  sources = rebase_path([ "lcp_image_id.asciipb" ], "", source_dir)
+
+  deps = [
+    ":element_locator_proto",
+    "//third_party/protobuf:py_proto",
+  ]
+
+  outputs = [ "${target_gen_dir}/${source_dir}/{{source_name_part}}.pb" ]
+
+  args = [
+    "-w",
+    "-i",
+    "{{source}}",
+    "-d",
+    rebase_path("${target_gen_dir}/${source_dir}", root_build_dir),
+    "-o",
+    "{{source_name_part}}.pb",
+    "-p",
+    rebase_path(python_path_root, root_build_dir),
+    "-p",
+    rebase_path(python_path_proto, root_build_dir),
+  ]
 }
 
 fuzzer_test("blink_html_tokenizer_fuzzer") {

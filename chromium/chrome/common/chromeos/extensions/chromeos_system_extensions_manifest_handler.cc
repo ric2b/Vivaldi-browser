@@ -4,28 +4,47 @@
 
 #include "chrome/common/chromeos/extensions/chromeos_system_extensions_manifest_handler.h"
 
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extensions_manifest_constants.h"
+#include "chrome/common/url_constants.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace chromeos {
 
 namespace {
 
+constexpr char kDevExtensionId[] = "jmalcmbicpnakfkncbgbcmlmgpfkhdca";
+
 using extensions::PermissionsParser;
 using extensions::mojom::APIPermissionID;
+
+bool IsDevExtensionEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  return ash::features::IsShimlessRMA3pDiagnosticsDevModeEnabled();
+#else
+  return false;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
 
 bool VerifyExternallyConnectableDefinition(extensions::Extension* extension) {
   const base::Value::Dict* externally_connectable_dict =
       extension->manifest()->FindDictPath(
           extensions::manifest_keys::kExternallyConnectable);
   // chromeos_system_extension's 'externally_connectable' must exist.
-  if (!externally_connectable_dict)
+  if (!externally_connectable_dict) {
     return false;
+  }
 
   // chromeos_system_extension's 'externally_connectable' can only specify
   // "matches".
@@ -36,13 +55,31 @@ bool VerifyExternallyConnectableDefinition(extensions::Extension* extension) {
 
   const auto* matches_list =
       externally_connectable_dict->Find("matches")->GetIfList();
-  if (!matches_list || matches_list->size() != 1)
+  if (!matches_list || matches_list->empty()) {
     return false;
+  }
 
-  const auto& extension_info = GetChromeOSExtensionInfoForId(extension->id());
+  const auto& extension_info = GetChromeOSExtensionInfoById(extension->id());
 
-  // Verifies allowlisted origins.
-  return matches_list->front().GetString() == extension_info.pwa_origin;
+  if (!features::IsIWAForTelemetryExtensionAPIEnabled()) {
+    // Verifies allowlisted origins.
+    return matches_list->size() == 1 &&
+           matches_list->front().GetString() == extension_info.pwa_origin;
+  }
+
+  absl::optional<std::string> iwa_origin;
+  if (extension_info.iwa_id.has_value()) {
+    iwa_origin =
+        base::StrCat({chrome::kIsolatedAppScheme, url::kStandardSchemeSeparator,
+                      extension_info.iwa_id->id(), "/*"});
+  }
+  for (const auto& match : *matches_list) {
+    const auto& match_str = match.GetString();
+    if (match_str != extension_info.pwa_origin && match_str != iwa_origin) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -53,6 +90,11 @@ ChromeOSSystemExtensionHandler::~ChromeOSSystemExtensionHandler() = default;
 
 bool ChromeOSSystemExtensionHandler::Parse(extensions::Extension* extension,
                                            std::u16string* error) {
+  if (extension->id() == kDevExtensionId && !IsDevExtensionEnabled()) {
+    *error = base::ASCIIToUTF16(kInvalidChromeOSSystemExtensionId);
+    return false;
+  }
+
   if (!extension->manifest()->FindDictPath(
           extensions::manifest_keys::kChromeOSSystemExtension)) {
     *error = base::ASCIIToUTF16(kInvalidChromeOSSystemExtensionDeclaration);
@@ -62,7 +104,10 @@ bool ChromeOSSystemExtensionHandler::Parse(extensions::Extension* extension,
   // Verifies that chromeos_system_extension's externally_connectable key exists
   // and contains one origin only.
   if (!VerifyExternallyConnectableDefinition(extension)) {
-    *error = base::ASCIIToUTF16(kInvalidExternallyConnectableDeclaration);
+    *error =
+        base::ASCIIToUTF16(features::IsIWAForTelemetryExtensionAPIEnabled()
+                               ? kInvalidExternallyConnectableDeclarationWithIWA
+                               : kInvalidExternallyConnectableDeclaration);
     return false;
   }
 

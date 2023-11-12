@@ -5,7 +5,6 @@
 #include <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 
-#import "base/mac/scoped_nsobject.h"
 #include "chrome/browser/profiles/profile.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
@@ -77,7 +76,7 @@ class VivaldiNativeWidgetMac : public views::NativeWidgetMac {
   raw_ptr<VivaldiBrowserWindow> browser_window_;
 
   // Used to notify us about certain NSWindow events.
-  base::scoped_nsobject<VivaldiResizeNotificationObserver> nswindow_observer_;
+  VivaldiResizeNotificationObserver* __strong nswindow_observer_;
 
   // The bounds of the window just before it was last maximized.
   NSRect bounds_before_maximize_;
@@ -228,9 +227,9 @@ void VivaldiNativeWidgetMac::PopulateCreateWindowParams(
 
 void VivaldiNativeWidgetMac::OnWindowInitialized() {
   views::NativeWidgetMac::OnWindowInitialized();
-
-  nswindow_observer_.reset(
-      [[VivaldiResizeNotificationObserver alloc] initForNativeWidget:this]);
+  // TODO: Test properly for problems wrt ARC transition
+  nswindow_observer_ =
+      [[VivaldiResizeNotificationObserver alloc] initForNativeWidget:this];
 }
 
 void VivaldiNativeWidgetMac::OnWindowDestroying(gfx::NativeWindow window) {
@@ -238,7 +237,8 @@ void VivaldiNativeWidgetMac::OnWindowDestroying(gfx::NativeWindow window) {
   FinishMenubarTracker();
   if (nswindow_observer_) {
     [nswindow_observer_ stopObserving];
-    nswindow_observer_.reset();
+    // TODO: Test properly for problems wrt ARC transition
+    nswindow_observer_ = nullptr;
   }
   views::NativeWidgetMac::OnWindowDestroying(window);
 }

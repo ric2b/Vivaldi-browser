@@ -11,6 +11,8 @@
 extern NSString* vBookmarksFolderIcon;
 // Image name for the speed dial folder icon.
 extern NSString* vSpeedDialFolderIcon;
+// Image name for trash folder icon
+extern NSString* vBookmarkTrashFolder;
 // Image name for the folder selection chevron.
 extern NSString* vBookmarkFolderSelectionChevron;
 // Image name for the folder selection checkmark.

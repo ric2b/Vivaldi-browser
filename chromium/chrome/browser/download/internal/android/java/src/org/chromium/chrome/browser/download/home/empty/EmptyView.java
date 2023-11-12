@@ -36,8 +36,12 @@ class EmptyView {
 
             mEmptyContainer = mView.findViewById(R.id.empty_state_container);
             mEmptyView = (TextView) mView.findViewById(R.id.empty_state_text_title);
+
+            if (!BuildConfig.IS_VIVALDI) {
             ImageView emptyStateIcon = mView.findViewById(R.id.empty_state_icon);
             emptyStateIcon.setImageResource(R.drawable.downloads_empty_state_illustration);
+            } // End Vivaldi
+
             TextView emptyStateSubheadingView =
                     (TextView) mView.findViewById(R.id.empty_state_text_description);
             emptyStateSubheadingView.setText(

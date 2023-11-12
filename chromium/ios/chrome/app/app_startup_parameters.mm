@@ -11,10 +11,6 @@
 #import "net/base/url_util.h"
 #import "url/gurl.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @implementation AppStartupParameters {
   GURL _externalURL;
   GURL _completeURL;
@@ -81,6 +77,7 @@
     case START_LENS_FROM_APP_ICON_LONG_PRESS:
     case START_LENS_FROM_HOME_SCREEN_WIDGET:
     case START_LENS_FROM_SPOTLIGHT:
+    case START_LENS_FROM_INTENTS:
       [description appendString:@", should launch Lens"];
       break;
     case START_VOICE_SEARCH:
@@ -88,6 +85,42 @@
       break;
     case FOCUS_OMNIBOX:
       [description appendString:@", should focus omnibox"];
+      break;
+    case OPEN_READING_LIST:
+      [description appendString:@", should open reading list"];
+      break;
+    case OPEN_BOOKMARKS:
+      [description appendString:@", should open bookmarks"];
+      break;
+    case OPEN_RECENT_TABS:
+      [description appendString:@", should open recent tabs"];
+      break;
+    case OPEN_TAB_GRID:
+      [description appendString:@", should open tab grid"];
+      break;
+    case SET_CHROME_DEFAULT_BROWSER:
+      [description appendString:@", should open set chrome default browser"];
+      break;
+    case VIEW_HISTORY:
+      [description appendString:@", should open history"];
+      break;
+    case OPEN_PAYMENT_METHODS:
+      [description appendString:@", should open payment methods"];
+      break;
+    case RUN_SAFETY_CHECK:
+      [description appendString:@", should run safety check"];
+      break;
+    case MANAGE_PASSWORDS:
+      [description appendString:@", should open manage passwords setting page"];
+      break;
+    case MANAGE_SETTINGS:
+      [description appendString:@", should open settings page"];
+      break;
+    case OPEN_LATEST_TAB:
+      [description appendString:@", should resume latest tab"];
+      break;
+    case OPEN_CLEAR_BROWSING_DATA_DIALOG:
+      [description appendString:@", should open Clear Browsing Data dialog"];
       break;
     default:
       break;
@@ -101,10 +134,37 @@
 }
 
 - (void)setPostOpeningAction:(TabOpeningPostOpeningAction)action {
-  // Only NO_ACTION or SHOW_DEFAULT_BROWSER_SETTINGS are allowed on non NTP.
-  DCHECK(action == NO_ACTION || action == SHOW_DEFAULT_BROWSER_SETTINGS ||
-         _externalURL == GURL(kChromeUINewTabURL));
+  DCHECK([self isValidPostOpeningAction:action]);
   _postOpeningAction = action;
+}
+
+#pragma mark - Private methods
+
+- (BOOL)isValidPostOpeningAction:(TabOpeningPostOpeningAction)action {
+  switch (action) {
+      // NO_ACTION , SHOW_DEFAULT_BROWSER_SETTINGS and SEARCH_PASSWORDS are
+      // allowed on any URL.
+    case NO_ACTION:
+    case SHOW_DEFAULT_BROWSER_SETTINGS:
+    case SEARCH_PASSWORDS:
+      return YES;
+
+      // Lens action are valid on empty URLs, in addition to
+      // the URLs where all actions are valid.
+    case START_LENS_FROM_APP_ICON_LONG_PRESS:
+    case START_LENS_FROM_HOME_SCREEN_WIDGET:
+    case START_LENS_FROM_SPOTLIGHT:
+    case OPEN_LATEST_TAB:
+    case START_LENS_FROM_INTENTS:
+      if (_externalURL.is_empty()) {
+        return YES;
+      }
+      [[fallthrough]];
+
+      // Other actions are only valid on NTP;
+    default:
+      return _externalURL == GURL(kChromeUINewTabURL);
+  }
 }
 
 @end

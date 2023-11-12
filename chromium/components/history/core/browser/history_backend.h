@@ -164,8 +164,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
     // Notify HistoryService that the user is visiting a URL. The event will
     // be forwarded to the HistoryServiceObservers in the correct thread.
-    virtual void NotifyURLVisited(const URLRow& url_row,
-                                  const VisitRow& visit_row) = 0;
+    virtual void NotifyURLVisited(
+        const URLRow& url_row,
+        const VisitRow& visit_row,
+        absl::optional<int64_t> local_navigation_id) = 0;
 
     // Notify HistoryService that some URLs have been modified. The event will
     // be forwarded to the HistoryServiceObservers in the correct thread.
@@ -547,9 +549,14 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   void UpdateClusterTriggerability(const std::vector<Cluster>& clusters);
 
+  // Use `UpdateVisitsInteractionState` instead to preserve the visits' scores.
   void HideVisits(const std::vector<VisitID>& visit_ids);
 
   void UpdateClusterVisit(const history::ClusterVisit& cluster_visit);
+
+  void UpdateVisitsInteractionState(
+      const std::vector<VisitID>& visit_ids,
+      const ClusterVisit::InteractionState interaction_state);
 
   std::vector<Cluster> GetMostRecentClusters(
       base::Time inclusive_min_time,
@@ -847,19 +854,32 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // of the associated URL (whether added or not) is returned. Both values will
   // be 0 on failure.
   //
+  // If the caller wants to add this visit to the VisitedLinkDatabase, it needs
+  // to provide values for the `top_level_url` and `frame_url` parameters.
+  // `top_level_url` is a GURL representing the top-level frame that this
+  // navigation originated from. `frame_url` is GURL representing the immediate
+  // frame that this navigation originated from. For example, if a link to
+  // `c.com` is clicked in an iframe `b.com` that is embedded in `a.com`, the
+  // `top_level_url` is `a.com` and the `frame_url` is `b.com` (and the `url` is
+  // `c.com`).
+  //
   // This does not schedule database commits, it is intended to be used as a
   // subroutine for AddPage only. It also assumes the database is valid.
   std::pair<URLID, VisitID> AddPageVisit(
       const GURL& url,
       base::Time time,
       VisitID referring_visit,
+      const GURL& external_referrer_url,
       ui::PageTransition transition,
       bool hidden,
       VisitSource visit_source,
       bool should_increment_typed_count,
       VisitID opener_visit,
       bool consider_for_ntp_most_visited,
+      absl::optional<int64_t> local_navigation_id = absl::nullopt,
       absl::optional<std::u16string> title = absl::nullopt,
+      absl::optional<GURL> top_level_url = absl::nullopt,
+      absl::optional<GURL> frame_url = absl::nullopt,
       absl::optional<base::TimeDelta> visit_duration = absl::nullopt,
       absl::optional<std::string> originator_cache_guid = absl::nullopt,
       absl::optional<VisitID> originator_visit_id = absl::nullopt,
@@ -988,7 +1008,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   void NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                              const GURL& icon_url) override;
   void NotifyURLVisited(const URLRow& url_row,
-                        const VisitRow& visit_row) override;
+                        const VisitRow& visit_row,
+                        absl::optional<int64_t> local_navigation_id) override;
   void NotifyURLsModified(const URLRows& changed_urls,
                           bool is_from_expiration) override;
   void NotifyURLsDeleted(DeletionInfo deletion_info) override;

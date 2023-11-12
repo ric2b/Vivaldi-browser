@@ -18,6 +18,7 @@ source_set("app_service") {
     "app_icon/app_icon_util.h",
     "app_icon/dip_px_util.cc",
     "app_icon/dip_px_util.h",
+    "app_icon/icon_effects.h",
     "app_icon/icon_key_util.cc",
     "app_icon/icon_key_util.h",
     "app_service_proxy.h",
@@ -36,6 +37,8 @@ source_set("app_service") {
     "metrics/app_service_metrics.h",
     "package_id.cc",
     "package_id.h",
+    "package_id_util.cc",
+    "package_id_util.h",
     "paused_apps.cc",
     "paused_apps.h",
     "policy_util.cc",
@@ -87,8 +90,6 @@ source_set("app_service") {
     sources += [
       "app_notifications.cc",
       "app_notifications.h",
-      "app_web_contents_data.cc",
-      "app_web_contents_data.h",
       "browser_app_instance.cc",
       "browser_app_instance.h",
       "browser_app_instance_map.h",
@@ -126,8 +127,6 @@ source_set("app_service") {
       "app_icon/app_icon_writer.h",
       "app_icon/arc_activity_adaptive_icon_impl.cc",
       "app_icon/arc_activity_adaptive_icon_impl.h",
-      "app_icon/arc_icon_once_loader.cc",
-      "app_icon/arc_icon_once_loader.h",
       "app_service_proxy_ash.cc",
       "app_service_proxy_ash.h",
       "app_shortcut_item.cc",
@@ -238,6 +237,7 @@ source_set("app_service") {
       "//chrome/browser/image_decoder",
       "//chrome/browser/metrics/structured:features",
       "//chrome/browser/resources",
+      "//chromeos/ash/components/browser_context_helper",
       "//chromeos/ash/components/login/login_state",
       "//chromeos/components/kiosk:kiosk",
       "//components/app_restore",
@@ -248,7 +248,8 @@ source_set("app_service") {
       "//components/image_fetcher/core",
       "//components/metrics/structured:structured_events",
       "//components/resources:components_resources",
-      "//components/services/app_service/public/cpp/shortcut",
+      "//components/services/app_service/public/cpp:instance_update",
+      "//components/services/app_service/public/cpp:macros",
       "//components/ukm",
       "//components/webapps/browser",
       "//services/metrics/public/cpp:ukm_builders",
@@ -312,8 +313,7 @@ source_set("constants") {
 
   deps = [
     "//base",
-    "//components/services/app_service/public/cpp:app_types",
-    "//components/services/app_service/public/cpp:intents",
+    "//components/services/app_service",
     "//ui/base:types",
     "//ui/display/types",
     "//ui/gfx/geometry",
@@ -435,7 +435,12 @@ source_set("unit_tests") {
   }
 
   if (is_chromeos_lacros) {
-    sources += [ "app_service_proxy_lacros_unittest.cc" ]
+    sources += [
+      "app_service_proxy_lacros_unittest.cc",
+      "metrics/website_metrics_service_lacros_unittest.cc",
+    ]
+  } else {
+    sources += [ "publishers/app_publisher_unittest.cc" ]
   }
 }
 
@@ -476,4 +481,21 @@ source_set("test_support") {
       "mock_crosapi_app_service_proxy.h",
     ]
   }
+}
+
+source_set("app_registry_cache_waiter") {
+  testonly = true
+
+  sources = [
+    "app_registry_cache_waiter.cc",
+    "app_registry_cache_waiter.h",
+  ]
+
+  public_deps = [ "//components/services/app_service" ]
+
+  deps = [
+    ":app_service",
+    "//build:chromeos_buildflags",
+    "//url",
+  ]
 }

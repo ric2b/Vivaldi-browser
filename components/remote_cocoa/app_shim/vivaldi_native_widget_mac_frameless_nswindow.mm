@@ -2,7 +2,7 @@
 
 #import "components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h"
 
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #include "base/mac/mac_util.h"
 
 @implementation VivaldiNativeWidgetMacFramelessNSWindow

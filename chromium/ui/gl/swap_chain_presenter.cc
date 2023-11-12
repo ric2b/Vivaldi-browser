@@ -41,30 +41,24 @@ BASE_FEATURE(kFallbackBT709VideoToBT601,
              "FallbackBT709VideoToBT601",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+gfx::ColorSpace GetOutputColorSpace(const gfx::ColorSpace& input_color_space,
+                                    bool is_yuv_swapchain) {
+  gfx::ColorSpace output_color_space =
+      is_yuv_swapchain ? input_color_space : gfx::ColorSpace::CreateSRGB();
+  if (base::FeatureList::IsEnabled(kFallbackBT709VideoToBT601) &&
+      (output_color_space == gfx::ColorSpace::CreateREC709())) {
+    output_color_space = gfx::ColorSpace::CreateREC601();
+  }
+  if (input_color_space.IsHDR()) {
+    output_color_space = gfx::ColorSpace::CreateHDR10();
+  }
+
+  return output_color_space;
+}
+
 bool IsProtectedVideo(gfx::ProtectedVideoType protected_video_type) {
   return protected_video_type != gfx::ProtectedVideoType::kClear;
 }
-
-class ScopedReleaseKeyedMutex {
- public:
-  ScopedReleaseKeyedMutex(Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex,
-                          UINT64 key)
-      : keyed_mutex_(keyed_mutex), key_(key) {
-    DCHECK(keyed_mutex);
-  }
-
-  ScopedReleaseKeyedMutex(const ScopedReleaseKeyedMutex&) = delete;
-  ScopedReleaseKeyedMutex& operator=(const ScopedReleaseKeyedMutex&) = delete;
-
-  ~ScopedReleaseKeyedMutex() {
-    HRESULT hr = keyed_mutex_->ReleaseSync(key_);
-    DCHECK(SUCCEEDED(hr));
-  }
-
- private:
-  Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex_;
-  UINT64 key_ = 0;
-};
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -316,6 +310,62 @@ HRESULT ToggleVpSuperResolution(UINT gpu_vendor_id,
   return E_NOTIMPL;
 }
 
+HRESULT ToggleNvidiaVpTrueHDR(ID3D11VideoContext* video_context,
+                              ID3D11VideoProcessor* video_processor,
+                              bool enable) {
+  TRACE_EVENT1("gpu", "ToggleNvidiaVpTrueHDR", "on", enable);
+
+  constexpr GUID kNvidiaTrueHDRInterfaceGUID = {
+      0xfdd62bb4,
+      0x620b,
+      0x4fd7,
+      {0x9a, 0xb3, 0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3}};
+  constexpr UINT kStreamExtensionVersionV4 = 0x4;
+  constexpr UINT kStreamExtensionMethodTrueHDR = 0x3;
+  struct {
+    UINT version;
+    UINT method;
+    UINT enable : 1;
+    UINT reserved : 31;
+  } stream_extension_info = {kStreamExtensionVersionV4,
+                             kStreamExtensionMethodTrueHDR, enable ? 1u : 0u,
+                             0u};
+
+  HRESULT hr = video_context->VideoProcessorSetStreamExtension(
+      video_processor, 0, &kNvidiaTrueHDRInterfaceGUID,
+      sizeof(stream_extension_info), &stream_extension_info);
+
+  base::UmaHistogramSparse(enable ? "GPU.NvidiaVpTrueHDR.On.SetStreamExt"
+                                  : "GPU.NvidiaVpTrueHDR.Off.SetStreamExt",
+                           hr);
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "VideoProcessorSetStreamExtension failed with error 0x"
+                << std::hex << hr;
+  }
+
+  return hr;
+}
+
+HRESULT ToggleVpAutoHDR(UINT gpu_vendor_id,
+                        ID3D11VideoContext* video_context,
+                        ID3D11VideoProcessor* video_processor,
+                        bool enable) {
+  if (gpu_vendor_id == 0x10de) {
+    return ToggleNvidiaVpTrueHDR(video_context, video_processor, enable);
+  }
+
+  return E_NOTIMPL;
+}
+
+bool IsVpAutoHDREnabled(UINT gpu_vendor_id) {
+  if (gpu_vendor_id == 0x10de &&
+      base::FeatureList::IsEnabled(features::kNvidiaVpTrueHDR)) {
+    return true;
+  }
+
+  return false;
+}
+
 bool IsWithinMargin(int i, int j) {
   constexpr int kFullScreenMargin = 10;
   return (std::abs(i - j) < kFullScreenMargin);
@@ -411,11 +461,11 @@ int SwapChainPresenter::PresentationHistory::composed_count() const {
 
 SwapChainPresenter::SwapChainPresenter(
     DCLayerTree* layer_tree,
-    HWND window,
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
     Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device)
     : layer_tree_(layer_tree),
-      window_(window),
+      swap_chain_buffer_count_(BufferCount(
+          layer_tree->force_dcomp_triple_buffer_video_swap_chain())),
       switched_to_BGRA8888_time_tick_(base::TimeTicks::Now()),
       d3d11_device_(d3d11_device),
       dcomp_device_(dcomp_device),
@@ -604,8 +654,9 @@ gfx::Size SwapChainPresenter::GetMonitorSize() const {
     // Get the monitor on which the overlay is displayed.
     MONITORINFO monitor_info;
     monitor_info.cbSize = sizeof(monitor_info);
-    if (GetMonitorInfo(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST),
-                       &monitor_info)) {
+    if (GetMonitorInfo(
+            MonitorFromWindow(layer_tree_->window(), MONITOR_DEFAULTTONEAREST),
+            &monitor_info)) {
       monitor_size = gfx::Rect(monitor_info.rcMonitor).size();
     }
 
@@ -613,9 +664,8 @@ gfx::Size SwapChainPresenter::GetMonitorSize() const {
   }
 }
 
-void SwapChainPresenter::SetTargetToFullScreen(
-    gfx::Transform* visual_transform,
-    gfx::Rect* visual_clip_rect) const {
+void SwapChainPresenter::SetTargetToFullScreen(gfx::Transform* visual_transform,
+                                               gfx::Rect* visual_clip_rect) {
   // Reset the horizontal/vertical shift according to the visual clip and
   // original transform, since DWM will do the positioning in case of overlay.
   visual_transform->set_rc(
@@ -629,6 +679,8 @@ void SwapChainPresenter::SetTargetToFullScreen(
 
   // Expand the clip rect for swap chain to the whole screen.
   *visual_clip_rect = gfx::Rect(GetMonitorSize());
+
+  last_desktop_plane_removed_ = true;
 }
 
 void SwapChainPresenter::AdjustTargetToOptimalSizeIfNeeded(
@@ -1020,7 +1072,7 @@ gfx::Size SwapChainPresenter::CalculateSwapChainSize(
   // the video processor can do the minimal amount of work and the overlay has
   // to read the minimal amount of data. DWM is also less likely to promote a
   // surface to an overlay if it's much larger than its area on-screen.
-  gfx::Size swap_chain_size = params.content_rect.size();
+  gfx::Size swap_chain_size = gfx::ToNearestRect(params.content_rect).size();
   if (swap_chain_size.IsEmpty())
     return gfx::Size();
   if (params.quad_rect.IsEmpty())
@@ -1291,6 +1343,7 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   DCHECK(params.overlay_image);
   DCHECK_NE(params.overlay_image->type(),
             gl::DCLayerOverlayType::kDCompVisualContent);
+  CHECK(gfx::IsNearestRectWithinDistance(params.content_rect, 0.01f));
 
   gl::DCLayerOverlayType overlay_type = params.overlay_image->type();
 
@@ -1343,10 +1396,20 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   }
 
   bool content_is_hdr = input_color_space.IsHDR();
-  bool use_hdr_swap_chain = content_is_hdr && params.hdr_metadata.IsValid();
+
+  // Enable VideoProcessor-HDR for SDR content if the monitor and
+  // GPU driver support it
+  bool use_vp_auto_hdr =
+      !content_is_hdr &&
+      DirectCompositionMonitorHDREnabled(layer_tree_->window()) &&
+      enable_vp_auto_hdr_ && !is_on_battery_power_;
+
+  bool use_hdr_swap_chain =
+      ((content_is_hdr && params.hdr_metadata.IsValid()) || use_vp_auto_hdr);
 
   DXGI_FORMAT swap_chain_format =
       GetSwapChainFormat(params.protected_video_type, use_hdr_swap_chain);
+
   bool swap_chain_format_changed = swap_chain_format != swap_chain_format_;
   bool toggle_protected_video =
       swap_chain_protected_video_type_ != params.protected_video_type;
@@ -1358,6 +1421,12 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
     // The swap chain is presenting the same images as last swap, which means
     // that the images were never returned to the video decoder and should
     // have the same contents as last time. It shouldn't need to be redrawn.
+    // But the visual transform and clip rectangle for DCLayerTree update need
+    // to keep the same as the last presentation when desktop plane was removed.
+    if (last_desktop_plane_removed_) {
+      SetTargetToFullScreen(visual_transform, visual_clip_rect);
+    }
+
     return true;
   }
 
@@ -1366,14 +1435,16 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   unsigned input_level = params.overlay_image->texture_array_slice();
 
   if (TryPresentToDecodeSwapChain(input_texture, input_level, input_color_space,
-                                  params.content_rect, swap_chain_size,
-                                  swap_chain_format, params.transform,
-                                  dest_size, target_rect)) {
+                                  gfx::ToNearestRect(params.content_rect),
+                                  swap_chain_size, swap_chain_format,
+                                  params.transform, dest_size, target_rect)) {
     last_overlay_image_ = std::move(params.overlay_image);
     // Only NV12 format is supported in zero copy presentation path.
     if (dest_size.has_value() && target_rect.has_value() &&
         params.z_order > 0) {
       SetTargetToFullScreen(visual_transform, visual_clip_rect);
+    } else {
+      last_desktop_plane_removed_ = false;
     }
 
     return true;
@@ -1402,10 +1473,6 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
     input_level = 0;
   }
 
-  // Keyed mutex is not present if access is synchronized by the shared image.
-  Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex =
-      params.overlay_image->keyed_mutex();
-
   absl::optional<DXGI_HDR_METADATA_HDR10> stream_metadata;
   if (params.hdr_metadata.IsValid()) {
     stream_metadata =
@@ -1413,8 +1480,8 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   }
 
   if (!VideoProcessorBlt(std::move(input_texture), input_level,
-                         std::move(keyed_mutex), params.content_rect,
-                         input_color_space, content_is_hdr, stream_metadata)) {
+                         gfx::ToNearestRect(params.content_rect),
+                         input_color_space, stream_metadata, use_vp_auto_hdr)) {
     return false;
   }
 
@@ -1422,30 +1489,32 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   if (first_present_) {
     first_present_ = false;
     UINT flags = DXGI_PRESENT_USE_DURATION;
-    hr = swap_chain_->Present(0, flags);
-    // Ignore DXGI_STATUS_OCCLUDED since that's not an error but only indicates
-    // that the window is occluded and we can stop rendering.
-    if (FAILED(hr) && hr != DXGI_STATUS_OCCLUDED) {
-      DLOG(ERROR) << "Present failed with error 0x" << std::hex << hr;
-      return false;
-    }
-
     // DirectComposition can display black for a swap chain between the first
-    // and second time it's presented to - maybe the first Present can get
-    // lost somehow and it shows the wrong buffer. In that case copy the
-    // buffers so both have the correct contents, which seems to help. The
-    // first Present() after this needs to have SyncInterval > 0, or else the
-    // workaround doesn't help.
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> dest_texture;
-    swap_chain_->GetBuffer(0, IID_PPV_ARGS(&dest_texture));
-    DCHECK(dest_texture);
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> src_texture;
-    hr = swap_chain_->GetBuffer(1, IID_PPV_ARGS(&src_texture));
-    DCHECK(src_texture);
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
-    d3d11_device_->GetImmediateContext(&context);
-    DCHECK(context);
-    context->CopyResource(dest_texture.Get(), src_texture.Get());
+    // and second time it's presented to - maybe the first Present can get lost
+    // somehow and it shows the wrong buffer. In that case copy the buffers so
+    // all have the correct contents, which seems to help. The first Present()
+    // after this needs to have SyncInterval > 0, or else the workaround doesn't
+    // help.
+    for (size_t i = 0; i < swap_chain_buffer_count_ - 1; ++i) {
+      hr = swap_chain_->Present(0, flags);
+      // Ignore DXGI_STATUS_OCCLUDED since that's not an error but only
+      // indicates that the window is occluded and we can stop rendering.
+      if (FAILED(hr) && hr != DXGI_STATUS_OCCLUDED) {
+        DLOG(ERROR) << "Present failed with error 0x" << std::hex << hr;
+        return false;
+      }
+
+      Microsoft::WRL::ComPtr<ID3D11Texture2D> dest_texture;
+      swap_chain_->GetBuffer(0, IID_PPV_ARGS(&dest_texture));
+      DCHECK(dest_texture);
+      Microsoft::WRL::ComPtr<ID3D11Texture2D> src_texture;
+      hr = swap_chain_->GetBuffer(1, IID_PPV_ARGS(&src_texture));
+      DCHECK(src_texture);
+      Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
+      d3d11_device_->GetImmediateContext(&context);
+      DCHECK(context);
+      context->CopyResource(dest_texture.Get(), src_texture.Get());
+    }
 
     // Additionally wait for the GPU to finish executing its commands, or
     // there still may be a black flicker when presenting expensive content
@@ -1519,6 +1588,8 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
   // letterboxing overlay presentation.
   if (is_letterboxing_overlay_ready) {
     SetTargetToFullScreen(visual_transform, visual_clip_rect);
+  } else {
+    last_desktop_plane_removed_ = false;
   }
 
   last_overlay_image_ = std::move(params.overlay_image);
@@ -1668,11 +1739,10 @@ void SwapChainPresenter::ReleaseDCOMPSurfaceResourcesIfNeeded() {
 bool SwapChainPresenter::VideoProcessorBlt(
     Microsoft::WRL::ComPtr<ID3D11Texture2D> input_texture,
     UINT input_level,
-    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex,
     const gfx::Rect& content_rect,
     const gfx::ColorSpace& src_color_space,
-    bool content_is_hdr,
-    absl::optional<DXGI_HDR_METADATA_HDR10> stream_hdr_metadata) {
+    absl::optional<DXGI_HDR_METADATA_HDR10> stream_hdr_metadata,
+    bool use_vp_auto_hdr) {
   TRACE_EVENT2("gpu", "SwapChainPresenter::VideoProcessorBlt", "content_rect",
                content_rect.ToString(), "swap_chain_size",
                swap_chain_size_.ToString());
@@ -1682,18 +1752,10 @@ bool SwapChainPresenter::VideoProcessorBlt(
   // doesn't need a |force_yuv| parameter (and the associated plumbing).
   bool is_yuv_swapchain = IsYUVSwapChainFormat(swap_chain_format_);
   gfx::ColorSpace output_color_space =
-      is_yuv_swapchain ? src_color_space : gfx::ColorSpace::CreateSRGB();
-  if (base::FeatureList::IsEnabled(kFallbackBT709VideoToBT601) &&
-      (output_color_space == gfx::ColorSpace::CreateREC709())) {
-    output_color_space = gfx::ColorSpace::CreateREC601();
-  }
-  if (content_is_hdr) {
-    output_color_space = gfx::ColorSpace::CreateHDR10();
-  }
-
+      GetOutputColorSpace(src_color_space, is_yuv_swapchain);
   VideoProcessorWrapper* video_processor_wrapper =
-      layer_tree_->InitializeVideoProcessor(
-          content_rect.size(), swap_chain_size_, output_color_space.IsHDR());
+      layer_tree_->InitializeVideoProcessor(content_rect.size(),
+                                            swap_chain_size_);
   if (!video_processor_wrapper)
     return false;
 
@@ -1716,8 +1778,12 @@ bool SwapChainPresenter::VideoProcessorBlt(
     DXGI_COLOR_SPACE_TYPE output_dxgi_color_space =
         gfx::ColorSpaceWin::GetDXGIColorSpace(output_color_space,
                                               /*force_yuv=*/is_yuv_swapchain);
+    DXGI_COLOR_SPACE_TYPE swap_dxgi_color_space =
+        use_vp_auto_hdr ? gfx::ColorSpaceWin::GetDXGIColorSpace(
+                              gfx::ColorSpace::CreateHDR10())
+                        : output_dxgi_color_space;
 
-    if (SUCCEEDED(swap_chain3->SetColorSpace1(output_dxgi_color_space))) {
+    if (SUCCEEDED(swap_chain3->SetColorSpace1(swap_dxgi_color_space))) {
       context1->VideoProcessorSetOutputColorSpace1(video_processor.Get(),
                                                    output_dxgi_color_space);
     }
@@ -1750,22 +1816,6 @@ bool SwapChainPresenter::VideoProcessorBlt(
   }
 
   {
-    absl::optional<ScopedReleaseKeyedMutex> release_keyed_mutex;
-    if (keyed_mutex) {
-      // The producer may still be using this texture for a short period of
-      // time, so wait long enough to hopefully avoid glitches. For example,
-      // all levels of the texture share the same keyed mutex, so if the
-      // hardware decoder acquired the mutex to decode into a different array
-      // level then it still may block here temporarily.
-      const int kMaxSyncTimeMs = 1000;
-      HRESULT hr = keyed_mutex->AcquireSync(0, kMaxSyncTimeMs);
-      if (FAILED(hr)) {
-        DLOG(ERROR) << "Error acquiring keyed mutex: " << std::hex << hr;
-        return false;
-      }
-      release_keyed_mutex.emplace(keyed_mutex, 0);
-    }
-
     Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device =
         video_processor_wrapper->video_device;
     Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator>
@@ -1821,57 +1871,112 @@ bool SwapChainPresenter::VideoProcessorBlt(
       DCHECK(output_view_);
     }
 
-    bool use_vp_super_resolution = false;
-    if (!layer_tree_->disable_vp_super_resolution() &&
-        !force_vp_super_resolution_off_) {
-      hr =
-          ToggleVpSuperResolution(gpu_vendor_id_, video_context.Get(),
-                                  video_processor.Get(), !is_on_battery_power_);
+    if (enable_vp_auto_hdr_) {
+      hr = ToggleVpAutoHDR(gpu_vendor_id_, video_context.Get(),
+                           video_processor.Get(), use_vp_auto_hdr);
       if (FAILED(hr)) {
-        force_vp_super_resolution_off_ = true;
+        enable_vp_auto_hdr_ = false;
+
+        if (use_vp_auto_hdr) {
+          if (!RevertSwapChainToSDR(video_device, video_processor,
+                                    video_processor_enumerator, swap_chain3,
+                                    context1, src_color_space)) {
+            return false;
+          }
+
+          use_vp_auto_hdr = false;
+        }
       }
-      use_vp_super_resolution = !is_on_battery_power_ && SUCCEEDED(hr);
     }
 
-    hr = video_context->VideoProcessorBlt(video_processor.Get(),
-                                          output_view_.Get(), 0, 1, &stream);
+    bool use_vp_super_resolution =
+        enable_vp_super_resolution_ && !is_on_battery_power_;
+    if (enable_vp_super_resolution_) {
+      hr = ToggleVpSuperResolution(gpu_vendor_id_, video_context.Get(),
+                                   video_processor.Get(),
+                                   use_vp_super_resolution);
+      if (FAILED(hr)) {
+        enable_vp_super_resolution_ = false;
+        use_vp_super_resolution = false;
+      }
+    }
+
+    {
+      TRACE_EVENT0("gpu", "ID3D11VideoContext::VideoProcessorBlt");
+      hr = video_context->VideoProcessorBlt(video_processor.Get(),
+                                            output_view_.Get(), 0, 1, &stream);
+    }
+    base::UmaHistogramSparse(
+        (use_vp_auto_hdr ? "GPU.VideoProcessorBlt.VpAutoHDR.On"
+                         : "GPU.VideoProcessorBlt.VpAutoHDR.Off"),
+        hr);
     base::UmaHistogramSparse(
         (use_vp_super_resolution
              ? "GPU.VideoProcessorBlt.VpSuperResolution.On"
              : "GPU.VideoProcessorBlt.VpSuperResolution.Off"),
         hr);
 
-    if (FAILED(hr)) {
-      // Retry VideoProcessorBlt with vp super resolution off if it was on.
-      if (use_vp_super_resolution) {
-        DLOG(ERROR) << "Retry VideoProcessorBlt with VpSuperResolution off "
-                       "after it failed with error 0x"
-                    << std::hex << hr;
+    // Retry VideoProcessorBlt with VpSuperResolution off if it was on.
+    if (FAILED(hr) && use_vp_super_resolution) {
+      DLOG(ERROR) << "Retry VideoProcessorBlt with VpSuperResolution off "
+                     "after it failed with error 0x"
+                  << std::hex << hr;
 
-        ToggleVpSuperResolution(gpu_vendor_id_, video_context.Get(),
-                                video_processor.Get(), false);
+      ToggleVpSuperResolution(gpu_vendor_id_, video_context.Get(),
+                              video_processor.Get(), false);
+      {
+        TRACE_EVENT0("gpu", "ID3D11VideoContext::VideoProcessorBlt");
         hr = video_context->VideoProcessorBlt(
             video_processor.Get(), output_view_.Get(), 0, 1, &stream);
-
-        base::UmaHistogramSparse(
-            "GPU.VideoProcessorBlt.VpSuperResolution.RetryOffAfterError", hr);
-
-        // We shouldn't use VpSuperResolution if it was the reason that caused
-        // the VideoProcessorBlt failure.
-        force_vp_super_resolution_off_ = SUCCEEDED(hr);
       }
+      base::UmaHistogramSparse(
+          "GPU.VideoProcessorBlt.VpSuperResolution.RetryOffAfterError", hr);
 
-      if (FAILED(hr)) {
-        DLOG(ERROR) << "VideoProcessorBlt failed with error 0x" << std::hex
-                    << hr;
+      // We shouldn't use VpSuperResolution if it was the reason that caused
+      // the VideoProcessorBlt failure.
+      if (SUCCEEDED(hr)) {
+        enable_vp_super_resolution_ = false;
+      }
+    }
 
-        // To prevent it from failing in all coming frames, disable overlay if
-        // VideoProcessorBlt is not implemented in the GPU driver.
-        if (hr == E_NOTIMPL) {
-          DisableDirectCompositionOverlays();
-        }
+    if (FAILED(hr) && use_vp_auto_hdr) {
+      DLOG(ERROR) << "Retry VideoProcessorBlt with VpAutoHDR off "
+                     "after it failed with error 0x"
+                  << std::hex << hr;
+
+      ToggleVpAutoHDR(gpu_vendor_id_, video_context.Get(),
+                      video_processor.Get(), false);
+
+      if (!RevertSwapChainToSDR(video_device, video_processor,
+                                video_processor_enumerator, swap_chain3,
+                                context1, src_color_space)) {
         return false;
       }
+
+      {
+        TRACE_EVENT0("gpu", "ID3D11VideoContext::VideoProcessorBlt");
+        hr = video_context->VideoProcessorBlt(
+            video_processor.Get(), output_view_.Get(), 0, 1, &stream);
+      }
+      base::UmaHistogramSparse(
+          "GPU.VideoProcessorBlt.VpAutoHDR.RetryOffAfterError", hr);
+
+      // We shouldn't use VpAutoHDR if it was the reason that caused
+      // the VideoProcessorBlt failure.
+      if (SUCCEEDED(hr)) {
+        enable_vp_auto_hdr_ = false;
+      }
+    }
+
+    if (FAILED(hr)) {
+      DLOG(ERROR) << "VideoProcessorBlt failed with error 0x" << std::hex << hr;
+
+      // To prevent it from failing in all coming frames, disable overlay if
+      // VideoProcessorBlt is not implemented in the GPU driver.
+      if (hr == E_NOTIMPL) {
+        DisableDirectCompositionOverlays();
+      }
+      return false;
     }
   }
 
@@ -1939,8 +2044,7 @@ bool SwapChainPresenter::ReallocateSwapChain(
   desc.Format = swap_chain_format;
   desc.Stereo = FALSE;
   desc.SampleDesc.Count = 1;
-  desc.BufferCount =
-      BufferCount(layer_tree_->force_dcomp_triple_buffer_video_swap_chain());
+  desc.BufferCount = swap_chain_buffer_count_;
   desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
   desc.Scaling = DXGI_SCALING_STRETCH;
   desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
@@ -2050,6 +2154,10 @@ bool SwapChainPresenter::ReallocateSwapChain(
     DLOG(ERROR) << "Failed to get adapter desc with error 0x" << std::hex << hr;
   }
 
+  enable_vp_auto_hdr_ =
+      !layer_tree_->disable_vp_auto_hdr() && IsVpAutoHDREnabled(gpu_vendor_id_);
+  enable_vp_super_resolution_ = !layer_tree_->disable_vp_super_resolution();
+
   return true;
 }
 
@@ -2108,6 +2216,62 @@ SwapChainPresenter::GetSwapChainMedia() const {
   if (SUCCEEDED(hr))
     return swap_chain_media;
   return nullptr;
+}
+
+bool SwapChainPresenter::RevertSwapChainToSDR(
+    Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device,
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor,
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator>
+        video_processor_enumerator,
+    Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain3,
+    Microsoft::WRL::ComPtr<ID3D11VideoContext1> context1,
+    const gfx::ColorSpace& input_color_space) {
+  if (!video_device || !video_processor || !video_processor_enumerator ||
+      !swap_chain3 || !context1) {
+    return false;
+  }
+
+  // Restore the SDR swap chain and output view
+  if (!ReallocateSwapChain(
+          gfx::Size(swap_chain_size_),
+          GetSwapChainFormat(swap_chain_protected_video_type_, /*hdr=*/false),
+          swap_chain_protected_video_type_)) {
+    ReleaseSwapChainResources();
+    return false;
+  }
+  content_ = swap_chain_.Get();
+
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> swap_chain_buffer;
+  swap_chain_->GetBuffer(0, IID_PPV_ARGS(&swap_chain_buffer));
+  D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC output_desc = {};
+  output_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+  output_desc.Texture2D.MipSlice = 0;
+  HRESULT hr = video_device->CreateVideoProcessorOutputView(
+      swap_chain_buffer.Get(), video_processor_enumerator.Get(), &output_desc,
+      &output_view_);
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "CreateVideoProcessorOutputView failed with error 0x"
+                << std::hex << hr;
+    return false;
+  }
+  DCHECK(output_view_);
+
+  // Reset the output color space for the swap chain and video processor
+  bool is_yuv_swapchain = IsYUVSwapChainFormat(swap_chain_format_);
+  gfx::ColorSpace output_color_space =
+      GetOutputColorSpace(input_color_space, is_yuv_swapchain);
+  DXGI_COLOR_SPACE_TYPE output_dxgi_color_space =
+      gfx::ColorSpaceWin::GetDXGIColorSpace(output_color_space,
+                                            is_yuv_swapchain);
+  context1->VideoProcessorSetOutputColorSpace1(video_processor.Get(),
+                                               output_dxgi_color_space);
+  hr = swap_chain3->SetColorSpace1(output_dxgi_color_space);
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "SetColorSpace1 failed with error 0x" << std::hex << hr;
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace gl

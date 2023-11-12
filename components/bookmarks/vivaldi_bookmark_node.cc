@@ -5,6 +5,7 @@
 #include "app/vivaldi_resources.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/bookmarks/browser/bookmark_uuids.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -29,8 +30,7 @@ const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
 // > vivaldi_namespace = uuid.uuid5(uuid.NAMESPACE_DNS, "vivaldi.com")
 // > bookmarks_namespace = uuid.uuid5(vivaldi_namespace, "bookmarks")
 // > trash_uuid = uuid.uuid5(bookmarks_namespace, "trash")
-const char BookmarkNode::kVivaldiTrashNodeUuid[] =
-    "9f32a0fb-bfd9-5032-be46-07afe4a25400";
+const char kVivaldiTrashNodeUuid[] = "9f32a0fb-bfd9-5032-be46-07afe4a25400";
 
 const std::u16string BookmarkNode::GetTitledUrlNodeNickName() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetNickname(this));

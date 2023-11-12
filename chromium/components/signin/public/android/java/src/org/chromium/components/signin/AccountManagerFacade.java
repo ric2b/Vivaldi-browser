@@ -65,8 +65,12 @@ public interface AccountManagerFacade {
      * Since a different {@link Promise} will be returned every time the accounts get updated,
      * this makes the {@link Promise} a bad candidate for end users to cache locally unless
      * the end users are awaiting the current list of accounts only.
+     *
+     * @deprecated
+     * TODO(crbug.com/1463878): Use {@link #getCoreAccountInfos()} instead.
      */
     @MainThread
+    @Deprecated
     Promise<List<Account>> getAccounts();
 
     /**
@@ -91,12 +95,13 @@ public interface AccountManagerFacade {
     /**
      * Synchronously gets an OAuth2 access token. May return a cached version, use
      * {@link #invalidateAccessToken} to invalidate a token in the cache.
-     * @param account The {@link Account} for which the token is requested.
+     * @param coreAccountInfo The {@link CoreAccountInfo} for which the token is requested.
      * @param scope OAuth2 scope for which the requested token should be valid.
      * @return The OAuth2 access token as an AccessTokenData with a string and an expiration time.
      */
     @WorkerThread
-    AccessTokenData getAccessToken(Account account, String scope) throws AuthException;
+    AccessTokenData getAccessToken(CoreAccountInfo coreAccountInfo, String scope)
+            throws AuthException;
 
     /**
      * Removes an OAuth2 access token from the cache with retries asynchronously.
@@ -108,6 +113,7 @@ public interface AccountManagerFacade {
 
     /**
      * Checks the child account status of the given account.
+     * TODO(crbug.com/1462264): Replace Account with CoreAccountId.
      *
      * @param account The account to check the child account status.
      * @param listener The listener is called when the status of the account

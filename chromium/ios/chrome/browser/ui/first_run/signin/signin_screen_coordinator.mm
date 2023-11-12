@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -31,10 +31,6 @@
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
 #import "ios/chrome/browser/ui/first_run/tos/tos_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/uma/uma_coordinator.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface SigninScreenCoordinator () <IdentityChooserCoordinatorDelegate,
                                        SigninScreenViewControllerDelegate,
@@ -104,6 +100,12 @@
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   self.authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
+  if (self.authenticationService->GetPrimaryIdentity(
+          signin::ConsentLevel::kSignin)) {
+    // Don't show the sign-in screen since the user is already signed in.
+    [_delegate screenWillFinishPresenting];
+    return;
+  }
   self.accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
   signin::IdentityManager* identityManager =
@@ -143,6 +145,12 @@
 }
 
 #pragma mark - Private
+
+- (void)stopUMACoordinator {
+  [self.UMACoordinator stop];
+  self.UMACoordinator.delegate = nil;
+  self.UMACoordinator = nil;
+}
 
 // Starts the coordinator to present the Add Account module.
 - (void)triggerAddAccount {
@@ -312,7 +320,7 @@
                         UMAReportingUserChoice:(BOOL)UMAReportingUserChoice {
   DCHECK(self.UMACoordinator);
   DCHECK_EQ(self.UMACoordinator, coordinator);
-  self.UMACoordinator = nil;
+  [self stopUMACoordinator];
   DCHECK(self.mediator);
   self.mediator.UMAReportingUserChoice = UMAReportingUserChoice;
 }

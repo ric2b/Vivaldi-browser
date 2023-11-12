@@ -44,23 +44,6 @@ namespace policy {
 
 namespace {
 
-// Precedence policies cannot be set at the user cloud level regardless of
-// affiliation status. This is done to prevent cloud users from potentially
-// giving themselves increased priority, causing a security issue.
-void IgnoreUserCloudPrecedencePolicies(PolicyMap* policies) {
-  for (auto* policy_name : metapolicy::kPrecedence) {
-    const PolicyMap::Entry* policy_entry = policies->Get(policy_name);
-    if (policy_entry && policy_entry->scope == POLICY_SCOPE_USER &&
-        policy_entry->source == POLICY_SOURCE_CLOUD) {
-      PolicyMap::Entry* policy_entry_mutable =
-          policies->GetMutable(policy_name);
-      policy_entry_mutable->SetIgnored();
-      policy_entry_mutable->AddMessage(PolicyMap::MessageType::kError,
-                                       IDS_POLICY_IGNORED_CHROME_PROFILE);
-    }
-  }
-}
-
 // Metrics should not be enforced so if this policy is set as mandatory
 // downgrade it to a recommended level policy.
 void DowngradeMetricsReportingToRecommendedPolicy(PolicyMap* policies) {
@@ -322,6 +305,10 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
   DefaultChromeAppsMigrator chrome_apps_migrator;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   for (auto* provider : providers_) {
+    if (!provider->is_active()) {
+      continue;
+    }
+
     PolicyBundle provided_bundle = provider->policies().Clone();
     IgnoreUserCloudPrecedencePolicies(&provided_bundle.Get(chrome_namespace));
     DowngradeMetricsReportingToRecommendedPolicy(
@@ -332,14 +319,14 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
     bundle.MergeFrom(provided_bundle);
   }
 
+  auto& chrome_policies = bundle.Get(chrome_namespace);
+
   // Merges all the mergeable policies
   base::flat_set<std::string> policy_lists_to_merge = GetStringListPolicyItems(
       bundle, chrome_namespace, key::kPolicyListMultipleSourceMergeList);
   base::flat_set<std::string> policy_dictionaries_to_merge =
       GetStringListPolicyItems(bundle, chrome_namespace,
                                key::kPolicyDictionaryMultipleSourceMergeList);
-
-  auto& chrome_policies = bundle.Get(chrome_namespace);
 
   // This has to be done after setting enterprise default values since it is
   // enabled by default for enterprise users.
@@ -480,6 +467,8 @@ void PolicyServiceImpl::MaybeNotifyPolicyDomainStatusChange(
     // If and when crbug.com/1221454 gets fixed, we should drop the WeakPtr
     // construction and checks here.
     const auto weak_this = weak_ptr_factory_.GetWeakPtr();
+    VLOG_POLICY(2, POLICY_PROCESSING)
+        << "PolicyService is initialized for domain: " << policy_domain;
     for (auto& observer : iter->second) {
       observer.OnPolicyServiceInitialized(policy_domain);
       if (!weak_this) {
@@ -511,6 +500,21 @@ void PolicyServiceImpl::CheckRefreshComplete() {
     callbacks.swap(refresh_callbacks_);
     for (auto& callback : callbacks)
       std::move(callback).Run();
+  }
+}
+
+// static
+void PolicyServiceImpl::IgnoreUserCloudPrecedencePolicies(PolicyMap* policies) {
+  for (auto* policy_name : metapolicy::kPrecedence) {
+    const PolicyMap::Entry* policy_entry = policies->Get(policy_name);
+    if (policy_entry && policy_entry->scope == POLICY_SCOPE_USER &&
+        policy_entry->source == POLICY_SOURCE_CLOUD) {
+      PolicyMap::Entry* policy_entry_mutable =
+          policies->GetMutable(policy_name);
+      policy_entry_mutable->SetIgnored();
+      policy_entry_mutable->AddMessage(PolicyMap::MessageType::kError,
+                                       IDS_POLICY_IGNORED_CHROME_PROFILE);
+    }
   }
 }
 

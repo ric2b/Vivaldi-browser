@@ -79,7 +79,7 @@ class VivaldiInvalidationService
   void UpdateInvalidatorState(invalidation::InvalidatorState state);
 
   GURL notification_server_url_;
-  raw_ptr<VivaldiAccountManager> account_manager_;
+  VivaldiAccountManager* account_manager_;
   NetworkContextProvider network_context_provider_;
 
   net::BackoffEntry websocket_backoff_;

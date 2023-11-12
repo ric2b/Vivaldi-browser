@@ -9,8 +9,8 @@
   <title>$i18n{title}</title>
   <link rel="stylesheet" href="../../../chromium/components/security_interstitials/core/common/resources/interstitial_core.css">
   <link rel="stylesheet" href="../../../chromium/components/security_interstitials/core/common/resources/interstitial_common.css">
-  <link rel="stylesheet" href="neterror.css">
-  <script src="../../../chromium/components/neterror/resources/neterror.js"></script>
+  <link rel="stylesheet" href="./neterror.css">
+  <script src="./neterror.js"></script>
   <script src="../../../chromium/components/security_interstitials/core/common/resources/interstitial_mobile_nav.js"></script>
   <script src="../../../chromium/components/neterror/resources/offline.js"></script>
   <script src="../../../chromium/components/neterror/resources/offline-sprite-definitions.js"></script>
@@ -144,5 +144,20 @@
       <audio id="offline-sound-reached" src="../../../chromium/components/neterror/resources/sounds/score-reached.mp3"></audio>
     </template>
   </div>
+
+  <if expr="not is_ios">
+    <div id="vivaldia" class="interstitial-wrapper hidden">
+      <div class="vivaldia-section">
+        <div>While you wait, try the most powerful in-browser game</div>
+        <div class="playbutton-holder">
+          <a class="link-button" onclick="launchVivaldiGame();">Play Vivaldia →</a>
+        </div>
+        <span class="logo-holder">
+          <img id="vivaldia-logo" src="./game_icon_loop.gif">
+        </span>
+      </div>
+    </div>
+  </if>
+
 </body>
 </html>

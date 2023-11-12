@@ -2,6 +2,7 @@
 
 #import "ios/panel/panel_button_cell.h"
 
+#import "ios/panel/panel_constants.h"
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
@@ -52,16 +53,16 @@
 - (void)configureCellWithIndex:(NSInteger)index {
   if (index == PanelPage::BookmarksPage)
       self.imageView.image = [UIImage
-                        imageNamed:@"bookmark_panel"];
+                        imageNamed:vPanelBookmarks];
   else if (index == PanelPage::ReadinglistPage)
       self.imageView.image = [UIImage
-                        imageNamed:@"readinglist_panel"];
+                        imageNamed:vPanelReadingList];
   else if (index == PanelPage::NotesPage)
       self.imageView.image = [UIImage
-                        imageNamed:@"notes_panel"];
+                        imageNamed:vPanelNotes];
   else if (index == PanelPage::HistoryPage)
       self.imageView.image = [UIImage
-                        imageNamed:@"history_panel"];
+                        imageNamed:vPanelHistory];
 }
 
 - (void)configureHighlightedCellWithIndex:(NSInteger)index {

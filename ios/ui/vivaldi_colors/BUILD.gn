@@ -12,6 +12,4 @@ source_set("vivaldi_colors") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

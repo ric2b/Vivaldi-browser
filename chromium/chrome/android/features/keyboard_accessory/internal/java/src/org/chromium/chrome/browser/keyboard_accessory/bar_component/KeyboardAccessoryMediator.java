@@ -17,7 +17,6 @@ import static org.chromium.chrome.browser.keyboard_accessory.bar_component.Keybo
 
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -45,6 +44,9 @@ import org.chromium.ui.modelutil.PropertyObservable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+
+// Vivaldi
+import org.vivaldi.browser.screen_lock.ScreenLock;
 
 /**
  * This is the second part of the controller of the keyboard accessory component.
@@ -212,6 +214,14 @@ class KeyboardAccessoryMediator
                 -> {
                     ManualFillingMetricsRecorder.recordActionSelected(
                             AccessoryAction.AUTOFILL_SUGGESTION);
+                    // Note(david@vivaldi.com): Before autofill trigger screen lock.
+                    if (ScreenLock.getInstance().canReauthenticate()) {
+                        ScreenLock.getInstance().reauthenticate(succeed -> {
+                            if (succeed) {
+                                delegate.suggestionSelected(pos);
+                            }
+                        });
+                    } else
                     delegate.suggestionSelected(pos);
                 },
                 result -> { delegate.deleteSuggestion(pos); });
@@ -328,7 +338,6 @@ class KeyboardAccessoryMediator
         return mModel.get(VISIBLE) && mTabSwitcher.getActiveTab() != null;
     }
 
-    @VisibleForTesting
     PropertyModel getModelForTesting() {
         return mModel;
     }

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.android.httpclient;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -65,11 +64,6 @@ public class SimpleHttpClientUnitTest {
         Mockito.verify(mNativeMock).init(mMockProfile);
     }
 
-    @After
-    public void tearDown() {
-        ThreadUtils.setThreadAssertsDisabledForTesting(false);
-    }
-
     @Test
     public void testDestroy() {
         mHttpClient.destroy();
@@ -91,14 +85,14 @@ public class SimpleHttpClientUnitTest {
         final byte[] requestBody = {};
         final String requestType = "requestType";
 
-        mHttpClient.send(JUnitTestGURLs.getGURL(JUnitTestGURLs.BLUE_1), requestType, requestBody,
-                headers, NetworkTrafficAnnotationTag.TRAFFIC_ANNOTATION_FOR_TESTS,
+        mHttpClient.send(JUnitTestGURLs.BLUE_1, requestType, requestBody, headers,
+                NetworkTrafficAnnotationTag.TRAFFIC_ANNOTATION_FOR_TESTS,
                 (response) -> responseCallback.notifyCalled());
 
         Mockito.verify(mNativeMock)
-                .sendNetworkRequest(eq(FAKE_NATIVE_POINTER),
-                        eq(JUnitTestGURLs.getGURL(JUnitTestGURLs.BLUE_1)), eq(requestType),
-                        eq(requestBody), mHeaderKeysCaptor.capture(), mHeaderValuesCaptor.capture(),
+                .sendNetworkRequest(eq(FAKE_NATIVE_POINTER), eq(JUnitTestGURLs.BLUE_1),
+                        eq(requestType), eq(requestBody), mHeaderKeysCaptor.capture(),
+                        mHeaderValuesCaptor.capture(),
                         eq(NetworkTrafficAnnotationTag.TRAFFIC_ANNOTATION_FOR_TESTS.getHashCode()),
                         any());
 

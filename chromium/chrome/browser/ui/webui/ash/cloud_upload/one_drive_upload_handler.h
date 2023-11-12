@@ -12,13 +12,14 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/types/expected.h"
 #include "chrome/browser/ash/file_manager/io_task_controller.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_notification_manager.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_url.h"
-#include "url/gurl.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
@@ -34,7 +35,7 @@ class OneDriveUploadHandler
       public base::RefCounted<OneDriveUploadHandler> {
  public:
   using UploadCallback =
-      base::OnceCallback<void(const storage::FileSystemURL&, int64_t)>;
+      base::OnceCallback<void(absl::optional<storage::FileSystemURL>, int64_t)>;
 
   // Starts the upload workflow for the file specified at construct time.
   static void Upload(Profile* profile,
@@ -54,9 +55,9 @@ class OneDriveUploadHandler
   void Run(UploadCallback callback);
 
   // Ends upload and runs Upload callback.
-  void OnEndUpload(const storage::FileSystemURL& uploaded_file_url,
-                   OfficeFilesUploadResult result,
-                   std::string error_message = "");
+  void OnEndUpload(
+      base::expected<storage::FileSystemURL, std::string> url_or_error,
+      OfficeFilesUploadResult result_metric);
 
   // IOTaskController::Observer:
   void OnIOTaskStatus(
@@ -65,6 +66,17 @@ class OneDriveUploadHandler
   // Find the base::File::Error error returned by the IO Task and convert it to
   // an appropriate error notification.
   void ShowIOTaskError(const file_manager::io_task::ProgressStatus& status);
+
+  // Show the correct error notification for
+  // base::File::FILE_ERROR_ACCESS_DENIED. Request ODFS metadata and show the
+  // correct notification in the |OnGetReauthenticationRequired| callback.
+  void ShowAccessDeniedError();
+
+  // Check if reauthentication to OneDrive is required from the ODFS metadata
+  // and show the reuathentication is required notification if true. Otherwise
+  // show the generic access error notification.
+  void OnGetReauthenticationRequired(
+      base::expected<ODFSMetadata, base::File::Error> metadata_or_error);
 
   // OnGetActions callback which checks the |result| to see if reauthentication
   // is required. If reauthentication is required, show the reauthentication

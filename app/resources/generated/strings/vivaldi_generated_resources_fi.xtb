@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Palauta asetukset</translation>
 <translation id="4478664379124702289">Tallenna lin&amp;kki nimellä…</translation>
 <translation id="4520385623207007473">Käytössä olevat evästeet</translation>
+<translation id="456449593072900590">Poista suljettaessa</translation>
 <translation id="4580596421317071374">Tällä laitteella salasanojen tallennuskohde on <ph name="GOOGLE_PASSWORD_MANAGER" /> .</translation>
 <translation id="4593021220803146968">&amp;Avaa <ph name="URL" /></translation>
 <translation id="4595560905247879544">Vain ylläpitäjä (<ph name="CUSTODIAN_NAME" />) voi muokata sovelluksia ja laajennuksia.</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Väri</translation>
 <translation id="5485102783864353244">Lisää sovellus</translation>
 <translation id="5486561344817861625">Simuloi selaimen uudelleenkäynnistys</translation>
-<translation id="5487521232677179737">Tyhjennä tiedot</translation>
 <translation id="5509693895992845810">Ta&amp;llenna nimellä…</translation>
 <translation id="5521078259930077036">Onko tämä odottamasi aloitussivu?</translation>
 <translation id="5542132724887566711">Profiili</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Tuntematon</translation>
 <translation id="5851868085455377790">Myöntäjä</translation>
 <translation id="5860491529813859533">Ota käyttöön</translation>
-<translation id="5867841422488265304">Etsi tai kirjoita verkko-osoite</translation>
 <translation id="5910363049092958439">Tallenna &amp;kuva nimellä…</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bittiä):
 <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7287143125007575591">Käyttö estettiin.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Tarkista oikeinkirjoitus kirjoittaessa</translation>
-<translation id="73786666777299047">Avaa Chrome Web Store</translation>
 <translation id="7385854874724088939">Tulostuksessa meni jokin vikaan. Tarkista tulostimesi ja yritä uudelleen.</translation>
 <translation id="7412226954991670867">GPU-muisti</translation>
 <translation id="7421925624202799674">&amp;Näytä sivun lähdekoodi</translation>
@@ -442,6 +440,7 @@ Tallenna avaintiedosto turvalliseen pakkaan. Sitä tarvitaan uusien laajennusver
 <translation id="8382913212082956454">Kopioi s&amp;ähköpostiosoite</translation>
 <translation id="8434480141477525001">NaCl-vianetsintäportti</translation>
 <translation id="8449008133205184768">Liitä ja sovita tyyli</translation>
+<translation id="8477178913400731244">Poista tiedot</translation>
 <translation id="8477384620836102176">&amp;Yleistä</translation>
 <translation id="8496717697661868878">Suorita tämä lisäosa</translation>
 <translation id="8512476990829870887">Lopeta prosessi</translation>

@@ -9,7 +9,10 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/apps/app_service/app_icon/icon_effects.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_icon_cache.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
@@ -47,13 +50,14 @@ using IconDownloadedCallback =
 // including retrieving any data required to populate a promise app object.
 // These promise apps will result in a "promise icon" that the user sees in the
 // Launcher/ Shelf, which represents a pending or active app installation.
-class PromiseAppService {
+class PromiseAppService : public AppRegistryCache::Observer {
  public:
-  explicit PromiseAppService(Profile* profile);
+  explicit PromiseAppService(Profile* profile,
+                             AppRegistryCache& app_registry_cache);
 
   PromiseAppService(const PromiseAppService&) = delete;
   PromiseAppService& operator=(const PromiseAppService&) = delete;
-  ~PromiseAppService();
+  ~PromiseAppService() override;
 
   apps::PromiseAppRegistryCache* PromiseAppRegistryCache();
 
@@ -64,15 +68,30 @@ class PromiseAppService {
   // request to the Almanac API to retrieve additional promise app info.
   void OnPromiseApp(PromiseAppPtr delta);
 
+  // Retrieves the icon for a package ID and applies any specified effects.
+  void LoadIcon(const PackageId& package_id,
+                int32_t size_hint_in_dip,
+                apps::IconEffects icon_effects,
+                apps::LoadIconCallback callback);
+
+  // apps::AppRegistryCache::Observer overrides:
+  void OnAppUpdate(const apps::AppUpdate& update) override;
+  void OnAppRegistryCacheWillBeDestroyed(
+      apps::AppRegistryCache* cache) override;
+
   // Allows us to skip Almanac implementation when running unit tests that don't
   // care about Almanac responses.
   void SetSkipAlmanacForTesting(bool skip_almanac);
 
-  // Allows us to set a fake image fetcher for mock responses in unit tests.
-  void SetImageFetcherForTesting(
-      std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher);
+  // Allows tests to skip the check of whether the user has an official Google
+  // API key so that we can trigger an Almanac query.
+  void SetSkipApiKeyCheckForTesting(bool skip_almanac);
 
  private:
+  // Remove all details about a promise app from the PromiseAppRegistryCache and
+  // PromiseAppIconCache.
+  void RemovePromiseApp(const PackageId& package_id);
+
   // Update a promise app's fields with the info retrieved from the Almanac API.
   void OnGetPromiseAppInfoCompleted(
       const PackageId& package_id,
@@ -81,9 +100,12 @@ class PromiseAppService {
   // Adds an icon to the icon cache and marks the corresponding promise app
   // as ready to show after all the icons are downloaded.
   void OnIconDownloaded(const PackageId& package_id,
-                        PromiseAppIconPtr promise_app_icon,
                         const gfx::Image& image,
                         const image_fetcher::RequestMetadata& metadata);
+
+  // Check whether there is a registered app in AppRegistryCache with the
+  // specified package ID.
+  bool IsRegisteredInAppRegistryCache(const PackageId& package_id);
 
   // The cache that contains all the promise apps in the system.
   std::unique_ptr<apps::PromiseAppRegistryCache> promise_app_registry_cache_;
@@ -98,12 +120,19 @@ class PromiseAppService {
   // Fetches images from a given URL.
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
 
+  raw_ptr<apps::AppRegistryCache> app_registry_cache_;
+
   // Keeps track of how many icon downloads we are waiting on for each promise
   // app. When all downloads are completed, we can proceed to set (or not set)
   // the promise app as ready to show to the user.
   std::map<PackageId, int> pending_download_count_;
 
+  base::ScopedObservation<apps::AppRegistryCache,
+                          apps::AppRegistryCache::Observer>
+      app_registry_cache_observation_{this};
+
   bool skip_almanac_for_testing_ = false;
+  bool skip_api_key_check_for_testing_ = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

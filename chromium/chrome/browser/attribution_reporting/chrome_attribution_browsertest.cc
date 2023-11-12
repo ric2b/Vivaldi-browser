@@ -36,11 +36,8 @@
 class ChromeAttributionBrowserTest : public InProcessBrowserTest {
  public:
   ChromeAttributionBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/
-        {features::kPrivacySandboxAdsAPIsOverride,
-         privacy_sandbox::kEnforcePrivacySandboxAttestations},
-        /*disabled_features=*/{});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kPrivacySandboxAdsAPIsOverride);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -159,9 +156,15 @@ IN_PROC_BROWSER_TEST_F(ChromeAttributionBrowserTest,
   ASSERT_TRUE(server_.Start());
 
   auto* new_contents = RegisterSourceWithNavigation();
+
+  content::WebContentsConsoleObserver console_observer(new_contents);
+  console_observer.SetPattern(
+      "Attestation check for Attribution Reporting on * failed.");
+
   RegisterTrigger(new_contents);
 
   expected_report.WaitForRequest();
+  EXPECT_TRUE(console_observer.messages().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeAttributionBrowserTest,
@@ -175,6 +178,11 @@ IN_PROC_BROWSER_TEST_F(ChromeAttributionBrowserTest,
   ASSERT_TRUE(server_.Start());
 
   auto* new_contents = RegisterSourceWithNavigation();
+
+  content::WebContentsConsoleObserver console_observer(new_contents);
+  console_observer.SetPattern(
+      "Attestation check for Attribution Reporting on * failed.");
+
   RegisterTrigger(new_contents);
 
   // Wait to 2 seconds as reports should be received by then and we want to
@@ -184,4 +192,7 @@ IN_PROC_BROWSER_TEST_F(ChromeAttributionBrowserTest,
   timer.Start(FROM_HERE, base::Seconds(2), loop_.QuitClosure());
   loop_.Run();
   EXPECT_FALSE(expected_report.HasRequest());
+
+  ASSERT_TRUE(console_observer.Wait());
+  EXPECT_FALSE(console_observer.messages().empty());
 }

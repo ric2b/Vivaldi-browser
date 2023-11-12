@@ -32,6 +32,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -46,6 +47,12 @@
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
+
+// Vivaldi
+#include "base/big_endian.h"
+#include "components/base32/base32.h"
+// End Vivaldi
+
 
 namespace {
 
@@ -195,10 +202,12 @@ bool IsTemplateParameterString(const std::string& param) {
 std::string YandexSearchPathFromDeviceFormFactor() {
   switch (ui::GetDeviceFormFactor()) {
     case ui::DEVICE_FORM_FACTOR_DESKTOP:
+    case ui::DEVICE_FORM_FACTOR_TV:
       return "search/";
     case ui::DEVICE_FORM_FACTOR_PHONE:
       return "search/touch/";
     case ui::DEVICE_FORM_FACTOR_TABLET:
+    case ui::DEVICE_FORM_FACTOR_AUTOMOTIVE:
       return "search/pad/";
   }
   NOTREACHED();
@@ -807,9 +816,11 @@ bool TemplateURLRef::ParseParameter(size_t start,
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
     url->insert(start, "PC=ATVE&FORM=VEVA03");
 #elif BUILDFLAG(IS_WIN)
-    url->insert(start, "PC=ATVB&FORM=VBRO01");
-#else //Linux, Mac
-    url->insert(start, "PC=ATVB&FORM=VBRO02");
+    url->insert(start, "PC=ATVB&FORM=VRBO01");
+    replacements->push_back(Replacement(VIVALDI_BING_PTAG, start));
+#else  // Linux, Mac
+    url->insert(start, "PC=ATVB&FORM=VRBO02");
+    replacements->push_back(Replacement(VIVALDI_BING_PTAG, start));
 #endif
   } else if (parameter == "ddg:Referral") {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
@@ -1038,6 +1049,7 @@ std::string TemplateURLRef::HandleReplacements(
     const SearchTermsArgs& search_terms_args,
     const SearchTermsData& search_terms_data,
     PostContent* post_content) const {
+  TRACE_EVENT0("omnibox", "TemplateURLRef::HandleReplacement");
   if (replacements_.empty()) {
     if (!post_params_.empty())
       EncodeFormData(post_params_, post_content);
@@ -1125,8 +1137,10 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_ASSISTED_QUERY_STATS: {
         DCHECK(!replacement.is_post_param);
+        const size_t searchbox_stats_size =
+            search_terms_args.searchbox_stats.ByteSizeLong();
         if (!search_terms_args.assisted_query_stats.empty()) {
-          DCHECK(search_terms_args.searchbox_stats.ByteSizeLong() > 0)
+          DCHECK(searchbox_stats_size > 0)
               << "searchbox_stats must be set when assisted_query_stats is.";
           // Get the base URL without substituting AQS and gs_lcrp to avoid
           // infinite recursion and unwanted replacement respectively. We need
@@ -1151,7 +1165,7 @@ std::string TemplateURLRef::HandleReplacements(
           }
         }
 
-        if (search_terms_args.searchbox_stats.ByteSizeLong() > 0) {
+        if (searchbox_stats_size > 0) {
           DCHECK(!search_terms_args.assisted_query_stats.empty())
               << "assisted_query_stats must be set when searchbox_stats is.";
           // Get the base URL without substituting gs_lcrp and AQS to avoid
@@ -1167,22 +1181,22 @@ std::string TemplateURLRef::HandleReplacements(
                                            search_terms_data, nullptr));
           if (base_url.SchemeIsCryptographic() &&
               base::FeatureList::IsEnabled(omnibox::kReportSearchboxStats)) {
-            std::string serialized_searchbox_stats;
-            search_terms_args.searchbox_stats.SerializeToString(
-                &serialized_searchbox_stats);
-            if (!serialized_searchbox_stats.empty()) {
-              std::string encoded_searchbox_stats;
-              base::Base64UrlEncode(serialized_searchbox_stats,
-                                    base::Base64UrlEncodePolicy::OMIT_PADDING,
-                                    &encoded_searchbox_stats);
-              HandleReplacement("gs_lcrp", encoded_searchbox_stats, replacement,
-                                &url);
-              base::UmaHistogramCounts1000(
-                  "Omnibox.SearchboxStats.Length",
-                  static_cast<int>(encoded_searchbox_stats.length()));
-            } else {
-              base::UmaHistogramCounts1000("Omnibox.SearchboxStats.Length", 0);
-            }
+            TRACE_EVENT0(
+                "omnibox",
+                "TemplateURLRef::HandleReplacement:serialize_searchbox_stats");
+            std::vector<uint8_t> serialized_searchbox_stats(
+                searchbox_stats_size);
+            search_terms_args.searchbox_stats.SerializeWithCachedSizesToArray(
+                &serialized_searchbox_stats[0]);
+            std::string encoded_searchbox_stats;
+            base::Base64UrlEncode(serialized_searchbox_stats,
+                                  base::Base64UrlEncodePolicy::OMIT_PADDING,
+                                  &encoded_searchbox_stats);
+            HandleReplacement("gs_lcrp", encoded_searchbox_stats, replacement,
+                              &url);
+            base::UmaHistogramCounts1000(
+                "Omnibox.SearchboxStats.Length",
+                static_cast<int>(encoded_searchbox_stats.length()));
           }
         }
         break;
@@ -1481,6 +1495,27 @@ std::string TemplateURLRef::HandleReplacements(
                             search_terms_args.image_translate_target_locale,
                             replacement, &url);
         }
+        break;
+      }
+
+      case VIVALDI_BING_PTAG: {
+        std::bitset<40> ptag_value;
+        if (search_terms_args.vivaldi_ad_blocking_state) {
+          ptag_value.set(0);
+          for (size_t i = 0;
+               i < search_terms_args.vivaldi_ad_blocking_state->size(); i++)
+            ptag_value[i + 1] =
+                search_terms_args.vivaldi_ad_blocking_state.value()[i];
+        }
+
+        char ptag_bytes[8];
+        base::WriteBigEndian(ptag_bytes, ptag_value.to_ullong());
+        std::string ptag = "ATVB";
+        ptag.append(
+            base32::Base32Encode(std::string_view(ptag_bytes + 3, 5),
+                                 base32::Base32EncodePolicy::OMIT_PADDING));
+
+        HandleReplacement("PTAG", ptag, replacement, &url);
         break;
       }
 

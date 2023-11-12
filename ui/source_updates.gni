@@ -101,6 +101,8 @@ if (!is_android) {
       "//vivaldi/ui/views/controls/mute_button.h",
       "//vivaldi/ui/views/controls/video_progress.cc",
       "//vivaldi/ui/views/controls/video_progress.h",
+      "//vivaldi/ui/views/controls/volume_slider.cc",
+      "//vivaldi/ui/views/controls/volume_slider.h",
     ]
     deps += [
       "//content/public/common:interfaces",

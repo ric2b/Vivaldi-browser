@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Ynstellingen werstellen</translation>
 <translation id="4478664379124702289">Bewarje &amp;keppeling as...</translation>
 <translation id="4520385623207007473">Brûkte koekjes</translation>
+<translation id="456449593072900590">Wiskje by it ferlitten</translation>
 <translation id="4580596421317071374">Wachtwurden wurde bewarre yn <ph name="GOOGLE_PASSWORD_MANAGER" /> op dit apparaat.</translation>
 <translation id="4593021220803146968">&amp;Gean nei <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps en tafoegings kinne allinne feroare wurde troch de behearder (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Kleur</translation>
 <translation id="5485102783864353244">App taheakje</translation>
 <translation id="5486561344817861625">Sneuper werstart simulearje</translation>
-<translation id="5487521232677179737">Gegevens wiskje</translation>
 <translation id="5509693895992845810">Bewarje &amp;as...</translation>
 <translation id="5521078259930077036">Is dit de startside dy't jo ferwachte?</translation>
 <translation id="5542132724887566711">Profyl</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Unbekend</translation>
 <translation id="5851868085455377790">Utjouwer</translation>
 <translation id="5860491529813859533">Ynskeakelje</translation>
-<translation id="5867841422488265304">Fier in adres of syk opdracht yn</translation>
 <translation id="5910363049092958439">Be&amp;warje ôfbylding as...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Tagong wegere.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Hifkje stavering ûnder it ynfieren</translation>
-<translation id="73786666777299047">Chrome Web Store iepenje</translation>
 <translation id="7385854874724088939">Der barde in flater by it printsjen. Kontrolearje jo printer en besykje nochris.</translation>
 <translation id="7412226954991670867">GPU ûnthâld</translation>
 <translation id="7421925624202799674">&amp;Side boarne besjen</translation>
@@ -442,6 +440,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8382913212082956454">&amp;E-post adres kopiearje</translation>
 <translation id="8434480141477525001">NaCI útbrek poarte</translation>
 <translation id="8449008133205184768">Plakke en styl oanpasse</translation>
+<translation id="8477178913400731244">Gegevens wiskje</translation>
 <translation id="8477384620836102176">&amp;Algemien</translation>
 <translation id="8496717697661868878">Dizze ynstekker útfiere</translation>
 <translation id="8512476990829870887">Proses eine litte</translation>

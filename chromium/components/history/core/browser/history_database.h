@@ -18,6 +18,7 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_annotations_database.h"
 #include "components/history/core/browser/visit_database.h"
+#include "components/history/core/browser/visited_link_database.h"
 #include "components/history/core/browser/visitsegment_database.h"
 #include "sql/database.h"
 #include "sql/init_status.h"
@@ -57,6 +58,7 @@ class HistoryDatabase : public DownloadDatabase,
                         public URLDatabase,
                         public VisitDatabase,
                         public VisitAnnotationsDatabase,
+                        public VisitedLinkDatabase,
                         public VisitSegmentDatabase,
                         public VivaldiHistoryDatabase {
  public:

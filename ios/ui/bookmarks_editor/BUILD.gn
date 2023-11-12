@@ -30,6 +30,4 @@ source_set("vivaldi_bookmarks_editor") {
     "Foundation.framework",
     "UIKit.framework",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }

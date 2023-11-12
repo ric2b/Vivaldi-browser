@@ -23,14 +23,14 @@
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/managed_ui.h"
-#include "chrome/browser/ui/signin_view_controller.h"
+#include "chrome/browser/ui/signin/signin_view_controller.h"
 #include "chrome/browser/ui/webui/management/management_ui_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/google_chrome_strings.h"
+#include "components/policy/core/browser/signin/profile_separation_policies.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/strings/grit/components_strings.h"
@@ -70,9 +70,8 @@ std::string GetManagedAccountTitleWithEmail(
 #if !BUILDFLAG(IS_CHROMEOS)
   absl::optional<std::string> account_manager =
       chrome::GetAccountManagerIdentity(profile);
-  auto profile_separation_state =
-      signin_util::GetProfileSeparationPolicyState(profile);
-  if (profile_separation_state.Empty()) {
+
+  if (!signin_util::IsProfileSeparationEnforcedByProfile(profile)) {
     // The profile is managed but does not enforce profile separation. The
     // intercepted account requires it.
     if (account_manager && !account_manager->empty()) {
@@ -86,9 +85,8 @@ std::string GetManagedAccountTitleWithEmail(
     return l10n_util::GetStringFUTF8(
         IDS_ENTERPRISE_PROFILE_WELCOME_ACCOUNT_EMAIL_MANAGED_BY, email,
         base::UTF8ToUTF16(account_domain_name));
-  } else if (profile_separation_state.Has(
-                 signin_util::ProfileSeparationPolicyState::
-                     kEnforcedOnMachineLevel)) {
+  } else if (profile->GetPrefs()->GetBoolean(
+                 prefs::kManagedAccountsSigninRestrictionScopeMachine)) {
     // The device is managed and requires profile separation.
     absl::optional<std::string> device_manager =
         chrome::GetDeviceManagerIdentity();
@@ -102,9 +100,6 @@ std::string GetManagedAccountTitleWithEmail(
           email);
     }
   } else {
-    DCHECK(profile_separation_state.Has(
-        signin_util::ProfileSeparationPolicyState::kStrict));
-    // The profile is managed and requires profile separation.
     DCHECK(account_manager);
     DCHECK(!account_manager->empty());
     return l10n_util::GetStringFUTF8(

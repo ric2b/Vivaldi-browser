@@ -4,7 +4,6 @@
 
 #include "services/network/public/cpp/cors/cors.h"
 
-#include <cctype>
 #include <set>
 #include <vector>
 
@@ -21,6 +20,7 @@
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/request_mode.h"
+#include "third_party/abseil-cpp/absl/strings/ascii.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -43,13 +43,14 @@ bool IsSimilarToDoubleABNF(const std::string& header_value) {
   if (header_value.empty())
     return false;
   char first_char = header_value.at(0);
-  if (!isdigit(first_char))
+  if (!absl::ascii_isdigit(static_cast<unsigned char>(first_char))) {
     return false;
+  }
 
   bool period_found = false;
   bool digit_found_after_period = false;
   for (char ch : header_value) {
-    if (isdigit(ch)) {
+    if (absl::ascii_isdigit(static_cast<unsigned char>(ch))) {
       if (period_found) {
         digit_found_after_period = true;
       }
@@ -74,8 +75,9 @@ bool IsSimilarToIntABNF(const std::string& header_value) {
     return false;
 
   for (char ch : header_value) {
-    if (!isdigit(ch))
+    if (!absl::ascii_isdigit(static_cast<unsigned char>(ch))) {
       return false;
+    }
   }
   return true;
 }
@@ -132,6 +134,8 @@ const char kAccessControlRequestHeaders[] = "Access-Control-Request-Headers";
 const char kAccessControlRequestMethod[] = "Access-Control-Request-Method";
 const char kAccessControlRequestPrivateNetwork[] =
     "Access-Control-Request-Private-Network";
+const char kPrivateNetworkDeviceId[] = "Private-Network-Access-ID";
+const char kPrivateNetworkDeviceName[] = "Private-Network-Access-Name";
 
 }  // namespace header_names
 
@@ -356,6 +360,16 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
       // although there may be internal UI in the future.
       // https://wicg.github.io/user-preference-media-features-headers/#sec-ch-prefers-reduced-motion
       "sec-ch-prefers-reduced-motion",
+      // The `Sec-CH-UA-Form-Factor` header field provides information on the
+      // form factor of the user agent device.
+      "sec-ch-ua-form-factor",
+      // The `Sec-CH-Prefers-Reduced-Transparency` header field is modeled after
+      // the prefers-reduced-transparency user preference media feature. It
+      // reflects the user’s desire that the page minimizes the amount of
+      // transparency it uses. This is currently pulled from operating system
+      // preferences, although there may be internal UI in the future.
+      // https://wicg.github.io/user-preference-media-features-headers/#sec-ch-prefers-reduced-transparency
+      "sec-ch-prefers-reduced-transparency",
   });
 
   // Check if the name of the header to send is safe.

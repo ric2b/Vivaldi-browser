@@ -5,8 +5,8 @@
 #import <memory>
 #import <vector>
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
-#import "base/mac/foundation_util.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
@@ -292,7 +292,7 @@ using vivaldi::NoteNode;
         }
       }
       const NoteNode* folder;
-      NoteFolderItem* folderItem = base::mac::ObjCCast<NoteFolderItem>(
+      NoteFolderItem* folderItem = base::apple::ObjCCast<NoteFolderItem>(
         [self.tableViewModel itemAtIndexPath:indexPath]);
       folder = folderItem.noteNode;
       [self changeSelectedFolder:folder];

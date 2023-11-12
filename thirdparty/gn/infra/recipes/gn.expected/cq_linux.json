@@ -208,13 +208,13 @@
   },
   {
     "cmd": [],
-    "name": "rpmalloc"
+    "name": "jemalloc"
   },
   {
     "cmd": [
       "git",
       "init",
-      "[START_DIR]/rpmalloc"
+      "[START_DIR]/jemalloc"
     ],
     "luci_context": {
       "realm": {
@@ -228,7 +228,7 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.init",
+    "name": "jemalloc.init",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -237,11 +237,11 @@
     "cmd": [
       "git",
       "fetch",
-      "--tags",
-      "https://fuchsia.googlesource.com/third_party/github.com/mjansson/rpmalloc",
-      "+upstream/develop"
+      "https://fuchsia.googlesource.com/third_party/github.com/jemalloc/jemalloc.git",
+      "refs/tags/5.3.0",
+      "--depth=1"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc",
     "infra_step": true,
     "luci_context": {
       "realm": {
@@ -255,7 +255,7 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.fetch",
+    "name": "jemalloc.fetch",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -264,9 +264,9 @@
     "cmd": [
       "git",
       "checkout",
-      "668a7f81b588a985c6528b70674dbcc005d9cb75"
+      "FETCH_HEAD"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc",
     "infra_step": true,
     "luci_context": {
       "realm": {
@@ -280,22 +280,16 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.checkout",
+    "name": "jemalloc.checkout",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
     "cmd": [
-      "vpython3",
-      "-u",
-      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
-      "--json-output",
-      "/path/to/tmp/json",
-      "copy",
-      "[START_DIR]/rpmalloc/build/ninja/clang.py",
-      "/path/to/tmp/"
+      "autoconf"
     ],
+    "cwd": "[START_DIR]/jemalloc",
     "infra_step": true,
     "luci_context": {
       "realm": {
@@ -309,25 +303,17 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.read [START_DIR]/rpmalloc/build/ninja/clang.py",
+    "name": "jemalloc.autoconf",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@",
-      "@@@STEP_LOG_LINE@clang.py@CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']@@@",
-      "@@@STEP_LOG_END@clang.py@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
     "cmd": [
-      "vpython3",
-      "-u",
-      "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
-      "--json-output",
-      "/path/to/tmp/json",
-      "copy",
-      "CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']",
-      "[START_DIR]/rpmalloc/build/ninja/clang.py"
+      "mkdir",
+      "-p",
+      "[START_DIR]/jemalloc/build-linux-amd64"
     ],
-    "infra_step": true,
     "luci_context": {
       "realm": {
         "name": "gn:try"
@@ -340,37 +326,35 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.write [START_DIR]/rpmalloc/build/ninja/clang.py",
+    "name": "jemalloc.prepare linux-amd64 build",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@",
-      "@@@STEP_LOG_LINE@clang.py@CXXFLAGS = ['-Wall', '-Weverything', '-Wfoo']@@@",
-      "@@@STEP_LOG_END@clang.py@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
     "cmd": [],
-    "name": "rpmalloc.build rpmalloc-linux-amd64",
+    "name": "jemalloc.build jemalloc-linux-amd64",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
     "cmd": [
-      "python3",
-      "-u",
-      "[START_DIR]/rpmalloc/configure.py",
-      "-c",
-      "release",
-      "-a",
-      "x86-64",
-      "--lto"
+      "../configure",
+      "--build=x86_64-linux-gnu",
+      "--host=x86_64-linux-gnu",
+      "--disable-shared",
+      "--enable-static",
+      "--disable-syscall",
+      "--disable-stats"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc/build-linux-amd64",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
     "luci_context": {
@@ -385,22 +369,24 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.build rpmalloc-linux-amd64.configure",
+    "name": "jemalloc.build jemalloc-linux-amd64.configure",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
   },
   {
     "cmd": [
-      "[START_DIR]/cipd/ninja",
-      "lib/linux/release/x86-64/librpmallocwrap.a"
+      "make",
+      "-j8",
+      "build_lib_static"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc/build-linux-amd64",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
     "luci_context": {
@@ -415,35 +401,58 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.build rpmalloc-linux-amd64.ninja",
+    "name": "jemalloc.build jemalloc-linux-amd64.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
   },
   {
+    "cmd": [
+      "mkdir",
+      "-p",
+      "[START_DIR]/jemalloc/build-linux-arm64"
+    ],
+    "luci_context": {
+      "realm": {
+        "name": "gn:try"
+      },
+      "resultdb": {
+        "current_invocation": {
+          "name": "invocations/build:8945511751514863184",
+          "update_token": "token"
+        },
+        "hostname": "rdbhost"
+      }
+    },
+    "name": "jemalloc.prepare linux-arm64 build",
+    "~followup_annotations": [
+      "@@@STEP_NEST_LEVEL@1@@@"
+    ]
+  },
+  {
     "cmd": [],
-    "name": "rpmalloc.build rpmalloc-linux-arm64",
+    "name": "jemalloc.build jemalloc-linux-arm64",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
     "cmd": [
-      "python3",
-      "-u",
-      "[START_DIR]/rpmalloc/configure.py",
-      "-c",
-      "release",
-      "-a",
-      "arm64",
-      "--lto"
+      "../configure",
+      "--build=x86_64-linux-gnu",
+      "--host=aarch64-linux-gnu",
+      "--disable-shared",
+      "--enable-static",
+      "--disable-syscall",
+      "--disable-stats"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc/build-linux-arm64",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
     "luci_context": {
@@ -458,22 +467,24 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.build rpmalloc-linux-arm64.configure",
+    "name": "jemalloc.build jemalloc-linux-arm64.configure",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
   },
   {
     "cmd": [
-      "[START_DIR]/cipd/ninja",
-      "lib/linux/release/arm64/librpmallocwrap.a"
+      "make",
+      "-j8",
+      "build_lib_static"
     ],
-    "cwd": "[START_DIR]/rpmalloc",
+    "cwd": "[START_DIR]/jemalloc/build-linux-arm64",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "CXX": "[START_DIR]/cipd/bin/clang++",
+      "CXXFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -Wno-error",
       "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
     },
     "luci_context": {
@@ -488,7 +499,7 @@
         "hostname": "rdbhost"
       }
     },
-    "name": "rpmalloc.build rpmalloc-linux-arm64.ninja",
+    "name": "jemalloc.build jemalloc-linux-arm64.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -614,7 +625,7 @@
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",
       "--use-icf",
-      "--link-lib=[START_DIR]/rpmalloc/lib/linux/release/x86-64/librpmallocwrap.a"
+      "--link-lib=[START_DIR]/jemalloc/build-linux-amd64/lib/libjemalloc.a"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {
@@ -894,7 +905,7 @@
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",
       "--use-icf",
-      "--link-lib=[START_DIR]/rpmalloc/lib/linux/release/arm64/librpmallocwrap.a"
+      "--link-lib=[START_DIR]/jemalloc/build-linux-arm64/lib/libjemalloc.a"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {

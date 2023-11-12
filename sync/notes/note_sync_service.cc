@@ -8,11 +8,11 @@
 
 namespace sync_notes {
 
-NoteSyncService::NoteSyncService(
-    file_sync::SyncedFileStore* synced_file_store,
-    bool wipe_model_on_stopping_sync_with_clear_data)
+NoteSyncService::NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
+                                 syncer::WipeModelUponSyncDisabledBehavior
+                                     wipe_model_upon_sync_disabled_behavior)
     : note_model_type_processor_(synced_file_store,
-                                 wipe_model_on_stopping_sync_with_clear_data) {}
+                                 wipe_model_upon_sync_disabled_behavior) {}
 
 NoteSyncService::~NoteSyncService() = default;
 

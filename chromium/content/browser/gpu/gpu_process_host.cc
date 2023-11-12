@@ -96,9 +96,10 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include "base/win/access_token.h"
+#include "base/win/security_descriptor.h"
 #include "base/win/win_util.h"
 #include "sandbox/policy/win/sandbox_win.h"
-#include "sandbox/win/src/restricted_token_utils.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/window.h"
 #include "ui/gfx/win/rendering_window_manager.h"
@@ -297,6 +298,7 @@ static const char* const kSwitchNames[] = {
     switches::kGpuWatchdogTimeoutSeconds,
     switches::kUseCmdDecoder,
     switches::kForceVideoOverlays,
+    switches::kSkiaGraphiteBackend,
 #if BUILDFLAG(IS_ANDROID)
     switches::kEnableReachedCodeProfiler,
     switches::kReachedCodeSamplingIntervalUs,
@@ -497,6 +499,38 @@ class GpuSandboxedProcessLauncherDelegate
            gl::kGLImplementationDesktopName;
   }
 
+  bool CanLowIntegrityAccessDesktop() {
+    // Access required for UI thread to initialize (when user32.dll loads
+    // without win32k lockdown).
+    DWORD desired_access = DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS;
+
+    // Desktop is inherited by child process unless overridden, e.g. by sandbox.
+    HDESK hdesk = ::GetThreadDesktop(GetCurrentThreadId());
+    absl::optional<base::win::SecurityDescriptor> sd =
+        base::win::SecurityDescriptor::FromHandle(
+            hdesk, base::win::SecurityObjectType::kDesktop,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION);
+    if (!sd) {
+      return false;
+    }
+
+    absl::optional<base::win::AccessToken> token =
+        base::win::AccessToken::FromCurrentProcess(/*impersonation=*/true,
+                                                   TOKEN_ADJUST_DEFAULT);
+    if (!token) {
+      return false;
+    }
+
+    if (!token->SetIntegrityLevel(SECURITY_MANDATORY_LOW_RID)) {
+      return false;
+    }
+
+    absl::optional<base::win::AccessCheckResult> result = sd->AccessCheck(
+        *token, desired_access, base::win::SecurityObjectType::kDesktop);
+    return result && result->access_status;
+  }
+
   bool ShouldSetDelayedIntegrity() {
     if (UseOpenGLRenderer()) {
       return true;
@@ -504,7 +538,7 @@ class GpuSandboxedProcessLauncherDelegate
 
     // Desktop access is needed to load user32.dll, we can lower token in child
     // process after that's done.
-    if (sandbox::CanLowIntegrityAccessDesktop()) {
+    if (CanLowIntegrityAccessDesktop()) {
       return false;
     }
     return true;
@@ -1226,19 +1260,18 @@ bool GpuProcessHost::LaunchGpuProcess() {
   // https://crbug.com/590825
   // If you want a browser command-line switch passed to the GPU process
   // you need to add it to |kSwitchNames| at the beginning of this file.
-  cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
-                             std::size(kSwitchNames));
+  cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames);
   cmd_line->CopySwitchesFrom(
-      browser_command_line, switches::kGLSwitchesCopiedFromGpuProcessHost,
-      switches::kGLSwitchesCopiedFromGpuProcessHostNumSwitches);
+      browser_command_line,
+      {switches::kGLSwitchesCopiedFromGpuProcessHost,
+       switches::kGLSwitchesCopiedFromGpuProcessHostNumSwitches});
 
   if (browser_command_line.HasSwitch(switches::kDisableFrameRateLimit))
     cmd_line->AppendSwitch(switches::kDisableGpuVsync);
 
   std::vector<const char*> gpu_workarounds;
   gpu::GpuDriverBugList::AppendAllWorkarounds(&gpu_workarounds);
-  cmd_line->CopySwitchesFrom(browser_command_line, gpu_workarounds.data(),
-                             gpu_workarounds.size());
+  cmd_line->CopySwitchesFrom(browser_command_line, gpu_workarounds);
 
   // Because AppendExtraCommandLineSwitches is called here, we should call
   // LaunchWithoutExtraCommandLineSwitches() instead of Launch for gpu process

@@ -41,8 +41,6 @@ NSString *const SUSkippedMajorVersionKey = @"SUSkippedMajorVersion";
 NSString *const SUSkippedMajorSubreleaseVersionKey = @"SUSkippedMajorSubreleaseVersion";
 NSString *const SUScheduledCheckIntervalKey = @"SUScheduledCheckInterval";
 NSString *const SULastCheckTimeKey = @"SULastCheckTime";
-NSString *const SUExpectsDSASignatureKey = @"SUExpectsDSASignature";
-NSString *const SUExpectsEDSignatureKey = @"SUExpectsEDSignatureKey";
 NSString *const SUPublicDSAKeyKey = @"SUPublicDSAKey";
 NSString *const SUPublicDSAKeyFileKey = @"SUPublicDSAKeyFile";
 NSString *const SUPublicEDKeyKey = @"SUPublicEDKey";
@@ -59,6 +57,7 @@ NSString *const SUUpdateGroupIdentifierKey = @"SUUpdateGroupIdentifier";
 NSString *const SULastProfileSubmitDateKey = @"SULastProfileSubmissionDate";
 NSString *const SUPromptUserOnFirstLaunchKey = @"SUPromptUserOnFirstLaunch";
 NSString *const SUEnableJavaScriptKey = @"SUEnableJavaScript";
+NSString *const SUAllowedURLSchemesKey = @"SUAllowedURLSchemes";
 NSString *const SUFixedHTMLDisplaySizeKey = @"SUFixedHTMLDisplaySize";
 NSString *const SUDefaultsDomainKey = @"SUDefaultsDomain";
 NSString *const SUSparkleErrorDomain = @"SUSparkleErrorDomain";
@@ -74,12 +73,15 @@ NSString *const SURelaunchToolNameKey = @"SURelaunchToolName";
 NSString *const SUAppcastAttributeDeltaFrom = @"sparkle:deltaFrom";
 NSString *const SUAppcastAttributeDeltaFromSparkleExecutableSize = @"sparkle:deltaFromSparkleExecutableSize";
 NSString *const SUAppcastAttributeDeltaFromSparkleLocales = @"sparkle:deltaFromSparkleLocales";
+#if SPARKLE_BUILD_LEGACY_DSA_SUPPORT || GENERATE_APPCAST_BUILD_LEGACY_DSA_SUPPORT
 NSString *const SUAppcastAttributeDSASignature = @"sparkle:dsaSignature";
+#endif
 NSString *const SUAppcastAttributeEDSignature = @"sparkle:edSignature";
 NSString *const SUAppcastAttributeShortVersionString = @"sparkle:shortVersionString";
 NSString *const SUAppcastAttributeVersion = @"sparkle:version";
 NSString *const SUAppcastAttributeOsType = @"sparkle:os";
 NSString *const SUAppcastAttributeInstallationType = @"sparkle:installationType";
+NSString *const SUAppcastAttributeFormat = @"sparkle:format";
 
 NSString *const SUAppcastElementVersion = SUAppcastAttributeVersion;
 NSString *const SUAppcastElementShortVersionString = SUAppcastAttributeShortVersionString;

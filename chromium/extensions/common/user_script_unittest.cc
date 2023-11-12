@@ -219,7 +219,7 @@ TEST(ExtensionUserScriptTest, Pickle) {
   script1.add_exclude_url_pattern(exclude1);
   script1.add_exclude_url_pattern(exclude2);
 
-  const std::string kId = "_12";
+  const std::string kId = "_mc_12";
   script1.set_id(kId);
   const std::string kExtensionId = "foo";
   mojom::HostID id(mojom::HostID::HostType::kExtensions, kExtensionId);
@@ -255,6 +255,20 @@ TEST(ExtensionUserScriptTest, Pickle) {
 TEST(ExtensionUserScriptTest, Defaults) {
   UserScript script;
   ASSERT_EQ(mojom::RunLocation::kDocumentIdle, script.run_location());
+}
+
+// Verifies the correct source is returned for a script id with source prefix.
+TEST(ExtensionUserScriptTest, GetSourceForScriptID) {
+  std::string manifest_script_id = "_mc_manifest_script";
+  std::string content_script_id = "_dc_content_script";
+  std::string user_script_id = "_du_user_script";
+
+  EXPECT_EQ(UserScript::GetSourceForScriptID(manifest_script_id),
+            UserScript::Source::kStaticContentScript);
+  EXPECT_EQ(UserScript::GetSourceForScriptID(content_script_id),
+            UserScript::Source::kDynamicContentScript);
+  EXPECT_EQ(UserScript::GetSourceForScriptID(user_script_id),
+            UserScript::Source::kDynamicUserScript);
 }
 
 }  // namespace extensions

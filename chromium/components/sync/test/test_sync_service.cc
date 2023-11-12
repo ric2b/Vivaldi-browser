@@ -40,6 +40,11 @@ TestSyncService::~TestSyncService() = default;
 
 void TestSyncService::SetDisableReasons(DisableReasonSet disable_reasons) {
   disable_reasons_ = disable_reasons;
+  if (!disable_reasons_.Empty()) {
+    transport_state_ = TransportState::DISABLED;
+  } else if (transport_state_ == TransportState::DISABLED) {
+    transport_state_ = TransportState::ACTIVE;
+  }
 }
 
 void TestSyncService::SetTransportState(TransportState transport_state) {
@@ -145,13 +150,21 @@ void TestSyncService::SetDownloadStatusFor(
 }
 
 void TestSyncService::FireStateChanged() {
-  for (SyncServiceObserver& observer : observers_)
+  for (SyncServiceObserver& observer : observers_) {
     observer.OnStateChanged(this);
+  }
+}
+
+void TestSyncService::FirePaymentsIntegrationEnabledChanged() {
+  for (SyncServiceObserver& observer : observers_) {
+    observer.OnSyncPaymentsIntegrationEnabledChanged(this);
+  }
 }
 
 void TestSyncService::FireSyncCycleCompleted() {
-  for (SyncServiceObserver& observer : observers_)
+  for (SyncServiceObserver& observer : observers_) {
     observer.OnSyncCycleCompleted(this);
+  }
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -241,6 +254,11 @@ ModelTypeSet TestSyncService::GetActiveDataTypes() const {
   if (transport_state_ != TransportState::ACTIVE) {
     return ModelTypeSet();
   }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (sync_feature_disabled_via_dashboard_) {
+    return ModelTypeSet();
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return Difference(GetPreferredDataTypes(), failed_data_types_);
 }
 
@@ -334,17 +352,6 @@ SyncService::ModelTypeDownloadStatus TestSyncService::GetDownloadStatusFor(
 
 void TestSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {}
 
-void TestSyncService::AddTrustedVaultDecryptionKeysFromWeb(
-    const std::string& gaia_id,
-    const std::vector<std::vector<uint8_t>>& keys,
-    int last_key_version) {}
-
-void TestSyncService::AddTrustedVaultRecoveryMethodFromWeb(
-    const std::string& gaia_id,
-    const std::vector<uint8_t>& public_key,
-    int method_type_hint,
-    base::OnceClosure callback) {}
-
 bool TestSyncService::IsSyncFeatureConsideredRequested() const {
   return HasSyncConsent();
 }
@@ -353,5 +360,35 @@ void TestSyncService::Shutdown() {
   for (SyncServiceObserver& observer : observers_)
     observer.OnSyncShutdown(this);
 }
+
+void TestSyncService::SetTypesWithUnsyncedData(const ModelTypeSet& types) {
+  unsynced_types_ = types;
+}
+
+void TestSyncService::GetTypesWithUnsyncedData(
+    base::OnceCallback<void(ModelTypeSet)> cb) const {
+  std::move(cb).Run(unsynced_types_);
+}
+
+void TestSyncService::SetLocalDataDescriptions(
+    const std::map<ModelType, LocalDataDescription>& local_data_descriptions) {
+  local_data_descriptions_ = local_data_descriptions;
+}
+
+void TestSyncService::GetLocalDataDescriptions(
+    ModelTypeSet types,
+    base::OnceCallback<void(std::map<ModelType, LocalDataDescription>)>
+        callback) {
+  std::map<ModelType, LocalDataDescription> result;
+  for (ModelType type : types) {
+    if (auto it = local_data_descriptions_.find(type);
+        it != local_data_descriptions_.end()) {
+      result.insert(*it);
+    }
+  }
+  std::move(callback).Run(std::move(result));
+}
+
+void TestSyncService::TriggerLocalDataMigration(ModelTypeSet types) {}
 
 }  // namespace syncer

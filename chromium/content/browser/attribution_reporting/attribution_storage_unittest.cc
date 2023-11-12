@@ -32,6 +32,7 @@
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
@@ -56,6 +57,7 @@
 #include "net/base/schemeful_site.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -78,6 +80,7 @@ using ::testing::UnorderedElementsAre;
 
 using AttributionFilterData = ::attribution_reporting::FilterData;
 
+using ::attribution_reporting::FilterConfig;
 using ::attribution_reporting::FilterPair;
 using ::attribution_reporting::SuitableOrigin;
 using ::attribution_reporting::mojom::SourceType;
@@ -149,11 +152,13 @@ class AttributionStorageTest : public testing::Test {
       const AttributionTrigger& conversion) {
     // TOO(apaseltiner): Replace this logic with explicit setting of expected
     // values.
+    const base::Time trigger_time = source.source_time() + kReportDelay;
     auto event_trigger = base::ranges::find_if(
         conversion.registration().event_triggers,
         [&](const attribution_reporting::EventTriggerData& event_trigger) {
           return source.filter_data().Matches(
-              source.common_info().source_type(), event_trigger.filters);
+              source.common_info().source_type(), source.source_time(),
+              trigger_time, event_trigger.filters);
         });
     CHECK(event_trigger != conversion.registration().event_triggers.end());
 
@@ -163,7 +168,7 @@ class AttributionStorageTest : public testing::Test {
                              .Build(),
                          source)
         .SetTriggerData(event_trigger->data)
-        .SetReportTime(source.source_time() + kReportDelay)
+        .SetReportTime(trigger_time)
         .SetPriority(event_trigger->priority)
         .Build();
   }
@@ -245,16 +250,21 @@ TEST_F(AttributionStorageTest, ImpressionStoredAndRetrieved_ValuesIdentical) {
 }
 
 TEST_F(AttributionStorageTest, UniqueReportWindowsStored_ValuesIdentical) {
-  storage()->StoreSource(SourceBuilder()
-                             .SetExpiry(base::Days(30))
-                             .SetEventReportWindow(base::Days(15))
-                             .SetAggregatableReportWindow(base::Days(5))
-                             .Build());
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetExpiry(base::Days(30))
+          .SetEventReportWindows(
+              *attribution_reporting::EventReportWindows::CreateSingularWindow(
+                  base::Days(15)))
+          .SetAggregatableReportWindow(base::Days(5))
+          .Build());
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(CommonSourceInfoIs(
                   SourceBuilder()
                       .SetExpiry(base::Days(30))
-                      .SetEventReportWindow(base::Days(15))
+                      .SetEventReportWindows(
+                          *attribution_reporting::EventReportWindows::
+                              CreateSingularWindow(base::Days(15)))
                       .SetAggregatableReportWindow(base::Days(5))
                       .BuildCommonInfo())));
 }
@@ -343,15 +353,6 @@ TEST_F(AttributionStorageTest, ImpressionExpired_NoConversionsStored) {
             MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
 }
 
-TEST_F(AttributionStorageTest, ImpressionReportWindowPassed_NoReportGenerated) {
-  storage()->StoreSource(
-      SourceBuilder().SetEventReportWindow(base::Milliseconds(2)).Build());
-  task_environment_.FastForwardBy(base::Milliseconds(3));
-
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kReportWindowPassed,
-            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
-}
-
 TEST_F(AttributionStorageTest,
        AggregatableReportWindowPassed_NoReportGenerated) {
   SourceBuilder source_builder = TestAggregatableSourceProvider().GetBuilder();
@@ -402,6 +403,103 @@ TEST_F(AttributionStorageTest,
                     ReplacedEventLevelReportIs(absl::nullopt),
                     DroppedEventLevelReportIs(
                         Optional(EventLevelDataIs(TriggerDataIs(20u))))));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionWithSetMaxConversions_ConversionReportStored) {
+  storage()->StoreSource(
+      SourceBuilder().SetMaxEventLevelReports(kMaxConversions + 1).Build());
+
+  for (int i = 0; i < kMaxConversions; i++) {
+    EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+              MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+  }
+  // An additional conversion report should be created.
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+
+  // No additional conversion reports should be created.
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(
+                  TriggerBuilder().SetTriggerData(20).Build()),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kPriorityTooLow),
+                    ReplacedEventLevelReportIs(absl::nullopt),
+                    DroppedEventLevelReportIs(
+                        Optional(EventLevelDataIs(TriggerDataIs(20u))))));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionWithMaxConversionsSetToZero_NoReportGenerated) {
+  storage()->StoreSource(SourceBuilder().SetMaxEventLevelReports(0).Build());
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kExcessiveReports,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionReportWindowNotStarted_NoReportGenerated) {
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetEventReportWindows(
+              *attribution_reporting::EventReportWindows::CreateWindows(
+                  base::Milliseconds(1), {base::Days(30)}))
+          .Build());
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kReportWindowNotStarted,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionReportWindowsPassed_NoReportGenerated) {
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetEventReportWindows(
+              *attribution_reporting::EventReportWindows::CreateWindows(
+                  base::Milliseconds(0), {base::Milliseconds(1)}))
+          .Build());
+
+  task_environment_.FastForwardBy(base::Milliseconds(2));
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kReportWindowPassed,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionWithReportWindowsOverDefault_WindowsTruncated) {
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetEventReportWindows(
+              *attribution_reporting::EventReportWindows::CreateWindows(
+                  base::Seconds(0), {base::Days(10)}))
+          .SetExpiry(base::Days(5))
+          .Build());
+
+  ASSERT_THAT(storage()->GetActiveSources(),
+              ElementsAre(EventReportWindowsIs(
+                  attribution_reporting::EventReportWindows::CreateWindows(
+                      base::Seconds(0), {base::Days(5)}))));
+}
+
+TEST_F(AttributionStorageTest,
+       ImpressionWithReportWindowsStartGTEDefaultEnd_RegistrationFailure) {
+  auto source =
+      SourceBuilder()
+          .SetEventReportWindows(
+              *attribution_reporting::EventReportWindows::CreateWindows(
+                  base::Days(2), {base::Days(5)}))
+          .SetExpiry(base::Days(1))
+          .Build();
+  EXPECT_EQ(storage()->StoreSource(source).status,
+            StorableSource::Result::kEventReportWindowsInvalidStartTime);
+
+  source = SourceBuilder()
+               .SetEventReportWindows(
+                   *attribution_reporting::EventReportWindows::CreateWindows(
+                       base::Days(1), {base::Days(5)}))
+               .SetExpiry(base::Days(1))
+               .Build();
+  EXPECT_EQ(storage()->StoreSource(source).status,
+            StorableSource::Result::kEventReportWindowsInvalidStartTime);
 }
 
 TEST_F(AttributionStorageTest, OneConversion_OneReportScheduled) {
@@ -634,6 +732,19 @@ TEST_F(AttributionStorageTest, GetAttributionReportsMultipleTimes_SameResult) {
 
   // Expect that |GetAttributionReports()| did not delete any conversions.
   EXPECT_EQ(first_call_reports, second_call_reports);
+}
+
+TEST_F(AttributionStorageTest, ExceedsChannelCapacity) {
+  delegate()->set_channel_capacity(6.51);
+
+  EXPECT_EQ(storage()->StoreSource(SourceBuilder().Build()).status,
+            StorableSource::Result::kSuccess);
+
+  EXPECT_EQ(storage()
+                ->StoreSource(
+                    SourceBuilder().SetSourceType(SourceType::kEvent).Build())
+                .status,
+            StorableSource::Result::kExceedsMaxChannelCapacity);
 }
 
 TEST_F(AttributionStorageTest, MaxImpressionsPerOrigin_LimitsStorage) {
@@ -1208,6 +1319,63 @@ TEST_F(AttributionStorageTest,
                       DefaultAggregatableHistogramContributions()))));
 }
 
+TEST_F(AttributionStorageTest,
+       AttributeFalseImpression_OtherSourceDeactivated) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      blink::features::kConversionMeasurement,
+      {{"source_deactivation_after_filtering", "true"}});
+
+  storage()->StoreSource(SourceBuilder().SetSourceEventId(7).Build());
+
+  task_environment_.FastForwardBy(base::Milliseconds(1));
+  const base::Time fake_report_time = base::Time::Now() + kReportDelay;
+  const base::Time fake_trigger_time = fake_report_time - base::Microseconds(1);
+
+  delegate()->set_randomized_response(
+      std::vector<AttributionStorageDelegate::FakeReport>{
+          {.trigger_data = 7,
+           .trigger_time = fake_trigger_time,
+           .report_time = fake_report_time}});
+  StoreSourceResult result =
+      storage()->StoreSource(SourceBuilder().SetSourceEventId(5).Build());
+  EXPECT_EQ(result.status, StorableSource::Result::kSuccessNoised);
+  delegate()->set_randomized_response(absl::nullopt);
+
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(2u));
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kFalselyAttributedSource,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+
+  EXPECT_THAT(storage()->GetActiveSources(), ElementsAre(SourceEventIdIs(5u)));
+}
+
+TEST_F(AttributionStorageTest,
+       AttributeFalseImpression_OtherSourceStillActive) {
+  storage()->StoreSource(SourceBuilder().SetSourceEventId(7).Build());
+
+  task_environment_.FastForwardBy(base::Milliseconds(1));
+  const base::Time fake_report_time = base::Time::Now() + kReportDelay;
+  const base::Time fake_trigger_time = fake_report_time - base::Microseconds(1);
+
+  delegate()->set_randomized_response(
+      std::vector<AttributionStorageDelegate::FakeReport>{
+          {.trigger_data = 7,
+           .trigger_time = fake_trigger_time,
+           .report_time = fake_report_time}});
+  StoreSourceResult result =
+      storage()->StoreSource(SourceBuilder().SetSourceEventId(5).Build());
+  EXPECT_EQ(result.status, StorableSource::Result::kSuccessNoised);
+  delegate()->set_randomized_response(absl::nullopt);
+
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(2u));
+
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kFalselyAttributedSource,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(2u));
+}
+
 TEST_F(AttributionStorageTest, NeverAttributeImpression_RateLimitsChanged) {
   delegate()->set_rate_limits(
       RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
@@ -1370,7 +1538,7 @@ TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimit) {
   delegate()->set_max_destinations_per_source_site_reporting_site(1);
   delegate()->set_delete_expired_sources_frequency(base::Milliseconds(10));
 
-  const base::TimeDelta expiry = base::Milliseconds(5);
+  const base::TimeDelta expiry = kReportDelay + base::Milliseconds(1);
 
   const auto store_source = [&](const char* source_origin,
                                 const char* reporting_origin,
@@ -1465,7 +1633,7 @@ TEST_F(AttributionStorageTest,
   delegate()->set_max_destinations_per_source_site_reporting_site(1);
   delegate()->set_delete_expired_rate_limits_frequency(base::Milliseconds(10));
 
-  const base::TimeDelta expiry = base::Milliseconds(5);
+  const base::TimeDelta expiry = kReportDelay + base::Milliseconds(1);
 
   storage()->StoreSource(
       SourceBuilder()
@@ -2209,6 +2377,8 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
               *attribution_reporting::AggregationKeys::FromKeys({{"0", 1}}))
           .Build());
 
+  task_environment_.FastForwardBy(kReportDelay);
+
   AttributionTrigger trigger1(
       /*reporting_origin=*/origin,
       attribution_reporting::TriggerRegistration(
@@ -2234,23 +2404,51 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
       {
           "filter mismatch",
           attribution_reporting::AggregatableDedupKey(
-              /*dedup_key=*/123, FilterPair(/*positive=*/{{
-                                                {"abc", {"456"}},
-                                            }},
-                                            /*negative=*/{})),
+              /*dedup_key=*/123,
+              FilterPair(/*positive=*/{*FilterConfig::Create({
+                             {"abc", {"456"}},
+                         })},
+                         /*negative=*/{})),
           false,
       },
       {
           "filter match",
           attribution_reporting::AggregatableDedupKey(
-              /*dedup_key=*/123, FilterPair(/*positive=*/{{
-                                                {"abc", {"123"}},
-                                            }},
-                                            /*negative=*/{})),
+              /*dedup_key=*/123,
+              FilterPair(/*positive=*/{*FilterConfig::Create({
+                             {"abc", {"123"}},
+                         })},
+                         /*negative=*/{})),
           true,
       },
       {
-          "negated filters match",
+          "filter match wih lookback_window",
+          attribution_reporting::AggregatableDedupKey(
+              /*dedup_key=*/123, FilterPair(
+                                     /*positive=*/{*FilterConfig::Create(
+                                         {
+                                             {"abc", {"123"}},
+                                         },
+                                         /*lookback_window=*/kReportDelay)},
+                                     /*negative=*/{})),
+          true,
+      },
+      {
+          "filter mismatch due to lookback_window",
+          attribution_reporting::AggregatableDedupKey(
+              /*dedup_key=*/123, FilterPair(
+                                     /*positive=*/{*FilterConfig::Create(
+
+                                         {
+                                             {"abc", {"123"}},
+                                         },
+                                         /*lookback_window=*/kReportDelay -
+                                             base::Microseconds(1))},
+                                     /*negative=*/{})),
+          false,
+      },
+      {
+          "negated filters false",
           attribution_reporting::AggregatableDedupKey(
               /*dedup_key=*/123,
               FilterPair(
@@ -2260,7 +2458,18 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
           false,
       },
       {
-          "negated filters mismatch",
+          "negated filters false due to lookback_window",
+          attribution_reporting::AggregatableDedupKey(
+              /*dedup_key=*/123,
+              FilterPair(
+                  /*positive=*/{},
+                  /*negative=*/attribution_reporting::FiltersForSourceType(
+                      SourceType::kEvent,
+                      /*lookback_window=*/kReportDelay))),
+          false,
+      },
+      {
+          "negated filters true",
           attribution_reporting::AggregatableDedupKey(
               /*dedup_key=*/123,
               FilterPair(
@@ -2270,12 +2479,25 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
           true,
       },
       {
+          "negated filters true with lookback_window",
+          attribution_reporting::AggregatableDedupKey(
+              /*dedup_key=*/123,
+              FilterPair(
+                  /*positive=*/{},
+                  /*negative=*/attribution_reporting::FiltersForSourceType(
+                      SourceType::kEvent,
+                      /*lookback_window=*/kReportDelay -
+                          base::Microseconds(1)))),
+          true,
+      },
+      {
           "null dedup key",
           attribution_reporting::AggregatableDedupKey(
-              /*dedup_key=*/absl::nullopt, FilterPair(/*positive=*/{{
-                                                          {"abc", {"123"}},
-                                                      }},
-                                                      /*negative=*/{})),
+              /*dedup_key=*/absl::nullopt,
+              FilterPair(/*positive=*/{*FilterConfig::Create({
+                             {"abc", {"123"}},
+                         })},
+                         /*negative=*/{})),
           false,
       },
   };
@@ -2907,10 +3129,21 @@ TEST_F(AttributionStorageTest,
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
               UnorderedElementsAre(
-                  AllOf(ReportSourceIs(SourceTypeIs(SourceType::kNavigation)),
-                        EventLevelDataIs(RandomizedTriggerRateIs(0.1))),
-                  AllOf(ReportSourceIs(SourceTypeIs(SourceType::kEvent)),
-                        EventLevelDataIs(RandomizedTriggerRateIs(0.1)))));
+                  ReportSourceIs(AllOf(SourceTypeIs(SourceType::kNavigation),
+                                       RandomizedResponseRateIs(0.1))),
+                  ReportSourceIs(AllOf(SourceTypeIs(SourceType::kEvent),
+                                       RandomizedResponseRateIs(0.1)))));
+}
+
+TEST_F(AttributionStorageTest, RandomizedResponseRatePerSourceUsed) {
+  delegate()->set_randomized_response_rate(0.1);
+  storage()->StoreSource(SourceBuilder().Build());
+  delegate()->set_randomized_response_rate(0.2);
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
+  EXPECT_THAT(
+      storage()->GetAttributionReports(base::Time::Max()),
+      UnorderedElementsAre(ReportSourceIs(RandomizedResponseRateIs(0.1))));
 }
 
 // Will return minimum of next event-level report and next aggregatable report
@@ -3059,15 +3292,17 @@ TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
           .SetFilterData(*AttributionFilterData::Create({{"abc", {"123"}}}))
           .Build());
 
+  task_environment_.FastForwardBy(kReportDelay);
+
   const std::vector<attribution_reporting::EventTriggerData> event_triggers = {
       // Filters don't match.
       attribution_reporting::EventTriggerData(
           /*data=*/11,
           /*priority=*/12,
           /*dedup_key=*/13,
-          FilterPair(/*positive=*/{{
+          FilterPair(/*positive=*/{*FilterConfig::Create({
                          {"abc", {"456"}},
-                     }},
+                     })},
                      /*negative=*/{})),
 
       // Filters match, but negated filters do not.
@@ -3075,22 +3310,24 @@ TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
           /*data=*/21,
           /*priority=*/22,
           /*dedup_key=*/23,
-          FilterPair(/*positive=*/{{
+          FilterPair(/*positive=*/{*FilterConfig::Create({
                          {"abc", {"123"}},
-                     }},
-                     /*negative=*/{{
+                     })},
+                     /*negative=*/{*FilterConfig::Create({
                          {"source_type", {"navigation"}},
-                     }})),
+                     })})),
 
       // Filters and negated filters match.
       attribution_reporting::EventTriggerData(
           /*data=*/31,
           /*priority=*/32,
           /*dedup_key=*/33,
-          FilterPair(/*positive=*/{{
-                         {"abc", {"123"}},
-                     }},
-                     /*negative=*/{{{"source_type", {"event"}}}})),
+          FilterPair(
+              /*positive=*/{*FilterConfig::Create({
+                  {"abc", {"123"}},
+              })},
+              /*negative=*/{*FilterConfig::Create(
+                  {{"source_type", {"event"}}})})),
 
       // Filters and negated filters match, but not the first event
       // trigger to match.
@@ -3098,12 +3335,12 @@ TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
           /*data=*/41,
           /*priority=*/42,
           /*dedup_key=*/43,
-          FilterPair(/*positive=*/{{
+          FilterPair(/*positive=*/{*FilterConfig::Create({
                          {"abc", {"123"}},
-                     }},
-                     /*negative=*/{{
+                     })},
+                     /*negative=*/{*FilterConfig::Create({
                          {"source_type", {"event"}},
-                     }})),
+                     })})),
   };
 
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
@@ -3159,12 +3396,14 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
               *attribution_reporting::AggregationKeys::FromKeys({{"0", 1}}))
           .Build());
 
+  task_environment_.FastForwardBy(kReportDelay);
+
   AttributionTrigger trigger1(
       /*reporting_origin=*/origin,
       attribution_reporting::TriggerRegistration(
-          FilterPair(/*positive=*/{{
+          FilterPair(/*positive=*/{*FilterConfig::Create({
                          {"abc", {"456"}},
-                     }},
+                     })},
                      /*negative=*/{}),
           /*debug_key=*/absl::nullopt,
           /*aggregatable_dedup_keys=*/{}, event_triggers,
@@ -3178,10 +3417,13 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
   AttributionTrigger trigger2(
       /*reporting_origin=*/origin,
       attribution_reporting::TriggerRegistration(
-          FilterPair(/*positive=*/{{
-                         {"abc", {"123"}},
-                     }},
-                     /*negative=*/{}),
+          FilterPair(
+              /*positive=*/{*FilterConfig::Create(
+                  {
+                      {"abc", {"123"}},
+                  },
+                  /*lookback_window=*/kReportDelay)},
+              /*negative=*/{}),
           /*debug_key=*/absl::nullopt,
           /*aggregatable_dedup_keys=*/{}, event_triggers,
           aggregatable_trigger_data, aggregatable_values,
@@ -3207,6 +3449,25 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
       /*verifications=*/{},
       /*is_within_fenced_frame=*/false);
 
+  AttributionTrigger trigger4(
+      /*reporting_origin=*/origin,
+      attribution_reporting::TriggerRegistration(
+          FilterPair(
+              /*positive=*/{*FilterConfig::Create(
+                  {
+                      {"abc", {"123"}},
+                  },
+                  /*lookback_window=*/kReportDelay - base::Microseconds(1))},
+              /*negative=*/{}),
+          /*debug_key=*/absl::nullopt,
+          /*aggregatable_dedup_keys=*/{}, event_triggers,
+          aggregatable_trigger_data, aggregatable_values,
+          /*debug_reporting=*/false,
+          /*aggregation_coordinator_origin=*/absl::nullopt,
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude),
+      /*destination_origin=*/origin, /*verifications=*/{},
+      /*is_within_fenced_frame=*/false);
+
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger1),
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::
@@ -3222,6 +3483,14 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
                         AttributionTrigger::AggregatableResult::kSuccess)));
 
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger3),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::
+                            kNoMatchingSourceFilterData),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::
+                            kNoMatchingSourceFilterData)));
+
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger4),
               AllOf(CreateReportEventLevelStatusIs(
                         AttributionTrigger::EventLevelResult::
                             kNoMatchingSourceFilterData),
@@ -3618,17 +3887,20 @@ TEST_F(AttributionStorageTest, MaxSourceReportingOriginsPerSite) {
       }));
 
   auto store_source = [&](std::string source, std::string reporting) {
-    storage()->StoreSource(
-        SourceBuilder()
-            .SetSourceOrigin(*SuitableOrigin::Deserialize(source))
-            .SetReportingOrigin(*SuitableOrigin::Deserialize(reporting))
-            .SetExpiry(base::Days(2))
-            .Build());
+    return storage()
+        ->StoreSource(
+            SourceBuilder()
+                .SetSourceOrigin(*SuitableOrigin::Deserialize(source))
+                .SetReportingOrigin(*SuitableOrigin::Deserialize(reporting))
+                .SetExpiry(base::Days(2))
+                .Build())
+        .status;
   };
   store_source("https://a.test", "https://reporter.test");
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
-  store_source("https://a.test", "https://a.reporter.test");
+  EXPECT_EQ(store_source("https://a.test", "https://a.reporter.test"),
+            StorableSource::Result::kReportingOriginsPerSiteLimitReached);
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 
   store_source("https://b.test", "https://a.reporter.test");
@@ -3645,7 +3917,8 @@ TEST_F(AttributionStorageTest, MaxSourceReportingOriginsPerSite) {
 
   // The reporter used on the first day can't be used even though it is
   // repeated.
-  store_source("https://a.test", "https://reporter.test");
+  EXPECT_EQ(store_source("https://a.test", "https://reporter.test"),
+            StorableSource::Result::kReportingOriginsPerSiteLimitReached);
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(4));
 }
 

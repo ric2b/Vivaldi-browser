@@ -13,9 +13,11 @@ import android.widget.RadioGroup;
 import androidx.fragment.app.Fragment;
 
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAuxButton;
 
 /**
@@ -24,6 +26,7 @@ import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAu
 public class SafeBrowsingFragment extends Fragment
         implements RadioButtonWithDescriptionAndAuxButton.OnAuxButtonClickedListener,
                    RadioGroup.OnCheckedChangeListener {
+    private RadioButtonWithDescription mStandardProtectionFriendlier;
     private RadioButtonWithDescriptionAndAuxButton mStandardProtection;
     private RadioButtonWithDescriptionAndAuxButton mEnhancedProtection;
     private BottomSheetController mBottomSheetController;
@@ -44,9 +47,29 @@ public class SafeBrowsingFragment extends Fragment
                 (RadioButtonWithDescriptionAndAuxButton) view.findViewById(R.id.enhanced_option);
         mStandardProtection =
                 (RadioButtonWithDescriptionAndAuxButton) view.findViewById(R.id.standard_option);
+        mStandardProtectionFriendlier =
+                (RadioButtonWithDescription) view.findViewById(R.id.standard_option_friendlier);
+
+        // The enhanced protection description is being overwritten when the flag is enabled
+        if (ChromeFeatureList.sFriendlierSafeBrowsingSettingsEnhancedProtection.isEnabled()) {
+            mEnhancedProtection.setDescriptionText(getContext().getString(
+                    R.string.safe_browsing_enhanced_protection_summary_updated));
+        }
+
+        if (ChromeFeatureList.sFriendlierSafeBrowsingSettingsStandardProtection.isEnabled()) {
+            mStandardProtection.setVisibility(View.GONE);
+            mStandardProtectionFriendlier.setVisibility(View.VISIBLE);
+            if (SafeBrowsingBridge.isHashRealTimeLookupEligibleInSession()) {
+                mStandardProtectionFriendlier.setDescriptionText(getContext().getString(
+                        R.string.safe_browsing_standard_protection_summary_updated_proxy));
+            }
+        } else {
+            mStandardProtection.setAuxButtonClickedListener(this);
+            mStandardProtection.setVisibility(View.VISIBLE);
+            mStandardProtectionFriendlier.setVisibility(View.GONE);
+        }
 
         mEnhancedProtection.setAuxButtonClickedListener(this);
-        mStandardProtection.setAuxButtonClickedListener(this);
 
         initialRadioButtonConfig();
     }
@@ -59,7 +82,12 @@ public class SafeBrowsingFragment extends Fragment
                 mEnhancedProtection.setChecked(true);
                 break;
             case (SafeBrowsingState.STANDARD_PROTECTION):
-                mStandardProtection.setChecked(true);
+                if (ChromeFeatureList.sFriendlierSafeBrowsingSettingsStandardProtection
+                                .isEnabled()) {
+                    mStandardProtectionFriendlier.setChecked(true);
+                } else {
+                    mStandardProtection.setChecked(true);
+                }
                 break;
             default:
                 assert false : "Unexpected SafeBrowsingState " + safeBrowsingState;
@@ -70,11 +98,28 @@ public class SafeBrowsingFragment extends Fragment
     public void onAuxButtonClicked(int clickedButtonId) {
         LayoutInflater inflater = LayoutInflater.from(getView().getContext());
         if (clickedButtonId == mEnhancedProtection.getId()) {
-            displayBottomSheet(
-                    inflater.inflate(R.layout.privacy_guide_sb_enhanced_explanation, null));
+            if (ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.FRIENDLIER_SAFE_BROWSING_SETTINGS_ENHANCED_PROTECTION)) {
+                displayBottomSheet(inflater.inflate(
+                        R.layout.privacy_guide_sb_enhanced_explanation_updated, null));
+            } else {
+                displayBottomSheet(
+                        inflater.inflate(R.layout.privacy_guide_sb_enhanced_explanation, null));
+            }
         } else if (clickedButtonId == mStandardProtection.getId()) {
-            displayBottomSheet(
-                    inflater.inflate(R.layout.privacy_guide_sb_standard_explanation, null));
+            View sheetContent =
+                    inflater.inflate(R.layout.privacy_guide_sb_standard_explanation, null);
+            if (SafeBrowsingBridge.isHashRealTimeLookupEligibleInSession()) {
+                PrivacyGuideExplanationItem itemTwo =
+                        sheetContent.findViewById(R.id.sb_standard_item_two);
+                itemTwo.setSummaryText(
+                        getContext().getString(R.string.privacy_guide_sb_standard_item_two_proxy));
+                PrivacyGuideExplanationItem itemThree =
+                        sheetContent.findViewById(R.id.sb_standard_item_three);
+                itemThree.setSummaryText(getContext().getString(
+                        R.string.privacy_guide_sb_standard_item_three_proxy));
+            }
+            displayBottomSheet(sheetContent);
         } else {
             assert false : "Unknown Aux clickedButtonId " + clickedButtonId;
         }
@@ -86,7 +131,8 @@ public class SafeBrowsingFragment extends Fragment
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.ENHANCED_PROTECTION);
             PrivacyGuideMetricsDelegate.recordMetricsOnSafeBrowsingChange(
                     SafeBrowsingState.ENHANCED_PROTECTION);
-        } else if (clickedButtonId == R.id.standard_option) {
+        } else if (clickedButtonId == R.id.standard_option
+                || clickedButtonId == R.id.standard_option_friendlier) {
             SafeBrowsingBridge.setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
             PrivacyGuideMetricsDelegate.recordMetricsOnSafeBrowsingChange(
                     SafeBrowsingState.STANDARD_PROTECTION);
@@ -96,7 +142,16 @@ public class SafeBrowsingFragment extends Fragment
     }
 
     private void displayBottomSheet(View sheetContent) {
-        mBottomSheetView = new PrivacyGuideBottomSheetView(sheetContent, this::closeBottomSheet);
+        if (ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.FRIENDLIER_SAFE_BROWSING_SETTINGS_ENHANCED_PROTECTION)
+                && ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.FRIENDLIER_SAFE_BROWSING_SETTINGS_STANDARD_PROTECTION)) {
+            mBottomSheetView = new PrivacyGuideBottomSheetView(
+                    sheetContent, this::closeBottomSheet, 0.9f, 1.0f);
+        } else {
+            mBottomSheetView =
+                    new PrivacyGuideBottomSheetView(sheetContent, this::closeBottomSheet);
+        }
         // TODO(crbug.com/1287979): Re-enable animation once bug is fixed
         if (mBottomSheetController != null) {
             mBottomSheetController.requestShowContent(mBottomSheetView, false);

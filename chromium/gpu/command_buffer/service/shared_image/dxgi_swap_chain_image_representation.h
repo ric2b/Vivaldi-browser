@@ -74,7 +74,7 @@ class SkiaGLImageRepresentationDXGISwapChain
       const gfx::Rect& update_rect,
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
-      std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
+      std::unique_ptr<skgpu::MutableTextureState>* end_state) override;
 
   void EndWriteAccess() override;
 
@@ -86,6 +86,26 @@ class SkiaGLImageRepresentationDXGISwapChain
       SharedImageManager* manager,
       SharedImageBacking* backing,
       MemoryTypeTracker* tracker);
+};
+
+// Representation of a DXGI swap chain backbuffer as a Dawn texture.
+class DawnRepresentationDXGISwapChain : public DawnImageRepresentation {
+ public:
+  DawnRepresentationDXGISwapChain(SharedImageManager* manager,
+                                  SharedImageBacking* backing,
+                                  MemoryTypeTracker* tracker,
+                                  wgpu::Device device,
+                                  wgpu::BackendType backend_type);
+  ~DawnRepresentationDXGISwapChain() override;
+
+  wgpu::Texture BeginAccess(wgpu::TextureUsage usage) override;
+  wgpu::Texture BeginAccess(wgpu::TextureUsage usage,
+                            const gfx::Rect& update_rect) override;
+  void EndAccess() override;
+
+ private:
+  const wgpu::Device device_;
+  wgpu::Texture texture_;
 };
 
 }  // namespace gpu

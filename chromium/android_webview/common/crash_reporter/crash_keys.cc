@@ -45,6 +45,11 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "oop_read_failure",
     "gpu-gl-error-message",
 
+    // components/android_autofill
+    "crbug1479006-form_ token",
+    "crbug1479006-form token",
+    "crbug1479006-manager token",
+
     // components/viz
     "viz_deserialization",
 
@@ -138,6 +143,7 @@ const char* const kWebViewCrashKeyAllowList[] = {
     // crash keys needed for recording finch trials
     "variations",
     "num-experiments",
+    "variations-seed-version",
 
     // sandbox/linux
     "seccomp-sigsys",

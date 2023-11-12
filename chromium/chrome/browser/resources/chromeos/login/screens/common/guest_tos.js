@@ -6,6 +6,7 @@
  * @fileoverview guest tos screen implementation.
  */
 
+import '//resources/cr_elements/chromeos/cros_color_overrides.css.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import '//resources/js/action_link.js';
@@ -58,7 +59,7 @@ const GUEST_TOS_ONLINE_LOAD_TIMEOUT_IN_MS = 10000;
  * @implements {MultiStepBehaviorInterface}
  */
 const GuestTosScreenElementBase = mixinBehaviors(
-    [OobeI18nBehavior, MultiStepBehavior, LoginScreenBehavior], PolymerElement);
+    [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior], PolymerElement);
 
 /**
  * @polymer

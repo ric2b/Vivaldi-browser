@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, assertExists, assertInstanceof} from '../assert.js';
+import {
+  assert,
+  assertEnumVariant,
+  assertExists,
+  assertInstanceof,
+} from '../assert.js';
 import {TIME_LAPSE_INITIAL_SPEED} from '../device/mode/video.js';
 import * as dom from '../dom.js';
 import * as localStorage from '../models/local_storage.js';
@@ -14,7 +19,8 @@ import {ChromeHelper} from '../mojo/chrome_helper.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
 import * as state from '../state.js';
 import {Facing, Mode, Resolution} from '../type.js';
-import {assertEnumVariant, FpsObserver, sleep} from '../util.js';
+import * as untrustedScripts from '../untrusted_scripts.js';
+import {FpsObserver, sleep} from '../util.js';
 import {windowController} from '../window_controller.js';
 
 import {
@@ -161,6 +167,32 @@ export class CCATest {
                           .filter(({kind}) => kind === 'videoinput');
       await deviceOperator.getCameraFacing(devices[0].deviceId);
     }
+  }
+
+  static visitedFocusedElementSet = new Set();
+
+  /**
+   * Checks if the focused element is in `visitedFocusedElementSet`.
+   */
+  static checkFocusedElementVisited(): boolean {
+    const focused = document.activeElement;
+    if (this.visitedFocusedElementSet.has(focused)) {
+      return true;
+    }
+
+    this.visitedFocusedElementSet.add(focused);
+    return false;
+  }
+
+  /**
+   * Returns aria-label of the focused element. Throws an error if a focused
+   * element is null.
+   */
+  static getFocusedElementAriaLabel(): string|null {
+    if (document.activeElement === null) {
+      throw new Error(`There is no active element`);
+    }
+    return document.activeElement.ariaLabel;
   }
 
   /**
@@ -443,6 +475,13 @@ export class CCATest {
   }
 
   /**
+   * Hides all toasts, nudges and tooltips.
+   */
+  static hideFloatingUI(): void {
+    state.set(state.State.HIDE_FLOATING_UI_FOR_TESTING, true);
+  }
+
+  /**
    * Sets input value of the component. Throws an error if the component is not
    * HTMLInputElement with type "range", or the value is not within [min, max]
    * range.
@@ -526,5 +565,21 @@ export class CCATest {
       }
       state.addObserver(stateKey, onChange);
     });
+  }
+
+  /**
+   * Sets measurement protocol's URL.
+   */
+  static async setMeasurementProtocolUrl(url: string): Promise<void> {
+    const helper = await untrustedScripts.getGaHelper();
+    return helper.setMeasurementProtocolUrl(url);
+  }
+
+  /**
+   * Enables GA4 metrics.
+   */
+  static async enableGa4Metrics(): Promise<void> {
+    const helper = await untrustedScripts.getGaHelper();
+    return helper.setGa4Enabled(true);
   }
 }

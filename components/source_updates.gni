@@ -74,12 +74,25 @@ if (vivaldi_build_tests) {
       "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
     ]
   }
+  if (!is_ios) {
+    update_target("//content/test:content_browsertests") {
+      sources += [
+        "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+      ]
+    }
+  }
 }
 
-if (is_linux && is_debug) {
-  # On linux headless pulls in a lot of unused components libs in debug mode,
-  # some of which depends on vivaldi functions. In this case we can use the
-  # dummy functions used for the tests
+if (!is_ios && !is_android) {
+  update_target("//content/shell:content_shell") {
+    if (!defined(sources)) {
+      sources = []
+    }
+    sources += [
+      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+    ]
+  }
+
   update_target("//headless:headless_non_renderer") {
     sources += [
       "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",

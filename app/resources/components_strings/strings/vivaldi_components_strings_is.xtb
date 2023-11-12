@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Smelltu á hnapp til að endurhlaða til þess að endursenda gögn sem þarf til þess að hlaða upp síðunni.</translation>
 <translation id="3234666976984236645">Skynja ætíð mikilvægt efni á þessari síðu</translation>
 <translation id="3308738399950580893">Auglýsingar</translation>
+<translation id="3384522979010096022">Fyrirtækið þitt leyfir þér ekki að skoða þetta vefsvæði</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> svarar ekki, í augnablikinu.</translation>
 <translation id="3427092606871434483">Leyfa (sjálfgefið)</translation>
 <translation id="3447661539832366887">Eigandi þessa tækis hefur slökkt á leiknum.</translation>
@@ -164,7 +165,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> fylgir ekki öryggisstöðlum.</translation>
 <translation id="7219179957768738017">Tengingin notar <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Sýna tilkynningar</translation>
-<translation id="7260504762447901703">Afturkalla aðgengi</translation>
 <translation id="7353601530677266744">Skipanalína</translation>
 <translation id="7364115444476960850">Síðan sem þú reyndir að komast inná er varin af <ph name="BLOCKER_NAME" /> frá Vivaldi</translation>
 <translation id="7419106976560586862">Slóð að notendaaðgangi</translation>

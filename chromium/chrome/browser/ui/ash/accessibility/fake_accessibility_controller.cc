@@ -70,6 +70,9 @@ void FakeAccessibilityController::SetDictationActive(bool is_active) {}
 void FakeAccessibilityController::ToggleDictationFromSource(
     ash::DictationToggleSource source) {}
 
+void FakeAccessibilityController::EnableOrToggleDictationFromSource(
+    ash::DictationToggleSource source) {}
+
 void FakeAccessibilityController::ShowDictationLanguageUpgradedNudge(
     const std::string& dictation_locale,
     const std::string& application_locale) {}
@@ -97,6 +100,9 @@ void FakeAccessibilityController::
     DisableSwitchAccessDisableConfirmationDialogTesting() {}
 
 void FakeAccessibilityController::
+    DisableSwitchAccessEnableNotificationTesting() {}
+
+void FakeAccessibilityController::
     UpdateDictationButtonOnSpeechRecognitionDownloadChanged(
         int download_progress) {}
 
@@ -111,3 +117,5 @@ void FakeAccessibilityController::UpdateDictationBubble(
     const absl::optional<std::vector<ash::DictationBubbleHintType>>& hints) {}
 
 void FakeAccessibilityController::SilenceSpokenFeedback() {}
+
+void FakeAccessibilityController::ShowToast(ash::AccessibilityToastType type) {}

@@ -22,6 +22,7 @@ import org.chromium.ui.widget.Toast;
 import java.util.Calendar;
 
 // Vivaldi
+import android.os.Build;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -84,23 +85,26 @@ public class AboutChromeSettings
                         Profile.getLastUsedRegularProfile()) + "]");
             }
             version = version.concat(" (OEM)");
-        }
-        if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
-            version = version.concat("(PS)");
-        } else if (BuildConfig.IS_OEM_RENAULT_BUILD) {
-            version = version.concat("(RNO)");
-        } else if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
-            version = version.concat("(LYNK)");
-            if (OemLynkcoExtensions.getInstance().isProdEnvironment())
-                version = version.concat("[prod]");
-            else
-                version = version.concat("[dev]");
-        } else if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
-            version = version.concat("(MB)");
-        } else if (BuildConfig.IS_OEM_VOLVO_BUILD) {
-            version = version.concat("(VOLVO)");
-        } else if (BuildConfig.IS_OEM_GAS_BUILD) {
-            version = version.concat("(GAS)");
+
+            if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
+                version = version.concat("(PS)");
+            } else if (BuildConfig.IS_OEM_RENAULT_BUILD) {
+                version = version.concat("(RNO)");
+            } else if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+                version = version.concat("(LYNK)");
+                if (OemLynkcoExtensions.getInstance().isProdEnvironment())
+                    version = version.concat("[prod]");
+                else
+                    version = version.concat("[dev]");
+            } else if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+                version = version.concat("(MB)");
+            } else if (BuildConfig.IS_OEM_VOLVO_BUILD) {
+                version = version.concat("(VOLVO)");
+            } else if (BuildConfig.IS_OEM_GAS_BUILD) {
+                version = version.concat("(GAS)");
+            }
+            // Add brand and model
+            version = version.concat(" ").concat(Build.BRAND).concat("/").concat(Build.MODEL);
         }
 
         if (VersionInfo.isOfficialBuild()) {

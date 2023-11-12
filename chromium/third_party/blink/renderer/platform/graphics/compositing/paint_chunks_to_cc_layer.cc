@@ -432,7 +432,7 @@ void ConversionContext<Result>::SwitchToClip(
   // of the top frame when we snapshot the whole page.
   if (pending_clips.back() == PaintChunksToCcLayer::TopClipToIgnore()) {
     pending_combined_clip_rect =
-      FloatRoundedRect(LayoutRect::InfiniteIntRect());
+      FloatRoundedRect(InfiniteIntRect());
   }
 
 // NOTE(david@vivaldi.com): When capturing the whole page in Android, we need
@@ -440,7 +440,7 @@ void ConversionContext<Result>::SwitchToClip(
 #if BUILDFLAG(IS_ANDROID)
   if (PaintChunksToCcLayer::TopClipToIgnore() != nullptr) {
     pending_combined_clip_rect =
-        FloatRoundedRect(LayoutRect::InfiniteIntRect());
+        FloatRoundedRect(InfiniteIntRect());
   }
 #endif  // IS_ANDROID
 
@@ -467,7 +467,7 @@ template <typename Result>
 void ConversionContext<Result>::StartClip(
     const FloatRoundedRect& combined_clip_rect,
     const ClipPaintPropertyNode& lowest_combined_clip_node) {
-  if (combined_clip_rect.Rect() == gfx::RectF(LayoutRect::InfiniteIntRect())) {
+  if (combined_clip_rect.Rect() == gfx::RectF(InfiniteIntRect())) {
     PushState(StateEntry::kClipOmitted);
   } else {
     const auto& local_transform =

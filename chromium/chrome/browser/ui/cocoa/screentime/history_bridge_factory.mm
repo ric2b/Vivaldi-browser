@@ -4,10 +4,6 @@
 
 #include "chrome/browser/ui/cocoa/screentime/history_bridge_factory.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 #include "base/no_destructor.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,7 +28,8 @@ bool HistoryBridgeFactory::IsEnabled() {
   return base::FeatureList::IsEnabled(kScreenTime);
 }
 
-KeyedService* HistoryBridgeFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+HistoryBridgeFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   auto* profile = Profile::FromBrowserContext(context);
   auto* service = HistoryServiceFactory::GetForProfile(
@@ -40,7 +37,7 @@ KeyedService* HistoryBridgeFactory::BuildServiceInstanceFor(
 
   auto deleter = HistoryDeleterImpl::Create();
 
-  return new HistoryBridge(service, std::move(deleter));
+  return std::make_unique<HistoryBridge>(service, std::move(deleter));
 }
 
 bool HistoryBridgeFactory::ServiceIsCreatedWithBrowserContext() const {

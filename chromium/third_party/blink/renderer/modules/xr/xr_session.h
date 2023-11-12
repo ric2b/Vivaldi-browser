@@ -9,6 +9,7 @@
 
 #include "base/containers/span.h"
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
+#include "device/vr/public/mojom/xr_session.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -65,7 +66,7 @@ class XRWebGLLayer;
 
 using XRSessionFeatureSet = HashSet<device::mojom::XRSessionFeature>;
 
-class XRSession final : public EventTargetWithInlineData,
+class XRSession final : public EventTarget,
                         public device::mojom::blink::XRSessionClient,
                         public ActiveScriptWrappable<XRSession> {
   DEFINE_WRAPPERTYPEINFO();

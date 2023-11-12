@@ -160,36 +160,6 @@ const gfx::RoundedCornersF& GetSubmitFeedbackButtonInkDropCorners() {
                              : kSubmitFeedbackButtonInkDropCornersLToR;
 }
 
-// A `HighlightPathGenerator` that uses caller-supplied rounded rect corners.
-class VIEWS_EXPORT RoundedCornerHighlightPathGenerator
-    : public views::HighlightPathGenerator {
- public:
-  explicit RoundedCornerHighlightPathGenerator(
-      const gfx::RoundedCornersF& corners)
-      : corners_(corners) {}
-
-  RoundedCornerHighlightPathGenerator(
-      const RoundedCornerHighlightPathGenerator&) = delete;
-  RoundedCornerHighlightPathGenerator& operator=(
-      const RoundedCornerHighlightPathGenerator&) = delete;
-
-  // views::HighlightPathGenerator:
-  absl::optional<gfx::RRectF> GetRoundRect(const gfx::RectF& rect) override {
-    return gfx::RRectF(rect, corners_);
-  }
-
- private:
-  // The user-supplied rounded rect corners.
-  const gfx::RoundedCornersF corners_;
-};
-
-void InstallRoundedCornerHighlightPathGenerator(
-    views::View* view,
-    const gfx::RoundedCornersF& corners) {
-  views::HighlightPathGenerator::Install(
-      view, std::make_unique<RoundedCornerHighlightPathGenerator>(corners));
-}
-
 // VersionButton is a base class that provides a styled button, for devices on a
 // non-stable release track, that has a label for the channel and ChromeOS
 // version.
@@ -198,6 +168,11 @@ class VersionButton : public views::LabelButton {
   VersionButton(version_info::Channel channel, bool allow_user_feedback)
       : LabelButton(
             base::BindRepeating([](const ui::Event& event) {
+              // Do nothing if it's shown on non-logged-in screen.
+              if (Shell::Get()->session_controller()->GetSessionState() !=
+                  session_manager::SessionState::ACTIVE) {
+                return;
+              }
               quick_settings_metrics_util::RecordQsButtonActivated(
                   QsButtonCatalogName::kVersionButton);
               Shell::Get()
@@ -222,13 +197,21 @@ class VersionButton : public views::LabelButton {
       SetImageLabelSpacing(kVersionButtonImageLabelSpacing);
       SetMinSize(gfx::Size(0, kVersionButtonHeight));
     }
-    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
-    InstallRoundedCornerHighlightPathGenerator(
+    StyleUtil::InstallRoundedCornerHighlightPathGenerator(
         this, GetVersionButtonInkDropCorners(allow_user_feedback));
     views::FocusRing::Get(this)->SetColorId(
         features::IsQsRevampEnabled()
             ? cros_tokens::kCrosSysFocusRing
             : static_cast<ui::ColorId>(ui::kColorAshFocusRing));
+
+    // The button is not focusable and with no clickable effect if it's shown on
+    // non-logged-in screen.
+    if (Shell::Get()->session_controller()->GetSessionState() !=
+        session_manager::SessionState::ACTIVE) {
+      SetFocusBehavior(FocusBehavior::NEVER);
+      return;
+    }
+    views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
   }
   VersionButton(const VersionButton&) = delete;
   VersionButton& operator=(const VersionButton&) = delete;
@@ -284,6 +267,7 @@ class VersionButton : public views::LabelButton {
       label()->SetFontList(
           ash::TypographyProvider::Get()->ResolveTypographyToken(
               ash::TypographyToken::kCrosBody2));
+      label()->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 6)));
     } else {
       label()->SetFontList(
           gfx::FontList().DeriveWithWeight(gfx::Font::Weight::MEDIUM));
@@ -341,7 +325,8 @@ class SubmitFeedbackButton : public IconButton {
     }
     // Icon colors are set in OnThemeChanged().
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
-    InstallRoundedCornerHighlightPathGenerator(this, highlight_corners);
+    StyleUtil::InstallRoundedCornerHighlightPathGenerator(this,
+                                                          highlight_corners);
   }
   SubmitFeedbackButton(const SubmitFeedbackButton&) = delete;
   SubmitFeedbackButton& operator=(const SubmitFeedbackButton&) = delete;

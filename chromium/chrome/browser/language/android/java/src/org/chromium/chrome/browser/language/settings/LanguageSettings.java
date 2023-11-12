@@ -107,7 +107,6 @@ public class LanguageSettings extends PreferenceFragmentCompat
      */
     private boolean shouldShowDetailedPreferences() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.DETAILED_LANGUAGE_SETTINGS)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.APP_LANGUAGE_PROMPT)
                 || GlobalAppLocaleController.getInstance().isOverridden();
     }
 

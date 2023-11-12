@@ -7,8 +7,8 @@
 #import <UIKit/UIKit.h>
 
 #import "base/apple/bundle_locations.h"
+#import "base/apple/foundation_util.h"
 #import "base/check_op.h"
-#import "base/mac/foundation_util.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
@@ -19,29 +19,59 @@
 #import "url/gurl.h"
 #import "url/url_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "app/vivaldi_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+using vivaldi::kVivaldiUIScheme;
+// End Vivaldi
 
 bool UrlIsExternalFileReference(const GURL& url) {
+
+  if (IsVivaldiRunning()) {
+    return (url.SchemeIs(kChromeUIScheme) || url.SchemeIs(kVivaldiUIScheme)) &&
+           base::EqualsCaseInsensitiveASCII(url.host(),
+                                            kChromeUIExternalFileHost);
+  } // End Vivaldi
+
   return url.SchemeIs(kChromeUIScheme) &&
          base::EqualsCaseInsensitiveASCII(url.host(),
                                           kChromeUIExternalFileHost);
 }
 
 bool UrlHasChromeScheme(const GURL& url) {
+
+  if (IsVivaldiRunning()) {
+    return url.SchemeIs(kChromeUIScheme) || url.SchemeIs(kVivaldiUIScheme);
+  } // End Vivaldi
+
   return url.SchemeIs(kChromeUIScheme);
 }
 
 bool UrlHasChromeScheme(NSURL* url) {
+
+  if (IsVivaldiRunning()) {
+    return net::UrlSchemeIs(url, base::SysUTF8ToNSString(kChromeUIScheme)) ||
+    net::UrlSchemeIs(url, base::SysUTF8ToNSString(kVivaldiUIScheme));
+  } // End Vivaldi
+
   return net::UrlSchemeIs(url, base::SysUTF8ToNSString(kChromeUIScheme));
 }
 
 bool IsUrlNtp(const GURL& url) {
+
+  if (IsVivaldiRunning()) {
+    if (url.SchemeIs(kChromeUIScheme) || url.SchemeIs(kVivaldiUIScheme)) {
+      return url.host_piece() == kChromeUINewTabHost;
+    }
+  } else {
   // Check for "chrome://newtab".
   if (url.SchemeIs(kChromeUIScheme)) {
     return url.host_piece() == kChromeUINewTabHost;
   }
+  } // End Vivaldi
+
   // Check for "about://newtab/". Since "about:" scheme is not standardised,
   // check the full path.
   if (url.SchemeIs(url::kAboutScheme)) {
@@ -52,6 +82,14 @@ bool IsUrlNtp(const GURL& url) {
 
 bool IsHandledProtocol(const std::string& scheme) {
   DCHECK_EQ(scheme, base::ToLowerASCII(scheme));
+
+  if (IsVivaldiRunning()) {
+    return (scheme == url::kHttpScheme || scheme == url::kHttpsScheme ||
+            scheme == url::kAboutScheme || scheme == url::kDataScheme ||
+            scheme == kChromeUIScheme || scheme == kVivaldiUIScheme ||
+            SchemeIsAppStoreScheme(scheme));
+  } // End Vivaldi
+
   return (scheme == url::kHttpScheme || scheme == url::kHttpsScheme ||
           scheme == url::kAboutScheme || scheme == url::kDataScheme ||
           scheme == kChromeUIScheme || SchemeIsAppStoreScheme(scheme));
@@ -99,7 +137,7 @@ bool ShouldLoadUrlInDesktopMode(const GURL& url,
     for (NSDictionary* urlType in urlTypes) {
       DCHECK([urlType isKindOfClass:[NSDictionary class]]);
       NSArray* schemesForType =
-          base::mac::ObjCCastStrict<NSArray>(urlType[@"CFBundleURLSchemes"]);
+          base::apple::ObjCCastStrict<NSArray>(urlType[@"CFBundleURLSchemes"]);
       if (schemesForType.count) {
         [schemes addObjectsFromArray:schemesForType];
       }

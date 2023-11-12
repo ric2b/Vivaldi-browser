@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.omnibox;
 
 import android.content.Context;
 import android.view.ActionMode;
-import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 
 import androidx.annotation.IntDef;
@@ -239,11 +238,6 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
         // to show or hide keyboard anyway. This may happen when we schedule keyboard hide, and
         // receive a second request to hide the keyboard instantly.
         if (showKeyboard) {
-            // Note (david@vivaldi.com): When the toolbar is at the bottom we don't apply the soft
-            // input mode in oder to have the control container always visible. We also reset the
-            // auto focus on new tab flag.
-            if (!BuildConfig.IS_VIVALDI)
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
             mKeyboardVisibilityDelegate.showKeyboard(mUrlBar);
             if (SharedPreferencesManager.getInstance().readBoolean(
                         "focus_address_bar_on_new_tab", false))
@@ -261,31 +255,12 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
             mUrlBar.postDelayed(mKeyboardHideTask, shouldDelayHiding ? KEYBOARD_HIDE_DELAY_MS : 0);
             // Convert the keyboard back to resize mode (delay the change for an arbitrary amount
             // of time in hopes the keyboard will be completely hidden before making this change).
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, /* delay */ true);
         }
     }
 
-    /**
-     * @param softInputMode The software input resize mode.
-     * @param delay Delay the change in input mode.
-     */
-    private void setSoftInputMode(final int softInputMode, boolean delay) {
-        if (OmniboxFeatures.omniboxConsumesImeInsets()) return;
-        mUrlBar.removeCallbacks(mKeyboardResizeModeTask);
-
-        if (mWindowDelegate == null || mWindowDelegate.getWindowSoftInputMode() == softInputMode) {
-            return;
-        }
-
-        if (delay) {
-            mKeyboardResizeModeTask = () -> {
-                mWindowDelegate.setWindowSoftInputMode(softInputMode);
-                mKeyboardResizeModeTask = NO_OP_RUNNABLE;
-            };
-            mUrlBar.postDelayed(mKeyboardResizeModeTask, KEYBOARD_MODE_CHANGE_DELAY_MS);
-        } else {
-            mWindowDelegate.setWindowSoftInputMode(softInputMode);
-        }
+    /** @param hasSuggestions Whether suggestions are showing in the URL bar. */
+    public void onUrlBarSuggestionsChanged(boolean hasSuggestions) {
+        mMediator.onUrlBarSuggestionsChanged(hasSuggestions);
     }
 
     private void onUrlFocusChangeInternal(boolean hasFocus) {
@@ -306,6 +281,9 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
             // focus blur indiscriminately here. Note that hiding keyboard may lower FPS of other
             // animation effects, but we found it tolerable in an experiment.
             if (imm.isActive(mUrlBar)) setKeyboardVisibility(false, false);
+            // Manually set that the URL bar is no longer showing suggestions when focus is lost as
+            // this won't happen automatically.
+            mMediator.onUrlBarSuggestionsChanged(false);
         }
         mFocusChangeCallback.onResult(hasFocus);
     }

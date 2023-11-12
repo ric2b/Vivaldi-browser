@@ -168,6 +168,9 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
   void OnSetAutocorrectRange(const gfx::Range& range) override {
     was_on_set_autocorrect_range_called_ = true;
   }
+  void OnInsertImage(const GURL& src) override {
+    was_on_insert_image_range_called_ = true;
+  }
   void OnPreeditEnd() override {}
   void OnPreeditStart() override {}
   void OnDeleteSurroundingText(size_t before, size_t after) override {
@@ -210,6 +213,10 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
     return was_on_set_autocorrect_range_called_;
   }
 
+  bool was_on_insert_image_called() const {
+    return was_on_insert_image_range_called_;
+  }
+
   const absl::optional<std::pair<size_t, size_t>>&
   last_on_delete_surrounding_text_args() const {
     return last_on_delete_surrounding_text_args_;
@@ -227,6 +234,7 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
   bool was_on_clear_grammar_fragments_called_ = false;
   bool was_on_add_grammar_fragment_called_ = false;
   bool was_on_set_autocorrect_range_called_ = false;
+  bool was_on_insert_image_range_called_ = false;
   absl::optional<std::pair<size_t, size_t>>
       last_on_delete_surrounding_text_args_;
   absl::optional<gfx::Rect> virtual_keyboard_bounds_;
@@ -1237,16 +1245,8 @@ TEST_P(WaylandInputMethodContextTest, OnCommit) {
             gfx::Range(0));
 }
 
-// TODO(1353668): WaylandInputMethodContext::OnCursorPosition sets
-// |pending_keep_selection| only on lacros. That's the reason why this test
-// doesn't pass on Linux. We need to clarify that.
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#define MAYBE(x) x
-#else
-#define MAYBE(x) DISABLED_##x
-#endif
-
-TEST_P(WaylandInputMethodContextTest, MAYBE(OnConfirmCompositionText)) {
+TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionText) {
   constexpr char16_t text[] = u"ab😀cあdef";
   constexpr gfx::Range range(5, 6);  // あ is selected.
 
@@ -1290,7 +1290,7 @@ TEST_P(WaylandInputMethodContextTest, MAYBE(OnConfirmCompositionText)) {
 }
 
 TEST_P(WaylandInputMethodContextTest,
-       MAYBE(OnConfirmCompositionTextExtendedKeepSelectionNoComposition)) {
+       OnConfirmCompositionTextExtendedKeepSelectionNoComposition) {
   input_method_context_->SetSurroundingText(u"abcd", gfx::Range(0, 4),
                                             gfx::Range(0, 4), absl::nullopt,
                                             absl::nullopt);
@@ -1311,7 +1311,7 @@ TEST_P(WaylandInputMethodContextTest,
 }
 
 TEST_P(WaylandInputMethodContextTest,
-       MAYBE(OnConfirmCompositionTextExtendedKeepSelectionComposition)) {
+       OnConfirmCompositionTextExtendedKeepSelectionComposition) {
   input_method_context_->SetSurroundingText(
       u"abcd", gfx::Range(0, 4), gfx::Range(2), absl::nullopt, absl::nullopt);
   input_method_context_->OnPreeditString("xyz", {}, 1);
@@ -1332,7 +1332,7 @@ TEST_P(WaylandInputMethodContextTest,
 }
 
 TEST_P(WaylandInputMethodContextTest,
-       MAYBE(OnConfirmCompositionTextExtendedDontKeepSelectionNoComposition)) {
+       OnConfirmCompositionTextExtendedDontKeepSelectionNoComposition) {
   input_method_context_->SetSurroundingText(u"abcd", gfx::Range(0, 4),
                                             gfx::Range(0, 4), absl::nullopt,
                                             absl::nullopt);
@@ -1355,7 +1355,7 @@ TEST_P(WaylandInputMethodContextTest,
 }
 
 TEST_P(WaylandInputMethodContextTest,
-       MAYBE(OnConfirmCompositionTextExtendedDontKeepSelectionComposition)) {
+       OnConfirmCompositionTextExtendedDontKeepSelectionComposition) {
   input_method_context_->SetSurroundingText(
       u"abcd", gfx::Range(0, 4), gfx::Range(2), absl::nullopt, absl::nullopt);
   input_method_context_->OnPreeditString("xyz", {}, 1);
@@ -1377,8 +1377,7 @@ TEST_P(WaylandInputMethodContextTest,
             gfx::Range(0));
 }
 
-TEST_P(WaylandInputMethodContextTest,
-       MAYBE(OnConfirmCompositionTextForLongRange)) {
+TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionTextForLongRange) {
   const std::u16string text(5000, u'あ');
   constexpr gfx::Range range(4000, 4500);
 
@@ -1441,6 +1440,7 @@ TEST_P(WaylandInputMethodContextTest,
   EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
             gfx::Range(0));
 }
+#endif
 
 TEST_P(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
   constexpr char16_t text[] = u"abcあdef";
@@ -1589,6 +1589,13 @@ TEST_P(WaylandInputMethodContextTest, OnAddGrammarFragments) {
   wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_add_grammar_fragment_called());
+}
+
+TEST_P(WaylandInputMethodContextTest, OnInsertImage) {
+  const GURL some_image_url = GURL("");
+  input_method_context_->OnInsertImage(some_image_url);
+  wl::SyncDisplay(connection_->display_wrapper(), *connection_->display());
+  EXPECT_TRUE(input_method_context_delegate_->was_on_insert_image_called());
 }
 
 TEST_P(WaylandInputMethodContextTest, OnSetAutocorrectRange) {

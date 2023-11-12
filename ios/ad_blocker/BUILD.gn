@@ -1,5 +1,7 @@
 source_set("ad_blocker") {
   sources = [
+    "adblock_content_injection_handler.h",
+    "adblock_content_injection_handler.mm",
     "adblock_content_rule_list_provider.h",
     "adblock_content_rule_list_provider.mm",
     "adblock_organized_rules_manager.cc",
@@ -19,8 +21,6 @@ source_set("ad_blocker") {
     "//ios/web/web_state/ui:wk_web_view_configuration_provider",
     "//vivaldi/components/ad_blocker",
   ]
-
-  configs += ["//build/config/compiler:enable_arc"]
 }
 
 source_set("utils") {

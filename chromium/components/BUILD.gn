@@ -106,12 +106,11 @@ test("components_unittests") {
   }
 
   if (is_fuchsia) {
-    # TODO(https://crbug.com/1185811): Investigate removing the requirement for
-    # job_policy_ambient_mark_vmo_exec for the sake of V8's allocator in tests.
-    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
-
     additional_manifest_fragments = [
       "//build/config/fuchsia/test/fonts.shard.test-cml",
+
+      # TODO(https://crbug.com/1185811): Investigate removing the requirement
+      # for VmexResource.
       "//build/config/fuchsia/test/mark_vmo_executable.shard.test-cml",
       "//build/config/fuchsia/test/network.shard.test-cml",
       "//build/config/fuchsia/test/present_view.shard.test-cml",
@@ -153,6 +152,7 @@ test("components_unittests") {
     "//components/content_settings/core/common:unit_tests",
     "//components/country_codes:unit_tests",
     "//components/crash/core/common:unit_tests",
+    "//components/cross_device/logging:unit_tests",
     "//components/crx_file:unit_tests",
     "//components/device_event_log:unit_tests",
     "//components/device_signals/core:unit_tests",
@@ -201,7 +201,9 @@ test("components_unittests") {
     "//components/os_crypt/sync:unit_tests",
     "//components/page_image_service:unit_tests",
     "//components/password_manager/core/browser:unit_tests",
+    "//components/password_manager/core/common:unit_tests",
     "//components/payments/core:unit_tests",
+    "//components/plus_addresses:unit_tests",
     "//components/policy/core/browser:unit_tests",
     "//components/policy/core/common:unit_tests",
     "//components/power_bookmarks/core:unit_tests",
@@ -219,6 +221,7 @@ test("components_unittests") {
     "//components/reporting/metrics:unit_tests",
     "//components/reporting/storage:unit_tests",
     "//components/reporting/util:unit_tests",
+    "//components/safe_browsing/core/browser:safe_browsing_hats_delegate_unittest",
     "//components/safe_browsing/core/browser:safe_browsing_metrics_collector_unittest",
     "//components/safe_browsing/core/browser/hashprefix_realtime:unit_tests",
     "//components/safe_browsing/core/browser/password_protection:unit_tests",
@@ -360,7 +363,6 @@ test("components_unittests") {
       "//components/endpoint_fetcher:unit_tests",
       "//components/enterprise/content:unit_tests",
       "//components/favicon/content:unit_tests",
-      "//components/feed:unit_tests",
       "//components/file_access:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/heavy_ad_intervention:unit_tests",
@@ -371,7 +373,9 @@ test("components_unittests") {
       "//components/javascript_dialogs:unit_tests",
       "//components/js_injection/common:unit_tests",
       "//components/keyed_service/content:unit_tests",
+      "//components/language/content/browser:unit_tests",
       "//components/link_header_util:unit_tests",
+      "//components/media_device_salt:unit_tests",
       "//components/mirroring:mirroring_tests",
       "//components/navigation_interception:unit_tests",
       "//components/no_state_prefetch/browser:unit_tests",
@@ -385,28 +389,42 @@ test("components_unittests") {
       "//components/paint_preview/common:unit_tests",
       "//components/paint_preview/player:unit_tests",
       "//components/paint_preview/renderer:unit_tests",
+      "//components/password_manager/content/browser:unit_tests",
+      "//components/password_manager/services/csv_password:unit_tests",
       "//components/payments/content:unit_tests",
       "//components/payments/content/utility:unit_tests",
+      "//components/performance_manager:unit_tests",
       "//components/policy/content:unit_tests",
       "//components/query_tiles:unit_tests",
       "//components/reporting/resources:unit_tests",
       "//components/services/heap_profiling:unit_tests",
       "//components/services/storage:tests",
+      "//components/subresource_filter/content/common:unit_tests",
+      "//components/subresource_filter/content/renderer:unit_tests",
       "//components/tracing:unit_tests",
       "//components/translate/content/browser:unit_tests",
       "//components/translate/content/renderer:unit_tests",
       "//components/ukm/content:unit_tests",
       "//components/url_rewrite:unit_tests",
       "//components/user_education/common:unit_tests",
+      "//components/value_store:unit_tests",
       "//components/visitedlink/test:unit_tests",
       "//components/web_cache/browser:unit_tests",
+      "//components/web_package:unit_tests",
+      "//components/web_package/test_support:unit_tests",
+      "//components/webapps/browser:unit_tests",
       "//components/webapps/services/web_app_origin_association:unit_tests",
       "//components/webauthn/json:unit_tests",
+      "//components/webcrypto:unit_tests",
       "//components/webrtc:unit_tests",
       "//components/webrtc_logging:unit_tests",
       "//components/webrtc_logging/browser:unit_tests",
       "//components/webrtc_logging/common:unit_tests",
     ]
+  }
+
+  if (is_linux || is_win || is_mac || is_android) {
+    deps += [ "//components/enterprise/idle:unit_tests" ]
   }
 
   if (is_ios) {
@@ -440,7 +458,8 @@ test("components_unittests") {
       "//components/browsing_topics/common:unit_tests",
       "//components/certificate_transparency:unit_tests",
       "//components/content_settings/browser:unit_tests",
-      "//components/language/content/browser:unit_tests",
+      "//components/content_settings/browser/ui:unit_tests",
+      "//components/feed/core/v2:core_unit_tests",
       "//components/media_router/browser:unit_tests",
       "//components/media_router/common:unit_tests",
       "//components/media_router/common/providers/cast/channel:unit_tests",
@@ -448,9 +467,6 @@ test("components_unittests") {
       "//components/page_load_metrics/browser:unit_tests",
       "//components/page_load_metrics/browser/observers/ad_metrics:unit_tests",
       "//components/page_load_metrics/renderer:unit_tests",
-      "//components/password_manager/content/browser:unit_tests",
-      "//components/password_manager/services/csv_password:unit_tests",
-      "//components/performance_manager:unit_tests",
       "//components/permissions:unit_tests",
       "//components/permissions/prediction_service:unit_tests",
       "//components/privacy_sandbox:unit_tests",
@@ -476,13 +492,6 @@ test("components_unittests") {
       "//components/spellcheck/browser:unit_tests",
       "//components/spellcheck/renderer:unit_tests",
       "//components/subresource_filter/content/browser:unit_tests",
-      "//components/subresource_filter/content/common:unit_tests",
-      "//components/subresource_filter/content/renderer:unit_tests",
-      "//components/value_store:unit_tests",
-      "//components/web_package:unit_tests",
-      "//components/web_package/test_support:unit_tests",
-      "//components/webapps/browser:unit_tests",
-      "//components/webcrypto:unit_tests",
     ]
 
     if (!is_win) {  #!iOS and!Windows
@@ -524,6 +533,7 @@ test("components_unittests") {
       "//components/embedder_support/android:native_java_unittests_java",
       "//components/embedder_support/android/metrics:test_support_java",
       "//components/embedder_support/android/metrics:unit_tests",
+      "//components/environment_integrity/android:unit_tests",
       "//components/gcm_driver/instance_id:test_support",
       "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/gcm_driver/instance_id/android:instance_id_driver_test_support_java",
@@ -577,7 +587,6 @@ test("components_unittests") {
       # See comment in components / guest_view / browser / BUILD.gn for why
       # guest_view is currently non - mobile.
       "//components/guest_view/browser:unit_tests",
-      "//components/password_manager/services/password_strength:unit_tests",
       "//components/soda:unit_tests",
       "//components/storage_monitor:unit_tests",
       "//components/web_modal:unit_tests",
@@ -619,7 +628,7 @@ test("components_unittests") {
       "//components/metrics/structured/mojom:unit_tests",
       "//components/ownership:unit_tests",
       "//components/user_manager:unit_tests",
-      "//components/variations/cros:unit_tests",
+      "//components/variations/cros_evaluate_seed:unit_tests",
     ]
   }
 
@@ -654,7 +663,10 @@ test("components_unittests") {
   }
 
   if (safe_browsing_mode != 0) {
-    deps += [ "//components/safe_browsing/content/common:unit_tests" ]
+    deps += [
+      "//components/safe_browsing/content/common:unit_tests",
+      "//components/safe_browsing/core/browser:safe_browsing_url_checker_unittest",
+    ]
   }
 
   # TODO(crbug / 1056278): Enable this on Fuchsia and merge with the above
@@ -675,7 +687,6 @@ test("components_unittests") {
       "//components/safe_browsing/content/renderer:throttles_unittest",
       "//components/safe_browsing/core/browser:ping_manager_unittest",
       "//components/safe_browsing/core/browser:safe_browsing_lookup_mechanism_experimenter_unittest",
-      "//components/safe_browsing/core/browser:safe_browsing_url_checker_unittest",
       "//components/safe_browsing/core/browser:user_population_unittest",
       "//components/safe_browsing/core/browser:verdict_cache_manager_unittest",
       "//components/safe_browsing/core/browser/db:unit_tests_local_db",
@@ -761,7 +772,7 @@ repack("components_tests_pak") {
     "//components/strings",
   ]
 
-  if (is_chrome_branded) {
+  if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
     sources += [ "${root_gen_dir}/components/strings/components_google_chrome_strings_en-US.pak" ]
   } else {
     sources += [ "${root_gen_dir}/components/strings/components_chromium_strings_en-US.pak" ]
@@ -937,7 +948,7 @@ if (use_blink) {
 
     if (enable_pdf) {
       sources += [
-        "pdf/browser/pdf_web_contents_helper_browsertest.cc",
+        "pdf/browser/pdf_document_helper_browsertest.cc",
         "pdf/renderer/pdf_accessibility_tree_browsertest.cc",
       ]
       deps += [
@@ -951,6 +962,7 @@ if (use_blink) {
     if (enable_screen_ai_service) {
       deps += [
         "//components/services/screen_ai",
+        "//components/services/screen_ai/public/mojom",
         "//skia",
       ]
     }
@@ -1024,7 +1036,6 @@ if (use_blink) {
     }
 
     if (is_fuchsia) {
-      test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
       additional_manifest_fragments = [
         "//build/config/fuchsia/test/present_view.shard.test-cml",
         "//build/config/fuchsia/test/fonts.shard.test-cml",
@@ -1109,6 +1120,7 @@ if (is_android) {
   robolectric_binary("components_junit_tests") {
     deps = [
       "//components/android_autofill/browser/junit:components_autofill_junit_tests",
+      "//components/autofill/android:payments_autofill_junit_tests",
       "//components/background_task_scheduler:components_background_task_scheduler_junit_tests",
       "//components/browser_ui/bottomsheet/android/internal:junit_tests",
       "//components/browser_ui/client_certificate/android:junit",
@@ -1123,6 +1135,7 @@ if (is_android) {
       "//components/crash/android:junit",
       "//components/download/network:junit",
       "//components/embedder_support/android:components_embedder_support_junit_tests",
+      "//components/environment_integrity/android:junit",
       "//components/gcm_driver/android:components_gcm_driver_junit_tests",
       "//components/image_fetcher:junit",
       "//components/installedapp/android:junit",
@@ -1141,5 +1154,6 @@ if (is_android) {
       "//components/webapk/android/libs/client:junit",
       "//components/webapps/browser/android:junit",
     ]
+    shared_libraries = [ "//url:libgurl_robolectric($robolectric_toolchain)" ]
   }
 }

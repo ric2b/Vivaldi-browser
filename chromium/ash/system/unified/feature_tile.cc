@@ -218,6 +218,7 @@ void FeatureTile::CreateDecorativeDrillInArrow() {
   drill_in_arrow_->SetProperty(views::kMarginsKey, kDrillInArrowMargins);
   // Allow hover events to fall through to show tooltips from the main view.
   drill_in_arrow_->SetCanProcessEventsWithinSubtree(false);
+  drill_in_arrow_->SetFlipCanvasOnPaintForRTLUI(true);
   UpdateDrillInArrowColor();
 }
 
@@ -266,8 +267,9 @@ void FeatureTile::UpdateColors() {
 }
 
 void FeatureTile::SetToggled(bool toggled) {
-  if (!is_togglable_ || toggled_ == toggled)
+  if (!is_togglable_ || toggled_ == toggled) {
     return;
+  }
 
   toggled_ = toggled;
   UpdateColors();
@@ -301,6 +303,10 @@ void FeatureTile::SetLabel(const std::u16string& label) {
   label_->SetText(label);
 }
 
+int FeatureTile::GetSubLabelMaxWidth() const {
+  return kTitlesContainerSize.width();
+}
+
 void FeatureTile::SetSubLabel(const std::u16string& sub_label) {
   sub_label_->SetText(sub_label);
 }
@@ -309,6 +315,20 @@ void FeatureTile::SetSubLabelVisibility(bool visible) {
   // Only primary tiles have a sub-label.
   DCHECK(sub_label_);
   sub_label_->SetVisible(visible);
+}
+
+void FeatureTile::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  views::Button::GetAccessibleNodeData(node_data);
+  // If the icon is clickable then the main feature tile usually takes the user
+  // to a detailed page (like Network or Bluetooth). Those tiles act more like a
+  // regular button than a toggle button.
+  if (is_togglable_ && !is_icon_clickable_) {
+    node_data->role = ax::mojom::Role::kToggleButton;
+    node_data->SetCheckedState(toggled_ ? ax::mojom::CheckedState::kTrue
+                                        : ax::mojom::CheckedState::kFalse);
+  } else {
+    node_data->role = ax::mojom::Role::kButton;
+  }
 }
 
 void FeatureTile::AddLayerToRegion(ui::Layer* layer,

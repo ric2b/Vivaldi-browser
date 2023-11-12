@@ -42,6 +42,7 @@
 /// through consumer.
 - (VivaldiATBSourceItem*)getBlockerSourceForSourceId:(uint32_t)key
                                           sourceType:(ATBSourceType)sourceType;
+- (BOOL)isApplyingExceptionRules;
 
 #pragma mark - SETTERS
 /// Updates the global ads and tracker blocking settings

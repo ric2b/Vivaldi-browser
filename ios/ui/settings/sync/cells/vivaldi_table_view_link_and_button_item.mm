@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_link_and_button_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/button_configuration_util.h"
@@ -52,7 +52,7 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewLinkAndButtonCell* cell =
-      base::mac::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(tableCell);
+      base::apple::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(tableCell);
   [cell setSelectionStyle:UITableViewCellSelectionStyleNone];
 
   cell.backgroundColor = [UIColor clearColor];

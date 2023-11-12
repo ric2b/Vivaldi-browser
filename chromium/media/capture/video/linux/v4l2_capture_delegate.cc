@@ -26,6 +26,11 @@
 #include "media/capture/video/blob_utils.h"
 #include "media/capture/video/linux/video_capture_device_linux.h"
 
+#if BUILDFLAG(IS_LINUX)
+#include "media/capture/capture_switches.h"
+#include "media/capture/video/linux/v4l2_capture_delegate_gpu_helper.h"
+#endif  // BUILDFLAG(IS_LINUX)
+
 using media::mojom::MeteringMode;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
@@ -310,7 +315,11 @@ V4L2CaptureDelegate::V4L2CaptureDelegate(
       device_fd_(v4l2),
       is_capturing_(false),
       timeout_count_(0),
-      rotation_(rotation) {}
+      rotation_(rotation) {
+#if BUILDFLAG(IS_LINUX)
+  use_gpu_buffer_ = switches::IsVideoCaptureUseGpuMemoryBufferEnabled();
+#endif  // BUILDFLAG(IS_LINUX)
+}
 
 void V4L2CaptureDelegate::AllocateAndStart(
     int width,
@@ -433,6 +442,13 @@ void V4L2CaptureDelegate::AllocateAndStart(
     return;
 
   client_->OnStarted();
+
+#if BUILDFLAG(IS_LINUX)
+  if (use_gpu_buffer_) {
+    v4l2_gpu_helper_ = std::make_unique<V4L2CaptureDelegateGpuHelper>(
+        std::move(gmb_support_test_));
+  }
+#endif  // BUILDFLAG(IS_LINUX)
 
   // Post task to start fetching frames from v4l2.
   v4l2_task_runner_->PostTask(
@@ -768,6 +784,11 @@ void V4L2CaptureDelegate::SetRotation(int rotation) {
 
 base::WeakPtr<V4L2CaptureDelegate> V4L2CaptureDelegate::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+void V4L2CaptureDelegate::SetGPUEnvironmentForTesting(
+    std::unique_ptr<gpu::GpuMemoryBufferSupport> gmb_support) {
+  gmb_support_test_ = std::move(gmb_support);
 }
 
 V4L2CaptureDelegate::~V4L2CaptureDelegate() = default;
@@ -1120,16 +1141,23 @@ void V4L2CaptureDelegate::DoCapture() {
       client_->OnFrameDropped(
           VideoCaptureFrameDropReason::kV4L2InvalidNumberOfBytesInBuffer);
     } else {
-      // TODO(julien.isorce): build gfx color space from v4l2 color space.
-      // primary = v4l2_format->fmt.pix.colorspace;
-      // range = v4l2_format->fmt.pix.quantization;
-      // matrix = v4l2_format->fmt.pix.ycbcr_enc;
-      // transfer = v4l2_format->fmt.pix.xfer_func;
+      // TODO(crbug:1449570): create color space by BuildColorSpaceFromv4l2(),
+      // and pass it to decoder side while hardware encoding/decoding is
+      // workable on Linux.
+
       // See http://crbug.com/959919.
-      client_->OnIncomingCapturedData(
-          buffer_tracker->start(), buffer_tracker->payload_size(),
-          capture_format_, gfx::ColorSpace(), rotation_, false /* flip_y */,
-          now, timestamp);
+#if BUILDFLAG(IS_LINUX)
+      if (use_gpu_buffer_) {
+        v4l2_gpu_helper_->OnIncomingCapturedData(
+            client_.get(), buffer_tracker->start(),
+            buffer_tracker->payload_size(), capture_format_, gfx::ColorSpace(),
+            rotation_, now, timestamp);
+      } else
+#endif  //  BUILDFLAG(IS_LINUX)
+        client_->OnIncomingCapturedData(
+            buffer_tracker->start(), buffer_tracker->payload_size(),
+            capture_format_, gfx::ColorSpace(), rotation_, false /* flip_y */,
+            now, timestamp);
     }
 
     while (!take_photo_callbacks_.empty()) {
@@ -1190,6 +1218,198 @@ void V4L2CaptureDelegate::SetErrorState(VideoCaptureError error,
   DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
   client_->OnError(error, from_here, reason);
 }
+
+#if BUILDFLAG(IS_LINUX)
+gfx::ColorSpace V4L2CaptureDelegate::BuildColorSpaceFromv4l2() {
+  v4l2_colorspace v4l2_primary = (v4l2_colorspace)video_fmt_.fmt.pix.colorspace;
+  v4l2_quantization v4l2_range =
+      (v4l2_quantization)video_fmt_.fmt.pix.quantization;
+  v4l2_ycbcr_encoding v4l2_matrix =
+      (v4l2_ycbcr_encoding)video_fmt_.fmt.pix.ycbcr_enc;
+  v4l2_xfer_func v4l2_transfer = (v4l2_xfer_func)video_fmt_.fmt.pix.xfer_func;
+
+  DVLOG(2) << __func__ << "v4l2_primary:" << v4l2_primary
+           << ", v4l2_range:" << v4l2_range << ", v4l2_matrix:" << v4l2_matrix
+           << ", v4l2_transfer:" << v4l2_transfer;
+
+  gfx::ColorSpace::PrimaryID primary = gfx::ColorSpace::PrimaryID::INVALID;
+  switch (v4l2_primary) {
+    case V4L2_COLORSPACE_470_SYSTEM_M:
+      primary = gfx::ColorSpace::PrimaryID::BT470M;
+      break;
+    case V4L2_COLORSPACE_470_SYSTEM_BG:
+      primary = gfx::ColorSpace::PrimaryID::BT470BG;
+      break;
+    case V4L2_COLORSPACE_SMPTE170M:
+      primary = gfx::ColorSpace::PrimaryID::SMPTE170M;
+      break;
+    case V4L2_COLORSPACE_SMPTE240M:
+      primary = gfx::ColorSpace::PrimaryID::SMPTE240M;
+      break;
+    case V4L2_COLORSPACE_BT2020:
+      primary = gfx::ColorSpace::PrimaryID::BT2020;
+      break;
+    case V4L2_COLORSPACE_DCI_P3:
+      primary = gfx::ColorSpace::PrimaryID::P3;
+      break;
+    // SRGB, JPEG and REC709 have same primary.
+    case V4L2_COLORSPACE_SRGB:
+    case V4L2_COLORSPACE_JPEG:
+    case V4L2_COLORSPACE_REC709:
+      primary = gfx::ColorSpace::PrimaryID::BT709;
+      break;
+    // The AdobeRGB standard defines the colorspace used by computer graphics
+    // that use the AdobeRGB colorspace. This is also known as the opRGB
+    // standard. (i.e. OPRGB is same as ADOBE_RGB)
+    case V4L2_COLORSPACE_OPRGB:
+      primary = gfx::ColorSpace::PrimaryID::ADOBE_RGB;
+      break;
+    case V4L2_COLORSPACE_BT878:
+    case V4L2_COLORSPACE_DEFAULT:
+    case V4L2_COLORSPACE_RAW:
+      return gfx::ColorSpace();
+  }
+
+  gfx::ColorSpace::RangeID range = gfx::ColorSpace::RangeID::INVALID;
+  switch (v4l2_range) {
+    case V4L2_QUANTIZATION_DEFAULT:
+      if (media::IsYuvPlanar(capture_format_.pixel_format) &&
+          v4l2_primary != V4L2_COLORSPACE_JPEG) {
+        range = gfx::ColorSpace::RangeID::LIMITED;
+      } else {
+        range = gfx::ColorSpace::RangeID::FULL;
+      }
+      break;
+    case V4L2_QUANTIZATION_FULL_RANGE:
+      range = gfx::ColorSpace::RangeID::FULL;
+      break;
+    case V4L2_QUANTIZATION_LIM_RANGE:
+      range = gfx::ColorSpace::RangeID::LIMITED;
+      break;
+  }
+
+  gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::INVALID;
+  switch (v4l2_matrix) {
+    case V4L2_YCBCR_ENC_DEFAULT:
+      switch (v4l2_primary) {
+        case V4L2_COLORSPACE_470_SYSTEM_BG:
+          matrix = gfx::ColorSpace::MatrixID::BT470BG;
+          break;
+        case V4L2_COLORSPACE_SRGB:
+          matrix = gfx::ColorSpace::MatrixID::RGB;
+          break;
+        // V4L2_COLORSPACE_SMPTE170M, V4L2_COLORSPACE_470_SYSTEM_M,
+        // V4L2_COLORSPACE_OPRGB and V4L2_COLORSPACE_JPEG have same matrix.
+        case V4L2_COLORSPACE_SMPTE170M:
+        case V4L2_COLORSPACE_470_SYSTEM_M:
+        case V4L2_COLORSPACE_OPRGB:
+        case V4L2_COLORSPACE_JPEG:
+          matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
+          break;
+        case V4L2_COLORSPACE_REC709:
+        case V4L2_COLORSPACE_DCI_P3:
+          matrix = gfx::ColorSpace::MatrixID::BT709;
+          break;
+        case V4L2_COLORSPACE_BT2020:
+          matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;
+          break;
+        case V4L2_COLORSPACE_SMPTE240M:
+          matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
+          break;
+        case V4L2_COLORSPACE_DEFAULT:
+        case V4L2_COLORSPACE_BT878:
+        case V4L2_COLORSPACE_RAW:
+          return gfx::ColorSpace();
+      }
+      break;
+    // The default Y’CbCr encoding of SMPTE170M is same as V4L2_YCBCR_ENC_601.
+    case V4L2_YCBCR_ENC_601:
+      matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
+      break;
+    case V4L2_YCBCR_ENC_709:
+      matrix = gfx::ColorSpace::MatrixID::BT709;
+      break;
+    case V4L2_YCBCR_ENC_BT2020:
+      matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;
+      break;
+    case V4L2_YCBCR_ENC_BT2020_CONST_LUM:
+      matrix = gfx::ColorSpace::MatrixID::BT2020_CL;
+      break;
+    case V4L2_YCBCR_ENC_SMPTE240M:
+      matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
+      break;
+    case V4L2_YCBCR_ENC_XV601:
+    case V4L2_YCBCR_ENC_XV709:
+    case V4L2_YCBCR_ENC_SYCC:
+      return gfx::ColorSpace();
+  }
+
+  gfx::ColorSpace::TransferID transfer = gfx::ColorSpace::TransferID::INVALID;
+  switch (v4l2_transfer) {
+    case V4L2_XFER_FUNC_DEFAULT:
+      switch (v4l2_primary) {
+        case V4L2_COLORSPACE_SMPTE170M:
+          transfer = gfx::ColorSpace::TransferID::SMPTE170M;
+          break;
+        // V4L2_COLORSPACE_470_SYSTEM_M, V4L2_COLORSPACE_470_SYSTEM_BG and
+        // V4L2_COLORSPACE_REC709 have same transfer function.
+        case V4L2_COLORSPACE_470_SYSTEM_M:
+        case V4L2_COLORSPACE_470_SYSTEM_BG:
+        case V4L2_COLORSPACE_REC709:
+          transfer = gfx::ColorSpace::TransferID::BT709;
+          break;
+        case V4L2_COLORSPACE_BT2020:
+          transfer = gfx::ColorSpace::TransferID::BT2020_10;
+          break;
+        // V4L2_COLORSPACE_JPEG and V4L2_COLORSPACE_SRGB has same transfer
+        // function.
+        case V4L2_COLORSPACE_SRGB:
+        case V4L2_COLORSPACE_JPEG:
+          transfer = gfx::ColorSpace::TransferID::SRGB;
+          break;
+        case V4L2_COLORSPACE_SMPTE240M:
+          transfer = gfx::ColorSpace::TransferID::SMPTE240M;
+          break;
+        case V4L2_COLORSPACE_RAW:
+        case V4L2_COLORSPACE_DCI_P3:
+        case V4L2_COLORSPACE_DEFAULT:
+        case V4L2_COLORSPACE_BT878:
+          // The default transfer function is V4L2_XFER_FUNC_ADOBERGB, but there
+          // is no same definition or same transfer function in TransferID.
+          // TODO(1449570, 959919): If ADOBE_RGB is handled, pass the right gfx
+          // color space instead of INVALID color space.
+        case V4L2_COLORSPACE_OPRGB:
+          return gfx::ColorSpace();
+      }
+      break;
+    case V4L2_XFER_FUNC_709:
+      transfer = gfx::ColorSpace::TransferID::BT709;
+      break;
+    case V4L2_XFER_FUNC_SRGB:
+      transfer = gfx::ColorSpace::TransferID::SRGB;
+      break;
+    case V4L2_XFER_FUNC_SMPTE240M:
+      transfer = gfx::ColorSpace::TransferID::SMPTE240M;
+      break;
+    // Perceptual quantizer, also known as SMPTEST2084.
+    case V4L2_XFER_FUNC_SMPTE2084:
+      transfer = gfx::ColorSpace::TransferID::PQ;
+      break;
+    case V4L2_XFER_FUNC_NONE:
+    case V4L2_XFER_FUNC_DCI_P3:
+      // The default transfer function is V4L2_XFER_FUNC_ADOBERGB, but there
+      // is no same definition or same transfer function in TransferID.
+      // TODO(1449570, 959919): If ADOBE_RGB is handled, pass the right gfx
+      // color space instead of INVALID color space.
+    case V4L2_XFER_FUNC_OPRGB:
+      return gfx::ColorSpace();
+  }
+
+  DVLOG(2) << __func__ << "build color space:"
+           << gfx::ColorSpace(primary, transfer, matrix, range).ToString();
+  return gfx::ColorSpace(primary, transfer, matrix, range);
+}
+#endif
 
 V4L2CaptureDelegate::BufferTracker::BufferTracker(V4L2CaptureDevice* v4l2)
     : v4l2_(v4l2) {}

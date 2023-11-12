@@ -28,7 +28,7 @@
 <translation id="3571177741182643350">未读文章-离线可用：</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首页</translation>
-<translation id="385051799172605136">上一页</translation>
+<translation id="385051799172605136">后退</translation>
 <translation id="399014816462153200">阅读文章：</translation>
 <translation id="4121750346708795461">使用此应用即表示您同意遵守 Vivaldi 的<ph name="BEGIN_LINK1" />最终用户许可协议<ph name="END_LINK1" />和<ph name="BEGIN_LINK2" />隐私政策<ph name="END_LINK2" />。</translation>
 <translation id="4137746084635924146">当前设备所用语言</translation>
@@ -54,7 +54,6 @@
 要调整您的搜索词，请长按选择。 要优化搜索，请将面板一直向上滑动并点击搜索框。</translation>
 <translation id="572328651809341494">最近打开的标签</translation>
 <translation id="6150320133806434356">书签已保存</translation>
-<translation id="6301525844455696527">请尽快补看阅读清单中的内容</translation>
 <translation id="6336451774241870485">新建隐私标签</translation>
 <translation id="6404511346730675251">编辑书签</translation>
 <translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>

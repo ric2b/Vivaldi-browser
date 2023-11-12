@@ -95,14 +95,21 @@ PerformanceManagerTabHelper::PerformanceManagerTabHelper(
   DCHECK_EQ(1u, frame_count);
 #endif
 
+  PagePropertyFlags initial_property_flags;
+  if (web_contents->GetVisibility() == content::Visibility::VISIBLE) {
+    initial_property_flags.Put(PagePropertyFlag::kIsVisible);
+  }
+  if (web_contents->IsCurrentlyAudible()) {
+    initial_property_flags.Put(PagePropertyFlag::kIsAudible);
+  }
+
   // Create the page node.
   std::unique_ptr<PageData> page = std::make_unique<PageData>();
   page->page_node = PerformanceManagerImpl::CreatePageNode(
       WebContentsProxy(weak_factory_.GetWeakPtr()),
       web_contents->GetBrowserContext()->UniqueId(),
-      web_contents->GetVisibleURL(),
-      web_contents->GetVisibility() == content::Visibility::VISIBLE,
-      web_contents->IsCurrentlyAudible(), web_contents->GetLastActiveTime(),
+      web_contents->GetVisibleURL(), initial_property_flags,
+      web_contents->GetLastActiveTime(),
       // TODO(crbug.com/1211368): Support MPArch fully!
       PageNode::PageState::kActive);
   content::RenderFrameHost* main_rfh = web_contents->GetPrimaryMainFrame();
@@ -478,6 +485,22 @@ void PerformanceManagerTabHelper::DidUpdateFaviconURL(
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE, base::BindOnce(&PageNodeImpl::OnFaviconUpdated,
                                 base::Unretained(primary_page_node())));
+}
+
+void PerformanceManagerTabHelper::OnWebContentsFocused(
+    content::RenderWidgetHost* render_widget_host) {
+  PerformanceManagerImpl::CallOnGraphImpl(
+      FROM_HERE, base::BindOnce(&PageNodeImpl::SetIsFocused,
+                                base::Unretained(primary_page_node()),
+                                /*is_focused=*/true));
+}
+
+void PerformanceManagerTabHelper::OnWebContentsLostFocus(
+    content::RenderWidgetHost* render_widget_host) {
+  PerformanceManagerImpl::CallOnGraphImpl(
+      FROM_HERE, base::BindOnce(&PageNodeImpl::SetIsFocused,
+                                base::Unretained(primary_page_node()),
+                                /*is_focused=*/false));
 }
 
 void PerformanceManagerTabHelper::AboutToBeDiscarded(

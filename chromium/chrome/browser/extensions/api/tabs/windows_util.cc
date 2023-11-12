@@ -24,8 +24,6 @@
 #include "extensions/common/extension.h"
 #include "url/gurl.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace windows_util {
 
 bool GetBrowserFromWindowID(ExtensionFunction* function,
@@ -78,14 +76,6 @@ bool CanOperateOnWindow(const ExtensionFunction* function,
                         extensions::WindowController::TypeFilter filter) {
   if (filter && !controller->MatchesFilter(filter))
     return false;
-
-  // NOTE(pettern@vivaldi.com): Make sure we can operate on all windows
-  // within the same profile (see also VB-87828).
-  if (function->browser_context() == controller->profile() &&
-      function->extension() &&
-      vivaldi::IsVivaldiApp(function->extension()->id())) {
-    return true;
-  }
 
   // TODO(https://crbug.com/807313): Remove this.
   bool allow_dev_tools_windows = !!filter;

@@ -89,6 +89,7 @@ class DualReadingListModel : public ReadingListModel,
                                      base::Time distilation_time) override;
   void AddObserver(ReadingListModelObserver* observer) override;
   void RemoveObserver(ReadingListModelObserver* observer) override;
+  void RecordCountMetricsOnUMAUpload() const override;
 
   // ReadingListModelObserver overrides.
   void ReadingListModelBeganBatchUpdates(
@@ -128,6 +129,9 @@ class DualReadingListModel : public ReadingListModel,
         local_or_syncable_model_batch_;
     std::unique_ptr<ScopedReadingListBatchUpdate> account_model_batch_;
   };
+
+  ReadingListModel* GetLocalOrSyncableModel();
+  ReadingListModel* GetAccountModel();
 
   StorageStateForTesting GetStorageStateForURLForTesting(const GURL& url);
 

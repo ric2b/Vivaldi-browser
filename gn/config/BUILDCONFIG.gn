@@ -34,3 +34,7 @@ if (is_win) {
 }
 
 default_chrome_lint_targets = ["//chrome/android:chrome_public_apk__lint"]
+
+if (vivaldi_notarytool_password != "") {
+  vivaldi_notarytool_password = string_replace(vivaldi_notarytool_password, "@keychain:", "")
+}

@@ -76,11 +76,13 @@ class MODULES_EXPORT MediaControlInputElement : public HTMLInputElement,
   // Returns whether element is a button on the control panel.
   virtual bool IsControlPanelButton() const { return false; }
 
+  // Updates the |aria_label_|.
+  void UpdateAriaLabel(const String& new_aria_label);
+
  private:
   friend class MediaControlInputElementTest;
   friend class MediaControlPopupMenuElementTest;
 
-  bool IsMouseFocusable() const override;
   bool IsMediaControlElement() const final;
 
   // Returns a string representation of the media control element. Used for

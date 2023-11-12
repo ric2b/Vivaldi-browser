@@ -25,9 +25,9 @@ void* GwpAsanSupport::MapRegion(size_t slot_count,
   PA_CHECK(slot_count > 0);
 
   constexpr PartitionOptions kConfig{
-      .backup_ref_ptr = PartitionOptions::BackupRefPtr::kEnabled,
+      .backup_ref_ptr = PartitionOptions::kEnabled,
   };
-  static internal::base::NoDestructor<ThreadSafePartitionRoot> root(kConfig);
+  static internal::base::NoDestructor<PartitionRoot> root(kConfig);
 
   const size_t kSlotSize = 2 * internal::SystemPageSize();
   uint16_t bucket_index = PartitionRoot::SizeToBucketIndex(

@@ -23,7 +23,6 @@
   "background-common-bundle.js.map": {},
   "bundle-mailreader-worker.js.map": {},
   "inject-all-bundle.js.map": {},
-  "main-bundle.js.map": {},
   "translate-bundle.js.map": {},
   "vendor-bundle.js.map": {}
 }

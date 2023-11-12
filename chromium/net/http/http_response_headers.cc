@@ -123,11 +123,7 @@ bool ShouldUpdateHeader(base::StringPiece name) {
 }
 
 bool HasEmbeddedNulls(base::StringPiece str) {
-  for (char c : str) {
-    if (c == '\0')
-      return true;
-  }
-  return false;
+  return str.find('\0') != std::string::npos;
 }
 
 void CheckDoesNotHaveEmbeddedNulls(base::StringPiece str) {
@@ -457,6 +453,8 @@ void HttpResponseHeaders::UpdateWithNewRange(const HttpByteRange& byte_range,
 
 void HttpResponseHeaders::Parse(const std::string& raw_input) {
   raw_headers_.reserve(raw_input.size());
+  // TODO(https://crbug.com/1470137): Call reserve() on `parsed_` with an
+  // appropriate value.
 
   // ParseStatusLine adds a normalized status line to raw_headers_
   std::string::const_iterator line_begin = raw_input.begin();

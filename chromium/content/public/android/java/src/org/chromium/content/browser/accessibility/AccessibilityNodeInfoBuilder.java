@@ -361,10 +361,11 @@ public class AccessibilityNodeInfoBuilder {
     @SuppressLint("NewApi")
     @CalledByNative
     protected void setAccessibilityNodeInfoText(AccessibilityNodeInfoCompat node, String text,
-            boolean annotateAsLink, boolean isEditableText, String language, int[] suggestionStarts,
-            int[] suggestionEnds, String[] suggestions, String stateDescription) {
-        CharSequence computedText = computeText(
-                text, annotateAsLink, language, suggestionStarts, suggestionEnds, suggestions);
+            String targetUrl, boolean annotateAsLink, boolean isEditableText, String language,
+            int[] suggestionStarts, int[] suggestionEnds, String[] suggestions,
+            String stateDescription) {
+        CharSequence computedText = computeText(text, targetUrl, annotateAsLink, language,
+                suggestionStarts, suggestionEnds, suggestions);
 
         // We add the stateDescription attribute when it is non-null and not empty.
         if (stateDescription != null && !stateDescription.isEmpty()) {
@@ -477,12 +478,12 @@ public class AccessibilityNodeInfoBuilder {
         info.getExtras().putByteArray(EXTRAS_KEY_IMAGE_DATA, imageData);
     }
 
-    private CharSequence computeText(String text, boolean annotateAsLink, String language,
-            int[] suggestionStarts, int[] suggestionEnds, String[] suggestions) {
+    private CharSequence computeText(String text, String targetUrl, boolean annotateAsLink,
+            String language, int[] suggestionStarts, int[] suggestionEnds, String[] suggestions) {
         CharSequence charSequence = text;
         if (annotateAsLink) {
             SpannableString spannable = new SpannableString(text);
-            spannable.setSpan(new URLSpan(""), 0, spannable.length(), 0);
+            spannable.setSpan(new URLSpan(targetUrl), 0, spannable.length(), 0);
             charSequence = spannable;
         }
         if (!language.isEmpty() && !language.equals(mDelegate.getLanguageTag())) {
@@ -555,6 +556,16 @@ public class AccessibilityNodeInfoBuilder {
         // Clip to the viewport bounds, and add unclipped values to the Bundle.
         int viewportRectTop = viewLocation[1] + (int) ac.getContentOffsetYPix();
         int viewportRectBottom = viewportRectTop + ac.getLastFrameViewportHeightPixInt();
+
+        // A cached node will contain Bundle extras values from the last time it was populated. For
+        // unclipped bounds, the extras would be stale and should be removed if present.
+        if (extras.containsKey(EXTRAS_KEY_UNCLIPPED_TOP)) {
+            extras.remove(EXTRAS_KEY_UNCLIPPED_TOP);
+        }
+        if (extras.containsKey(EXTRAS_KEY_UNCLIPPED_BOTTOM)) {
+            extras.remove(EXTRAS_KEY_UNCLIPPED_BOTTOM);
+        }
+
         if (rect.top < viewportRectTop) {
             extras.putInt(EXTRAS_KEY_UNCLIPPED_TOP, rect.top);
             rect.top = viewportRectTop;

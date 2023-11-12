@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Repor definições</translation>
 <translation id="4478664379124702289">Guardar li&amp;gação como...</translation>
 <translation id="4520385623207007473">Cookies em utilização</translation>
+<translation id="456449593072900590">Eliminar ao sair</translation>
 <translation id="4580596421317071374">Neste equipamento as palavras-passe são guardadas no <ph name="GOOGLE_PASSWORD_MANAGER" />.</translation>
 <translation id="4593021220803146968">&amp;Ir para <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apenas o gestor (<ph name="CUSTODIAN_NAME" />) pode modificar as aplicações e as extensões.</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Cor</translation>
 <translation id="5485102783864353244">Adicionar aplicação</translation>
 <translation id="5486561344817861625">Simular reinício do navegador</translation>
-<translation id="5487521232677179737">Limpar dados</translation>
 <translation id="5509693895992845810">Guardar &amp;Como...</translation>
 <translation id="5521078259930077036">É esta a página principal de que estava à espera?</translation>
 <translation id="5542132724887566711">Perfil</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Desconhecido</translation>
 <translation id="5851868085455377790">Emitente</translation>
 <translation id="5860491529813859533">Ativar</translation>
-<translation id="5867841422488265304">Pesquise ou escreva o endereço Web</translation>
 <translation id="5910363049092958439">Gra&amp;var imagem como...</translation>
 <translation id="5914724413750400082">Módulo (<ph name="MODULUS_NUM_BITS" /> bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7339785458027436441">Rever a ortografia durante a escrita</translation>
-<translation id="73786666777299047">Abrir a Web Store do Chrome</translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória GPU</translation>
 <translation id="7421925624202799674">&amp;Ver código fonte da página</translation>
@@ -442,6 +440,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8382913212082956454">Copiar &amp;endereço de correio eletrónico</translation>
 <translation id="8434480141477525001">Porta de depuração de NaCl</translation>
 <translation id="8449008133205184768">Colar e fazer corresponder estilo</translation>
+<translation id="8477178913400731244">Eliminar dados</translation>
 <translation id="8477384620836102176">&amp;Geral</translation>
 <translation id="8496717697661868878">Executar este plug-in</translation>
 <translation id="8512476990829870887">Terminar Processo</translation>

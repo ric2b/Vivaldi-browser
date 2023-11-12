@@ -6,6 +6,10 @@ import("//build/config/apple/symbols.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/ios/ios_sdk.gni")
 
+if (defined(is_vivaldi) && is_vivaldi) {
+  import("//vivaldi/gn/config/product.gni")
+}
+
 # Xcode 13.1 or higher is required to build Chromium on iOS. This file should
 # only be included when building Chromium, not other related projects (cronet,
 # webrtc, ...).
@@ -33,6 +37,9 @@ declare_args() {
 
   # Enable iOS shortcut widget in WidgetKit extension.
   ios_enable_shortcuts_widget = true
+
+  # Enable iOS search passwords widget in WidgetKit extension.
+  ios_enable_search_passwords_widget = false
 
   # Label of the target providing implementation for AccountVerificationProvider.
   # Overridden when using the Google-internal repository to build Chrome on iOS.
@@ -111,7 +118,11 @@ if (is_chrome_branded) {
   url_x_callback_scheme = "googlechrome-x-callback"
 } else {
   chromium_short_name = "Vivaldi"
-  url_channel_scheme = "vivaldi-internal"
+  if (VIVALDI_RELEASE_KIND == "vivaldi_final") {
+    url_channel_scheme = "vivaldi-final"
+  } else {
+    url_channel_scheme = "vivaldi-snapshot"
+  }
   url_secure_scheme = "vivaldis"
   url_ssoauth_scheme = "$ios_app_bundle_id_prefix.sso.vivaldi"
   url_unsecure_scheme = "vivaldi"

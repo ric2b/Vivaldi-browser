@@ -27,6 +27,7 @@ js_type_check("closure_compile_local") {
       ]
   deps = [
     ":adb_sideloading",
+    ":add_child",
     ":app_downloading",
     ":app_launch_splash",
 
@@ -47,6 +48,7 @@ js_type_check("closure_compile_local") {
     ":gesture_navigation",
     ":guest_tos",
     ":hw_data_collection",
+    ":local_password_setup",
     ":local_state_error",
     ":managed_terms_of_service",
     ":marketing_opt_in",
@@ -55,6 +57,7 @@ js_type_check("closure_compile_local") {
     ":os_install",
     ":os_trial",
     ":parental_handoff",
+    ":password_selection",
     ":pin_setup",
     ":placeholder",
     ":recommend_apps",
@@ -83,6 +86,18 @@ js_type_check("closure_compile_multidevice_setup") {
 
 js_library("adb_sideloading") {
   sources = [ "$root_gen_dir/chrome/browser/resources/chromeos/login/screens/common/adb_sideloading.js" ]
+  deps = [
+    "../../components/behaviors:login_screen_behavior",
+    "../../components/behaviors:multi_step_behavior",
+    "../../components/behaviors:oobe_i18n_behavior",
+    "../../components/buttons:oobe_text_button",
+    "../../components/dialogs:oobe_adaptive_dialog",
+  ]
+  extra_deps = [ ":web_components" ]
+}
+
+js_library("add_child") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/chromeos/login/screens/common/add_child.js" ]
   deps = [
     "../../components/behaviors:login_screen_behavior",
     "../../components/behaviors:multi_step_behavior",
@@ -272,7 +287,9 @@ js_library("fingerprint_setup") {
     "//ash/webui/common/resources:load_time_data.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
   ]
-  externs_list = [ "//ui/webui/resources/cr_elements/cr_fingerprint/cr_fingerprint_progress_arc_externs.js" ]
+  externs_list = [
+    "//ash/webui/common/resources/quick_unlock/fingerprint_progress_externs.js",
+  ]
 
   extra_deps = [ ":web_components" ]
 }
@@ -344,6 +361,21 @@ js_library("hw_data_collection") {
     "../../components/behaviors:oobe_dialog_host_behavior",
     "../../components/behaviors:oobe_i18n_behavior",
     "../../components/buttons:oobe_text_button",
+  ]
+  extra_deps = [ ":web_components" ]
+}
+
+js_library("local_password_setup") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/chromeos/login/screens/common/local_password_setup.js" ]
+  deps = [
+    "../../components/behaviors:login_screen_behavior",
+    "../../components/behaviors:multi_step_behavior",
+    "../../components/behaviors:oobe_dialog_host_behavior",
+    "../../components/behaviors:oobe_i18n_behavior",
+    "../../components/buttons:oobe_back_button",
+    "../../components/buttons:oobe_next_button",
+    "../../components/dialogs:oobe_adaptive_dialog",
+    "../../components/dialogs:oobe_loading_dialog",
   ]
   extra_deps = [ ":web_components" ]
 }
@@ -534,6 +566,19 @@ js_library("pin_setup") {
   extra_sources = [ "$interfaces_path/quick_unlock_private_interface.js" ]
 }
 
+js_library("password_selection") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/chromeos/login/screens/common/password_selection.js" ]
+  deps = [
+    "../../components/behaviors:login_screen_behavior",
+    "../../components/behaviors:oobe_dialog_host_behavior",
+    "../../components/behaviors:oobe_i18n_behavior",
+    "../../components/buttons:oobe_back_button",
+    "../../components/buttons:oobe_next_button",
+    "../../components/dialogs:oobe_adaptive_dialog",
+  ]
+  extra_deps = [ ":web_components" ]
+}
+
 js_library("gaia_info") {
   sources = [ "$root_gen_dir/chrome/browser/resources/chromeos/login/screens/common/gaia_info.js" ]
   deps = [
@@ -721,6 +766,8 @@ js_library("error_message") {
 html_to_js("web_components") {
   js_files = [
     "adb_sideloading.js",
+    "add_child.js",
+    "password_selection.js",
     "cryptohome_recovery_setup.js",
     "app_downloading.js",
     "app_launch_splash.js",
@@ -740,6 +787,7 @@ html_to_js("web_components") {
     "gesture_navigation.js",
     "guest_tos.js",
     "hw_data_collection.js",
+    "local_password_setup.js",
     "local_state_error.js",
     "managed_terms_of_service.js",
     "marketing_opt_in.js",

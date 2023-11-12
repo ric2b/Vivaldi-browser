@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_breaker.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_info.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/text_auto_space.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_inline_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
@@ -114,9 +115,9 @@ class ReusingTextShaper final {
     ShapeCacheEntry* entry = nullptr;
     if (allow_shape_cache_) {
       DCHECK(RuntimeEnabledFeatures::LayoutNGShapeCacheEnabled());
-      NGShapeCache* cache = font.GetNGShapeCache();
+      NGShapeCache& cache = font.GetNGShapeCache();
       const TextDirection direction = start_item.Direction();
-      entry = cache->Add(shaper_.GetText(), direction);
+      entry = cache.Add(shaper_.GetText(), direction);
       if (entry && *entry) {
         return *entry;
       }
@@ -484,8 +485,9 @@ NGInlineNode::NGInlineNode(LayoutBlockFlow* block)
     : NGLayoutInputNode(block, kInline) {
   DCHECK(block);
   DCHECK(block->IsLayoutNGObject());
-  if (!block->HasNGInlineNodeData())
+  if (!block->GetNGInlineNodeData()) {
     block->ResetNGInlineNodeData();
+  }
 }
 
 bool NGInlineNode::IsPrepareLayoutFinished() const {
@@ -526,6 +528,7 @@ void NGInlineNode::PrepareLayout(NGInlineNodeData* previous_data) const {
   SegmentText(data);
   ShapeTextIncludingFirstLine(
       data, previous_data ? &previous_data->text_content : nullptr, nullptr);
+
   AssociateItemsWithInlines(data);
   DCHECK_EQ(data, MutableData());
 
@@ -1236,6 +1239,40 @@ void NGInlineNode::SegmentBidiRuns(NGInlineNodeData* data) const {
 #endif
 }
 
+bool NGInlineNode::IsNGShapeCacheAllowed(
+    const String& text_content,
+    const Font* override_font,
+    const HeapVector<NGInlineItem>& items,
+    ShapeResultSpacing<String>& spacing) const {
+  if (!RuntimeEnabledFeatures::LayoutNGShapeCacheEnabled()) {
+    return false;
+  }
+  // For consistency with similar usages of ShapeCache (e.g. canvas) and in
+  // order to avoid caching bugs (e.g. with scripts having Arabic joining)
+  // NGShapeCache is only enabled when the IFC is made of a single text item. To
+  // be efficient, NGShapeCache only stores entries for short strings and
+  // without memory copy, so don't allow it if the text item is too long or if
+  // the start/end offsets match a substring. Don't allow it either if a call to
+  // ApplySpacing is needed to avoid a costly copy of the ShapeResult in the
+  // loop below. Finally, check that the font meet requirements on the font
+  // family list to avoid expensive hash key calculations.
+  if (items.size() != 1) {
+    return false;
+  }
+  if (text_content.length() > NGShapeCache::MaxTextLengthOfEntries()) {
+    return false;
+  }
+  const NGInlineItem& single_item = items[0];
+  if (!(single_item.Type() == NGInlineItem::kText &&
+        single_item.StartOffset() == 0 &&
+        single_item.EndOffset() == text_content.length())) {
+    return false;
+  }
+  const Font& font =
+      override_font ? *override_font : single_item.FontWithSvgScaling();
+  return !spacing.SetSpacing(font.GetFontDescription());
+}
+
 void NGInlineNode::ShapeText(NGInlineItemsData* data,
                              const String* previous_text,
                              const HeapVector<NGInlineItem>* previous_items,
@@ -1245,31 +1282,11 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
   HeapVector<NGInlineItem>* items = &data->items;
 
   ShapeResultSpacing<String> spacing(text_content, IsSvgText());
-
-  // For consistency with similar usages of ShapeCache (e.g. canvas) and in
-  // order to avoid caching bugs (e.g. with scripts having Arabic joining)
-  // NGShapeCache is only enabled when the IFC is made of a single text item. To
-  // be efficient, NGShapeCache only stores entries for short strings and
-  // without memory copy, so don't allow it if the text item is too long or if
-  // the start/end offsets match a substring. Don't allow it either if a call to
-  // ApplySpacing is needed to avoid a costly copy of the ShapeResult in the
-  // loop below.
-  auto ShapeCacheAllowedFor = [&override_font, &spacing,
-                               &text_content](const NGInlineItem& single_item) {
-    if (!(single_item.Type() == NGInlineItem::kText &&
-          single_item.StartOffset() == 0 &&
-          single_item.EndOffset() == text_content.length())) {
-      return false;
-    }
-    const Font& font =
-        override_font ? *override_font : single_item.FontWithSvgScaling();
-    return !spacing.SetSpacing(font.GetFontDescription());
-  };
+  TextAutoSpace auto_space(*data);
 
   const bool allow_shape_cache =
-      RuntimeEnabledFeatures::LayoutNGShapeCacheEnabled() &&
-      text_content.length() <= NGShapeCache::MaxTextLengthOfEntries() &&
-      items->size() == 1 && ShapeCacheAllowedFor((*items)[0]);
+      IsNGShapeCacheAllowed(text_content, override_font, *items, spacing) &&
+      !auto_space.MayApply();
 
   // Provide full context of the entire node to the shaper.
   ReusingTextShaper shaper(data, previous_items, allow_shape_cache);
@@ -1460,6 +1477,8 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
     shape_result->CopyRanges(text_item_ranges.data(), text_item_ranges.size());
   }
 
+  auto_space.ApplyIfNeeded(*data);
+
 #if DCHECK_IS_ON()
   for (const NGInlineItem& item : *items) {
     if (item.Type() == NGInlineItem::kText && item.Length()) {
@@ -1508,6 +1527,9 @@ void NGInlineNode::ShapeTextForFirstLineIfNeeded(NGInlineNodeData* data) const {
   first_line_items->items.AppendVector(data->items);
   for (auto& item : first_line_items->items) {
     item.SetStyleVariant(NGStyleVariant::kFirstLine);
+  }
+  if (data->segments) {
+    first_line_items->segments = data->segments->Clone();
   }
 
   // Re-shape if the font is different.
@@ -1669,7 +1691,7 @@ static LayoutUnit ComputeContentSize(
       EFloat previous_float_type = EFloat::kNone;
       for (const auto& floating_object : floating_objects_) {
         const EClear float_clear =
-            floating_object.float_style.Clear(floating_object.style);
+            floating_object.float_style->Clear(*floating_object.style);
 
         // If this float clears the previous float we start a new "line".
         // This is subtly different to block layout which will only reset either
@@ -1688,7 +1710,7 @@ static LayoutUnit ComputeContentSize(
         floats_inline_size_ += floating_object.float_inline_max_size_with_margin
                                    .ClampNegativeToZero();
         previous_float_type =
-            floating_object.float_style.Floating(floating_object.style);
+            floating_object.float_style->Floating(*floating_object.style);
       }
       max_inline_size =
           std::max(max_inline_size, line_inline_size + floats_inline_size_);

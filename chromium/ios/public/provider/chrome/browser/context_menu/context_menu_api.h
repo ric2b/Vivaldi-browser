@@ -10,10 +10,11 @@
 #import "base/files/file_path.h"
 #import "base/values.h"
 #import "ios/web/public/ui/context_menu_params.h"
-#import "ios/web/public/ui/crw_context_menu_item.h"
+#import "services/metrics/public/cpp/ukm_source_id.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 
 class ChromeBrowserState;
+@protocol MiniMapCommands;
 
 // Wraps information to add/show to/in a context menu
 @interface ElementsToAddToContextMenu : NSObject
@@ -39,7 +40,8 @@ ElementsToAddToContextMenu* GetContextMenuElementsToAdd(
     ChromeBrowserState* browser_state,
     web::WebState* web_state,
     web::ContextMenuParams params,
-    UIViewController* presenting_view_controller);
+    UIViewController* presenting_view_controller,
+    id<MiniMapCommands> mini_map_handler);
 
 // Returns set of `NSTextCheckingType` representing the intent types that
 // can be handled by the provider, for the given `web_state`.
@@ -54,15 +56,9 @@ NSTextCheckingType GetHandledIntentTypesForOneTap(web::WebState* web_state);
 // NO if no direct 1-tap action is defined.
 BOOL HandleIntentTypesForOneTap(web::WebState* web_state,
                                 NSTextCheckingResult* match,
-                                UIViewController* presenting_view_controller);
-
-// Returns `CRWContextMenuItem` items for the given `match`, for the given
-// `web_state`.
-NSArray<CRWContextMenuItem*>* GetContextMenuElementsToAdd(
-    web::WebState* web_state,
-    NSTextCheckingResult* match,
-    NSString* text,
-    UIViewController* presenting_view_controller);
+                                NSString* text,
+                                UIViewController* presenting_view_controller,
+                                id<MiniMapCommands> mini_map_handler);
 
 // Returns a full set of intents of `handled_types`, located inside `text`. The
 // `model_path` for the give web state should be passed in if a detection by
@@ -70,6 +66,7 @@ NSArray<CRWContextMenuItem*>* GetContextMenuElementsToAdd(
 absl::optional<base::Value> ExtractDataElementsFromText(
     const std::string& text,
     NSTextCheckingType handled_types,
+    ukm::SourceId source_id,
     const base::FilePath& model_path);
 
 }  // namespace provider

@@ -6,31 +6,33 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/feature_list.h"
 #import "base/metrics/user_metrics.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/ui/authentication/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator+protected.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_sync_screen_provider.h"
+#import "ios/chrome/browser/ui/authentication/signin/uno_signin_screen_provider.h"
+#import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/upgrade_signin_logger.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
-#import "ios/chrome/browser/ui/first_run/history_sync/history_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/tangible_sync/tangible_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/screen/screen_provider.h"
 #import "ios/chrome/browser/ui/screen/screen_type.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using base::RecordAction;
 using base::UserMetricsAction;
 
 @interface TwoScreensSigninCoordinator () <
+    HistorySyncCoordinatorDelegate,
     UIAdaptivePresentationControllerDelegate>
 @end
 
@@ -70,7 +72,22 @@ using base::UserMetricsAction;
 
 - (void)start {
   [super start];
-  _screenProvider = [[SigninSyncScreenProvider alloc] init];
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    if (_accessPoint ==
+        signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO) {
+      ChromeAccountManagerService* accountManagerService =
+          ChromeAccountManagerServiceFactory::GetForBrowserState(
+              self.browser->GetBrowserState());
+      // TODO(crbug.com/779791): Need to add `CHECK(accountManagerService)`.
+      [UpgradeSigninLogger
+          logSigninStartedWithAccessPoint:_accessPoint
+                    accountManagerService:accountManagerService];
+    }
+    _screenProvider = [[UnoSigninScreenProvider alloc] init];
+  } else {
+    _screenProvider = [[SigninSyncScreenProvider alloc] init];
+  }
   _navigationController =
       [[UINavigationController alloc] initWithNavigationBarClass:nil
                                                     toolbarClass:nil];
@@ -88,7 +105,7 @@ using base::UserMetricsAction;
 - (void)stop {
   if (_navigationController) {
     __block BOOL completionBlockCalled = NO;
-    [self interruptWithAction:SigninCoordinatorInterruptActionNoDismiss
+    [self interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
                    completion:^{
                      completionBlockCalled = YES;
                    }];
@@ -152,12 +169,16 @@ using base::UserMetricsAction;
                                   firstRun:NO
                                   delegate:self];
     case kHistorySync:
-      return [[HistorySyncScreenCoordinator alloc]
+      return [[HistorySyncCoordinator alloc]
           initWithBaseNavigationController:_navigationController
                                    browser:self.browser
+                                  delegate:self
                                   firstRun:NO
-                                  delegate:self];
+                             showUserEmail:NO
+                                isOptional:YES
+                               accessPoint:_accessPoint];
     case kDefaultBrowserPromo:
+    case kChoice:
     case kStepsCompleted:
       break;
   }
@@ -168,6 +189,13 @@ using base::UserMetricsAction;
 // SigninCompletionInfo object that includes the given `identity`.
 - (void)finishWithResult:(SigninCoordinatorResult)result
                 identity:(id<SystemIdentity>)identity {
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos) &&
+      _accessPoint == signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO) {
+    // TODO(crbug.com/1491419): `addedAccount` is not always `NO`. Need to fix
+    // that call to have the right value.
+    [UpgradeSigninLogger logSigninCompletedWithResult:result addedAccount:NO];
+  }
   // When this coordinator is interrupted, `_childCoordinator` needs to be
   // stopped here.
   if (_childCoordinator) {
@@ -200,7 +228,7 @@ using base::UserMetricsAction;
 
 #pragma mark - SigninCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
+- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
                  completion:(ProceduralBlock)completion {
   __weak __typeof(self) weakSelf = self;
   __weak __typeof(_navigationController) weakNavigationController =
@@ -213,9 +241,9 @@ using base::UserMetricsAction;
   };
   BOOL animated = NO;
   switch (action) {
-    case SigninCoordinatorInterruptActionNoDismiss: {
+    case SigninCoordinatorInterrupt::UIShutdownNoDismiss: {
       [_childCoordinator
-          interruptWithAction:SigninCoordinatorInterruptActionNoDismiss
+          interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
                    completion:^{
                      [weakNavigationController.presentingViewController
                          dismissViewControllerAnimated:NO
@@ -224,11 +252,11 @@ using base::UserMetricsAction;
                    }];
       return;
     }
-    case SigninCoordinatorInterruptActionDismissWithoutAnimation: {
+    case SigninCoordinatorInterrupt::DismissWithoutAnimation: {
       animated = NO;
       break;
     }
-    case SigninCoordinatorInterruptActionDismissWithAnimation: {
+    case SigninCoordinatorInterrupt::DismissWithAnimation: {
       animated = YES;
       break;
     }
@@ -237,8 +265,7 @@ using base::UserMetricsAction;
   // Interrupt the child coordinator UI first before dismissing the new
   // sign-in navigation controller.
   [_childCoordinator
-      interruptWithAction:
-          SigninCoordinatorInterruptActionDismissWithoutAnimation
+      interruptWithAction:SigninCoordinatorInterrupt::DismissWithoutAnimation
                completion:^{
                  UIViewController* presentingViewController =
                      weakNavigationController.presentingViewController;
@@ -252,13 +279,21 @@ using base::UserMetricsAction;
                }];
 }
 
+#pragma mark - HistorySyncCoordinatorDelegate
+
+// Dismisses the current screen.
+- (void)closeHistorySyncCoordinator:
+            (HistorySyncCoordinator*)historySyncCoordinator
+                     declinedByUser:(BOOL)declined {
+  [self screenWillFinishPresenting];
+}
+
 #pragma mark - UIAdaptivePresentationControllerDelegate
 
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
   RecordAction(UserMetricsAction("Signin_TwoScreens_SwipeDismiss"));
-  [self interruptWithAction:
-            SigninCoordinatorInterruptActionDismissWithoutAnimation
+  [self interruptWithAction:SigninCoordinatorInterrupt::DismissWithoutAnimation
                  completion:nil];
 }
 

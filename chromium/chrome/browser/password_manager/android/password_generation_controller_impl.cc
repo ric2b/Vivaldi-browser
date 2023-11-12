@@ -53,35 +53,6 @@ PasswordGenerationController* PasswordGenerationController::GetIfExisting(
   return PasswordGenerationControllerImpl::FromWebContents(web_contents);
 }
 
-struct PasswordGenerationControllerImpl::GenerationElementData {
-  GenerationElementData(
-      const autofill::password_generation::PasswordGenerationUIData& ui_data) {
-    const std::string kFieldType = "password";
-
-    form_data = ui_data.form_data;
-    form_signature = autofill::CalculateFormSignature(ui_data.form_data);
-    field_signature = autofill::CalculateFieldSignatureByNameAndType(
-        ui_data.generation_element, kFieldType);
-    generation_element_id = ui_data.generation_element_id;
-    max_password_length = ui_data.max_length;
-  }
-
-  // Form for which password generation is triggered.
-  autofill::FormData form_data;
-
-  // Signature of the form for which password generation is triggered.
-  autofill::FormSignature form_signature;
-
-  // Signature of the field for which password generation is triggered.
-  autofill::FieldSignature field_signature;
-
-  // Renderer ID of the password field triggering generation.
-  autofill::FieldRendererId generation_element_id;
-
-  // Maximum length of the generated password.
-  uint32_t max_password_length;
-};
-
 base::WeakPtr<password_manager::ContentPasswordManagerDriver>
 PasswordGenerationControllerImpl::GetActiveFrameDriver() const {
   return active_frame_driver_;
@@ -104,14 +75,8 @@ void PasswordGenerationControllerImpl::OnAutomaticGenerationAvailable(
           active_frame_driver_.get(), ui_data.form_data.unique_renderer_id,
           ui_data.generation_element_id, PasswordGenerationType::kAutomatic);
 
-  if (!base::FeatureList::IsEnabled(
-          autofill::features::kAutofillKeyboardAccessory)) {
-    active_frame_driver_->GetPasswordAutofillManager()
-        ->MaybeShowPasswordSuggestions(element_bounds_in_screen_space,
-                                       ui_data.text_direction);
-  }
-
-  generation_element_data_ = std::make_unique<GenerationElementData>(ui_data);
+  generation_element_data_ =
+      std::make_unique<PasswordGenerationElementData>(ui_data);
 
   if (touch_to_fill_generation_state_ == TouchToFillState::kIsShowing) {
     return;
@@ -137,7 +102,8 @@ void PasswordGenerationControllerImpl::ShowManualGenerationDialog(
   if (!IsActiveFrameDriver(target_frame_driver) ||
       !manual_generation_requested_)
     return;
-  generation_element_data_ = std::make_unique<GenerationElementData>(ui_data);
+  generation_element_data_ =
+      std::make_unique<PasswordGenerationElementData>(ui_data);
   ShowDialog(PasswordGenerationType::kManual);
 }
 
@@ -226,12 +192,11 @@ void PasswordGenerationControllerImpl::CreateForWebContentsForTesting(
 
 PasswordGenerationControllerImpl::PasswordGenerationControllerImpl(
     content::WebContents* web_contents)
-    : content::WebContentsUserData<PasswordGenerationControllerImpl>(
-          *web_contents),
-      client_(ChromePasswordManagerClient::FromWebContents(web_contents)),
-      create_dialog_factory_(
-          base::BindRepeating(&PasswordGenerationDialogViewInterface::Create)),
-      create_touch_to_fill_generation_controller_(
+    : PasswordGenerationControllerImpl(
+          web_contents,
+          ChromePasswordManagerClient::FromWebContents(web_contents),
+          /*manual_filling_controller=*/nullptr,
+          base::BindRepeating(&PasswordGenerationDialogViewInterface::Create),
           base::BindRepeating(&PasswordGenerationControllerImpl::
                                   CreateTouchToFillGenerationController,
                               base::Unretained(this))) {}
@@ -243,7 +208,8 @@ PasswordGenerationControllerImpl::PasswordGenerationControllerImpl(
     CreateDialogFactory create_dialog_factory,
     CreateTouchToFillGenerationControllerFactory
         create_touch_to_fill_generation_controller)
-    : content::WebContentsUserData<PasswordGenerationControllerImpl>(
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<PasswordGenerationControllerImpl>(
           *web_contents),
       client_(client),
       manual_filling_controller_(std::move(manual_filling_controller)),
@@ -254,22 +220,26 @@ PasswordGenerationControllerImpl::PasswordGenerationControllerImpl(
 std::unique_ptr<TouchToFillPasswordGenerationController>
 PasswordGenerationControllerImpl::CreateTouchToFillGenerationController() {
   return std::make_unique<TouchToFillPasswordGenerationController>(
-      active_frame_driver_, &GetWebContents(),
+      active_frame_driver_, &GetWebContents(), *generation_element_data_,
       std::make_unique<TouchToFillPasswordGenerationBridgeImpl>(),
       base::BindOnce(&PasswordGenerationControllerImpl::
                          OnTouchToFillForGenerationDismissed,
-                     base::Unretained(this)));
+                     base::Unretained(this)),
+      ManualFillingController::GetOrCreate(&GetWebContents()));
 }
 
 std::unique_ptr<TouchToFillPasswordGenerationController>
 PasswordGenerationControllerImpl::
     CreateTouchToFillGenerationControllerForTesting(
-        std::unique_ptr<TouchToFillPasswordGenerationBridge> bridge) {
+        std::unique_ptr<TouchToFillPasswordGenerationBridge> bridge,
+        base::WeakPtr<ManualFillingController> manual_filling_controller) {
   return std::make_unique<TouchToFillPasswordGenerationController>(
-      active_frame_driver_, &GetWebContents(), std::move(bridge),
+      active_frame_driver_, &GetWebContents(), *generation_element_data_,
+      std::move(bridge),
       base::BindOnce(&PasswordGenerationControllerImpl::
                          OnTouchToFillForGenerationDismissed,
-                     base::Unretained(this)));
+                     base::Unretained(this)),
+      manual_filling_controller);
 }
 
 void PasswordGenerationControllerImpl::ShowDialog(PasswordGenerationType type) {
@@ -306,16 +276,10 @@ bool PasswordGenerationControllerImpl::TryToShowGenerationTouchToFill() {
 
   touch_to_fill_generation_controller_ =
       create_touch_to_fill_generation_controller_.Run();
-  std::u16string generated_password =
-      active_frame_driver_->GetPasswordGenerationHelper()->GeneratePassword(
-          GetWebContents().GetLastCommittedURL().DeprecatedGetOriginAsURL(),
-          generation_element_data_->form_signature,
-          generation_element_data_->field_signature,
-          generation_element_data_->max_password_length);
   std::string account =
       password_manager::GetDisplayableAccountName(&GetWebContents());
   if (!touch_to_fill_generation_controller_->ShowTouchToFill(
-          std::move(generated_password), std::move(account))) {
+          std::move(account))) {
     return false;
   }
 
@@ -361,6 +325,12 @@ void PasswordGenerationControllerImpl::RenderFrameDeleted(
       active_frame_driver_->render_frame_host() == render_frame_host) {
     HideBottomSheetIfNeeded();
   }
+}
+
+void PasswordGenerationControllerImpl::WebContentsDestroyed() {
+  // Avoid invalid pointers to other `WebContentsUserData`, e.g. `client_`.
+  GetWebContents().RemoveUserData(UserDataKey());
+  // `this` is now destroyed - do not add code here.
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PasswordGenerationControllerImpl);

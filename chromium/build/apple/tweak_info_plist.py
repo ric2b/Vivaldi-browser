@@ -262,6 +262,13 @@ def _RemoveSparkleKeys(plist):
     'SUFeedURL')
 
 # Vivaldi
+def _UpdateiOSDisplayName(plist, vivaldi_release_kind):
+  """Update iOS display name based on release kind."""
+  if vivaldi_release_kind == 'vivaldi_final':
+    plist['CFBundleDisplayName'] = 'Vivaldi'
+  else: # iOS only has final and snapshot type.
+    plist['CFBundleDisplayName'] = 'Vivaldi Snapshot'
+
 def _UpdateUIApplicationShortcutItems(plist):
   """Removes voice search related shortcut keys"""
   for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
@@ -466,9 +473,11 @@ def Main(argv):
   else:
     _RemoveBreakpadKeys(plist)
 
-  # Remove Voice Search shortcut item from Vivaldi iOS
   if (options.vivaldi_plist and options.platform == 'ios'):
+    # Remove Voice Search shortcut item from Vivaldi iOS
     _UpdateUIApplicationShortcutItems(plist)
+    # Update display name for Vivaldi iOS
+    _UpdateiOSDisplayName(plist, options.vivaldi_release_kind)
 
   # Add Keystone if configured to do so.
   if options.use_keystone:

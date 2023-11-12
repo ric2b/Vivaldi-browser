@@ -375,10 +375,33 @@ export let Volume;
 export let VolumeMap;
 
 /**
+ * This carries the state related to physical user device.
+ *
+ * @typedef {{
+ *   connection: (chrome.fileManagerPrivate.DeviceConnectionState),
+ * }}
+ */
+export let Device;
+
+/**
+ * This carries the state related to the underlying Drive connection status.
+ * This differs from the device connection state as the Drive can also be in a
+ * effectively paused state when on a metered network.
+ *
+ * @typedef {{
+ *   connectionType: (chrome.fileManagerPrivate.DeviceConnectionState),
+ *   offlineReason: (chrome.fileManagerPrivate.DriveOfflineReason|undefined),
+ * }}
+ */
+export let Drive;
+
+/**
  * Files app's state.
  * @typedef {{
  *   allEntries: !Object<!FileKey, !FileData>,
  *   currentDirectory: (CurrentDirectory|undefined),
+ *   device: !Device,
+ *   drive: !Drive,
  *   search: (!SearchData|undefined),
  *   navigation: !NavigationTree,
  *   volumes: !Object<!VolumeId, !Volume>,

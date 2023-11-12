@@ -1,4 +1,360 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
+<translation id="1016495303386450659">item bywurke</translation>
+<translation id="1066692930984703744">Tsjinkeare fan folgers en advertinsjes ynskeakelje foar flugger en feiliger sneupen</translation>
+<translation id="1116694919640316211">Oer</translation>
+<translation id="1123707809902612118">Folgers en advertinsjes tsjinkeare</translation>
+<translation id="1151972924205500581">Wachtwurd fereaske</translation>
+<translation id="1166425484559430538">Dyn syngronisearre gegevens binne fersifere. Ferskaf dyn fersifering wachtwurd om de gegevens te ûntsiferjen.</translation>
+<translation id="1181037720776840403">Wiskje</translation>
+<translation id="1182668946911971500">Notysje balke</translation>
+<translation id="1198271701881992799">Lit ús begjinne</translation>
+<translation id="1201402288615127009">Folgjende</translation>
+<translation id="1208495925646914304">Titel</translation>
+<translation id="1254117744268754948">Map kieze</translation>
+<translation id="1265555169187992603">Kies in brûkersnamme tusken 3 oant 30 tekens, (a-z of A-Z) en sifers (0-9).</translation>
+<translation id="1267954839079880017">Italiaansk (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">Syngronisaasje is aktyf</translation>
+<translation id="1275213816424141989">Miskien letter</translation>
+<translation id="1315107593850379616">Ferhelje e-post</translation>
+<translation id="1325473901257014816">Mei Vivaldi, hâld al dyn ljeppers yn ien sneuper en syngronisearje se op alle apparaten.</translation>
+<translation id="132683371494960526">Dûbel klikke om de boppenlizzende map te feroarjen.</translation>
+<translation id="1379470994139227452">Set Vivaldi as standert</translation>
+<translation id="1381484244248892686">Do kinst bewarre wachtwurden brûke op elk apparaat. Se wurde bewarre yn Vivaldi's Wachtwurd behearder foar <ph name="EMAIL" /></translation>
+<translation id="1383876407941801731">Sykje</translation>
+<translation id="1397515084080510783">Gjin syngronisearre ljeppers</translation>
+<translation id="1410197035576869800">App ikoan</translation>
+<translation id="1430638949087011281">Neat tsjinkeare</translation>
+<translation id="1446108955355168157">Foar it fersiferjen en befeiligjen fan dyn syngronisaasje gegevens (lykas wachtwurden, blêdwizers en notysjes), moat der in fersifering wachtwurd oanmakke wurde. Dit wachtwurd wurdt nea nei ús stjoerd.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> items</translation>
+<translation id="1521731267649138856">dyn ferhelje e-post adres.</translation>
+<translation id="1573784689611551537">Advertinsje tsjinkearder boarnen beheare</translation>
+<translation id="1577761519530347814">Bewarre webstee wachtwurden syngronisearje</translation>
+<translation id="1644574205037202324">Skiednis</translation>
+<translation id="1659112017960130179">Koreaansk (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">Bynamme</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Betingsten fan brûken ➔<ph name="END_LINK" />      <ph name="BEGIN_LINK2" />Privacy belied<ph name="END_LINK2" /></translation>
+<translation id="1721552494230946796">Nije fluchkiezer map</translation>
+<translation id="173924678149983125">Fier URL-adres yn om tsjinkear regels te ymportearjen</translation>
+<translation id="1751280147639351837">Advertinsje en folger tsjinkearder</translation>
+<translation id="1752547299766512813">Wachtwurden bewarje</translation>
+<translation id="1754797958074421486">Betingsten fan brûken</translation>
+<translation id="1771413903824396513">Neffens bynamme</translation>
+<translation id="1804522390855853698">Sineesk <ph name="ORIGIN" /></translation>
+<translation id="1809939268435598390">Map wiskje</translation>
+<translation id="1813686536470127172">Oare map</translation>
+<translation id="1828800626900562968">Druk op it plus ikoan hjirûnder om in nij ljepper oan te meitsjen.</translation>
+<translation id="1861262398884155592">Dizze map is leech</translation>
+<translation id="1887193815546011584">Nije fluchkiezer</translation>
+<translation id="1929299157575856072">STANDERT TSJINKEAR NIVO</translation>
+<translation id="1979539205367899613">Druk op it plus ikoan om in nij privee ljepper oan te meitsjen.</translation>
+<translation id="2030706494969937066">Jo oanmeld gegevens koenen net ynhelle wurde. Besykje op 'e nij yn te loggen.</translation>
+<translation id="2034405583989639424">Fluchkiezer bewurkje</translation>
+<translation id="2048247880942380698">Arabysk (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">Ungedien meitsje</translation>
+<translation id="2117093051794889870">Neffens ynhâld</translation>
+<translation id="2129408066358825297">Leeftiid</translation>
+<translation id="2148384276939959392">Seleksje syngronisearje</translation>
+<translation id="21693288559538605">Gearfetting advertinsje en folger tsjinkearder</translation>
+<translation id="2195713384412091023">Dit sil alle bewarre syngronisearre gegevens op ús tsjinner wiskje, jo fersifering wachtwurd weromsette, en jo ôfmelde.</translation>
+<translation id="2243210264130642074">Notysje bewarre</translation>
+<translation id="2272338747456392228">Akkount is beskoattele</translation>
+<translation id="2273327106802955778">Menu mear</translation>
+<translation id="2324160330092901720">In ferifikaasje koade is stjoerd nei <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Jiskefet leegje</translation>
+<translation id="2359808026110333948">Fierder</translation>
+<translation id="2386793615875593361">1 selektearre</translation>
+<translation id="2388224692799337242">Sadra dat it sneupen begjint, sil de skiednis hjir ferskinne</translation>
+<translation id="2391028308389203648">Turks (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">Aktivearje</translation>
+<translation id="2434910957904013691">Alles syngronisearje</translation>
+<translation id="2448144008809286557"><ph name="BEGIN_LINK" />Brûkersnamme<ph name="END_LINK" /> of <ph name="BEGIN_LINK" />wachtwurd<ph name="END_LINK" /> ferjitte?</translation>
+<translation id="2536780277491102902">UTSUNDERINGEN</translation>
+<translation id="2558801801411970131">Folgers tsjinkeare</translation>
+<translation id="2577446409661931381">Nije notysje</translation>
+<translation id="2619628557366098325">Portugeesk (<ph name="ORIGIN" />)</translation>
+<translation id="2677862276555105603">Advertinsje
+tsjinkeard</translation>
+<translation id="2678542925523700624">Estysk (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">Automatyske ynfier</translation>
+<translation id="271033894570825754">Nij</translation>
+<translation id="2745324713975967671">Fersifering wachtwurd</translation>
+<translation id="2765217105034171413">Lyts</translation>
+<translation id="2825232297853754349">Do moatst akkoard gean mei de betingsten en kondysjes.</translation>
+<translation id="2842985007712546952">Haadmap</translation>
+<translation id="2843343418360315034">Hongaarsk (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">Syngronisaasje wurdt taret...</translation>
+<translation id="2874111661876416905">Sykje mei Vivaldi</translation>
+<translation id="2874121295511641364">Ynfierde adressen en iepen ljeppers syngronisearje</translation>
+<translation id="2898963176829412617">Nije map…</translation>
+<translation id="2961573414320947355">Alle keppelingen iepenje yn Vivaldi? Set ús dan as standert.</translation>
+<translation id="3006429105107822794">Do hoechst dit wachtwurd net te omhâlden. It sil bewarre wurde yn Vivaldi Wachtwurd behearder.</translation>
+<translation id="3018244467214569202">Gryksk (<ph name="ORIGIN" />)</translation>
+<translation id="3039671569659952257">Map wiskje</translation>
+<translation id="3073196329485613487">Oanmelde by dyn akkount</translation>
+<translation id="307859903981308731">Troch fierder te gean, giest akkoard mei Vivaldi's</translation>
+<translation id="3086746722712840547">notysje</translation>
+<translation id="3091563570137981919">Folger en advertinsje tsjinkeare</translation>
+<translation id="313566647356924831">Tsjinkearder ynstellingen beheare</translation>
+<translation id="3177673846235066154">Tsjinner hat jo oanmelding wegere.</translation>
+<translation id="3229182533910980085">Dyn earste blêdwizer taheakje troch te klikken op it plus ikoan</translation>
+<translation id="3236835587712044564">Bliid mei Vivaldi? Set it as dyn standert sneuper.</translation>
+<translation id="3270894089048358271">Set Vivaldi as dyn standert</translation>
+<translation id="3270930591809084274">Syngronisearre ljeppers</translation>
+<translation id="3335772982573114336">Nije notysje</translation>
+<translation id="33451081266695216">Ferbining beheind troch de tsjinner.</translation>
+<translation id="3346386541263128307">E-post adressen komme net oerien.</translation>
+<translation id="3365991203476235715">Ingelsk (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Litousk (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">Privee ljepper</translation>
+<translation id="3435896845095436175">Ynskeakelje</translation>
+<translation id="3438160227308459316">Roemeensk (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">In akkount oanmeitsje</translation>
+<translation id="3509379002674019679">Wachtwurden oanmeitsje, bewarje en beheare sadat jo ienfâldich oanmelde kinst by websteeën en apps.</translation>
+<translation id="3513566764071045027">Ofmelde</translation>
+<translation id="3527085408025491307">Map</translation>
+<translation id="3530991200302302959">Bulgaarsk (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Neffens datum</translation>
+<translation id="3607176258839749451">Troch in flater mislearre de registraasje. Besykje it letter nochris.</translation>
+<translation id="3646647753063635401">Syngronisearje alle gegevens en it syngronisearjen fan gegevens typen automatysk ynskeakelje</translation>
+<translation id="3682791711395736890">Buroblêd ferzje fan side besjen</translation>
+<translation id="3692650606013198282">Privee iepenje</translation>
+<translation id="3699026013955941879">De koade is ferrûn. Freegje in nije aktivaasje koade oan.</translation>
+<translation id="3700829948786686853">Wolkom by Vivaldi</translation>
+<translation id="3766350025418769949">Do kinst de wachtwurden bewarre yn Vivaldi's Wachtwurd behearder brûke yn oare apps op dyn iPad.</translation>
+<translation id="3845564230651302310">Nije tsjinkearder ynstellingen tapasse...</translation>
+<translation id="3858860766373142691">Namme</translation>
+<translation id="3866249974567520381">Beskriuwing</translation>
+<translation id="3872195896030547485">Fier in jildich e-post adres yn.</translation>
+<translation id="3894427358181296146">Map taheakje</translation>
+<translation id="3897092660631435901">Menu</translation>
+<translation id="3953599441418463312">Japansk (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Folger tsjinkeard</translation>
+<translation id="3997823869212225788">Fier de 6 sifer koade yn</translation>
+<translation id="4002066346123236978">Titel</translation>
+<translation id="4032606071208172574">(Standert)</translation>
+<translation id="4048057312173843244">Syngronisearre ljeppers fan oare apparaten sille hjir ferskine. Meld dy by syngronisaasje oan om dizze tsjinst te brûken.</translation>
+<translation id="4073968054795398875">De syngronisaasje tsjinner hat swierrigens. Syngronisaasje wurd sa wer besocht...</translation>
+<translation id="4096707694175478403">Paniel</translation>
+<translation id="414098425907666915">privee sykjen</translation>
+<translation id="4141861385728508836">Noarsk (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">Unferwachtse flater.</translation>
+<translation id="4152011295694446843">Hjir binne dyn blêdwizers</translation>
+<translation id="4152623049003960417">Folger detail</translation>
+<translation id="4176463684765177261">Utskeakele</translation>
+<translation id="4209092469652827314">Grut</translation>
+<translation id="4219175188138757774">Tsjechysk en Slowaaksk (<ph name="ORIGIN" /> )</translation>
+<translation id="4276839458685471670">Neffens oanmakke</translation>
+<translation id="4277085371281330061">Folgers
+tsjinkeard</translation>
+<translation id="4299298331965375737">Vivaldi ta dyn standert sneuper meitsje?</translation>
+<translation id="4304224509867189079">Oanmelde</translation>
+<translation id="4316955624679873896">Blêdwizer yn</translation>
+<translation id="432696242656678770">Russysk (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Spaansk (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">Fjetnameesk (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Utskeakelje</translation>
+<translation id="4413780690230851155">Skiednis fan sneupen wiskje</translation>
+<translation id="4452878871193896747">Yndonezysk (<ph name="ORIGIN" />)</translation>
+<translation id="4474581062946673155">Der binne op it stuit gjin ljeppers syngronisearre fan oare apparaten.</translation>
+<translation id="4493850495402472953">en</translation>
+<translation id="4497115807425788318">Lokaasje</translation>
+<translation id="4507213865286211606">Foarbyld grutte</translation>
+<translation id="4515084385531683114">Wachtwurden wurde bewarre yn de wachtwurd behearder op dit apparaat.</translation>
+<translation id="4525945044609022380">Dizze e-postadres is al keppele mei in oar akkount.</translation>
+<translation id="4526803704855831732">Privee ljeppers</translation>
+<translation id="4563480492836333884">E-post net akseptearre. Brûk in oar domein.</translation>
+<translation id="457386861538956877">Mear...</translation>
+<translation id="460370326897402035">Wachtwurd is net jildich.</translation>
+<translation id="4619615317237390068">Ljeppers fan oare apparaten</translation>
+<translation id="4640946580087069269">Kopiearje nei notysje</translation>
+<translation id="4654578955713250802">Tsjinkeare fan advertinsje en folgers</translation>
+<translation id="4655510151391078468">Dizze koade komt net oerien mei dyjinne dy't wy stjoerd ha.
+        Do hast <ph name="ATTEMPTS" /> besykjen oer.</translation>
+<translation id="466494460776294423">Ferifikaasje koade is fereaske</translation>
+<translation id="4727698999970341158">Yslânsk (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Fernijen</translation>
+<translation id="4739712911308055817">Net ophelle</translation>
+<translation id="4780953868408193639">Folger
+tsjinkeard</translation>
+<translation id="4807415245238822255">De wachtwurden moatte oerienkomme.</translation>
+<translation id="4833044618885331665">Do moatst Vivaldi fernije om syngronisaasje te brûken.</translation>
+<translation id="4852383705713307704">Advertinsje tsjinkeard</translation>
+<translation id="4871370605780490696">Blêdwizer taheakje</translation>
+<translation id="4903325570808402486">Vivaldi's ynstellingen syngronisearje (net alles kin syngronisearre wurde)</translation>
+<translation id="4929196061847506605">Krêftich. Persoanlik. Privee.</translation>
+<translation id="4936710149174207991">Net syngronisearre</translation>
+<translation id="4943266325467647391">Vivaldi's ynboude folger en advertinsje tsjinkearder beskermet dy tsjin malware en advertinsjes.</translation>
+<translation id="495421405224926623">Ik haw de betingsten fan brûkme en it privacy belied lêzen en gean akkoard</translation>
+<translation id="497942794017668482">Folgers en advertinsjes tsjinkeare</translation>
+<translation id="5037761343305489956">Kopiearre nei notysje</translation>
+<translation id="504986598654589766">Sneupen yn in privee ljepper jout oan dan it sykjen, besochte websteeën, koekjes en tydlike triemmen net bewarre wurde troch Vivaldi. It fersiferet of feroaret net jo ferbining.</translation>
+<translation id="5094376253685335202">syngronisaasje ynskeakelje</translation>
+<translation id="5116316489033177455">Blêdwizers en fluchkiezers syngronisearje</translation>
+<translation id="5122095890854520072">Letsk (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">Ynloch mislearre</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Koade nochris ferstjoere<ph name="END_LINK" /></translation>
+<translation id="5191012692655103305">Ljeppers en skiednis ophelje...</translation>
+<translation id="5238642303473095117">Gegevens wiskje</translation>
+<translation id="5245732982828228444">Hjir binne dyn notysjes</translation>
+<translation id="5249199221558969362">Fier in realistyske libbensdoer getal yn.</translation>
+<translation id="5290452628447338707">Gjin notysjes</translation>
+<translation id="5317780077021120954">Bewarje</translation>
+<translation id="5349678548463426691">Neffens beskriuwing</translation>
+<translation id="5350737901534958404">Advertinsjes fan ús partners tastean (stypje Vivaldi)</translation>
+<translation id="5351912500249789547">Vivaldi.net wegere jo ynlog gegevens: Flater koade <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">Jiskefet</translation>
+<translation id="5398772614898833570">Advertinsjes tsjinkeard</translation>
+<translation id="5421638721143596928">It ûntsiferjen fan jo ynloch gegevens mislearre. Loch op 'e nij yn.</translation>
+<translation id="5422086212043657100">As fluchkiezermap brûke</translation>
+<translation id="5439835075346716808">Rigistraasje fan ôf dit IP-adres is tydlik tsjinkeard. Besykje it letter nochris.</translation>
+<translation id="5486261815000869482">Wachtwurd befêstigje</translation>
+<translation id="5494016731375030300">Koartlyn sluten ljeppers</translation>
+<translation id="5569279496588266002">Start side yndieling</translation>
+<translation id="5639137028584114536">Dyn organisaasje fereaske dy om privee te sneupen. Ljeppers wurde net bewarre yn privee modus.
+        <ph name="BEGIN_LINK" />Mear ynformaasje<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">List</translation>
+<translation id="574392208103952083">Trochsneed</translation>
+<translation id="5787420647064736989">Apparaat namme</translation>
+<translation id="5822336771053074270">Notysje taheakje</translation>
+<translation id="5823830882692559950">Vivaldi.net wegere jo ynlog gegevens: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">Nije map</translation>
+<translation id="5859825823508296659">Domein bewurkje</translation>
+<translation id="5867841422488265304">Fier in adres of syk opdracht yn</translation>
+<translation id="5869217094746242845">Mear ynformaasje oer Privacy &amp; Feiligens</translation>
+<translation id="5871497086027727873">1 item ferpleatst</translation>
+<translation id="5898502570200301364">Do kinst de wachtwurden bewarre yn Vivaldi's Wachtwurd behearder brûke yn oare apps op dyn iPhone.</translation>
+<translation id="5900160494089383343">Dizze brûkersnamme is net beskikber.</translation>
+<translation id="6005497458542935062">Ut map ferpleatse</translation>
+<translation id="6042308850641462728">Mear</translation>
+<translation id="6077943432358741146">Fluchkiezer</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> items ferpleatst</translation>
+<translation id="6147094071357011481">Koartlyn sluten ljeppers binne net beskikber</translation>
+<translation id="6193995664633100765">Yndysk (<ph name="ORIGIN" />)</translation>
+<translation id="6365929278691047681">Dútsk (<ph name="ORIGIN" />)</translation>
+<translation id="6404511346730675251">Blêdwizer bewurkje</translation>
+<translation id="6406506848690869874">Syngronisaasje</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> selektearre</translation>
+<translation id="6468130661190228905">Sorry, jo moatte noch efkes geduld ha om oan ús mienskip meidwaan te kinnen. Jo moatte yn elk gefal 16 jier wêze om lid te wurden.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Ymportearje<ph name="END_LINK" /></translation>
+<translation id="6517411226162529295">Reservekopy fersifering kaai</translation>
+<translation id="6527303717912515753">Diele</translation>
+<translation id="6535988230515403205">Poalsk (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">Sneup gegevens wiskje...</translation>
+<translation id="6614744450826097546">Advertinsje details</translation>
+<translation id="6627583120233659107">Map bewurkje</translation>
+<translation id="6631760746795162665">Kolombiaansk <ph name="ORIGIN" /></translation>
+<translation id="6639866709520319699">Folgers en advertinsjes wurde tsjinkeard. Guon websteeën kinne kapot gean.</translation>
+<translation id="6642196070615520677">Gegevens op de tsjinner wiskje</translation>
+<translation id="6645228090427373820">Folgers binne tsjinkeard, mar advertinsjes net. Guon websteeën kinne kapot gean.</translation>
+<translation id="6656103420185847513">Map Bewurkje</translation>
+<translation id="6657585470893396449">Wachtwurd</translation>
+<translation id="6690955457036363013">Tsjinkear nivo de webstee beheare</translation>
+<translation id="6703516503311038964">Ik wol de nijsbrief fan Vivaldi ûntfange</translation>
+<translation id="6757792528048321576">Advertinsje en folger tsjinkearder</translation>
+<translation id="6798469570047202628">Ferkeard wachtwurd ynfierd</translation>
+<translation id="681368974849482173">item oanmakke</translation>
+<translation id="6830986331692390764">Syngronisaasje gegevens wiskje. In amerijke.</translation>
+<translation id="6875510405870945573">Kies it wiske tsjinkearder nivo.</translation>
+<translation id="6885837502028760851">Allinne fluchkiezer mappen sjen litte</translation>
+<translation id="6887143077297974801">Syngronisaasje mislearre te starten.</translation>
+<translation id="6937750621455385628">Do moatst in vivaldi akkount brûke om oan te melden.</translation>
+<translation id="6945221475159498467">Selektearje</translation>
+<translation id="6946395294519639514">Mei panielen hâldst wichtige stikken ark yn berik fan de sneupers sydbalke.</translation>
+<translation id="6967884871145366229">Privacy ynstellingen beheare</translation>
+<translation id="6973630695168034713">Mappen</translation>
+<translation id="7006864796794806241">Wachtwurd opfreegje</translation>
+<translation id="7029809446516969842">Wachtwurden</translation>
+<translation id="7041964446309059643">Mei de hân</translation>
+<translation id="7110758301321962823">Brûkersnamme opfreegje</translation>
+<translation id="7194677467200983873">Lêste syngronisaasje:</translation>
+<translation id="7196846668589096106">Buroblêd ljeppers</translation>
+<translation id="7210372243397300116">Map trochsykje</translation>
+<translation id="7215420652436283416">Neffens adres</translation>
+<translation id="7229439505896086266">Notysje oanmeitsje</translation>
+<translation id="7299721129597238157">Blêdwizer wiskje</translation>
+<translation id="7311118006561484338">Neffens titel</translation>
+<translation id="7325310788570036874">Sneup tûker, soepelder en flugger op it ynternet mei Vivaldi.</translation>
+<translation id="734110743815267231">Hebriuwsk (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Privee iepenje?</translation>
+<translation id="7362952245780030555">Kies tusken in buroblêd styl ljepperbalke, of de ienfâldiger ljeppers skeakeling.</translation>
+<translation id="7379938540614588640">Nederlânsk (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">Nije boarne taheakje</translation>
+<translation id="7400418766976504921">URL-adres</translation>
+<translation id="7454640759045234067">Folger tsjinkeard</translation>
+<translation id="7461899062138731833">BOARNEN</translation>
+<translation id="750493650310597496">0 selektearre</translation>
+<translation id="7525067979554623046">Oanmeitsje</translation>
+<translation id="7573518470897278603">Mobile ferzje fan side besjen</translation>
+<translation id="7574321014880720413">Nij domein taheakje</translation>
+<translation id="7587132259180664054">E-post is mei sukses ferstjoerd</translation>
+<translation id="7602336701644200880">It stjoeren fan e-post is mislearre. Besykje it nochris.</translation>
+<translation id="7606108789437688910">Notysje adressen privee iepenje</translation>
+<translation id="7622661618259256505">Kies in wachtwurd fan yn elk gefal 12 tekens lang.</translation>
+<translation id="7658239707568436148">Ofbrekke</translation>
+<translation id="767363698559661695">Dyn ljepper syl sette</translation>
+<translation id="7702907602086592255">Domein</translation>
+<translation id="7730831244010940855">Vivaldi as standert ynstelle op de iPad?</translation>
+<translation id="7732622593814325274">Folger filter boarnen beheare</translation>
+<translation id="7765158879357617694">Ferpleatse</translation>
+<translation id="7801204999757211519">Der is al in akkount? <ph name="BEGIN_LINK" />Loch yn ➔<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">Notysje bewurkje</translation>
+<translation id="7925340978147141704">Wachtwurd sjen litte</translation>
+<translation id="8008214489230610096">Ferhelje e-post befêstigje</translation>
+<translation id="804786196054284061">Lisinsjeoerienkomst foar einbrûkers</translation>
+<translation id="8053851743673939284">Frânsk (<ph name="ORIGIN" />)</translation>
+<translation id="8066170816074394954">Tsjinner flater.</translation>
+<translation id="8076492880354921740">Ljeppers</translation>
+<translation id="8112996065264879835">Dizze koade komt net oerien mei dyjinne dy't wy stjoerd ha.
+        It maksimum tal ferkeard besykjen is berikt. Freegje hjirûnder in nije koade oan mei de opsje Nochris stjoere.</translation>
+<translation id="8147118677117542370">Jou dyn leeftiid hjir op.</translation>
+<translation id="8165573437634525334">Gegevens befeilige troch in fersifering wachtwurd</translation>
+<translation id="8182979418912184986">Nije privee ljepper</translation>
+<translation id="8257908958623224237">Konflikt mei gegevens fan in oare kliïnt.</translation>
+<translation id="8261506727792406068">Wiskje</translation>
+<translation id="8273666073173891138">Notysje bewarre nei <ph name="FOLDER_TITLE" /></translation>
+<translation id="8275038454117074363">Ymportearje</translation>
+<translation id="8329813750766387010">Fernijd: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">Koekje warskôgings wiskje (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Om ljeppers fan oare apparaten te sjen, moat syngronisaasje ynskeakele wurde.</translation>
+<translation id="8366175803122817174">Iepenje alle notysje adressen</translation>
+<translation id="8384409685584033392">Side ynfo</translation>
+<translation id="839736845446313156">Registrearje</translation>
+<translation id="8414685983518053656">Notysjes</translation>
+<translation id="8423076545503792640">Troch in flater mislearre de oanfraach. Besykje it letter nochris.</translation>
+<translation id="8428213095426709021">Ynstellingen</translation>
+<translation id="8458397775385147834">1 item wiske</translation>
+<translation id="8500459200727969761">Standert listen weromsette</translation>
+<translation id="8503813439785031346">Brûkersnamme</translation>
+<translation id="8515808232153642813">Untsiferje</translation>
+<translation id="8517852590337319813">Dyn akkount aktivearje</translation>
+<translation id="8546963963006468833">Mei Vivaldi kinst naadleas keppelingen iepenje, fanút widget sykje, en wachtwurden automatysk folje yn oare apps.</translation>
+<translation id="8562452229998620586">Bewarre wachtwurden sille hjir ferskine.</translation>
+<translation id="8605953154325672921">Brûkersnamme fereaske</translation>
+<translation id="8675578805254882416">Ophelje</translation>
+<translation id="8677007239430848917">Dyn earste notysje taheakje troch te klikken op it plus ikoan hjirûnder</translation>
+<translation id="8684294196284714094">Ree om Vivaldi as dyn standert sneuper te setten?</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items wiske</translation>
+<translation id="8763006697839582351">Privee yn Vivaldi iepenje</translation>
+<translation id="8804164990146287819">Privacy belied</translation>
+<translation id="8819841443522803117">Tiid om te wikseljen fan standert sneuper? Kies Vivaldi.</translation>
+<translation id="8820817407110198400">Blêdwizers</translation>
+<translation id="8855707633300847215">Ljepperbalke sjen litte</translation>
+<translation id="8892354889971902600">Ljeppers dyst koartlyn slutten hast, ferskine hjirre.</translation>
+<translation id="89390081013973080">Hielendal klear! Tiid om de kar te meitsjen hokker gegevens tusken de apparaten syngronisearre moatte wurde.</translation>
+<translation id="8965371804397726192">Uteinsette mei syngronisaasje fan alle gegevens</translation>
+<translation id="9028089729841356743">Netwurk flater.</translation>
+<translation id="9043882097999887291">Advertinsjes
+tsjinkeard</translation>
+<translation id="9065203028668620118">Bewurkje</translation>
+<translation id="9079251484401922158">Finsk (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">1 item</translation>
+<translation id="9091665118798175641">Automatysk ynfier gegevens syngronisearje</translation>
+<translation id="9097127519290088802">Fersifering wachtwurd fereaske</translation>
+<translation id="9212737146310746733">Farsi (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">Folgers tsjinkeare</translation>
+<translation id="937440209447114831">Advertinsjes of folgers wurde net tsjinkeard.</translation>
+<translation id="984650419570014454">Aktivaasje koade moat 6 sifers wêze.</translation>
+<translation id="992440609313570947">Nij by Vivaldi? <ph name="BEGIN_LINK" />Meitsje in akkount oan ➔<ph name="END_LINK" /></translation>
 </translationbundle>

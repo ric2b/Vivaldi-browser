@@ -31,13 +31,14 @@ namespace blink {
 
 namespace {
 
-// Only expect precision up to 1 microsecond with an additional epsilon to
-// account for float conversion error (mainly due to timeline time getting
-// converted between float and base::TimeDelta).
-static constexpr double time_error_ms = 0.001 + 1e-13;
+static constexpr double percent_precision = 0.01;
 
-#define EXPECT_TIME_NEAR(expected, value) \
-  EXPECT_NEAR(expected, value, time_error_ms)
+#define EXPECT_CURRENT_TIME_AS_PERCENT_NEAR(expected, animation)          \
+  EXPECT_NEAR(expected,                                                   \
+              (animation->CurrentTimeInternal()->InMillisecondsF() /      \
+               animation->timeline()->GetDuration()->InMillisecondsF()) * \
+                  100,                                                    \
+              percent_precision);
 
 Animation* CreateTestAnimation(AnimationTimeline* timeline) {
   Timing timing;
@@ -332,9 +333,7 @@ TEST_F(ScrollTimelineTest, AnimationPersistsWhenFinished) {
                                    mojom::blink::ScrollType::kProgrammatic);
   SimulateFrame();
   EXPECT_EQ("running", animation->playState());
-  EXPECT_TIME_NEAR(50.0, animation->CurrentTimeInternal()
-                             .value_or(AnimationTimeDelta())
-                             .InSecondsF());
+  EXPECT_CURRENT_TIME_AS_PERCENT_NEAR(50.0, animation);
 }
 
 TEST_F(ScrollTimelineTest, AnimationPersistsWhenSourceBecomesNonScrollable) {
@@ -365,12 +364,10 @@ TEST_F(ScrollTimelineTest, AnimationPersistsWhenSourceBecomesNonScrollable) {
   scroller->GetScrollableArea()->SetScrollOffset(
       offset_50, mojom::blink::ScrollType::kProgrammatic);
   SimulateFrame();
-  EXPECT_TIME_NEAR(50.0, animation->CurrentTimeInternal()
-                             .value_or(AnimationTimeDelta())
-                             .InSecondsF());
+  EXPECT_CURRENT_TIME_AS_PERCENT_NEAR(50.0, animation);
 
   // Make #scroller non-scrollable.
-  GetElementById("scroller")->classList().Remove("scroll");
+  GetElementById("scroller")->classList().Remove(AtomicString("scroll"));
   UpdateAllLifecyclePhasesForTest();
   scroller = To<LayoutBoxModelObject>(GetLayoutObjectByElementId("scroller"));
   ASSERT_TRUE(scroller);
@@ -387,7 +384,7 @@ TEST_F(ScrollTimelineTest, AnimationPersistsWhenSourceBecomesNonScrollable) {
   animation = *scroll_timeline->GetAnimations().begin();
 
   // Make #scroller scrollable again.
-  GetElementById("scroller")->classList().Add("scroll");
+  GetElementById("scroller")->classList().Add(AtomicString("scroll"));
   UpdateAllLifecyclePhasesForTest();
   scroller = To<LayoutBoxModelObject>(GetLayoutObjectByElementId("scroller"));
   ASSERT_TRUE(scroller);
@@ -398,9 +395,7 @@ TEST_F(ScrollTimelineTest, AnimationPersistsWhenSourceBecomesNonScrollable) {
   scroller->GetScrollableArea()->SetScrollOffset(
       offset_40, mojom::blink::ScrollType::kProgrammatic);
   SimulateFrame();
-  EXPECT_TIME_NEAR(40.0, animation->CurrentTimeInternal()
-                             .value_or(AnimationTimeDelta())
-                             .InSecondsF());
+  EXPECT_CURRENT_TIME_AS_PERCENT_NEAR(40.0, animation);
 }
 
 TEST_F(ScrollTimelineTest, ScheduleFrameOnlyWhenScrollOffsetChanges) {
@@ -492,14 +487,15 @@ TEST_F(ScrollTimelineTest, ScheduleFrameWhenScrollerLayoutChanges) {
   // current time to change. Here we change the scroller max offset which
   // affects current time because endScrollOffset is 'auto'.
   Element* spacer_element = GetElementById("spacer");
-  spacer_element->setAttribute(html_names::kStyleAttr, "height:1000px;");
+  spacer_element->setAttribute(html_names::kStyleAttr,
+                               AtomicString("height:1000px;"));
   GetChromeClient().UnsetAnimationScheduled();
   UpdateAllLifecyclePhasesForTest();
   EXPECT_TRUE(GetChromeClient().AnimationScheduled());
 
   // Also test changing the scroller height, which also affect the max offset.
   GetElementById("scroller")
-      ->setAttribute(html_names::kStyleAttr, "height: 200px");
+      ->setAttribute(html_names::kStyleAttr, AtomicString("height: 200px"));
   GetChromeClient().UnsetAnimationScheduled();
   UpdateAllLifecyclePhasesForTest();
   EXPECT_TRUE(GetChromeClient().AnimationScheduled());
@@ -540,7 +536,8 @@ TEST_F(ScrollTimelineTest,
   scroll_animation->play();
   UpdateAllLifecyclePhasesForTest();
 
-  scroller_element->setAttribute(html_names::kStyleAttr, "display:table-cell;");
+  scroller_element->setAttribute(html_names::kStyleAttr,
+                                 AtomicString("display:table-cell;"));
   GetChromeClient().UnsetAnimationScheduled();
   UpdateAllLifecyclePhasesForTest();
   EXPECT_TRUE(GetChromeClient().AnimationScheduled());
@@ -820,7 +817,8 @@ TEST_F(ScrollTimelineTest, WeakViewTimelines) {
 
   wtf_size_t base_count = TimelinesCount();
 
-  StaticElementList* list = GetDocument().QuerySelectorAll("#scroller > div");
+  StaticElementList* list =
+      GetDocument().QuerySelectorAll(AtomicString("#scroller > div"));
   ASSERT_TRUE(list);
   EXPECT_EQ(10u, list->length());
 
@@ -1058,13 +1056,13 @@ TEST_F(ScrollTimelineTest, ScrollTimelineCalculateIntrinsicIterationDuration) {
   using NamedRange = TimelineOffset::NamedRange;
 
   // [0, 300]
-  EXPECT_TRUE(IsWithinAnimationTimeTolerance(
+  EXPECT_TRUE(TimingCalculations::IsWithinAnimationTimeTolerance(
       duration, timeline->CalculateIntrinsicIterationDurationForTest(
                     /* range_start */ absl::optional<TimelineOffset>(),
                     /* range_end */ absl::optional<TimelineOffset>())));
 
   // [0, 300] (explicit)
-  EXPECT_TRUE(IsWithinAnimationTimeTolerance(
+  EXPECT_TRUE(TimingCalculations::IsWithinAnimationTimeTolerance(
       duration,
       timeline->CalculateIntrinsicIterationDurationForTest(
           /* range_start */ TimelineOffset(NamedRange::kNone, Length::Fixed(0)),
@@ -1072,7 +1070,7 @@ TEST_F(ScrollTimelineTest, ScrollTimelineCalculateIntrinsicIterationDuration) {
                                          Length::Fixed(300)))));
 
   // [50, 200]
-  EXPECT_TRUE(IsWithinAnimationTimeTolerance(
+  EXPECT_TRUE(TimingCalculations::IsWithinAnimationTimeTolerance(
       duration / 2.0, timeline->CalculateIntrinsicIterationDurationForTest(
                           /* range_start */
                           TimelineOffset(NamedRange::kNone, Length::Fixed(50)),
@@ -1081,7 +1079,7 @@ TEST_F(ScrollTimelineTest, ScrollTimelineCalculateIntrinsicIterationDuration) {
 
   // [50, 200] (kEntry)
   // The name part of the TimelineOffset is ignored.
-  EXPECT_TRUE(IsWithinAnimationTimeTolerance(
+  EXPECT_TRUE(TimingCalculations::IsWithinAnimationTimeTolerance(
       duration / 2.0,
       timeline->CalculateIntrinsicIterationDurationForTest(
           /* range_start */
@@ -1090,7 +1088,7 @@ TEST_F(ScrollTimelineTest, ScrollTimelineCalculateIntrinsicIterationDuration) {
           TimelineOffset(NamedRange::kEntry, Length::Fixed(200)))));
 
   // [50, 50]
-  EXPECT_TRUE(IsWithinAnimationTimeTolerance(
+  EXPECT_TRUE(TimingCalculations::IsWithinAnimationTimeTolerance(
       AnimationTimeDelta(),
       timeline->CalculateIntrinsicIterationDurationForTest(
           /* range_start */

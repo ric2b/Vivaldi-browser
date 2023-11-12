@@ -22,7 +22,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "build/build_config.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_logging.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_remote_command_utils.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_uma_logger.h"
@@ -41,8 +40,8 @@ namespace policy {
 
 namespace {
 
-using SessionParameters =
-    DeviceCommandStartCrdSessionJob::Delegate::SessionParameters;
+using SessionParameters = StartCrdSessionJobDelegate::SessionParameters;
+using ErrorCallback = StartCrdSessionJobDelegate::ErrorCallback;
 
 // OAuth2 Token scopes
 constexpr char kCloudDevicesOAuth2Scope[] =
@@ -223,34 +222,19 @@ class DeviceCommandStartCrdSessionJob::OAuthTokenFetcher
   const raw_ref<DeviceOAuth2TokenService, ExperimentalAsh> oauth_service_;
   absl::optional<std::string> oauth_token_for_test_;
   DeviceCommandStartCrdSessionJob::OAuthTokenCallback success_callback_;
-  DeviceCommandStartCrdSessionJob::ErrorCallback error_callback_;
+  ErrorCallback error_callback_;
   // Handler for the OAuth access token request.
   // When deleted the token manager will cancel the request (and not call us).
   std::unique_ptr<OAuth2AccessTokenManager::Request> oauth_request_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// DeviceCommandStartCrdSessionJob::Delegate::SessionParameters
-////////////////////////////////////////////////////////////////////////////////
-
-SessionParameters::SessionParameters() = default;
-SessionParameters::~SessionParameters() = default;
-
-SessionParameters::SessionParameters(const SessionParameters&) = default;
-SessionParameters& SessionParameters::operator=(const SessionParameters&) =
-    default;
-SessionParameters::SessionParameters(SessionParameters&&) = default;
-SessionParameters& SessionParameters::operator=(SessionParameters&&) = default;
-
-////////////////////////////////////////////////////////////////////////////////
 // DeviceCommandStartCrdSessionJob
 ////////////////////////////////////////////////////////////////////////////////
 
 DeviceCommandStartCrdSessionJob::DeviceCommandStartCrdSessionJob(
-    Delegate* crd_host_delegate)
-    : delegate_(crd_host_delegate) {
-  DCHECK(crd_host_delegate);
-}
+    Delegate& delegate)
+    : delegate_(delegate) {}
 
 DeviceCommandStartCrdSessionJob::~DeviceCommandStartCrdSessionJob() = default;
 
@@ -573,17 +557,12 @@ bool DeviceCommandStartCrdSessionJob::ShouldAllowTroubleshootingTools() const {
 }
 
 bool DeviceCommandStartCrdSessionJob::ShouldAllowFileTransfer() const {
-  if (!IsKioskSession(GetCurrentUserSessionType())) {
-    return false;
-  }
-
-  // TODO(b/284944528): Add check here for policy.
-  return base::FeatureList::IsEnabled(
-      remoting::features::kEnableCrdFileTransferForKiosk);
+  return IsKioskSession(GetCurrentUserSessionType()) &&
+         base::FeatureList::IsEnabled(
+             remoting::features::kEnableCrdFileTransferForKiosk);
 }
 
-DeviceCommandStartCrdSessionJob::ErrorCallback
-DeviceCommandStartCrdSessionJob::GetErrorCallback() {
+ErrorCallback DeviceCommandStartCrdSessionJob::GetErrorCallback() {
   return base::BindOnce(&DeviceCommandStartCrdSessionJob::FinishWithError,
                         weak_factory_.GetWeakPtr());
 }

@@ -1,5 +1,28 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="3866249974567520381">描述</translation>
+<translation id="1063263220330818888">無痕搜尋</translation>
+<translation id="1137850887415122856">要鎖定您的無痕分頁，請設定 Touch ID、Face ID 或密碼。</translation>
+<translation id="1310184829257917508">要求在無痕模式下開啟其他應用程式的連結</translation>
+<translation id="1512201558627495343">新增無痕分頁</translation>
+<translation id="1786453623676543866">在新的 Vivaldi 分頁中開始搜尋。</translation>
+<translation id="207677936531967364">新的無痕分頁頁面</translation>
+<translation id="3171582312249481866">開啟 Vivaldi 設定</translation>
+<translation id="3372807273343182542">在 Vivaldi 中已無痕模式開啟網址</translation>
+<translation id="3379322781901918214">1. 開啟 Vivaldi 設定</translation>
+<translation id="3473652525653758699">新增無痕視窗</translation>
+<translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 以解鎖您的無痕分頁。</translation>
+<translation id="3692650606013198282">在無痕模式中開啟</translation>
+<translation id="3709782636417497984">在新的無痕分頁中開啟</translation>
+<translation id="3981599532037327317">以無痕模式開啟 ${url}</translation>
+<translation id="4755216899422789286">在 Vivaldi 中開啟網址</translation>
+<translation id="6233792867654386826">在 Vivaldi 中開啟輸入的網址。</translation>
+<translation id="6827597288286078054">無痕搜尋</translation>
+<translation id="7175743738896712454">在 Vivaldi 中以無痕模式開啟輸入的網址。</translation>
+<translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解鎖無痕分頁</translation>
+<translation id="7347289093190902150">要在無痕模式中開啟連結嗎？</translation>
+<translation id="7549299604720382000">新增無痕分頁</translation>
+<translation id="8326104954595890674">新增無痕分頁</translation>
+<translation id="8763006697839582351">以 Vivaldi 無痕模式開啟連結</translation>
+<translation id="9060728682512999830">使用 Vivaldi 進行搜尋</translation>
 </translationbundle>

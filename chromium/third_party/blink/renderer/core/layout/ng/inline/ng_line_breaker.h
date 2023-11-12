@@ -225,6 +225,7 @@ class CORE_EXPORT NGLineBreaker {
 
   bool HandleOverflowIfNeeded(NGLineInfo*);
   void HandleOverflow(NGLineInfo*);
+  void RetryAfterOverflow(NGLineInfo*, NGInlineItemResults*);
   void RewindOverflow(unsigned new_end, NGLineInfo*);
   void Rewind(unsigned new_end, NGLineInfo*);
   void ResetRewindLoopDetector() { last_rewind_.reset(); }
@@ -304,13 +305,16 @@ class CORE_EXPORT NGLineBreaker {
   // True when current box allows line wrapping.
   bool auto_wrap_ = false;
 
-  // True when current box has 'word-break/word-wrap: break-word'.
+  // True when current box should fallback to break anywhere if it overflows.
   bool break_anywhere_if_overflow_ = false;
 
   // Force LineBreakType::kBreakCharacter by ignoring the current style if
   // |break_anywhere_if_overflow_| is set. Set to find grapheme cluster
   // boundaries for 'break-word' after overflow.
   bool override_break_anywhere_ = false;
+
+  // Disable `LineBreakType::kPhrase` even if specified by the CSS.
+  bool disable_phrase_ = false;
 
   bool disable_score_line_break_ = false;
 
@@ -325,7 +329,7 @@ class CORE_EXPORT NGLineBreaker {
   // between images, and between text and images.
   bool sticky_images_quirk_ = false;
 
-  // True if the resultant line contains a RubyRun with inline-end overhang.
+  // True if the resultant line contains a RubyColumn with inline-end overhang.
   bool maybe_have_end_overhang_ = false;
 
   // True if ShouldCreateNewSvgSegment() should be called.
@@ -351,7 +355,7 @@ class CORE_EXPORT NGLineBreaker {
   NGExclusionSpace* exclusion_space_;
   const NGInlineBreakToken* break_token_;
   const NGColumnSpannerPath* column_spanner_path_;
-  scoped_refptr<const ComputedStyle> current_style_;
+  const ComputedStyle* current_style_ = nullptr;
 
   LazyLineBreakIterator break_iterator_;
   HarfBuzzShaper shaper_;

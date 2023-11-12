@@ -36,11 +36,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-// Vivaldi
-import androidx.appcompat.app.AppCompatActivity;
-import org.chromium.build.BuildConfig;
-import org.vivaldi.browser.rating.RateVivaldiUtils;
-
 /**
  * This is the implementation of the synchronous {@link TabModel} for the
  * {@link ChromeTabbedActivity}.
@@ -117,6 +112,7 @@ public class TabModelImpl extends TabModelJniBridge {
                         @Override
                         public void insertUndoneTabClosureAt(Tab tab, int insertIndex) {
                             if (mIndex >= insertIndex) mIndex++;
+                            assert !tab.isDestroyed() : "Attempting to undo tab that is destroyed.";
                             mTabs.add(insertIndex, tab);
 
                             WebContents webContents = tab.getWebContents();
@@ -245,6 +241,9 @@ public class TabModelImpl extends TabModelJniBridge {
             Tab tab, int index, @TabLaunchType int type, @TabCreationState int creationState) {
         try {
             TraceEvent.begin("TabModelImpl.addTab");
+            // TODO(crbug/1466235): Technically this should trigger NPEs downstream. Adding out of
+            // an abundance of caution.
+            assert tab != null : "Attempting to add a tab that is null to TabModel.";
 
             for (TabModelObserver obs : mObservers) obs.willAddTab(tab, type);
 
@@ -292,14 +291,6 @@ public class TabModelImpl extends TabModelJniBridge {
             if (selectTab) setIndex(newIndex, TabSelectionType.FROM_NEW, false);
         } finally {
             TraceEvent.end("TabModelImpl.addTab");
-
-            // Vivaldi - Launch rate vivaldi prompt if needed
-            boolean openedTabFromInsideApp = type == TabLaunchType.FROM_CHROME_UI;
-            if (openedTabFromInsideApp && !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
-                if (tab.getContext() instanceof ChromeTabbedActivity) {
-                    RateVivaldiUtils.maybeShowPrompt((AppCompatActivity) tab.getContext());
-                }
-            }
         }
     }
 
@@ -319,6 +310,7 @@ public class TabModelImpl extends TabModelJniBridge {
         Tab tab = mTabs.remove(curIndex);
         if (curIndex < newIndex) --newIndex;
 
+        assert tab != null : "Attempting to move a tab that is null.";
         mTabs.add(newIndex, tab);
 
         if (curIndex == mIndex) {

@@ -2,6 +2,28 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
 <translation id="1063263220330818888">Частно търсене</translation>
+<translation id="1137850887415122856">Заключете частните раздели, като зададете Touch ID, Face ID или код за достъп.</translation>
+<translation id="1310184829257917508">Питай при отваряне на препратки от други приложения в частен режим</translation>
 <translation id="1512201558627495343">Създай частен раздел</translation>
+<translation id="1786453623676543866">Започване на търсене в нов раздел на Vivaldi.</translation>
+<translation id="207677936531967364">Страница с нов частен раздел</translation>
+<translation id="2899836479226240291">Може да отваряте автоматично препратки във Vivaldi, като направите приложението водещ браузър.</translation>
+<translation id="3171582312249481866">Отвори Настройки</translation>
+<translation id="3372807273343182542">Отваряй адреси във Vivaldi в частен режим</translation>
+<translation id="3379322781901918214">1. Отворете Настройки на Vivaldi</translation>
+<translation id="3473652525653758699">Създай частен прозорец</translation>
+<translation id="3501504415290398157">Ползвайте <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />, за да отключите частните раздели.</translation>
+<translation id="3692650606013198282">Отвори в частен режим</translation>
+<translation id="3709782636417497984">Отвори в нов частен раздел</translation>
+<translation id="3981599532037327317">Отвори ${url} в частен режим</translation>
+<translation id="4755216899422789286">Отваряй адреси във Vivaldi</translation>
+<translation id="6233792867654386826">Отваряне на въведените адреси във Vivaldi.</translation>
 <translation id="6827597288286078054">Частно търсене</translation>
+<translation id="7175743738896712454">Отваряне на въведените адреси във Vivaldi в частен режим.</translation>
+<translation id="7307970171564921489">Отключи Частни раздели чрез <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Отваряне в частен режим?</translation>
+<translation id="7549299604720382000">Създай частен раздел</translation>
+<translation id="8326104954595890674">Нов частен раздел</translation>
+<translation id="8763006697839582351">Отвори във Vivaldi в частен режим</translation>
+<translation id="9060728682512999830">Търси чрез Vivaldi</translation>
 </translationbundle>

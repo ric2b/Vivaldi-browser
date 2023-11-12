@@ -62,6 +62,16 @@ class GaiaView : public base::SupportsWeakPtr<GaiaView> {
     kMaxValue = kOnlineSignin
   };
 
+  enum class PasswordlessSupportLevel {
+    // Passwordless logins are not supported or password logins are enforced.
+    kNone = 0,
+    // Passwordless logins are supported for consumers only, but not for
+    // enterprise users.
+    kConsumersOnly,
+    // Passwordless logins are supported for all users.
+    kAll,
+  };
+
   inline constexpr static StaticOobeScreenId kScreenId{"gaia-signin",
                                                        "GaiaSigninScreen"};
 
@@ -85,7 +95,7 @@ class GaiaView : public base::SupportsWeakPtr<GaiaView> {
   virtual void SetGaiaPath(GaiaPath gaia_path) = 0;
   // Returns the currently set Gaia path
   virtual GaiaPath GetGaiaPath() = 0;
-  // Show error UI at the end of GAIA flow when user is not allowlisted.
+  // Show error UI at the end of Gaia flow when user is not allowlisted.
   virtual void ShowAllowlistCheckFailedError() = 0;
   // Reloads authenticator.
   virtual void ReloadGaiaAuthenticator() = 0;
@@ -93,6 +103,12 @@ class GaiaView : public base::SupportsWeakPtr<GaiaView> {
   // for recovery.
   virtual void SetReauthRequestToken(
       const std::string& reauth_request_token) = 0;
+  // Shows pop-up saying that enrollment is required for user's managed domain.
+  virtual void ShowEnrollmentNudge(const std::string& email_domain) = 0;
+  // Checks if user's email is allowlisted.
+  virtual void CheckIfAllowlisted(const std::string& user_email) = 0;
+  // Shows a page with loading animation on top of the Gaia screen.
+  virtual void ToggleLoadingUI(bool is_shown) = 0;
 
   // Show sign-in screen for the given credentials. `services` is a list of
   // services returned by userInfo call as JSON array. Should be an empty array
@@ -100,6 +116,11 @@ class GaiaView : public base::SupportsWeakPtr<GaiaView> {
   virtual void ShowSigninScreenForTest(const std::string& username,
                                        const std::string& password,
                                        const std::string& services) = 0;
+  virtual void SetQuickStartEnabled() = 0;
+  // Sets if Gaia password is required during login. If the password is
+  // required, Gaia passwordless login will be disallowed.
+  virtual void SetIsGaiaPasswordRequired(bool is_required) = 0;
+
   // Reset authenticator.
   virtual void Reset() = 0;
 };
@@ -127,7 +148,8 @@ class GaiaScreenHandler
     FRAME_STATE_UNKNOWN = 0,
     FRAME_STATE_LOADING,
     FRAME_STATE_LOADED,
-    FRAME_STATE_ERROR
+    FRAME_STATE_ERROR,
+    FRAME_STATE_BLOCKED
   };
 
   GaiaScreenHandler(
@@ -148,10 +170,17 @@ class GaiaScreenHandler
   void ShowAllowlistCheckFailedError() override;
   void ReloadGaiaAuthenticator() override;
   void SetReauthRequestToken(const std::string& reauth_request_token) override;
+  void ShowEnrollmentNudge(const std::string& email_domain) override;
+  void CheckIfAllowlisted(const std::string& user_email) override;
+  void ToggleLoadingUI(bool is_shown) override;
 
   void ShowSigninScreenForTest(const std::string& username,
                                const std::string& password,
                                const std::string& services) override;
+
+  void SetQuickStartEnabled() override;
+  void SetIsGaiaPasswordRequired(bool is_required) override;
+
   void Reset() override;
 
   // SecurityTokenPinDialogHost:
@@ -169,6 +198,10 @@ class GaiaScreenHandler
   // NetworkStateInformer::NetworkStateInformerObserver:
   void UpdateState(NetworkError::ErrorReason reason) override;
 
+  // Returns the initial mode of the Gaia signin screen for a given user email
+  // address. Note this also affects which Gaia endpoint is used.
+  static GaiaScreenMode GetGaiaScreenMode(const std::string& email);
+
   void SetNextSamlChallengeKeyHandlerForTesting(
       std::unique_ptr<SamlChallengeKeyHandler> handler_for_test);
 
@@ -181,6 +214,12 @@ class GaiaScreenHandler
   void set_offline_timeout_for_testing(base::TimeDelta offline_timeout) {
     offline_timeout_ = offline_timeout;
   }
+
+  // TODO(https://issuetracker.google.com/292489063): Remove these methods to
+  // query the frame state, and instead, allow registering callbacks or futures
+  // to learn of the relevant state transitions e.g. with an Observer class.
+  bool IsLoadedForTesting() const;
+  bool IsNavigationBlockedForTesting() const;
 
  private:
   void LoadGaia(const login::GaiaContext& context);
@@ -243,8 +282,6 @@ class GaiaScreenHandler
                                            base::Value::Dict result);
 
   void HandleGaiaUIReady();
-
-  void HandleIdentifierEntered(const std::string& account_identifier);
 
   void HandleAuthExtensionLoaded();
 
@@ -346,9 +383,6 @@ class GaiaScreenHandler
 
   void SAMLConfirmPassword(::login::StringList scraped_saml_passwords,
                            std::unique_ptr<UserContext> user_context);
-
-  bool MaybeTriggerEnrollmentNudge(const std::string& user_email);
-  void CheckIfAllowlisted(const std::string& user_email);
 
   // Current state of Gaia frame.
   FrameState frame_state_ = FRAME_STATE_UNKNOWN;
@@ -480,6 +514,8 @@ class GaiaScreenHandler
   base::TimeDelta offline_timeout_ = base::Seconds(1);
 
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
+
+  bool is_gaia_password_required_ = false;
 
   base::WeakPtrFactory<GaiaScreenHandler> weak_factory_{this};
 };

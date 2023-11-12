@@ -6,6 +6,8 @@
 
 #import "base/command_line.h"
 #import "base/logging.h"
+#import "components/password_manager/core/browser/sharing/fake_recipients_fetcher.h"
+#import "components/password_manager/ios/fake_bulk_leak_check_service.h"
 #import "components/signin/internal/identity_manager/fake_profile_oauth2_token_service.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
@@ -17,10 +19,6 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/signin_test_util.h"
 #import "ios/chrome/test/earl_grey/test_switches.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace tests_hook {
 
@@ -128,6 +126,30 @@ std::unique_ptr<SystemIdentityManager> CreateSystemIdentityManager() {
   }
 
   return system_identity_manager;
+}
+
+std::unique_ptr<password_manager::BulkLeakCheckServiceInterface>
+GetOverriddenBulkLeakCheckService() {
+  return std::make_unique<password_manager::FakeBulkLeakCheckService>();
+}
+
+std::unique_ptr<password_manager::RecipientsFetcher>
+GetOverriddenRecipientsFetcher() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
+  password_manager::FetchFamilyMembersRequestStatus status =
+      password_manager::FetchFamilyMembersRequestStatus::kUnknown;
+  if (command_line->HasSwitch(test_switches::kFamilyStatus)) {
+    std::string command_line_value =
+        command_line->GetSwitchValueASCII(test_switches::kFamilyStatus);
+    int status_value = 0;
+    if (base::StringToInt(command_line_value, &status_value)) {
+      status = static_cast<password_manager::FetchFamilyMembersRequestStatus>(
+          status_value);
+    }
+  }
+
+  return std::make_unique<password_manager::FakeRecipientsFetcher>(status);
 }
 
 void SetUpTestsIfPresent() {

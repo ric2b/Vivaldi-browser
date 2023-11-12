@@ -2,7 +2,7 @@
 
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 
-#import "base/mac/foundation_util.h"
+#import "base/apple/foundation_util.h"
 #import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -39,7 +39,7 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewSyncStatusCell* cell =
-      base::mac::ObjCCastStrict<VivaldiTableViewSyncStatusCell>(tableCell);
+      base::apple::ObjCCastStrict<VivaldiTableViewSyncStatusCell>(tableCell);
   if ([self.accessibilityIdentifier length]) {
     cell.accessibilityIdentifier = self.accessibilityIdentifier;
   }

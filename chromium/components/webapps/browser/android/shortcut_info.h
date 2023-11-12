@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "components/webapps/browser/android/webapp_icon.h"
+#include "components/webapps/common/web_page_metadata.mojom.h"
 #include "services/device/public/mojom/screen_orientation_lock_types.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -126,12 +127,19 @@ struct ShortcutInfo {
   ShortcutInfo(const ShortcutInfo& other);
   ~ShortcutInfo();
 
+  // Updates the info based on the given web page metadata.
+  void UpdateFromWebPageMetadata(
+      const mojom::WebPageMetadata& web_page_metadata);
+
   // Updates the info based on the given |manifest|.
   void UpdateFromManifest(const blink::mojom::Manifest& manifest);
 
   // Update the splash screen icon URL based on the given |manifest| for the
   // later download.
   void UpdateBestSplashIcon(const blink::mojom::Manifest& manifest);
+
+  // Update the display mode based on whether the web app is webapk_compatible.
+  void UpdateDisplayMode(bool webapk_compatible);
 
   // Updates the source of the shortcut.
   void UpdateSource(const Source source);
@@ -163,6 +171,8 @@ struct ShortcutInfo {
   std::vector<std::string> icon_urls;
   std::vector<GURL> screenshot_urls;
   absl::optional<ShareTarget> share_target;
+  absl::optional<SkColor> dark_theme_color;
+  absl::optional<SkColor> dark_background_color;
 
   // Id specified in the manifest.
   GURL manifest_id;

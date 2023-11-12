@@ -387,6 +387,17 @@
         ]
       },
       {
+        "name": "onWindowCloseCanceled",
+        "type": "function",
+        "description": "Fired when a window close sqeuence is canceled. Note that the close action may not have been started from JS.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
         "name": "onPageInfoPopupChanged",
         "type": "function",
         "description": "Fired when a page information popup visibility changes.",

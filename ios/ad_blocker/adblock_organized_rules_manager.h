@@ -20,6 +20,7 @@ namespace adblock_filter {
 class RuleService;
 class CompiledRules;
 class AdBlockerContentRuleListProvider;
+class ContentInjectionHandler;
 
 class OrganizedRulesManager : public RuleManager::Observer {
   using OrganizedRulesChangedCallback =
@@ -32,11 +33,13 @@ class OrganizedRulesManager : public RuleManager::Observer {
       RuleService* rule_service,
       std::unique_ptr<AdBlockerContentRuleListProvider>
           content_rule_list_provider,
+      ContentInjectionHandler* content_injection_handler,
       RuleGroup group,
       base::FilePath browser_state_path,
       const std::string& organized_rules_checksum,
       OrganizedRulesChangedCallback organized_rules_changed_callback,
       RulesReadFailCallback rule_read_fail_callback,
+      base::RepeatingClosure on_start_applying_rules,
       scoped_refptr<base::SequencedTaskRunner> file_task_runner);
   ~OrganizedRulesManager() override;
   OrganizedRulesManager(const OrganizedRulesManager&) = delete;
@@ -46,6 +49,8 @@ class OrganizedRulesManager : public RuleManager::Observer {
   std::string organized_rules_checksum() const {
     return organized_rules_checksum_;
   }
+
+  bool IsApplyingRules();
 
   RuleService::IndexBuildResult build_result() const { return build_result_; }
 
@@ -71,6 +76,7 @@ class OrganizedRulesManager : public RuleManager::Observer {
 
   const raw_ptr<RuleManager> rule_manager_;
   std::unique_ptr<AdBlockerContentRuleListProvider> content_rule_list_provider_;
+  ContentInjectionHandler* content_injection_handler_;
   RuleGroup group_;
 
   bool is_loaded_;
@@ -89,6 +95,7 @@ class OrganizedRulesManager : public RuleManager::Observer {
 
   OrganizedRulesChangedCallback organized_rules_changed_callback_;
   RulesReadFailCallback rule_read_fail_callback_;
+  base::RepeatingClosure on_start_applying_rules_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

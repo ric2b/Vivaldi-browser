@@ -16,15 +16,12 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 namespace {
 const CGFloat kSymbolSize = 16;
@@ -141,7 +138,7 @@ const CGFloat kSymbolSize = 16;
   // By default NTP tabs gets no favicon.
 
   if (IsVivaldiRunning())
-    return [UIImage imageNamed:@"toolbar_menu"]; // End Vivaldi
+    return [UIImage imageNamed:vToolbarMenu]; // End Vivaldi
 
   return nil;
 }

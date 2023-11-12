@@ -9,10 +9,6 @@
 #import "ios/web/common/crw_viewport_adjustment.h"
 #import "ios/web/common/crw_viewport_adjustment_container.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface CRCWebViewportContainerView () <CRWViewportAdjustment>
 
 @end
@@ -23,6 +19,19 @@
 @synthesize viewportEdgesAffectedBySafeArea = _viewportEdgesAffectedBySafeArea;
 @synthesize minViewportInsets = _minViewportInsets;
 @synthesize maxViewportInsets = _maxViewportInsets;
+
+- (id)init {
+  if ((self = [super init])) {
+    // TODO(crbug.com/1456195): `updateMinViewportInsets` is not called when
+    // FullscreenSmoothScrollingDefault is disabled, so we populate them here.
+    // We cannot load them from FullscreenController because that would make
+    // this code dependant on UI. Rather we will need to propagated the values
+    // down to the active WebState.
+    _minViewportInsets = UIEdgeInsetsMake(79, 0, 0, 0);
+    _maxViewportInsets = UIEdgeInsetsMake(109, 0, 78, 0);
+  }
+  return self;
+}
 
 - (UIView<CRWViewportAdjustment>*)fullscreenViewportAdjuster {
   return self;

@@ -50,6 +50,7 @@
 #include "media/cast/sender/video_sender.h"
 #include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/mojo/clients/mojo_video_encode_accelerator.h"
+#include "media/mojo/clients/mojo_video_encoder_metrics_provider.h"
 #include "media/video/video_encode_accelerator.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/ip_endpoint.h"
@@ -333,6 +334,11 @@ OpenscreenSessionHost::OpenscreenSessionHost(
           .message_source_id = session_params_.source_id,
           .message_destination_id = session_params_.destination_id});
 
+  if (session_params_.enable_rtcp_reporting) {
+    stats_client_ = std::make_unique<OpenscreenStatsClient>();
+    session_->SetStatsClient(stats_client_.get());
+  }
+
   // Use of `Unretained` is safe here since we own the update timer.
   bandwidth_update_timer_.Start(
       FROM_HERE, kBandwidthUpdateInterval,
@@ -483,6 +489,10 @@ void OpenscreenSessionHost::OnNegotiated(
   }
 
   if (senders.video_sender) {
+    mojo::PendingRemote<media::mojom::VideoEncoderMetricsProvider>
+        metrics_provider_pending_remote;
+    resource_provider_->GetVideoEncoderMetricsProvider(
+        metrics_provider_pending_remote.InitWithNewPipeAndPassReceiver());
     auto video_sender = std::make_unique<media::cast::VideoSender>(
         cast_environment_, *video_config,
         base::BindRepeating(&OpenscreenSessionHost::OnEncoderStatusChange,
@@ -491,6 +501,10 @@ void OpenscreenSessionHost::OnNegotiated(
             &OpenscreenSessionHost::CreateVideoEncodeAccelerator,
             weak_factory_.GetWeakPtr()),
         std::move(senders.video_sender),
+        base::MakeRefCounted<media::MojoVideoEncoderMetricsProviderFactory>(
+            media::mojom::VideoEncoderUseCase::kCastMirroring,
+            std::move(metrics_provider_pending_remote))
+            ->CreateVideoEncoderMetricsProvider(),
         base::BindRepeating(&OpenscreenSessionHost::SetTargetPlayoutDelay,
                             weak_factory_.GetWeakPtr()),
         base::BindRepeating(&OpenscreenSessionHost::ProcessFeedback,
@@ -1143,6 +1157,15 @@ void OpenscreenSessionHost::OnRemotingStartTimeout() {
 
 network::mojom::NetworkContext* OpenscreenSessionHost::GetNetworkContext() {
   return network_context_.get();
+}
+
+base::Value::Dict OpenscreenSessionHost::GetMirroringStats() const {
+  return stats_client_ ? stats_client_->GetStats() : base::Value::Dict();
+}
+
+void OpenscreenSessionHost::SetSenderStatsForTest(
+    const openscreen::cast::SenderStats& test_stats) {
+  stats_client_->OnStatisticsUpdated(test_stats);
 }
 
 }  // namespace mirroring

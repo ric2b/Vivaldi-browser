@@ -55,6 +55,9 @@
     VivaldiSyncSettingsViewController* syncSettingsViewController;
 @property(nonatomic, strong) VivaldiSyncMediator* mediator;
 
+// Used to present sync view with create account page on top when YES.
+@property(nonatomic, assign) BOOL showCreateAccount;
+
 @end
 
 @implementation VivaldiSyncCoordinator
@@ -63,11 +66,13 @@
 
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
-                                         browser:(Browser*)browser {
+                                         browser:(Browser*)browser
+                               showCreateAccount:(BOOL)showCreateAccount {
   self = [super initWithBaseViewController:navigationController
                                    browser:browser];
   if (self) {
     _baseNavigationController = navigationController;
+    _showCreateAccount = showCreateAccount;
   }
   return self;
 }
@@ -86,9 +91,8 @@
 
 - (void)start {
   vivaldi::VivaldiSyncServiceImpl* sync_service =
-    reinterpret_cast<vivaldi::VivaldiSyncServiceImpl*>(
-        vivaldi::VivaldiSyncServiceFactory::GetForBrowserState(
-            self.browser->GetBrowserState()));
+        vivaldi::VivaldiSyncServiceFactory::GetForBrowserStateVivaldi(
+            self.browser->GetBrowserState());
   vivaldi::VivaldiAccountManager* account_manager =
       vivaldi::VivaldiAccountManagerFactory::GetForBrowserState(
             self.browser->GetBrowserState());
@@ -292,26 +296,30 @@
 }
 
 - (void)showSyncLoginView {
-  if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+  // When showCreateAccount is YES we will put the Login view to the stack first
+  // and add the Create account view next. This allows going back to login view
+  // from create account view. This state is only expected when user is not
+  // logged in and opens the create account page from tab switcher synced tabs
+  // empty state.
+  if (_showCreateAccount) {
+    [self addSyncLoginViewControllerToNavigationStack];
+    [self showSyncCreateAccountUserView];
+    _showCreateAccount = NO;
     return;
   }
+
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+    return;
+  }
+
+  if ([self.baseNavigationController.viewControllers.lastObject
+          isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
     [self.baseNavigationController popViewControllerAnimated:YES];
     return;
   }
-  NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
 
-  if (!self.syncLoginViewController) {
-    self.syncLoginViewController =[[VivaldiSyncLoginViewController alloc]
-                                    initWithStyle:ChromeTableViewStyle()];
-    self.syncLoginViewController.delegate = self;
-  }
-  self.mediator.settingsConsumer = nil;
-  [controllers addObject:self.syncLoginViewController];
-  [self.baseNavigationController setViewControllers:controllers animated:YES];
+  [self addSyncLoginViewControllerToNavigationStack];
 }
 
 - (void)loginFailed:(NSString*)errorMessage {
@@ -483,6 +491,7 @@
   if (completionHandler) {
     completionHandler(success);
   }
+  [fileSelected stopAccessingSecurityScopedResource];
 }
 
 - (void)logOutButtonPressed {
@@ -580,6 +589,27 @@
 }
 
 #pragma mark - Private Methods
+
+- (void)addSyncLoginViewControllerToNavigationStack {
+  if (!self.syncLoginViewController) {
+    [self.browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(ModalPageCommands)];
+    id<ModalPageCommands> modalPageHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ModalPageCommands);
+    self.syncLoginViewController =
+        [[VivaldiSyncLoginViewController alloc]
+          initWithModalPageHandler:modalPageHandler
+                             style:ChromeTableViewStyle()];
+    self.syncLoginViewController.delegate = self;
+  }
+  self.mediator.settingsConsumer = nil;
+  NSMutableArray* controllers =
+      [self removeSyncViewsFromArray:
+          self.baseNavigationController.viewControllers];
+  [controllers addObject:self.syncLoginViewController];
+  [self.baseNavigationController setViewControllers:controllers animated:YES];
+}
 
 - (NSMutableArray*)removeSyncViewsFromArray:(NSArray*)controllers {
   NSMutableArray* new_controllers = [[NSMutableArray alloc] init];

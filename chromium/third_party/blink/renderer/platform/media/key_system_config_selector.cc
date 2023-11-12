@@ -740,10 +740,13 @@ KeySystemConfigSelector::GetSupportedConfiguration(
   //         return NotSupported.
   EmeFeatureSupport persistent_state_support =
       key_systems_->GetPersistentStateSupport(key_system);
-  // If preferences disallow local storage, then indicate persistent state is
-  // not supported.
+  // If preferences disallow storage access, then indicate persistent state is
+  // not supported. A quota managed storage type is used in lieu of a dedicated
+  // StorageType, as Media Licenses are a quota managed managed type.
+  // TODO(crbug.com/1465299): Simplify the WebContentSettingsClient::StorageType
+  // to remove unnecessary distinctions between storage types.
   if (!web_frame_delegate_->AllowStorageAccessSync(
-          WebContentSettingsClient::StorageType::kLocalStorage)) {
+          WebContentSettingsClient::StorageType::kIndexedDB)) {
     if (persistent_state_support == EmeFeatureSupport::ALWAYS_ENABLED)
       return CONFIGURATION_NOT_SUPPORTED;
     persistent_state_support = EmeFeatureSupport::NOT_SUPPORTED;
@@ -1105,7 +1108,7 @@ void KeySystemConfigSelector::SelectConfigInternal(
         }
         DVLOG(3) << "Request permission.";
         media_permission_->RequestPermission(
-            media::MediaPermission::PROTECTED_MEDIA_IDENTIFIER,
+            media::MediaPermission::Type::kProtectedMediaIdentifier,
             base::BindOnce(&KeySystemConfigSelector::OnPermissionResult,
                            weak_factory_.GetWeakPtr(), std::move(request)));
         return;
@@ -1124,19 +1127,24 @@ void KeySystemConfigSelector::SelectConfigInternal(
         cdm_config.use_hw_secure_codecs =
             config_state.AreHwSecureCodecsRequired();
 #if BUILDFLAG(IS_WIN)
+        // Check whether hardware secure decryption CDM should be disabled.
         if (cdm_config.use_hw_secure_codecs &&
-            !request->was_hardware_secure_decryption_preferences_requested) {
-          media_permission_->IsHardwareSecureDecryptionAllowed(base::BindOnce(
-              &KeySystemConfigSelector::OnHardwareSecureDecryptionAllowedResult,
-              weak_factory_.GetWeakPtr(), std::move(request)));
-          return;
-        }
+            base::FeatureList::IsEnabled(
+                media::kHardwareSecureDecryptionFallback) &&
+            media::kHardwareSecureDecryptionFallbackPerSite.Get()) {
+          if (!request->was_hardware_secure_decryption_preferences_requested) {
+            media_permission_->IsHardwareSecureDecryptionAllowed(
+                base::BindOnce(&KeySystemConfigSelector::
+                                   OnHardwareSecureDecryptionAllowedResult,
+                               weak_factory_.GetWeakPtr(), std::move(request)));
+            return;
+          }
 
-        if (cdm_config.use_hw_secure_codecs &&
-            !config_state.IsHardwareSecureDecryptionAllowed()) {
-          DVLOG(2) << "Rejecting requested configuration because "
-                   << "Hardware secure decryption is not allowed.";
-          continue;
+          if (!config_state.IsHardwareSecureDecryptionAllowed()) {
+            DVLOG(2) << "Rejecting requested configuration because "
+                     << "Hardware secure decryption is not allowed.";
+            continue;
+          }
         }
 #endif  // BUILDFLAG(IS_WIN)
 

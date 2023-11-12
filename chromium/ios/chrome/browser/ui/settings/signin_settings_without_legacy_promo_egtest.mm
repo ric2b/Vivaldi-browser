@@ -3,26 +3,29 @@
 // found in the LICENSE file.
 
 #import "components/policy/policy_constants.h"
+#import "components/sync/base/features.h"
+#import "components/sync/base/user_selectable_type.h"
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/signin/test_constants.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/authentication/signin_matchers.h"
 #import "ios/chrome/browser/ui/settings/elements/elements_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
+#import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::SettingsSignInRowMatcher;
@@ -41,6 +44,26 @@ using chrome_test_util::SettingsSignInRowMatcher;
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kHideSettingsSyncPromo);
+
+  if ([self isRunningTest:@selector
+            (testSigninRowOpensSyncDialogIfSignedOutAndNoDeviceAccounts)] ||
+      [self isRunningTest:@selector
+            (testSigninRowOpensSyncDialogIfSignedOutAndSomeDeviceAccounts)] ||
+      [self isRunningTest:@selector(testSigninRowDisabledBySyncPolicy)] ||
+      [self isRunningTest:@selector(testSyncOffRowOpensDialogIfSignedIn)] ||
+      [self isRunningTest:@selector(testSyncOffRowDisabledByPolicy)]) {
+    config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  }
+  if ([self isRunningTest:@selector
+            (testSigninRowOpensSheetIfSignedOutAndSomeDeviceAccounts)] ||
+      [self isRunningTest:@selector
+            (testSigninRowOpensAuthActivityIfSignedOutAndNoDeviceAccounts)] ||
+      [self isRunningTest:@selector(testSigninRowNotDisabledBySyncPolicy)] ||
+      [self isRunningTest:@selector(testSignInAndDeclineHistorySync)]) {
+    config.features_enabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  }
   return config;
 }
 
@@ -50,14 +73,16 @@ using chrome_test_util::SettingsSignInRowMatcher;
   [SigninEarlGreyUI verifySigninPromoNotVisible];
 }
 
-// For a signed out user without device accounts, tests that the "Turn on Sync"
-// row is shown and opens the appropriate dialog upon tap.
-- (void)testEnableSyncRowOpensDialogIfSignedOutAndNoDeviceAccounts {
+// For a signed out user without device accounts, tests that the sign-in row is
+// shown with the correct strings and opens the dialog to enable sync upon tap.
+- (void)testSigninRowOpensSyncDialogIfSignedOutAndNoDeviceAccounts {
   [ChromeEarlGreyUI openSettingsMenu];
 
   [[EarlGrey selectElementWithMatcher:GoogleSyncSettingsButton()]
       assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SUBTITLE))]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
@@ -69,9 +94,9 @@ using chrome_test_util::SettingsSignInRowMatcher;
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// For a signed out user with device accounts, tests that the "Turn on Sync" row
-// is shown and opens the appropriate dialog upon tap.
-- (void)testEnableSyncRowOpensDialogIfSignedOutAndSomeDeviceAccounts {
+// For a signed out user with device accounts, tests that the sign-in row is
+// shown with the correct strings and opens the dialog to enable sync upon tap.
+- (void)testSigninRowOpensSyncDialogIfSignedOutAndSomeDeviceAccounts {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
@@ -79,7 +104,9 @@ using chrome_test_util::SettingsSignInRowMatcher;
 
   [[EarlGrey selectElementWithMatcher:GoogleSyncSettingsButton()]
       assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SUBTITLE))]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
@@ -91,9 +118,49 @@ using chrome_test_util::SettingsSignInRowMatcher;
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// For a signed out user with the SyncDisabled policy, tests that the "Turn on
-// Sync" row is disabled and opens the "disabled by policy" bubble upon tap.
-- (void)testEnableSyncRowDisabledBySyncPolicy {
+// For a signed out user with device accounts, tests that the sign-in row is
+// shown with the correct strings and opens the sign-in sheet upon tap.
+- (void)testSigninRowOpensSheetIfSignedOutAndSomeDeviceAccounts {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [ChromeEarlGreyUI openSettingsMenu];
+
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+      performAction:grey_tap()];
+
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(kWebSigninPrimaryButtonAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// For a signed out user with no device accounts, tests that the sign-in row is
+// shown with the correct strings and opens the auth activity on tap.
+- (void)testSigninRowOpensAuthActivityIfSignedOutAndNoDeviceAccounts {
+  [ChromeEarlGreyUI openSettingsMenu];
+
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kFakeAuthActivityViewIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// For a signed out user with the SyncDisabled policy, tests that the sign-in
+// row is disabled and opens the "disabled by policy" bubble upon tap.
+- (void)testSigninRowDisabledBySyncPolicy {
   [ChromeEarlGreyUI openSettingsMenu];
   // Set policy after opening settings so there's no need to dismiss the policy
   // bottom sheet.
@@ -116,9 +183,33 @@ using chrome_test_util::SettingsSignInRowMatcher;
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// For a signed out user with the BrowserSignin policy, tests that the "Turn on
-// Sync" row is disabled and opens the "disabled by policy" bubble upon tap.
-- (void)testEnableSyncRowDisabledBySigninPolicy {
+// For a signed out user with the SyncDisabled policy, tests that the sign-in
+// row is still enabled, since it leads to sign-in only.
+- (void)testSigninRowNotDisabledBySyncPolicy {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  // Set policy after opening settings so there's no need to dismiss the policy
+  // bottom sheet.
+  policy_test_utils::SetPolicy(true, policy::key::kSyncDisabled);
+
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+      performAction:grey_tap()];
+
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(kWebSigninPrimaryButtonAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// For a signed out user with the BrowserSignin policy, tests that the sign-in
+// row is disabled and opens the "disabled by policy" bubble upon tap.
+- (void)testSigninRowDisabledBySigninPolicy {
   policy_test_utils::SetPolicy(static_cast<int>(BrowserSigninMode::kDisabled),
                                policy::key::kBrowserSignin);
   [ChromeEarlGreyUI openSettingsMenu];
@@ -189,6 +280,65 @@ using chrome_test_util::SettingsSignInRowMatcher;
                  grey_text(l10n_util::GetNSString(
                      IDS_IOS_SYNC_SETTINGS_DISABLED_POPOVER_TEXT))]
       assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Tests that when signing-in using the settings cell, the user is not signed
+// out if history sync is declined.
+- (void)testSignInAndDeclineHistorySync {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+
+  // Tap on sign-in cell.
+  [[EarlGrey selectElementWithMatcher:SettingsSignInRowMatcher()]
+      performAction:grey_tap()];
+
+  // Confirm sign in.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_allOf(grey_accessibilityID(
+                                kWebSigninPrimaryButtonAccessibilityIdentifier),
+                            grey_sufficientlyVisible(), nil)]
+      performAction:grey_tap()];
+  // Verify that the History Sync Opt-In screen is shown.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kHistorySyncViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Verify that the footer is shown without the user's email.
+  id<GREYMatcher> footerTextMatcher = grey_allOf(
+      grey_text(
+          l10n_util::GetNSString(IDS_IOS_HISTORY_SYNC_FOOTER_WITHOUT_EMAIL)),
+      grey_sufficientlyVisible(), nil);
+  id<GREYMatcher> promoScrollViewMatcher = grey_allOf(
+      grey_accessibilityID(kPromoStyleScrollViewAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
+  [[[EarlGrey selectElementWithMatcher:footerTextMatcher]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 200)
+      onElementWithMatcher:promoScrollViewMatcher]
+      assertWithMatcher:grey_notNil()];
+
+  // Decline History Sync.
+  id<GREYMatcher> declineButtonMatcher = grey_allOf(
+      grey_accessibilityID(kPromoStyleSecondaryActionAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
+  [[[EarlGrey selectElementWithMatcher:declineButtonMatcher]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 200)
+      onElementWithMatcher:promoScrollViewMatcher] performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_accessibilityID(kHistorySyncViewAccessibilityIdentifier)];
+
+  // Verify that the history sync is disabled.
+  GREYAssertFalse(
+      [SigninEarlGreyAppInterface
+          isSelectedTypeEnabled:syncer::UserSelectableType::kHistory],
+      @"History sync should be disabled.");
+  GREYAssertFalse([SigninEarlGreyAppInterface
+                      isSelectedTypeEnabled:syncer::UserSelectableType::kTabs],
+                  @"Tabs sync should be disabled.");
+  // Verify that the identity is still signed in.
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 }
 
 @end

@@ -12,7 +12,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.IntDef;
@@ -53,6 +52,7 @@ import org.chromium.url.Origin;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.function.Predicate;
 
 import javax.inject.Inject;
 
@@ -111,9 +111,7 @@ public class CustomTabActivityNavigationController
     private final Activity mActivity;
     private final DefaultBrowserProvider mDefaultBrowserProvider;
     private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
-            new ObservableSupplierImpl<>() {
-                { set(false); }
-            };
+            new ObservableSupplierImpl<>(false);
 
     @Nullable
     private ToolbarManager mToolbarManager;
@@ -186,18 +184,10 @@ public class CustomTabActivityNavigationController
     }
 
     /**
-     * Navigates to given url.
-     */
-    public void navigate(String url) {
-        navigate(new LoadUrlParams(url), SystemClock.elapsedRealtime());
-    }
-
-    /**
      * Performs navigation using given {@link LoadUrlParams}.
-     * Uses provided timestamp as the initial time for tracking page loading times
-     * (see {@link CustomTabObserver}).
+     * The source Intent is used for tracking page loading times (see {@link CustomTabObserver}).
      */
-    public void navigate(final LoadUrlParams params, long timeStamp) {
+    public void navigate(final LoadUrlParams params, Intent sourceIntent) {
         Tab tab = mTabProvider.getTab();
         if (tab == null) {
             assert false;
@@ -212,7 +202,7 @@ public class CustomTabActivityNavigationController
 
         // TODO(pkotwicz): Figure out whether we want to record these metrics for WebAPKs.
         if (mIntentDataProvider.getWebappExtras() == null) {
-            mCustomTabObserver.get().trackNextPageLoadFromTimestamp(tab, timeStamp);
+            mCustomTabObserver.get().trackNextPageLoadForLaunch(tab, sourceIntent);
         }
 
         IntentHandler.addReferrerAndHeaders(params, mIntentDataProvider.getIntent());
@@ -264,11 +254,13 @@ public class CustomTabActivityNavigationController
                 BackPressManager.record(BackPressHandler.Type.TAB_HISTORY);
                 return true;
             }
-        }
-        if (!BackPressManager.isEnabled()) {
             // If enabled, BackPressManager will record this internally. Otherwise, this should
             // be recorded manually.
             BackPressManager.record(BackPressHandler.Type.MINIMIZE_APP_AND_CLOSE_TAB);
+        } else if (BackPressManager.correctTabNavigationOnFallback()) {
+            if (mTabProvider.getTab().canGoBack()) {
+                return false;
+            }
         }
         if (mTabController.dispatchBeforeUnloadIfNeeded()) {
             MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.CLOSE_TAB);
@@ -412,7 +404,7 @@ public class CustomTabActivityNavigationController
      * If no page in the navigation history meets the criterion, or there is no criterion, then
      * pressing close button will finish the Custom Tab activity.
      */
-    public void setLandingPageOnCloseCriterion(CloseButtonNavigator.PageCriteria criterion) {
+    public void setLandingPageOnCloseCriterion(Predicate<String> criterion) {
         mCloseButtonNavigator.setLandingPageCriteria(criterion);
     }
 

@@ -185,6 +185,11 @@ helpApp.DeviceInfo.prototype.model;
  * @type {string}
  */
 helpApp.DeviceInfo.prototype.userType;
+/**
+ * If Steam is allowed for the device, regardless of install status.
+ * @type {boolean}
+ */
+helpApp.DeviceInfo.prototype.isSteamAllowed;
 
 /**
  * The delegate which exposes open source privileged WebUi functions to
@@ -207,6 +212,14 @@ helpApp.ClientApiDelegate.prototype.openFeedbackDialog = function() {};
  * @return {!Promise<undefined>}
  */
 helpApp.ClientApiDelegate.prototype.showParentalControls = function() {};
+
+/**
+ * Triggers the call-to-action associated with the given action type id.
+ * @param {number} actionTypeId
+ * @return {!Promise<undefined>}
+ */
+helpApp.ClientApiDelegate.prototype.triggerWelcomeTipCallToAction = function(
+    actionTypeId) {};
 
 /**
  * Add or update the content that is stored in the Search Index.
@@ -244,6 +257,13 @@ helpApp.ClientApiDelegate.prototype.closeBackgroundPage = function() {};
  */
 helpApp.ClientApiDelegate.prototype.updateLauncherSearchIndex
     = function(data) {};
+
+/**
+ * Launches the MS365 setup flow (or shows the final screen of the flow if it
+ * was already completed).
+ * @return {!Promise<undefined>}
+ */
+helpApp.ClientApiDelegate.prototype.launchMicrosoft365Setup = function() {};
 
 /**
  * Request for the discover page notification to be shown to the user. The

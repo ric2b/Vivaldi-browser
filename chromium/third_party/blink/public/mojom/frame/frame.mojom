@@ -18,6 +18,7 @@ import "services/network/public/mojom/network_types.mojom";
 import "services/network/public/mojom/source_location.mojom";
 import "services/network/public/mojom/url_loader_completion_status.mojom";
 import "services/network/public/mojom/attribution.mojom";
+import "skia/public/mojom/bitmap.mojom";
 import "skia/public/mojom/skcolor.mojom";
 import "skia/public/mojom/skcolor4f.mojom";
 import "third_party/blink/public/mojom/blob/blob.mojom";
@@ -29,6 +30,7 @@ import "third_party/blink/public/mojom/css/preferred_color_scheme.mojom";
 import "third_party/blink/public/mojom/devtools/console_message.mojom";
 import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
 import "third_party/blink/public/mojom/devtools/inspector_issue.mojom";
+import "third_party/blink/public/mojom/drag/drag.mojom";
 import "third_party/blink/public/mojom/favicon/favicon_url.mojom";
 import "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom";
 import "third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom";
@@ -190,6 +192,8 @@ struct IframeAttributes {
   bool credentialless;
   // 'browsingtopics' attribute of the iframe.
   bool browsing_topics;
+  // 'sharedstoragewritable' attribute of the iframe.
+  bool shared_storage_writable;
   // 'id' attribute of the iframe. This can be optional because id might not be set.
   string? id;
   // 'name' attribute of the iframe. This is different from window.name, which is
@@ -197,6 +201,15 @@ struct IframeAttributes {
   string? name;
   // 'src' attribute of the iframe. Optional because it might not be set.
   string? src;
+};
+
+// Code location for an enterprise legacy technology event. The data will be
+// uploaded to the enterprise management server without being parsed by the
+// browser process.
+struct LegacyTechEventCodeLocation {
+  string filename;
+  uint64 line;
+  uint64 column;
 };
 
 // Implemented in Browser, this interface defines frame-specific methods that
@@ -221,6 +234,21 @@ interface LocalFrameHost {
   // Notifies the browser that the current frame has either become or is no
   // longer fullscreen. |options| is only provided if |is_fullscreen == true|.
   FullscreenStateChanged(bool is_fullscreen, FullscreenOptions? options);
+
+  // Request browser to maximize window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  [EnableIf=use_aura]
+  Maximize();
+
+  // Request browser to minimize window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  [EnableIf=use_aura]
+  Minimize();
+
+  // Request browser to restore window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  [EnableIf=use_aura]
+  Restore();
 
   // Register a new handler for URL requests with the given scheme. |scheme|
   // and |url| are provided directly from javascript. See
@@ -621,6 +649,37 @@ interface LocalFrameHost {
       network.mojom.AttributionReportingRuntimeFeatures
           attribution_reporting_runtime_features);
 
+  // See:
+  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
+  //
+  // This implements the API:
+  // window.fence.reportEvent({destinationURL})
+  //
+  // A document in a fenced frame can invoke the reportEvent API to request the
+  // browser to send a beacon to the https URL `destinationURL`, where macros
+  // in `destinationURL` will be substituted using the values specified by
+  // registerAdMacro in the Protected Audience auction's buyer worklet.
+  //
+  // TODO(crbug.com/1443561): Get rid of
+  // `attribution_reporting_runtime_features` when Runtime Feature State fully
+  // supports runtime feature access from the browser process.
+  SendFencedFrameReportingBeaconToCustomURL(
+      url.mojom.Url destination_url,
+      network.mojom.AttributionReportingRuntimeFeatures
+          attribution_reporting_runtime_features);
+
+  // Notify the browser that there is a legacy technology used by the page.
+  // The event contains the technology `type` and code location from the
+  // ExecutionContext.
+  // The event will only be sent when legacy tech report feature is turned on by
+  // the browser.
+  // All data will be later uploaded to the enterprise management service as is.
+  // Note that we don't guarantee any data here is valid, data will be valided
+  // by the server.
+  SendLegacyTechEvent(
+    string type,
+    LegacyTechEventCodeLocation code_location);
+
   // Fenced frames can send beacons automatically when an event happens.
   //
   // For now, only "reserved.top_navigation" is supported. The `event_data` is
@@ -702,6 +761,17 @@ interface LocalFrameHost {
   // See https://github.com/WICG/view-transitions/blob/main/explainer.md#declarative-opt-in-to-transitions.
   OnViewTransitionOptInChanged(
     ViewTransitionSameOriginOptIn view_transition_opt_in);
+
+  // Used to tell the browser the user started dragging in the content area.
+  // |drag_data| contains contextual information about the pieces of the page
+  // the user dragged. The browser uses this notification to initiate a drag
+  // session at the OS level.
+  StartDragging(DragData drag_data,
+                AllowedDragOperations operations_allowed,
+                skia.mojom.BitmapN32? image,
+                gfx.mojom.Vector2d cursor_offset_in_dip,
+                gfx.mojom.Rect drag_obj_rect_in_dip,
+                DragEventSourceInfo event_info);
 };
 
 // Implemented in Browser, this interface defines frame-specific methods

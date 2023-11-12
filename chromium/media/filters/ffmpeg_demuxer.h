@@ -273,7 +273,8 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   }
 
   container_names::MediaContainerName container() const {
-    return glue_ ? glue_->container() : container_names::CONTAINER_UNKNOWN;
+    return glue_ ? glue_->container()
+                 : container_names::MediaContainerName::kContainerUnknown;
   }
 
  private:
@@ -350,7 +351,7 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   // Executes |pending_seek_cb_| with |status| and closes out the async trace.
   void RunPendingSeekCB(PipelineStatus status);
 
-  raw_ptr<DemuxerHost, DanglingUntriaged> host_ = nullptr;
+  raw_ptr<DemuxerHost, AcrossTasksDanglingUntriaged> host_ = nullptr;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

@@ -21,9 +21,9 @@
 
   :host([checked]) #button {
     background-color: var(--color-segmented-button-checked,
-        var(--cr-fallback-color-tonal-container));
+        var(--cr-fallback-color-primary));
     color: var(--color-segmented-button-foreground-checked,
-        var(--cr-fallback-color-on-tonal-container));
+        var(--cr-fallback-color-on-primary));
   }
 
   #button #overlay {
@@ -38,7 +38,7 @@
 
   #button:hover #overlay {
     background-color: var(--color-segmented-button-hover,
-        var(--cr-fallback-color-state-hover-on-subtle));
+        var(--cr-hover-on-subtle-background-color));
   }
 
   #button:focus-visible #overlay {
@@ -47,7 +47,7 @@
 
   paper-ripple {
     color: var(--color-segmented-button-ripple,
-        var(--cr-fallback-color-state-ripple-neutral-on-subtle));
+        var(--cr-active-neutral-on-subtle-background-color));
   }
 
   #container {
@@ -76,7 +76,7 @@
   :host([checked]) #checkmark {
     display: block;
     fill: var(--color-segmented-button-foreground-checked,
-        var(--cr-fallback-color-on-tonal-container));
+        var(--cr-fallback-color-on-primary));
     height: 16px;
     margin-inline-end: 8px;
     width: 16px;

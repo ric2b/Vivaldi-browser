@@ -219,6 +219,7 @@
 <translation id="4423376891418188461">Instellingen herstellen</translation>
 <translation id="4478664379124702289">&amp;Koppeling opslaan als...</translation>
 <translation id="4520385623207007473">Gebruikte cookies</translation>
+<translation id="456449593072900590">Verwijderen bij afsluiten</translation>
 <translation id="4580596421317071374">Wachtwoorden worden opgeslagen in <ph name="GOOGLE_PASSWORD_MANAGER" /> op dit apparaat.</translation>
 <translation id="4593021220803146968">&amp;Ga naar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps en extensies kunnen alleen worden aangepast door de beheerder (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -279,7 +280,6 @@
 <translation id="5431318178759467895">Kleur</translation>
 <translation id="5485102783864353244">App toevoegen</translation>
 <translation id="5486561344817861625">Browserherstart simuleren</translation>
-<translation id="5487521232677179737">Gegevens wissen</translation>
 <translation id="5509693895992845810">Opslaan &amp;als...</translation>
 <translation id="5521078259930077036">Is dit de startpagina die je verwachtte?</translation>
 <translation id="5542132724887566711">Profiel</translation>
@@ -305,7 +305,6 @@
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5851868085455377790">Uitgever</translation>
 <translation id="5860491529813859533">Inschakelen</translation>
-<translation id="5867841422488265304">Voer een adres of zoekopdracht in</translation>
 <translation id="5910363049092958439">Af&amp;beelding opslaan als...</translation>
 <translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" />-bits):
   <ph name="MODULUS_HEX_DUMP" />
@@ -381,7 +380,6 @@
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Controleer spelling tijdens typen</translation>
-<translation id="73786666777299047">Chrome Web Store openen</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">&amp;Paginabron weergeven</translation>
@@ -441,6 +439,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8382913212082956454">&amp;E-mailadres kopiëren</translation>
 <translation id="8434480141477525001">NaCl Debug Port</translation>
 <translation id="8449008133205184768">Plakken en stijl aanpassen</translation>
+<translation id="8477178913400731244">Gegevens verwijderen</translation>
 <translation id="8477384620836102176">&amp;Algemeen</translation>
 <translation id="8496717697661868878">Deze plug-in uitvoeren</translation>
 <translation id="8512476990829870887">Proces beëindigen</translation>

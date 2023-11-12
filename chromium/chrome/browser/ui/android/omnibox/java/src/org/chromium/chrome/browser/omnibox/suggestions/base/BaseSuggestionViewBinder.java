@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions.base;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -11,6 +12,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.AccessibilityDelegate;
 import android.view.ViewGroup;
@@ -31,6 +33,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxDrawableState;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.DropdownCommonProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
@@ -71,27 +74,26 @@ public final class BaseSuggestionViewBinder<T extends View>
     private final ViewBinder<PropertyModel, T, PropertyKey> mContentBinder;
 
     private static boolean sDimensionsInitialized;
-    private static int sIconWidthPx;
-    private static int sPaddingSmallIcon;
-    private static int sPaddingStartLargeIcon;
-    private static int sPaddingEndLargeIcon;
     private static int sEdgeSize;
     private static int sEdgeSizeLargeIcon;
     private static int sSideSpacing;
+    private static int sLargeIconRoundingRadius;
+    private static int sSmallIconRoundingRadius;
 
     public BaseSuggestionViewBinder(ViewBinder<PropertyModel, T, PropertyKey> contentBinder) {
         mContentBinder = contentBinder;
     }
 
     @Override
+    @SuppressLint("ClickableViewAccessibility")
     public void bind(PropertyModel model, BaseSuggestionView<T> view, PropertyKey propertyKey) {
         if (!sDimensionsInitialized) {
             initializeDimensions(view.getContext());
             sDimensionsInitialized = true;
         }
 
-        mContentBinder.bind(model, view.getContentView(), propertyKey);
-        ActionChipsBinder.bind(model, view.getActionChipsView(), propertyKey);
+        mContentBinder.bind(model, view.contentView, propertyKey);
+        ActionChipsBinder.bind(model, view.actionChipsView, propertyKey);
 
         if (BaseSuggestionViewProperties.ICON == propertyKey) {
             updateSuggestionIcon(model, view);
@@ -127,6 +129,18 @@ public final class BaseSuggestionViewBinder<T extends View>
                 view.setOnLongClickListener(v -> {
                     listener.run();
                     return true;
+                });
+            }
+        } else if (BaseSuggestionViewProperties.ON_TOUCH_DOWN_EVENT == propertyKey) {
+            Runnable listener = model.get(BaseSuggestionViewProperties.ON_TOUCH_DOWN_EVENT);
+            if (listener == null) {
+                view.setOnTouchListener(null);
+            } else {
+                view.setOnTouchListener((v, event) -> {
+                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        listener.run();
+                    }
+                    return false;
                 });
             }
         }
@@ -199,20 +213,27 @@ public final class BaseSuggestionViewBinder<T extends View>
     /** Update attributes of decorated suggestion icon. */
     private static <T extends View> void updateSuggestionIcon(
             PropertyModel model, BaseSuggestionView<T> baseView) {
-        final ImageView rciv = baseView.getSuggestionImageView();
-        final SuggestionDrawableState sds = model.get(BaseSuggestionViewProperties.ICON);
+        final ImageView rciv = baseView.decorationIcon;
+        final OmniboxDrawableState sds = model.get(BaseSuggestionViewProperties.ICON);
 
         if (sds != null) {
-            rciv.setLayoutParams(new SuggestionLayout.LayoutParams(sIconWidthPx,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    SuggestionLayout.LayoutParams.SuggestionViewType.DECORATION));
-
-            int paddingStart = sds.isLarge ? sPaddingStartLargeIcon : sPaddingSmallIcon;
-            int paddingEnd = sds.isLarge ? sPaddingEndLargeIcon : sPaddingSmallIcon;
+            // Ensure the decoration icon size does not exceed the maximum edge size.
             int edgeSize = sds.isLarge ? sEdgeSizeLargeIcon : sEdgeSize;
-            rciv.setPadding(paddingStart, 0, paddingEnd, 0);
-            rciv.setMinimumHeight(edgeSize);
+            boolean isTall = sds.drawable.getIntrinsicHeight() > sds.drawable.getIntrinsicWidth();
+            rciv.getLayoutParams().width = isTall ? ViewGroup.LayoutParams.WRAP_CONTENT : edgeSize;
+            rciv.getLayoutParams().height = isTall ? edgeSize : ViewGroup.LayoutParams.WRAP_CONTENT;
+
+            // Note: ImageView, unlike other View types, includes logic to scale its bounds
+            // proportionally to its image aspect ratio. This guarantees behavior consistent with
+            // RoundedCornerImageView, dp-accurate rounding and hardware acceleration.
+            // The view bound adjustment is controlled by the following three lines.
+            rciv.setAdjustViewBounds(true);
+            rciv.setMaxWidth(edgeSize);
+            rciv.setMaxHeight(edgeSize);
+
             rciv.setClipToOutline(sds.useRoundedCorners);
+            baseView.decorationIconOutline.setRadius(
+                    sds.isLarge ? sLargeIconRoundingRadius : sSmallIconRoundingRadius);
         }
 
         updateIcon(rciv, sds, ChromeColors.getSecondaryIconTintRes(isIncognito(model)));
@@ -315,7 +336,7 @@ public final class BaseSuggestionViewBinder<T extends View>
 
     /** Update image view using supplied drawable state object. */
     private static void updateIcon(
-            ImageView view, SuggestionDrawableState sds, @ColorRes int tintRes) {
+            ImageView view, OmniboxDrawableState sds, @ColorRes int tintRes) {
         view.setVisibility(sds == null ? View.GONE : View.VISIBLE);
         if (sds == null) {
             // Release any drawable that is still attached to this view to reclaim memory.
@@ -363,24 +384,18 @@ public final class BaseSuggestionViewBinder<T extends View>
         boolean showModernizeVisualUpdate =
                 OmniboxFeatures.shouldShowModernizeVisualUpdate(context);
         Resources resources = context.getResources();
-        sIconWidthPx = resources.getDimensionPixelSize(showModernizeVisualUpdate
-                        ? R.dimen.omnibox_suggestion_icon_area_size_modern
-                        : R.dimen.omnibox_suggestion_icon_area_size);
 
-        sPaddingSmallIcon = showModernizeVisualUpdate
-                ? OmniboxResourceProvider.getIconStartPadding(context)
-                : resources.getDimensionPixelSize(
-                        R.dimen.omnibox_suggestion_24dp_icon_margin_start);
-        sPaddingStartLargeIcon = OmniboxResourceProvider.getLargeIconStartPadding(context);
-        sPaddingEndLargeIcon = OmniboxResourceProvider.getLargeIconEndPadding(context);
         sEdgeSize = resources.getDimensionPixelSize(R.dimen.omnibox_suggestion_24dp_icon_size);
         sEdgeSizeLargeIcon =
                 resources.getDimensionPixelSize(R.dimen.omnibox_suggestion_36dp_icon_size);
         sSideSpacing = OmniboxResourceProvider.getSideSpacing(context);
+        sLargeIconRoundingRadius =
+                resources.getDimensionPixelSize(R.dimen.omnibox_large_icon_rounding_radius);
+        sSmallIconRoundingRadius =
+                resources.getDimensionPixelSize(R.dimen.omnibox_small_icon_rounding_radius);
     }
 
     /** @return Cached ConstantState for testing. */
-    @VisibleForTesting
     public static Drawable.ConstantState getFocusableDrawableStateForTesting() {
         return sFocusableDrawableState;
     }

@@ -83,8 +83,9 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
 
   // Clear the database if too old for upgrade.
   DCHECK_LT(kDeprecatedVersionNumber, GetCurrentVersion());
-  sql::MetaTable::RazeIfIncompatible(&db_, kDeprecatedVersionNumber,
-                                     GetCurrentVersion());
+  if (!sql::MetaTable::RazeIfIncompatible(&db_, kDeprecatedVersionNumber,
+                                     GetCurrentVersion()))
+    return sql::INIT_FAILURE;
 
   // Wrap the rest of init in a tranaction. This will prevent the database from
   // getting corrupted if we crash in the middle of initialization or migration.

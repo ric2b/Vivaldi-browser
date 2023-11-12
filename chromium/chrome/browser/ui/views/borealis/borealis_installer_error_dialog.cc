@@ -10,7 +10,8 @@
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
-#include "base/allocator/partition_allocator/pointers/raw_ptr.h"
+#include "ash/webui/settings/public/constants/routes.mojom.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/borealis/borealis_features.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -62,6 +62,10 @@ class ErrorBehaviourProvider {
   virtual CallToAction GetAction() const { return CallToAction::kNone; }
 
   virtual std::u16string ErrorMessage() const = 0;
+
+  virtual std::vector<std::pair<std::u16string, GURL>> GetLinks() const {
+    return {};
+  }
 };
 
 class Duplicate : public ErrorBehaviourProvider {
@@ -75,6 +79,11 @@ class Update : public ErrorBehaviourProvider {
  public:
   std::u16string ErrorMessage() const override {
     return l10n_util::GetStringUTF16(IDS_BOREALIS_INSTALLER_ERROR_UPDATE);
+  }
+  std::vector<std::pair<std::u16string, GURL>> GetLinks() const override {
+    return {
+        {l10n_util::GetStringUTF16(IDS_LEARN_MORE),
+         GURL("https://support.google.com/chromebook?p=Steam_InternalError")}};
   }
 };
 
@@ -94,6 +103,11 @@ class Space : public ErrorBehaviourProvider {
   CallToAction GetAction() const override {
     return CallToAction::kStorageManagement;
   }
+  std::vector<std::pair<std::u16string, GURL>> GetLinks() const override {
+    return {{l10n_util::GetStringUTF16(IDS_LEARN_MORE),
+             GURL("https://support.google.com/"
+                  "chromebook?p=Steam_DlcNeedSpaceError")}};
+  }
 };
 
 class Offline : public ErrorBehaviourProvider {
@@ -102,6 +116,10 @@ class Offline : public ErrorBehaviourProvider {
     return l10n_util::GetStringUTF16(IDS_BOREALIS_INSTALLER_ERROR_OFFLINE);
   }
   CallToAction GetAction() const override { return CallToAction::kRetry; }
+  std::vector<std::pair<std::u16string, GURL>> GetLinks() const override {
+    return {{l10n_util::GetStringUTF16(IDS_LEARN_MORE),
+             GURL("https://support.google.com/chromebook?p=Steam_Offline")}};
+  }
 };
 
 class Startup : public ErrorBehaviourProvider {
@@ -152,9 +170,10 @@ class BorealisInstallerErrorDialog : public views::DialogDelegate {
       std::unique_ptr<ErrorBehaviourProvider> behaviour,
       DialogCallback callback)
       : behaviour_(std::move(behaviour)), callback_(std::move(callback)) {
+    SetTitle(IDS_BOREALIS_INSTALLER_APP_NAME);
     set_internal_name("BorealisInstallerErrorDialog");
     InitializeButtons();
-    InitializeView();
+    InitializeView(*behaviour_);
     SetModalType(ui::MODAL_TYPE_WINDOW);
     SetOwnedByWidget(true);
     SetShowCloseButton(false);
@@ -180,6 +199,8 @@ class BorealisInstallerErrorDialog : public views::DialogDelegate {
     alert_icon_->SetEnabledColor(
         color_provider->GetColor(cros_tokens::kIconColorAlert));
   }
+
+  bool ShouldShowWindowTitle() const override { return false; }
 
  private:
   void InitializeButtons() {
@@ -208,7 +229,7 @@ class BorealisInstallerErrorDialog : public views::DialogDelegate {
     }
   }
 
-  void InitializeView() {
+  void InitializeView(const ErrorBehaviourProvider& behaviour) {
     auto view = std::make_unique<views::View>();
 
     views::LayoutProvider* provider = views::LayoutProvider::Get();
@@ -235,6 +256,20 @@ class BorealisInstallerErrorDialog : public views::DialogDelegate {
     message_label->SetMultiLine(true);
     message_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
     view->AddChildView(message_label);
+
+    for (const std::pair<std::u16string, GURL>& link : behaviour.GetLinks()) {
+      LOG(ERROR) << link.first << link.second;
+      views::Link* link_label =
+          view->AddChildView(std::make_unique<views::Link>(link.first));
+      link_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      link_label->SetCallback(base::BindRepeating(
+          [](GURL url) {
+            ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+                url, ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+                ash::NewWindowDelegate::Disposition::kNewForegroundTab);
+          },
+          link.second));
+    }
 
     SetContentsView(std::move(view));
   }

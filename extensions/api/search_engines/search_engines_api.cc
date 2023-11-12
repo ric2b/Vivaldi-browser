@@ -2,11 +2,18 @@
 
 #include "extensions/api/search_engines/search_engines_api.h"
 
+#include <bitset>
+
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/search_engines/template_url_service.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/common/extension_set.h"
 #include "extensions/schema/search_engines.h"
 #include "extensions/tools/vivaldi_tools.h"
 
@@ -90,6 +97,7 @@ TemplateURL* GetTemplateURLById(TemplateURLService* service, TemplateURLID id) {
 }
 
 vivaldi::search_engines::SearchRequest BuildSearchRequest(
+    content::BrowserContext* browser_context,
     const TemplateURLRef& template_url_ref,
     const SearchTermsData& search_terms_data,
     std::string search_terms) {
@@ -98,6 +106,33 @@ vivaldi::search_engines::SearchRequest BuildSearchRequest(
   TemplateURLRef::PostContent post_content;
 
   vivaldi::search_engines::SearchRequest result;
+
+  std::bitset<3> ad_blocking_state;
+  auto* adblock_rules_manager =
+      adblock_filter::RuleServiceFactory::GetForBrowserContext(browser_context)
+          ->GetRuleManager();
+  if (adblock_rules_manager->GetActiveExceptionList(
+          adblock_filter::RuleGroup::kTrackingRules) ==
+      adblock_filter::RuleManager::kExemptList)
+    ad_blocking_state.set(0);
+  if (adblock_rules_manager->GetActiveExceptionList(
+          adblock_filter::RuleGroup::kAdBlockingRules) ==
+      adblock_filter::RuleManager::kExemptList)
+    ad_blocking_state.set(1);
+
+  extensions::ExtensionRegistry* extension_registry =
+      extensions::ExtensionRegistry::Get(browser_context);
+  DCHECK(extension_registry);
+  for (const auto extension : extension_registry->enabled_extensions()) {
+    if (extension->is_extension() &&
+        extension->location() !=
+            extensions::mojom::ManifestLocation::kComponent) {
+      ad_blocking_state.set(2);
+      break;
+    }
+  }
+
+  search_terms_args.vivaldi_ad_blocking_state = ad_blocking_state;
 
   result.url = template_url_ref.ReplaceSearchTerms(
       search_terms_args, search_terms_data, &post_content);
@@ -514,7 +549,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
 
   return RespondNow(
       ArgumentList(vivaldi::search_engines::GetSearchRequest::Results::Create(
-          BuildSearchRequest(template_url->url_ref(),
+          BuildSearchRequest(browser_context(), template_url->url_ref(),
                              service->search_terms_data(),
                              params->search_terms))));
 }
@@ -543,9 +578,9 @@ SearchEnginesGetSuggestRequestFunction::Run() {
 
   return RespondNow(
       ArgumentList(vivaldi::search_engines::GetSuggestRequest::Results::Create(
-          BuildSearchRequest(template_url->suggestions_url_ref(),
-                             service->search_terms_data(),
-                             params->search_terms))));
+          BuildSearchRequest(
+              browser_context(), template_url->suggestions_url_ref(),
+              service->search_terms_data(), params->search_terms))));
 }
 
 ExtensionFunction::ResponseAction

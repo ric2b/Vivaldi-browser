@@ -36,12 +36,33 @@ constexpr char kPointingStickLoginScreenExternalSettingsPref[] =
 constexpr char kTouchpadLoginScreenExternalSettingsPref[] =
     "settings.touchpad.external";
 
+// Prefs which contain login screen button remapping list for connected graphics
+// tablet devices.
+constexpr char kGraphicsTabletLoginScreenTabletButtonRemappingListPref[] =
+    "settings.graphics_tablet.tablet_button_remappings";
+constexpr char kGraphicsTabletLoginScreenPenButtonRemappingListPref[] =
+    "settings.graphics_tablet.pen_button_remappings";
+
 // Prefs which contain dictionaries of settings for each connected device.
 constexpr char kKeyboardDeviceSettingsDictPref[] = "settings.keyboard.devices";
 constexpr char kMouseDeviceSettingsDictPref[] = "settings.mouse.devices";
 constexpr char kPointingStickDeviceSettingsDictPref[] =
     "settings.pointing_stick.devices";
 constexpr char kTouchpadDeviceSettingsDictPref[] = "settings.touchpad.devices";
+
+// Pref which contains a list of previously seen imposter keyboards that we know
+// to be valid (ie false positives).
+constexpr char kKeyboardDeviceImpostersListPref[] =
+    "settings.keyboard.imposter_false_positives";
+
+// Prefs which contain dictionaries of button remappings for each connected
+// device.
+constexpr char kGraphicsTabletTabletButtonRemappingsDictPref[] =
+    "settings.graphics_tablet.tablet_button_remappings";
+constexpr char kGraphicsTabletPenButtonRemappingsDictPref[] =
+    "settings.graphics_tablet.pen_button_remappings";
+constexpr char kMouseButtonRemappingsDictPref[] =
+    "settings.mouse.button_remappings";
 
 // Keyboard settings dictionary keys.
 constexpr char kKeyboardSettingAutoRepeatDelay[] = "auto_repeat_delay";
@@ -86,6 +107,17 @@ constexpr char kTouchpadSettingSimulateRightClick[] = "simulate_right_click";
 constexpr char kPointingStickSettingSensitivity[] = "sensitivity";
 constexpr char kPointingStickSettingSwapRight[] = "swap_right";
 constexpr char kPointingStickSettingAcceleration[] = "acceleration";
+
+// Button Remapping dictionary keys.
+constexpr char kButtonRemappings[] = "button_remappings";
+constexpr char kButtonRemappingName[] = "name";
+constexpr char kButtonRemappingCustomizableButton[] = "customizable_button";
+constexpr char kButtonRemappingKeyboardCode[] = "vkey";
+constexpr char kButtonRemappingAction[] = "action";
+constexpr char kButtonRemappingKeyEvent[] = "key_event";
+constexpr char kButtonRemappingDomCode[] = "dom_code";
+constexpr char kButtonRemappingDomKey[] = "dom_key";
+constexpr char kButtonRemappingModifiers[] = "modifiers";
 
 }  // namespace ash::prefs
 

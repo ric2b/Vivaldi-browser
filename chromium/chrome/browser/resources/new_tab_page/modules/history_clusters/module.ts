@@ -4,6 +4,7 @@
 
 import '../module_header.js';
 import './suggest_tile.js';
+import '../../discount.mojom-webui.js';
 
 import {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
@@ -12,7 +13,7 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {Cart} from '../../cart.mojom-webui.js';
 import {Cluster, URLVisit} from '../../history_cluster_types.mojom-webui.js';
-import {LayoutType} from '../../history_clusters.mojom-webui.js';
+import {LayoutType} from '../../history_clusters_layout_type.mojom-webui.js';
 import {I18nMixin, loadTimeData} from '../../i18n_setup.js';
 import {NewTabPageProxy} from '../../new_tab_page_proxy.js';
 import {InfoDialogElement} from '../info_dialog';
@@ -83,6 +84,15 @@ export class HistoryClustersModuleElement extends I18nMixin
         value: null,
       },
 
+      /**
+         The discounts displayed on the visit tiles of this element, could be
+         empty.
+       */
+      discounts: {
+        type: Array,
+        value: [],
+      },
+
       searchResultPage: Object,
 
       overflowScroll_: {
@@ -95,6 +105,7 @@ export class HistoryClustersModuleElement extends I18nMixin
 
   cluster: Cluster;
   cart: Cart|null;
+  discounts: string[];
   layoutType: LayoutType;
   searchResultPage: URLVisit;
   private setDisabledModulesListenerId_: number|null = null;
@@ -158,6 +169,7 @@ export class HistoryClustersModuleElement extends I18nMixin
   private onVisitTileClick_(e: Event) {
     this.recordTileClickIndex_(e.target as HTMLElement, 'Visit');
     this.recordClick_(HistoryClusterElementType.VISIT);
+    this.maybeRecordDiscountClick_(e.target as TileModuleElement);
   }
 
   private onSuggestTileClick_(e: Event) {
@@ -193,6 +205,13 @@ export class HistoryClustersModuleElement extends I18nMixin
         index);
   }
 
+  private maybeRecordDiscountClick_(tile: TileModuleElement) {
+    if (tile.hasDiscount) {
+      chrome.metricsPrivate.recordUserAction(
+          `NewTabPage.HistoryClusters.DiscountClicked`);
+    }
+  }
+
   private onDisableButtonClick_() {
     HistoryClustersProxyImpl.getInstance().handler.recordDisabled(
         this.cluster.id);
@@ -200,8 +219,8 @@ export class HistoryClustersModuleElement extends I18nMixin
       composed: true,
       detail: {
         message: loadTimeData.getStringF(
-            'disableModuleToastMessage',
-            loadTimeData.getString('modulesJourneysSentence2')),
+            'modulesDisableToastMessage',
+            loadTimeData.getString('modulesThisTypeOfCardText')),
       },
     });
     this.dispatchEvent(disableEvent);
@@ -243,6 +262,13 @@ export class HistoryClustersModuleElement extends I18nMixin
     return loadTimeData.getBoolean(
                'modulesChromeCartInHistoryClustersModuleEnabled') &&
         !!cart;
+  }
+
+  private getInfo_(discounts: string[]): TrustedHTML {
+    const hasDiscount = discounts.some((discount) => !!discount);
+    return this.i18nAdvanced(
+        hasDiscount ? 'modulesHistoryWithDiscountInfo' :
+                      'modulesJourneysInfo');
   }
 }
 
@@ -309,6 +335,31 @@ async function createElement(): Promise<HistoryClustersModuleElement|null> {
                                  visit.hasUrlKeyedImage && visit.isKnownToSync)
                          .length;
   const visitCount = element.cluster.visits.length;
+  element.discounts = [];
+  if (loadTimeData.getBoolean('historyClustersModuleDiscountsEnabled')) {
+    const {discounts} = await HistoryClustersProxyImpl.getInstance()
+                            .handler.getDiscountsForCluster(clusters[0]);
+    for (const visit of clusters[0].visits) {
+      let discountInValue = '';
+      for (const [url, urlDiscounts] of discounts) {
+        if (url.url === visit.normalizedUrl.url && urlDiscounts.length > 0) {
+          // API is designed to support multiple discounts, but for now we only
+          // have one.
+          discountInValue = urlDiscounts[0].valueInText;
+          visit.normalizedUrl.url = urlDiscounts[0].annotatedVisitUrl.url;
+        }
+      }
+      element.discounts.push(discountInValue);
+    }
+    // For visits without discounts, discount string in corresponding index in
+    // `discounts` array is empty.
+    const hasDiscount =
+        element.discounts.some((discount) => discount.length > 0);
+    chrome.metricsPrivate.recordBoolean(
+        `NewTabPage.HistoryClusters.HasDiscount`, hasDiscount);
+  } else {
+    element.discounts = Array(visitCount).fill('');
+  }
 
   // Calculate which layout to use.
   if (imageCount >= LAYOUT_3_MIN_IMAGE_VISITS) {

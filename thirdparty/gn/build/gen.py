@@ -57,10 +57,12 @@ class Platform(object):
       self._platform = 'solaris'
     elif self._platform.startswith('zos'):
       self._platform = 'zos'
+    elif self._platform.startswith('serenity'):
+      self._platform = 'serenity'
 
   @staticmethod
   def known_platforms():
-    return ['linux', 'darwin', 'mingw', 'msys', 'msvc', 'aix', 'fuchsia', 'freebsd', 'netbsd', 'openbsd', 'haiku', 'solaris', 'zos']
+    return ['linux', 'darwin', 'mingw', 'msys', 'msvc', 'aix', 'fuchsia', 'freebsd', 'netbsd', 'openbsd', 'haiku', 'solaris', 'zos', 'serenity']
 
   def platform(self):
     return self._platform
@@ -93,10 +95,13 @@ class Platform(object):
     return self._platform == 'solaris'
 
   def is_posix(self):
-    return self._platform in ['linux', 'freebsd', 'darwin', 'aix', 'openbsd', 'haiku', 'solaris', 'msys', 'netbsd']
+    return self._platform in ['linux', 'freebsd', 'darwin', 'aix', 'openbsd', 'haiku', 'solaris', 'msys', 'netbsd', 'serenity']
 
   def is_zos(self):
     return self._platform == 'zos'
+
+  def is_serenity(self):
+    return self_.platform == 'serenity'
 
 class ArgumentsList:
   """Helper class to accumulate ArgumentParser argument definitions
@@ -292,6 +297,7 @@ def WriteGenericNinja(path, static_libraries, executables,
       'solaris': 'build_linux.ninja.template',
       'netbsd': 'build_linux.ninja.template',
       'zos': 'build_zos.ninja.template',
+      'serenity': 'build_linux.ninja.template',
   }[platform.platform()])
 
   with open(template_filename) as f:

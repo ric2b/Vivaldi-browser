@@ -20,10 +20,6 @@
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/password_checkup_metrics.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 using password_manager::CredentialUIEntry;
 using password_manager::InsecureType;
@@ -227,6 +223,10 @@ void IOSChromePasswordCheckManager::OnCredentialDone(
   if (is_leaked) {
     insecure_credentials_manager_.SaveInsecureCredential(credential);
   }
+}
+
+void IOSChromePasswordCheckManager::OnBulkCheckServiceShutDown() {
+  observed_bulk_leak_check_service_.Reset();
 }
 
 void IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished() {

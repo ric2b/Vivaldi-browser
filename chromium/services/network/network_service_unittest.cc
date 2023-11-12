@@ -25,6 +25,7 @@
 #include "base/test/values_test_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/mock_network_change_notifier.h"
@@ -43,6 +44,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/file_net_log_observer.h"
 #include "net/net_buildflags.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -99,7 +101,6 @@ mojom::NetworkContextParamsPtr CreateContextParams() {
       FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
   return params;
 }
-
 class NetworkServiceTest : public testing::Test {
  public:
   explicit NetworkServiceTest(
@@ -108,7 +109,7 @@ class NetworkServiceTest : public testing::Test {
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO,
                           time_source),
         service_(NetworkService::CreateForTesting()) {}
-  ~NetworkServiceTest() override {}
+  ~NetworkServiceTest() override = default;
 
   base::test::TaskEnvironment* task_environment() { return &task_environment_; }
 
@@ -153,6 +154,74 @@ TEST_F(NetworkServiceTest, CreateContextWithoutChannelID) {
   mojo::Remote<mojom::NetworkContext> network_context;
   service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
                                   std::move(params));
+  network_context.reset();
+  // Make sure the NetworkContext is destroyed.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(NetworkServiceTest, CreateContextWithMaskedDomainListProxyConfig) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      net::features::kEnableIpProtectionProxy);
+
+  masked_domain_list::MaskedDomainList mdl;
+  auto* resourceOwner = mdl.add_resource_owners();
+  resourceOwner->set_owner_name("foo");
+  resourceOwner->add_owned_resources()->set_domain("example.com");
+  service()->UpdateMaskedDomainList(mdl.SerializeAsString());
+  task_environment()->RunUntilIdle();
+
+  mojom::NetworkContextParamsPtr params = CreateContextParams();
+  mojo::Remote<mojom::NetworkContext> network_context;
+  service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
+                                  std::move(params));
+
+  // TODO(aakallam): verify that the allow list is used
+
+  network_context.reset();
+  // Make sure the NetworkContext is destroyed.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(NetworkServiceTest,
+       CreateContextWithCustomProxyConfig_MdlConfigIsNotUsed) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      net::features::kEnableIpProtectionProxy);
+
+  masked_domain_list::MaskedDomainList mdl;
+  auto* resourceOwner = mdl.add_resource_owners();
+  resourceOwner->set_owner_name("foo");
+  resourceOwner->add_owned_resources()->set_domain("example.com");
+  service()->UpdateMaskedDomainList(mdl.SerializeAsString());
+  task_environment()->RunUntilIdle();
+
+  mojom::NetworkContextParamsPtr params = CreateContextParams();
+  params->initial_custom_proxy_config =
+      network::mojom::CustomProxyConfig::New();
+  mojo::Remote<mojom::NetworkContext> network_context;
+  service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
+                                  std::move(params));
+
+  // TODO(aakallam): verify that the allow list isn't used
+
+  network_context.reset();
+  // Make sure the NetworkContext is destroyed.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(NetworkServiceTest, CreateContextWithoutMaskedDomainListData) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      net::features::kEnableIpProtectionProxy);
+
+  mojom::NetworkContextParamsPtr params = CreateContextParams();
+  mojo::Remote<mojom::NetworkContext> network_context;
+  service()->CreateNetworkContext(network_context.BindNewPipeAndPassReceiver(),
+                                  std::move(params));
+
+  // TODO(aakallam): verify that the allow list isn't used
+
   network_context.reset();
   // Make sure the NetworkContext is destroyed.
   base::RunLoop().RunUntilIdle();
@@ -982,6 +1051,23 @@ TEST_F(NetworkServiceTest, DisableCTEnforcement) {
 }
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
+TEST_F(NetworkServiceTest, SetMaskedDomainList) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {net::features::kEnableIpProtectionProxy,
+       network::features::kMaskedDomainList},
+      {});
+
+  masked_domain_list::MaskedDomainList mdl;
+  auto* resourceOwner = mdl.add_resource_owners();
+  resourceOwner->set_owner_name("foo");
+  resourceOwner->add_owned_resources()->set_domain("example.com");
+
+  service()->UpdateMaskedDomainList(mdl.SerializeAsString());
+
+  EXPECT_TRUE(service()->network_service_proxy_allow_list()->IsPopulated());
+}
+
 class NetworkServiceTestWithService : public testing::Test {
  public:
   NetworkServiceTestWithService()
@@ -991,7 +1077,7 @@ class NetworkServiceTestWithService : public testing::Test {
   NetworkServiceTestWithService& operator=(
       const NetworkServiceTestWithService&) = delete;
 
-  ~NetworkServiceTestWithService() override {}
+  ~NetworkServiceTestWithService() override = default;
 
   virtual mojom::NetworkServiceParamsPtr GetParams() {
     return mojom::NetworkServiceParams::New();
@@ -1085,13 +1171,12 @@ TEST_F(NetworkServiceTestWithService, StartsNetLog) {
   base::FilePath log_dir = temp_dir.GetPath();
   base::FilePath log_path = log_dir.Append(FILE_PATH_LITERAL("test_log.json"));
 
-  base::Value::Dict dict;
-  dict.Set("amiatest", "iamatest");
-
   base::File log_file(log_path,
                       base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
   network_service_->StartNetLog(
-      std::move(log_file), net::NetLogCaptureMode::kDefault, std::move(dict));
+      std::move(log_file), net::FileNetLogObserver::kNoLimit,
+      net::NetLogCaptureMode::kDefault,
+      base::Value::Dict().Set("amiatest", "iamatest"));
   CreateNetworkContext();
   LoadURL(test_server()->GetURL("/echo"));
   EXPECT_EQ(net::OK, client()->completion_status().error_code);
@@ -1104,6 +1189,57 @@ TEST_F(NetworkServiceTestWithService, StartsNetLog) {
 
   base::Value::Dict log_dict = base::test::ParseJsonDictFromFile(log_path);
   ASSERT_EQ(*log_dict.FindStringByDottedPath("constants.amiatest"), "iamatest");
+}
+
+// Verifies that a passed net log file is successfully opened and sane data
+// written to it up until the max file size.
+TEST_F(NetworkServiceTestWithService, StartsNetLogBounded) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath log_dir = temp_dir.GetPath();
+  base::FilePath log_path =
+      log_dir.Append(FILE_PATH_LITERAL("test_log_bounded.json"));
+
+  // For testing, have a max log size of 1 MB. 1024*1024 == 2^20 == left shift
+  // by 20 bits
+  const uint64_t kMaxSizeBytes = 1 << 20;
+  base::File log_file(log_path,
+                      base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  network_service_->StartNetLog(std::move(log_file), kMaxSizeBytes,
+                                net::NetLogCaptureMode::kEverything,
+                                base::Value::Dict());
+  CreateNetworkContext();
+
+  // Through trial and error it was found that this looping navigation results
+  // in a ~2MB unbounded net-log file. Since our bounded net-log is limited to
+  // 1MB this is fine.
+
+  // This string is roughly 8KB;
+  const std::string kManyAs(8192, 'a');
+  for (int i = 0; i < 30; i++) {
+    LoadURL(test_server()->GetURL("/echo?" + kManyAs));
+    EXPECT_EQ(net::OK, client()->completion_status().error_code);
+  }
+
+  // |log_file| is closed on destruction of the NetworkService.
+  Shutdown();
+
+  // |log_file| is closed on another thread, so have to wait for that to happen.
+  task_environment_.RunUntilIdle();
+
+  base::Value::Dict log_dict = base::test::ParseJsonDictFromFile(log_path);
+
+  base::File log_file_read(log_path,
+                           base::File::FLAG_OPEN | base::File::FLAG_READ);
+  base::File::Info file_info;
+  log_file_read.GetInfo(&file_info);
+
+  // The max size is only a rough bound, so let's make sure the final file is
+  // within a reasonable range from our max. Let's say 10%.
+  const int64_t kMaxSizeUpper = kMaxSizeBytes * 1.1;
+  const int64_t kMaxSizeLower = kMaxSizeBytes * 0.9;
+  EXPECT_GT(file_info.size, kMaxSizeLower);
+  EXPECT_LT(file_info.size, kMaxSizeUpper);
 }
 
 // Verifies that raw headers are only reported if requested.
@@ -1263,7 +1399,7 @@ class TestNetworkChangeManagerClient
   TestNetworkChangeManagerClient& operator=(
       const TestNetworkChangeManagerClient&) = delete;
 
-  ~TestNetworkChangeManagerClient() override {}
+  ~TestNetworkChangeManagerClient() override = default;
 
   // NetworkChangeManagerClient implementation:
   void OnInitialConnectionType(mojom::ConnectionType type) override {
@@ -1298,7 +1434,7 @@ class NetworkChangeTest : public testing::Test {
             net::NetworkChangeNotifier::CreateMockIfNeeded()),
         service_(NetworkService::CreateForTesting()) {}
 
-  ~NetworkChangeTest() override {}
+  ~NetworkChangeTest() override = default;
 
   NetworkService* service() const { return service_.get(); }
 
@@ -1308,14 +1444,7 @@ class NetworkChangeTest : public testing::Test {
   std::unique_ptr<NetworkService> service_;
 };
 
-// mojom:NetworkChangeManager isn't supported on iOS.
-// See the same ifdef in CreateNetworkChangeNotifierIfNeeded.
-#if BUILDFLAG(IS_IOS)
-#define MAYBE_NetworkChangeManagerRequest DISABLED_NetworkChangeManagerRequest
-#else
-#define MAYBE_NetworkChangeManagerRequest NetworkChangeManagerRequest
-#endif
-TEST_F(NetworkChangeTest, MAYBE_NetworkChangeManagerRequest) {
+TEST_F(NetworkChangeTest, NetworkChangeManagerRequest) {
   TestNetworkChangeManagerClient manager_client(service());
   net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
       net::NetworkChangeNotifier::CONNECTION_3G);
@@ -1337,7 +1466,7 @@ class NetworkServiceNetworkChangeTest : public testing::Test {
   NetworkServiceNetworkChangeTest& operator=(
       const NetworkServiceNetworkChangeTest&) = delete;
 
-  ~NetworkServiceNetworkChangeTest() override {}
+  ~NetworkServiceNetworkChangeTest() override = default;
 
   mojom::NetworkService* service() { return network_service_.get(); }
 
@@ -1348,7 +1477,7 @@ class NetworkServiceNetworkChangeTest : public testing::Test {
   std::unique_ptr<NetworkService> service_;
 };
 
-TEST_F(NetworkServiceNetworkChangeTest, MAYBE_NetworkChangeManagerRequest) {
+TEST_F(NetworkServiceNetworkChangeTest, NetworkChangeManagerRequest) {
   TestNetworkChangeManagerClient manager_client(service());
 
   // Wait for the NetworkChangeManagerClient registration to be processed within

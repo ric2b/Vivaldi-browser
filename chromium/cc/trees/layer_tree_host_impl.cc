@@ -37,6 +37,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/traced_value.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/base/devtools_instrumentation.h"
@@ -111,7 +112,6 @@
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/traced_value.h"
@@ -1544,10 +1544,15 @@ void LayerTreeHostImpl::InvalidateLayerTreeFrameSink(bool needs_redraw) {
 DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
   TRACE_EVENT1("cc", "LayerTreeHostImpl::PrepareToDraw", "SourceFrameNumber",
                active_tree_->source_frame_number());
-  TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
-                         TRACE_ID_GLOBAL(CurrentBeginFrameArgs().trace_id),
-                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
-                         "step", "GenerateRenderPass");
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(CurrentBeginFrameArgs().trace_id),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_GENERATE_RENDER_PASS);
+      });
   if (input_delegate_)
     input_delegate_->WillDraw();
 
@@ -1555,18 +1560,14 @@ DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
   constexpr double kSamplingFrequency = .01;
   if (!downsample_metrics_ ||
       metrics_subsampler_.ShouldSample(kSamplingFrequency)) {
-    // |client_name| is used for various UMA histograms below.
-    // GetClientNameForMetrics only returns one non-null value over the lifetime
-    // of the process, so the histogram names are runtime constant.
-    const char* client_name = GetClientNameForMetrics();
-    if (client_name) {
+    // These metrics are only for the renderer process.
+    if (!settings().single_thread_proxy_scheduler) {
       UMA_HISTOGRAM_CUSTOM_COUNTS(
-          base::StringPrintf("Compositing.%s.NumActiveLayers", client_name),
+          "Compositing.Renderer.NumActiveLayers",
           base::saturated_cast<int>(active_tree_->NumLayers()), 1, 1000, 20);
 
       UMA_HISTOGRAM_CUSTOM_COUNTS(
-          base::StringPrintf("Compositing.%s.NumActivePictureLayers",
-                             client_name),
+          "Compositing.Renderer.NumActivePictureLayers",
           base::saturated_cast<int>(active_tree_->picture_layers().size()), 1,
           1000, 20);
     }
@@ -2321,6 +2322,12 @@ viz::CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() {
         actively_scrolling || mutator_host_->NeedsTickAnimations();
   }
 
+  if (input_delegate_) {
+    metadata.is_handling_interaction =
+        GetActivelyScrollingType() != ActivelyScrollingType::kNone ||
+        input_delegate_->IsHandlingTouchSequence();
+  }
+
   const base::flat_set<viz::SurfaceRange>& referenced_surfaces =
       active_tree_->SurfaceRanges();
   for (auto& surface_range : referenced_surfaces)
@@ -2592,10 +2599,15 @@ absl::optional<LayerTreeHostImpl::SubmitInfo> LayerTreeHostImpl::DrawLayers(
 
 viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
     FrameData* frame) {
-  TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
-                         TRACE_ID_GLOBAL(CurrentBeginFrameArgs().trace_id),
-                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
-                         "step", "GenerateCompositorFrame");
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(CurrentBeginFrameArgs().trace_id),
+      [&](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_GENERATE_COMPOSITOR_FRAME);
+      });
 
   rendering_stats_instrumentation_->IncrementFrameCount(1);
 
@@ -2868,6 +2880,11 @@ void LayerTreeHostImpl::UpdateRasterCapabilities() {
   raster_caps_.ui_rgba_format =
       viz::PlatformColor::BestSupportedTextureFormat(context_caps);
 
+  raster_caps_.tile_overlay_candidate =
+      settings_.resource_settings.use_gpu_memory_buffer_resources &&
+      context_caps.supports_scanout_shared_images;
+  raster_caps_.tile_texture_target = GL_TEXTURE_2D;
+
   if (settings_.gpu_rasterization_disabled || !context_caps.gpu_rasterization) {
     // This is the GPU compositing but software rasterization path. Pick the
     // best format for GPU textures to be uploaded to.
@@ -2875,6 +2892,15 @@ void LayerTreeHostImpl::UpdateRasterCapabilities() {
         settings_.use_rgba_4444
             ? viz::SinglePlaneFormat::kRGBA_4444
             : viz::PlatformColor::BestSupportedTextureFormat(context_caps);
+
+    if (raster_caps_.tile_overlay_candidate) {
+      raster_caps_.tile_texture_target = gpu::GetBufferTextureTarget(
+          gfx::BufferUsage::SCANOUT,
+          viz::SinglePlaneSharedImageFormatToBufferFormat(
+              raster_caps_.tile_format),
+          context_caps);
+    }
+
     return;
   }
 
@@ -2892,6 +2918,14 @@ void LayerTreeHostImpl::UpdateRasterCapabilities() {
           ? viz::SinglePlaneFormat::kRGBA_4444
           : viz::PlatformColor::BestSupportedRenderBufferFormat(
                 context_provider->ContextCapabilities());
+
+  if (raster_caps_.tile_overlay_candidate) {
+    raster_caps_.tile_texture_target = gpu::GetBufferTextureTarget(
+        gfx::BufferUsage::SCANOUT,
+        viz::SinglePlaneSharedImageFormatToBufferFormat(
+            raster_caps_.tile_format),
+        context_caps);
+  }
 }
 
 ImageDecodeCache* LayerTreeHostImpl::GetImageDecodeCache() const {
@@ -3617,9 +3651,8 @@ LayerTreeHostImpl::CreateRasterBufferProvider() {
     DCHECK(worker_context_provider);
 
     return std::make_unique<GpuRasterBufferProvider>(
-        compositor_context_provider, worker_context_provider,
-        settings_.resource_settings.use_gpu_memory_buffer_resources,
-        raster_caps_, settings_.max_gpu_raster_tile_size,
+        compositor_context_provider, worker_context_provider, raster_caps_,
+        settings_.max_gpu_raster_tile_size,
         settings_.unpremultiply_and_dither_low_bit_depth_tiles,
         pending_raster_queries_.get());
   }
@@ -3645,7 +3678,6 @@ LayerTreeHostImpl::CreateRasterBufferProvider() {
       GetTaskRunner(), compositor_context_provider, worker_context_provider,
       layer_tree_frame_sink_->gpu_memory_buffer_manager(),
       max_copy_texture_chromium_size, settings_.use_partial_raster,
-      settings_.resource_settings.use_gpu_memory_buffer_resources,
       settings_.max_staging_buffer_usage_in_bytes, raster_caps_);
 }
 
@@ -4148,6 +4180,7 @@ LayerTreeHostImpl::ProcessCompositorDeltas(
 
   commit_data->ongoing_scroll_animation =
       !!mutator_host_->ImplOnlyScrollAnimatingElement();
+  commit_data->is_auto_scrolling = mutator_host_->IsAutoScrolling();
 
   if (browser_controls_manager()) {
     commit_data->browser_controls_constraint =
@@ -4627,11 +4660,13 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
     if (layer_tree_frame_sink_->context_provider()) {
       scaled_surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(
           upload_size.width(), upload_size.height()));
+      CHECK(scaled_surface);  // This would fail in OOM situations.
     } else {
       SkImageInfo dst_info =
           SkImageInfo::MakeN32Premul(gfx::SizeToSkISize(upload_size));
       scaled_surface = SkSurfaces::WrapPixels(dst_info, shm.mapping.memory(),
                                               dst_info.minRowBytes());
+      CHECK(scaled_surface);  // This could fail on invalid parameters.
     }
     SkCanvas* scaled_canvas = scaled_surface->getCanvas();
     scaled_canvas->scale(canvas_scale_x, canvas_scale_y);

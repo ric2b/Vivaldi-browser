@@ -181,10 +181,6 @@ void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
 
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
-
-  for (auto& observer : GetTestObservers()) {
-    observer.OnPrintPreview(print_preview_rfh_);
-  }
 }
 
 void PrintViewManager::PrintPreviewAlmostDone() {
@@ -240,6 +236,9 @@ void PrintViewManager::PrintPreviewDone() {
   }
   print_preview_state_ = NOT_PREVIEWING;
   print_preview_rfh_ = nullptr;
+  for (auto& observer : GetTestObservers()) {
+    observer.OnPrintPreviewDone();
+  }
 }
 
 void PrintViewManager::RejectPrintPreviewRequestIfRestricted(
@@ -295,8 +294,9 @@ void PrintViewManager::RejectPrintPreviewRequestIfRestrictedByContentAnalysis(
     content::GlobalRenderFrameHostId rfh_id,
     base::OnceCallback<void(bool should_proceed)> callback) {
   absl::optional<enterprise_connectors::ContentAnalysisDelegate::Data>
-      scanning_data = enterprise_connectors::GetBeforePrintPreviewAnalysisData(
-          web_contents());
+      scanning_data = enterprise_connectors::GetPrintAnalysisData(
+          web_contents(),
+          enterprise_connectors::PrintScanningContext::kBeforePreview);
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(rfh_id);
   if (rfh && scanning_data) {
     GetPrintRenderFrame(rfh)->SnapshotForContentAnalysis(base::BindOnce(
@@ -346,11 +346,6 @@ bool PrintViewManager::PrintPreview(
 
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
-
-  for (auto& observer : GetTestObservers()) {
-    observer.OnPrintPreview(print_preview_rfh_);
-  }
-
   return true;
 }
 
@@ -420,7 +415,9 @@ void PrintViewManager::ShowScriptedPrintPreview(bool source_is_modifiable) {
   DCHECK(print_preview_rfh_);
   if (GetCurrentTargetFrame() != print_preview_rfh_)
     return;
-
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/true);
+#endif
   RejectPrintPreviewRequestIfRestricted(
       print_preview_rfh_->GetGlobalId(),
       base::BindOnce(&PrintViewManager::OnScriptedPrintPreviewCallback,
@@ -432,6 +429,9 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
     bool source_is_modifiable,
     content::GlobalRenderFrameHostId rfh_id,
     bool should_proceed) {
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/false);
+#endif
   if (!should_proceed) {
     OnPrintPreviewRequestRejected(rfh_id);
     return;

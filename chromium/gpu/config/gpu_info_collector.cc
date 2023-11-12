@@ -16,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -43,7 +44,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/apple/bundle_locations.h"
-#include "base/mac/foundation_util.h"
+#include "base/apple/foundation_util.h"
 #endif
 
 #if BUILDFLAG(IS_OZONE)
@@ -272,13 +273,178 @@ void ForceDawnTogglesForWebGPU(
 void ForceDawnTogglesForSkiaGraphite(
     std::vector<const char*>* force_enabled_toggles,
     std::vector<const char*>* force_disabled_toggles) {
-#if !DCHECK_IS_ON()
+#if DCHECK_IS_ON()
+  force_enabled_toggles->push_back("use_user_defined_labels_in_backend");
+#else
   force_enabled_toggles->push_back("disable_robustness");
   force_enabled_toggles->push_back("skip_validation");
   force_disabled_toggles->push_back("lazy_clear_resource_on_first_use");
 #endif
 }
 #endif
+
+#if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
+
+void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
+  static BASE_FEATURE(kCollectDawnGpuMetrics, "CollectDawnGpuMetrics",
+                      base::FEATURE_ENABLED_BY_DEFAULT);
+  if (!base::FeatureList::IsEnabled(kCollectDawnGpuMetrics)) {
+    return;
+  }
+  WGPULimits max_limits{};
+  wgpu::AdapterType adapter_type = wgpu::AdapterType::Unknown;
+
+  WGPURequestAdapterOptions adapter_options = {};
+  // Search for the backend used for core WebGPU.
+#if BUILDFLAG(IS_WIN)
+  adapter_options.backendType = WGPUBackendType_D3D12;
+#elif BUILDFLAG(IS_MAC)
+  adapter_options.backendType = WGPUBackendType_Metal;
+#else
+  adapter_options.backendType = WGPUBackendType_Vulkan;
+#endif
+  for (dawn::native::Adapter& adapter :
+       instance->EnumerateAdapters(&adapter_options)) {
+    adapter.SetUseTieredLimits(false);
+    wgpu::AdapterProperties props;
+    adapter.GetProperties(&props);
+    if (props.adapterType != wgpu::AdapterType::DiscreteGPU &&
+        props.adapterType != wgpu::AdapterType::IntegratedGPU) {
+      // We only care about GPU adapters and not CPU adapters.
+      continue;
+    }
+
+    WGPUSupportedLimits limits;
+    limits.nextInChain = nullptr;
+    if (!adapter.GetLimits(&limits)) {
+      continue;
+    }
+
+    // Prefer the adapter with larger buffer binding size.
+    if (limits.limits.maxStorageBufferBindingSize >
+        max_limits.maxStorageBufferBindingSize) {
+      max_limits = limits.limits;
+      adapter_type = props.adapterType;
+    }
+  }
+
+  bool has_gpu_adapter = adapter_type != wgpu::AdapterType::Unknown;
+  base::UmaHistogramBoolean("GPU.WebGPU.HasGpuAdapter", has_gpu_adapter);
+  if (has_gpu_adapter) {
+    std::string adapter_string = adapter_type == wgpu::AdapterType::DiscreteGPU
+                                     ? "Discrete"
+                                     : "Integrated";
+    base::UmaHistogramMemoryLargeMB(
+        "GPU.WebGPU.MaxStorageBufferBindingSize." + adapter_string,
+        max_limits.maxStorageBufferBindingSize / (1024 * 1024));
+    base::UmaHistogramCounts100000(
+        "GPU.WebGPU.MaxTextureDimension2D." + adapter_string,
+        max_limits.maxTextureDimension2D);
+  }
+}
+
+void ReportWebGPUSupportMetrics(dawn::native::Instance* instance) {
+  static BASE_FEATURE(kCollectWebGPUSupportMetrics,
+                      "CollectWebGPUSupportMetrics",
+#if BUILDFLAG(IS_WIN)
+                      base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+                      base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+  if (!base::FeatureList::IsEnabled(kCollectWebGPUSupportMetrics)) {
+    return;
+  }
+  // Note: These enum values should not change and should match those in
+  // //tools/metrics/histograms/enums.xml
+  enum class WebGPUSupport {
+    kNone = 0,
+    kCoreNone_CompatBlocklisted = 1,
+    kCoreNone_CompatSupported = 2,
+    kCoreBlocklisted_CompatNone = 3,
+    kCoreBlocklisted_CompatBlocklisted = 4,
+    kCoreBlocklisted_CompatSupported = 5,
+    kCoreSupported = 6,
+    kMaxValue = kCoreSupported,
+  };
+
+  bool has_core_blocklisted_adapter = false;
+  bool has_core_adapter = false;
+  bool has_compat_blocklisted_adapter = false;
+  bool has_compat_adapter = false;
+
+  WGPURequestAdapterOptions adapter_options = {};
+  // Search for the backend used for core WebGPU.
+#if BUILDFLAG(IS_WIN)
+  adapter_options.backendType = WGPUBackendType_D3D12;
+#elif BUILDFLAG(IS_MAC)
+  adapter_options.backendType = WGPUBackendType_Metal;
+#else
+  adapter_options.backendType = WGPUBackendType_Vulkan;
+#endif
+  // Check core adapters.
+  for (const dawn::native::Adapter& adapter :
+       instance->EnumerateAdapters(&adapter_options)) {
+    WGPUAdapterProperties properties = {};
+    adapter.GetProperties(&properties);
+
+    switch (properties.adapterType) {
+      case WGPUAdapterType_CPU:
+        // Skip CPU adapters.
+        break;
+      default:
+        if (gpu::IsWebGPUAdapterBlocklisted(properties)) {
+          has_core_blocklisted_adapter = true;
+        } else {
+          has_core_adapter = true;
+        }
+    }
+  }
+  // Check for compat adapters on GLES.
+  adapter_options.backendType = WGPUBackendType_OpenGLES;
+  adapter_options.compatibilityMode = true;
+  for (const dawn::native::Adapter& adapter :
+       instance->EnumerateAdapters(&adapter_options)) {
+    WGPUAdapterProperties properties = {};
+    adapter.GetProperties(&properties);
+
+    switch (properties.adapterType) {
+      case WGPUAdapterType_CPU:
+        // Skip CPU adapters.
+        break;
+      default:
+        if (gpu::IsWebGPUAdapterBlocklisted(properties)) {
+          has_compat_blocklisted_adapter = true;
+        } else {
+          has_compat_adapter = true;
+        }
+    }
+  }
+
+  WebGPUSupport tier;
+  if (has_core_adapter) {
+    tier = WebGPUSupport::kCoreSupported;
+  } else if (has_core_blocklisted_adapter) {
+    if (has_compat_adapter) {
+      tier = WebGPUSupport::kCoreBlocklisted_CompatSupported;
+    } else if (has_compat_blocklisted_adapter) {
+      tier = WebGPUSupport::kCoreBlocklisted_CompatBlocklisted;
+    } else {
+      tier = WebGPUSupport::kCoreBlocklisted_CompatNone;
+    }
+  } else {
+    if (has_compat_adapter) {
+      tier = WebGPUSupport::kCoreNone_CompatSupported;
+    } else if (has_compat_blocklisted_adapter) {
+      tier = WebGPUSupport::kCoreNone_CompatBlocklisted;
+    } else {
+      tier = WebGPUSupport::kNone;
+    }
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("GPU.WebGPU.Support", tier);
+  ReportWebGPUAdapterMetrics(instance);
+}
+#endif  // BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
 
 }  // namespace
 
@@ -645,6 +811,7 @@ bool CollectGpuExtraInfo(gfx::GpuExtraInfo* gpu_extra_info,
 }
 
 void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
+                     bool collect_metrics,
                      std::vector<std::string>* dawn_info_list) {
 #if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
   DawnProcTable procs = dawn::native::GetProcs();
@@ -653,7 +820,7 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
   std::string dawn_search_path;
   base::FilePath module_path;
 #if BUILDFLAG(IS_MAC)
-  if (base::mac::AmIBundled()) {
+  if (base::apple::AmIBundled()) {
     dawn_search_path = base::apple::FrameworkBundlePath()
                            .Append("Libraries")
                            .AsEndingWithSeparator()
@@ -672,7 +839,7 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
   }
   const char* dawn_search_path_c_str = dawn_search_path.c_str();
 
-  wgpu::DawnInstanceDescriptor dawn_instance_desc = {};
+  dawn::native::DawnInstanceDescriptor dawn_instance_desc = {};
   dawn_instance_desc.additionalRuntimeSearchPathsCount =
       dawn_search_path.empty() ? 0u : 1u;
   dawn_instance_desc.additionalRuntimeSearchPaths = &dawn_search_path_c_str;
@@ -682,8 +849,13 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
 
   auto instance = std::make_unique<dawn::native::Instance>(
       reinterpret_cast<const WGPUInstanceDescriptor*>(&instance_desc));
-  instance->DiscoverDefaultPhysicalDevices();
-  std::vector<dawn::native::Adapter> adapters = instance->GetAdapters();
+  if (collect_metrics) {
+    ReportWebGPUSupportMetrics(instance.get());
+    return;
+  }
+
+  // Enumerate adapters with default toggles
+  std::vector<dawn::native::Adapter> adapters = instance->EnumerateAdapters();
 
   for (dawn::native::Adapter& adapter : adapters) {
     wgpu::AdapterProperties properties;
@@ -773,8 +945,8 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
       }
 #endif
 
-      // Get supported features
-      dawn_info_list->push_back("[Supported Features]");
+      // Get supported features under default adapter toggles.
+      dawn_info_list->push_back("[Default Supported Features]");
       for (const char* name : adapter.GetSupportedFeatures()) {
         dawn_info_list->push_back(name);
       }

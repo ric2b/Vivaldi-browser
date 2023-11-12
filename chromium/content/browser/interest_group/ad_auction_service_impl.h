@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/uuid.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
+#include "content/browser/interest_group/auction_nonce_manager.h"
 #include "content/browser/interest_group/auction_runner.h"
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/bidding_and_auction_serializer.h"
@@ -38,10 +39,12 @@
 
 namespace content {
 
+class AdAuctionPageData;
 class InterestGroupManagerImpl;
 struct BiddingAndAuctionServerKey;
 class RenderFrameHost;
 class RenderFrameHostImpl;
+class PageImpl;
 class PrivateAggregationManager;
 
 // Implements the AdAuctionService service called by Blink code.
@@ -63,6 +66,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                           LeaveInterestGroupCallback callback) override;
   void LeaveInterestGroupForDocument() override;
   void UpdateAdInterestGroups() override;
+  void CreateAuctionNonce(CreateAuctionNonceCallback callback) override;
   void RunAdAuction(
       const blink::AuctionConfig& config,
       mojo::PendingReceiver<blink::mojom::AbortableAdAuction> abort_receiver,
@@ -110,8 +114,10 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
         BiddingAndAuctionDataConstructionState&& other);
     ~BiddingAndAuctionDataConstructionState();
 
+    base::TimeTicks start_time;
     BiddingAndAuctionData data;
     base::Uuid request_id;
+    url::Origin seller;
     GetInterestGroupAdAuctionDataCallback callback;
   };
 
@@ -136,11 +142,15 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                                      interest_group_api_operation,
                                  const url::Origin& origin) const;
 
+  AdAuctionPageData* GetAdAuctionPageData();
+
   // Deletes `auction`.
   void OnAuctionComplete(
       RunAdAuctionCallback callback,
       GURL urn_uuid,
       FencedFrameURLMapping::Id fenced_frame_urls_map_id,
+      GlobalRenderFrameHostId render_frame_host_id,
+      const base::WeakPtr<PageImpl> page_impl,
       AuctionRunner* auction,
       bool manually_aborted,
       absl::optional<blink::InterestGroupKey> winning_group_key,
@@ -184,6 +194,11 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   // This must be before `auctions_`, since auctions may own references to
   // worklets it manages.
   AuctionWorkletManager auction_worklet_manager_;
+
+  // Manages auction nonces issued by prior calls to
+  // CreateAuctionNonce, which are used by subsequent calls to
+  // RunAdAuction.
+  AuctionNonceManager auction_nonce_manager_;
 
   // Use a map instead of a list so can remove entries without destroying them.
   // TODO(mmenke): Switch to std::set() and use extract() once that's allowed.

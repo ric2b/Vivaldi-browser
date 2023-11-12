@@ -20,10 +20,6 @@
 #import "ui/base/test/ios/ui_image_test_utils.h"
 #import "ui/gfx/image/image.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using ui::test::uiimage_utils::UIImagesAreEqual;
 using ui::test::uiimage_utils::UIImageWithSizeAndSolidColor;
 
@@ -111,7 +107,7 @@ class SnapshotTabHelperTest : public PlatformTest {
   ~SnapshotTabHelperTest() override { [snapshot_cache_ shutdown]; }
 
   void SetCachedSnapshot(UIImage* image) {
-    NSString* snapshot_id =
+    SnapshotID snapshot_id =
         SnapshotTabHelper::FromWebState(&web_state_)->GetSnapshotID();
     [snapshot_cache_ setImage:image withSnapshotID:snapshot_id];
   }
@@ -121,7 +117,7 @@ class SnapshotTabHelperTest : public PlatformTest {
     base::RunLoop* run_loop_ptr = &run_loop;
 
     __block UIImage* snapshot = nil;
-    NSString* snapshot_id =
+    SnapshotID snapshot_id =
         SnapshotTabHelper::FromWebState(&web_state_)->GetSnapshotID();
     [snapshot_cache_ retrieveImageForSnapshotID:snapshot_id
                                        callback:^(UIImage* cached_snapshot) {
@@ -354,7 +350,7 @@ TEST_F(SnapshotTabHelperTest, ClosingWebStateDoesNotRemoveSnapshot) {
   auto web_state = std::make_unique<web::FakeWebState>();
 
   SnapshotTabHelper::CreateForWebState(web_state.get());
-  NSString* snapshot_id =
+  SnapshotID snapshot_id =
       SnapshotTabHelper::FromWebState(web_state.get())->GetSnapshotID();
   [[partialMock reject] removeImageWithSnapshotID:snapshot_id];
 

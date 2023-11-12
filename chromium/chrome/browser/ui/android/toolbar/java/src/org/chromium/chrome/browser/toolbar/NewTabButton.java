@@ -13,13 +13,16 @@ import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider.IncognitoStateObserver;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.ChromeImageButton;
 import org.chromium.ui.widget.Toast;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
+// End Vivaldi
 
 /**
  * Button for creating new tabs.
@@ -31,7 +34,6 @@ public class NewTabButton
     private final boolean mIsTablet;
     private IncognitoStateProvider mIncognitoStateProvider;
     private boolean mIsIncognito;
-    private boolean mIsGridTabSwitcherEnabled;
     private boolean mIsStartSurfaceEnabled;
 
     /**
@@ -45,23 +47,16 @@ public class NewTabButton
                 getContext(), R.color.default_icon_color_light_tint_list);
         mDarkModeTint = AppCompatResources.getColorStateList(
                 getContext(), R.color.default_icon_color_tint_list);
+        if (BuildConfig.IS_VIVALDI)
+            setImageDrawable(TraceEventVectorDrawableCompat.create(
+                    getContext().getResources(), R.drawable.tab_switcher_new_tab_56dp,
+                    getContext().getTheme()));
+        else
         setImageDrawable(TraceEventVectorDrawableCompat.create(
                 getContext().getResources(), R.drawable.new_tab_icon, getContext().getTheme()));
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
         updateDrawableTint();
         setOnLongClickListener(this);
-    }
-
-    /**
-     * Set grid-type tab switcher feature flag.
-     * @param isGridTabSwitcherEnabled Whether grid tab switcher is enabled.
-     */
-    public void setGridTabSwitcherEnabled(boolean isGridTabSwitcherEnabled) {
-        if (mIsGridTabSwitcherEnabled == isGridTabSwitcherEnabled) return;
-        mIsGridTabSwitcherEnabled = isGridTabSwitcherEnabled;
-
-        updateDrawableTint();
-        invalidate();
     }
 
     /**
@@ -109,10 +104,7 @@ public class NewTabButton
 
     /** Update the tint for the icon drawable for Chrome Modern. */
     private void updateDrawableTint() {
-        final boolean shouldUseLightMode = mIsTablet
-                || ((DeviceClassManager.enableAccessibilityLayout(getContext())
-                            || mIsGridTabSwitcherEnabled || mIsStartSurfaceEnabled)
-                        && mIsIncognito);
+        final boolean shouldUseLightMode = mIsTablet || mIsIncognito;
         ImageViewCompat.setImageTintList(this, shouldUseLightMode ? mLightModeTint : mDarkModeTint);
     }
 

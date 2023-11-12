@@ -250,6 +250,10 @@ void VideoProgress::HandleSeeking(const gfx::Point& location) {
   seek_callback_.Run(current_position, seek_to_progress);
 }
 
+ui::Cursor VideoProgress::GetCursor(const ui::MouseEvent& event) {
+  return ui::mojom::CursorType::kProgress;
+}
+
 BEGIN_METADATA(VideoProgress, views::View)
 END_METADATA
 

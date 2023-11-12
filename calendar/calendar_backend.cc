@@ -138,14 +138,6 @@ std::vector<calendar::EventRow> CalendarBackend::GetAllEvents() {
   return results;
 }
 
-std::vector<calendar::EventRow> CalendarBackend::GetAllEventTemplates() {
-  std::vector<calendar::EventRow> rows;
-  db_->GetAllCalendarEventTemplates(&rows);
-  std::vector<calendar::EventRow> results;
-  FillEventsWithExceptions(rows, &results);
-  return results;
-}
-
 void CalendarBackend::FillEventsWithExceptions(EventRows rows,
                                                EventRows* results) {
   RecurrenceExceptionRows recurrence_exception_rows;
@@ -1002,6 +994,62 @@ AccountRows CalendarBackend::GetAllAccounts() {
   db_->GetAllAccounts(&account_rows);
 
   return account_rows;
+}
+
+EventTemplateResultCB CalendarBackend::CreateEventTemplate(
+    EventTemplateRow event_template) {
+  EventTemplateResultCB result;
+
+  EventTemplateID id = db_->CreateEventTemplate(event_template);
+
+  if (id) {
+    result.success = true;
+    db_->GetRowForEventTemplate(id, &result.event_template);
+    return result;
+  } else {
+    result.success = false;
+  }
+  return result;
+}
+
+calendar::EventTemplateRows CalendarBackend::GetAllEventTemplates() {
+  calendar::EventTemplateRows rows;
+  db_->GetAllEventTemplates(&rows);
+  return rows;
+}
+
+EventTemplateResultCB CalendarBackend::UpdateEventTemplate(
+    EventTemplateID event_template_id,
+    const EventTemplateRow& event_template) {
+  EventTemplateResultCB result;
+  if (!db_) {
+    result.success = false;
+    return result;
+  }
+
+  EventTemplateRow template_row;
+
+  if (db_->GetRowForEventTemplate(event_template_id, &template_row)) {
+    if (event_template.updateFields & calendar::TEMPLATE_NAME) {
+      template_row.name = event_template.name;
+    }
+  }
+
+  if (event_template.updateFields & calendar::TEMPLATE_ICAL) {
+    template_row.ical = event_template.ical;
+  }
+
+  result.success = db_->UpdateEventTemplate(template_row);
+  db_->GetRowForEventTemplate(event_template_id, &result.event_template);
+
+  return result;
+}
+
+bool CalendarBackend::DeleteEventTemplate(EventTemplateID event_template_id) {
+  if (!db_) {
+    return false;
+  }
+  return db_->DeleteEventTemplate(event_template_id);
 }
 
 void CalendarBackend::CloseAllDatabases() {

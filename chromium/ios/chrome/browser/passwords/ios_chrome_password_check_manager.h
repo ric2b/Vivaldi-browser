@@ -99,6 +99,7 @@ class IOSChromePasswordCheckManager
       password_manager::BulkLeakCheckServiceInterface::State state) override;
   void OnCredentialDone(const password_manager::LeakCheckCredential& credential,
                         password_manager::IsLeaked is_leaked) override;
+  void OnBulkCheckServiceShutDown() override;
 
   void OnWeakOrReuseCheckFinished();
 
@@ -161,7 +162,7 @@ class IOSChromePasswordCheckManager
       observed_bulk_leak_check_service_{this};
 
   // Observers to listen to password check changes.
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<Observer, true> observers_;
 
   base::WeakPtrFactory<IOSChromePasswordCheckManager> weak_ptr_factory_{this};
 };

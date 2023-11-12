@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
 
+#import "base/time/time.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -25,13 +26,15 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 const CGFloat kVerticalOffset = 6;
 const CGFloat kPopupBottomPaddingTablet = 80;
+
+/// Duration of the fade in animation.
+constexpr NSTimeInterval kFadeInAnimationDuration =
+    base::Milliseconds(300).InSecondsF();
+/// Vertical offset of the suggestions when fading in.
+const CGFloat kFadeAnimationVerticalOffset = 12;
 
 // Vivaldi
 // Bottom corner radius for the suggerstion container view.
@@ -51,13 +54,22 @@ const CGFloat vPopupContainerCornerRadius = 8;
 @property(nonatomic, strong) UIView* popupContainerView;
 /// Separator for the bottom edge of the popup on iPad.
 @property(nonatomic, strong) UIView* bottomSeparator;
+/// Top constraint between the popup and it's container. This is used to animate
+/// suggestions when focusing the omnibox.
+@property(nonatomic, strong) NSLayoutConstraint* popupTopConstraint;
 
 // The layout guide center to use to refer to the omnibox.
 @property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
+@property(nonatomic, strong) UILayoutGuide* topOmniboxGuide;
 
 @end
 
-@implementation OmniboxPopupPresenter
+@implementation OmniboxPopupPresenter {
+  /// Type of the toolbar that contains the omnibox when it's not focused. The
+  /// animation of focusing/defocusing the omnibox changes depending on this
+  /// position.
+  ToolbarType _unfocusedOmniboxToolbarType;
+}
 
 - (instancetype)
     initWithPopupPresenterDelegate:(id<OmniboxPopupPresenterDelegate>)delegate
@@ -107,7 +119,12 @@ const CGFloat vPopupContainerCornerRadius = 8;
       _popupContainerView.layer.borderWidth = 2.0f;
       AddSameConstraints(viewController.view, _popupContainerView);
     } else {
-      AddSameConstraints(viewController.view, _popupContainerView);
+      AddSameConstraintsToSides(viewController.view, _popupContainerView,
+                                LayoutSides::kLeading | LayoutSides::kTrailing |
+                                    LayoutSides::kBottom);
+      _popupTopConstraint = [viewController.view.topAnchor
+          constraintEqualToAnchor:_popupContainerView.topAnchor];
+      _popupTopConstraint.active = YES;
     }
 
     // Add bottom separator. This will only be visible on iPad where
@@ -133,7 +150,7 @@ const CGFloat vPopupContainerCornerRadius = 8;
   return self;
 }
 
-- (void)updatePopup {
+- (void)updatePopupOnFocus:(BOOL)isFocusingOmnibox {
   BOOL popupHasContent = self.viewController.hasContent;
   BOOL popupIsOnscreen = self.popupContainerView.superview != nil;
   if (!popupHasContent && popupIsOnscreen) {
@@ -161,7 +178,11 @@ const CGFloat vPopupContainerCornerRadius = 8;
         addSubview:self.popupContainerView];
     [self.viewController didMoveToParentViewController:parentVC];
 
-    [self initialLayout];
+    BOOL enableFocusAnimation =
+        IsBottomOmniboxSteadyStateEnabled() && isFocusingOmnibox &&
+        _unfocusedOmniboxToolbarType == ToolbarType::kSecondary;
+
+    [self initialLayoutAnimated:enableFocusAnimation];
 
     if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
       self.bottomConstraintPhone.active = YES;
@@ -193,7 +214,7 @@ const CGFloat vPopupContainerCornerRadius = 8;
       addSubview:self.popupContainerView];
 
   // Re-add necessary constraints.
-  [self initialLayout];
+  [self initialLayoutAnimated:NO];
 
   if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
     self.bottomConstraintPhone.active = YES;
@@ -201,10 +222,16 @@ const CGFloat vPopupContainerCornerRadius = 8;
   }
 }
 
+#pragma mark - ToolbarOmniboxConsumer
+
+- (void)steadyStateOmniboxMovedToToolbar:(ToolbarType)toolbarType {
+  _unfocusedOmniboxToolbarType = toolbarType;
+}
+
 #pragma mark - Private
 
 /// Layouts the popup when it is just added to the view hierarchy.
-- (void)initialLayout {
+- (void)initialLayoutAnimated:(BOOL)isAnimated {
   UIView* popup = self.popupContainerView;
   // Creates the constraints if the view is newly added to the view hierarchy.
 
@@ -236,13 +263,16 @@ const CGFloat vPopupContainerCornerRadius = 8;
       constraintGreaterThanOrEqualToAnchor:popup.bottomAnchor
                                   constant:kPopupBottomPaddingTablet];
 
-  // Install in the superview the guide tracking the omnibox.
-  UILayoutGuide* omniboxGuide =
-      [self.layoutGuideCenter makeLayoutGuideNamed:kOmniboxGuide];
-  [[popup superview] addLayoutGuide:omniboxGuide];
+  // Install in the superview the guide tracking the top omnibox.
+  if (self.topOmniboxGuide) {
+    [[popup superview] removeLayoutGuide:self.topOmniboxGuide];
+  }
+  self.topOmniboxGuide =
+      [self.layoutGuideCenter makeLayoutGuideNamed:kTopOmniboxGuide];
+  [[popup superview] addLayoutGuide:self.topOmniboxGuide];
   // Position the top anchor of the popup relatively to that layout guide.
   NSLayoutConstraint* topConstraint =
-      [popup.topAnchor constraintEqualToAnchor:omniboxGuide.bottomAnchor
+      [popup.topAnchor constraintEqualToAnchor:self.topOmniboxGuide.bottomAnchor
                                       constant:kVerticalOffset];
 
   NSMutableArray<NSLayoutConstraint*>* constraintsToActivate =
@@ -251,9 +281,10 @@ const CGFloat vPopupContainerCornerRadius = 8;
   if (IsIpadPopoutOmniboxEnabled() &&
       IsRegularXRegularSizeClass(self.popupContainerView)) {
     [constraintsToActivate addObjectsFromArray:@[
-      [popup.leadingAnchor constraintEqualToAnchor:omniboxGuide.leadingAnchor],
+      [popup.leadingAnchor
+          constraintEqualToAnchor:self.topOmniboxGuide.leadingAnchor],
       [popup.trailingAnchor
-          constraintEqualToAnchor:omniboxGuide.trailingAnchor],
+          constraintEqualToAnchor:self.topOmniboxGuide.trailingAnchor],
     ]];
   } else {
     [constraintsToActivate addObjectsFromArray:@[
@@ -267,6 +298,31 @@ const CGFloat vPopupContainerCornerRadius = 8;
   [NSLayoutConstraint activateConstraints:constraintsToActivate];
 
   [[popup superview] layoutIfNeeded];
+
+  if (isAnimated) {
+    [self animatePopupOnOmniboxFocus];
+  }
+}
+
+/// Animates the popup for omnibox focus.
+- (void)animatePopupOnOmniboxFocus {
+  CHECK(IsBottomOmniboxSteadyStateEnabled());
+  __weak __typeof__(self) weakSelf = self;
+  self.viewController.view.alpha = 0.0;
+  self.popupTopConstraint.constant = kFadeAnimationVerticalOffset;
+  [self.popupContainerView.superview layoutIfNeeded];
+
+  auto constraintForVisiblePopup = ^{
+    weakSelf.viewController.view.alpha = 1.0;
+    weakSelf.popupTopConstraint.constant = 0.0;
+    [weakSelf.popupContainerView.superview layoutIfNeeded];
+  };
+
+  [UIView animateWithDuration:kFadeInAnimationDuration
+                   animations:constraintForVisiblePopup
+                   completion:^(BOOL _) {
+                     constraintForVisiblePopup();
+                   }];
 }
 
 @end

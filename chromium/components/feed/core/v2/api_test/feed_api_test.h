@@ -25,10 +25,10 @@
 #include "components/feed/core/v2/feed_network.h"
 #include "components/feed/core/v2/feed_store.h"
 #include "components/feed/core/v2/feed_stream.h"
+#include "components/feed/core/v2/feed_stream_surface.h"
 #include "components/feed/core/v2/image_fetcher.h"
 #include "components/feed/core/v2/metrics_reporter.h"
 #include "components/feed/core/v2/prefs.h"
-#include "components/feed/core/v2/public/feed_stream_surface.h"
 #include "components/feed/core/v2/public/reliability_logging_bridge.h"
 #include "components/feed/core/v2/public/types.h"
 #include "components/feed/core/v2/stream_model.h"
@@ -126,7 +126,7 @@ class TestReliabilityLoggingBridge : public ReliabilityLoggingBridge {
   std::vector<std::string> events_;
 };
 
-class TestSurfaceBase : public FeedStreamSurface {
+class TestSurfaceBase : public feed::SurfaceRenderer {
  public:
   // Provide some helper functionality to attach/detach the surface.
   // This way we can auto-detach in the destructor.
@@ -134,9 +134,19 @@ class TestSurfaceBase : public FeedStreamSurface {
       const StreamType& stream_type,
       FeedStream* stream = nullptr,
       SingleWebFeedEntryPoint entry_point = SingleWebFeedEntryPoint::kOther);
-
   ~TestSurfaceBase() override;
 
+  SurfaceId GetSurfaceId() const;
+  const StreamType GetStreamType() const { return stream_type_; }
+  SingleWebFeedEntryPoint GetSingleWebFeedEntryPoint() const {
+    return entry_point_;
+  }
+
+  // Create the surface with FeedApi::CreateSurface, but don't attach it.
+  void CreateWithoutAttach(FeedStream* stream);
+
+  // Calls FeedApi::CreateSurface if it hasn't been created yet, and attaches
+  // the surface for rendering.
   void Attach(FeedStream* stream);
 
   void Detach();
@@ -149,7 +159,6 @@ class TestSurfaceBase : public FeedStreamSurface {
   ReliabilityLoggingBridge& GetReliabilityLoggingBridge() override;
 
   // Test functions.
-
   void Clear();
 
   // Returns a description of the updates this surface received. Each update
@@ -180,8 +189,14 @@ class TestSurfaceBase : public FeedStreamSurface {
 
   bool IsInitialLoadSpinnerUpdate(const feedui::StreamUpdate& stream_update);
 
-  // The stream if it was attached using the constructor.
+  const StreamType stream_type_;
+  SingleWebFeedEntryPoint entry_point_;
+  SurfaceId surface_id_ = {};
+
+  // The stream if this surface was attached at least once.
   base::WeakPtr<FeedStream> stream_;
+  // The stream if this surface is attached.
+  base::WeakPtr<FeedStream> bound_stream_;
   std::vector<std::string> described_updates_;
   std::map<std::string, std::string> data_store_entries_;
   std::vector<std::string> described_datastore_updates_;
@@ -246,6 +261,14 @@ class TestFeedNetwork : public FeedNetwork {
       absl::optional<RequestMetadata> request_metadata,
       base::OnceCallback<void(RawResponse)> callback) override;
 
+  void SendAsyncDataRequest(
+      const GURL& url,
+      base::StringPiece request_method,
+      net::HttpRequestHeaders request_headers,
+      std::string request_body,
+      const AccountInfo& account_info,
+      base::OnceCallback<void(RawResponse)> callback) override;
+
   void CancelRequests() override;
 
   void InjectRealFeedQueryResponse();
@@ -304,6 +327,9 @@ class TestFeedNetwork : public FeedNetwork {
   }
   void InjectListWebFeedsResponse(const FeedNetwork::RawResponse& response) {
     InjectApiRawResponse<ListWebFeedsDiscoverApi>(response);
+  }
+  void InjectRawResponse(const FeedNetwork::RawResponse& response) {
+    injected_raw_response_ = response;
   }
 
   void InjectEmptyActionRequestResult();
@@ -388,6 +414,7 @@ class TestFeedNetwork : public FeedNetwork {
   std::map<NetworkRequestType, int> api_request_count_;
   std::vector<NetworkRequestType> sent_request_types_;
   absl::optional<feedwire::Response> injected_response_;
+  absl::optional<RawResponse> injected_raw_response_;
 };
 
 // Forwards to |FeedStream::WireResponseTranslator| unless a response is
@@ -474,6 +501,8 @@ class TestMetricsReporter : public MetricsReporter {
   StreamMetrics for_you;
 };
 
+// Base text fixture for feed API tests.
+// Note: The web-feeds feature (kWebFeed) is enabled by default for these tests.
 class FeedApiTest : public testing::Test, public FeedStream::Delegate {
  public:
   FeedApiTest();

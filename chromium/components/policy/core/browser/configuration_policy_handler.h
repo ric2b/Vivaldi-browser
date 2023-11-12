@@ -235,6 +235,36 @@ class POLICY_EXPORT SimplePolicyHandler : public TypeCheckingPolicyHandler {
   const char* pref_path_;
 };
 
+// ConfigurationPolicyHandler for policies that rely on another policy to take
+// effect.
+class POLICY_EXPORT PolicyWithDependencyHandler : public NamedPolicyHandler {
+ public:
+  PolicyWithDependencyHandler(const char* required_policy_name,
+                              std::unique_ptr<NamedPolicyHandler> handler);
+  PolicyWithDependencyHandler(const PolicyWithDependencyHandler&) = delete;
+  PolicyWithDependencyHandler& operator=(const PolicyWithDependencyHandler&) =
+      delete;
+  ~PolicyWithDependencyHandler() override;
+
+  // ConfigurationPolicyHandler methods:
+  bool CheckPolicySettings(const PolicyMap& policies,
+                           PolicyErrorMap* errors) override;
+
+  void ApplyPolicySettingsWithParameters(
+      const policy::PolicyMap& policies,
+      const policy::PolicyHandlerParameters& parameters,
+      PrefValueMap* prefs) override;
+
+ protected:
+  // ConfigurationPolicyHandler methods:
+  void ApplyPolicySettings(const PolicyMap& policies,
+                           PrefValueMap* prefs) override;
+
+ private:
+  const char* required_policy_name_;
+  std::unique_ptr<NamedPolicyHandler> handler_;
+};
+
 // Base class that encapsulates logic for mapping from a string enum list
 // to a separate matching type value.
 class POLICY_EXPORT StringMappingListPolicyHandler
@@ -544,6 +574,13 @@ class POLICY_EXPORT CloudOnlyPolicyHandler
                          Schema schema,
                          SchemaOnErrorStrategy strategy);
   ~CloudOnlyPolicyHandler() override;
+
+  // Utility method for checking whether a policy is applied by a cloud-only
+  // source. Useful for cloud-only policy handlers which currently don't inherit
+  // from `CloudOnlyPolicyHandler`.
+  static bool CheckCloudOnlyPolicySettings(const char* policy_name,
+                                           const PolicyMap& policies,
+                                           PolicyErrorMap* errors);
 
   bool CheckPolicySettings(const PolicyMap& policies,
                            PolicyErrorMap* errors) override;

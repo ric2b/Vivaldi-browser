@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::autofill::FastCheckoutTriggerOutcome;
+using ::autofill::test::CreateTestAddressFormData;
 
 class FastCheckoutDelegateImplTest : public ChromeRenderViewHostTestHarness {
  protected:
@@ -46,7 +47,7 @@ class FastCheckoutDelegateImplTest : public ChromeRenderViewHostTestHarness {
   }
 
   autofill::test::AutofillUnitTestEnvironment autofill_test_environment_;
-  testing::NiceMock<MockFastCheckoutClient> fast_checkout_client_;
+  testing::NiceMock<autofill::MockFastCheckoutClient> fast_checkout_client_;
   std::unique_ptr<FastCheckoutDelegateImpl> fast_checkout_delegate_;
   autofill::TestAutofillClientInjector<autofill::TestContentAutofillClient>
       test_autofill_client_injector_;
@@ -83,12 +84,10 @@ TEST_F(FastCheckoutDelegateImplTest, HideFastCheckoutWhenNotShowing) {
 }
 
 TEST_F(FastCheckoutDelegateImplTest, IntendsToShowFastCheckout) {
-  autofill::FormData form;
-  autofill::test::CreateTestAddressFormData(&form);
-  autofill::FormFieldData field = form.fields[0];
-  autofill::FormFieldData non_seen_field;
-  autofill::test::CreateTestFormField("First Name", "firstname", "", "text",
-                                      &non_seen_field);
+  autofill::FormData form = CreateTestAddressFormData();
+  autofill::FormFieldData& field = form.fields[0];
+  autofill::FormFieldData non_seen_field = autofill::test::CreateTestFormField(
+      "First Name", "firstname", "", "text");
   autofill_manager()->OnFormsSeen(
       /*updated_forms=*/{form},
       /*removed_forms=*/{});
@@ -106,9 +105,8 @@ TEST_F(FastCheckoutDelegateImplTest, IntendsToShowFastCheckout) {
 
 TEST_F(FastCheckoutDelegateImplTest,
        RecordsFastCheckoutTriggerOutcomeMetricIfNotSupported) {
-  autofill::FormData form;
-  autofill::test::CreateTestAddressFormData(&form);
-  autofill::FormFieldData field = form.fields[0];
+  autofill::FormData form = CreateTestAddressFormData();
+  autofill::FormFieldData& field = form.fields[0];
   autofill_manager()->OnFormsSeen(
       /*updated_forms=*/{form},
       /*removed_forms=*/{});

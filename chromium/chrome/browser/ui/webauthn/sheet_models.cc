@@ -9,8 +9,8 @@
 #include <utility>
 
 #include "base/check_op.h"
-#include "base/i18n/number_formatting.h"
-#include "base/logging.h"
+#include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
@@ -18,18 +18,14 @@
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/webauthn/webauthn_ui_helpers.h"
+#include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/url_formatter/elide_url.h"
-#include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/discoverable_credential_metadata.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_types.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/font_list.h"
-#include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/text_utils.h"
-#include "url/gurl.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
@@ -109,7 +105,11 @@ bool AuthenticatorSheetModelBase::IsOtherMechanismButtonVisible() const {
 
 std::u16string AuthenticatorSheetModelBase::GetOtherMechanismButtonLabel()
     const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_USE_A_DIFFERENT_DEVICE);
+  if (base::FeatureList::IsEnabled(device::kWebAuthnNewPasskeyUI)) {
+    return l10n_util::GetStringUTF16(IDS_WEBAUTHN_USE_A_DIFFERENT_PASSKEY);
+  } else {
+    return l10n_util::GetStringUTF16(IDS_WEBAUTHN_USE_A_DIFFERENT_DEVICE);
+  }
 }
 
 std::u16string AuthenticatorSheetModelBase::GetCancelButtonLabel() const {
@@ -575,7 +575,7 @@ bool AuthenticatorBlePermissionMacSheetModel::IsAcceptButtonEnabled() const {
 }
 
 bool AuthenticatorBlePermissionMacSheetModel::IsCancelButtonVisible() const {
-  return false;
+  return true;
 }
 
 std::u16string AuthenticatorBlePermissionMacSheetModel::GetAcceptButtonLabel()
@@ -1294,6 +1294,32 @@ std::u16string AuthenticatorQRSheetModel::GetStepDescription() const {
   }
 }
 
+bool AuthenticatorQRSheetModel::ShowSecurityKeyLabel() const {
+  return base::FeatureList::IsEnabled(device::kWebAuthnNewPasskeyUI) &&
+         base::Contains(
+             dialog_model()->transport_availability()->available_transports,
+             device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
+}
+
+std::u16string AuthenticatorQRSheetModel::GetSecurityKeyLabel() const {
+  switch (dialog_model()->transport_availability()->request_type) {
+    case device::FidoRequestType::kMakeCredential:
+      return l10n_util::GetStringFUTF16(
+          IDS_WEBAUTHN_QR_CREATE_PASSKEY_ON_SECURITY_KEY_LABEL,
+          GetRelyingPartyIdString(dialog_model()));
+    case device::FidoRequestType::kGetAssertion:
+      return l10n_util::GetStringFUTF16(
+          IDS_WEBAUTHN_QR_USE_PASSKEY_ON_SECURITY_KEY_LABEL,
+          GetRelyingPartyIdString(dialog_model()));
+  }
+}
+
+std::u16string AuthenticatorQRSheetModel::GetOtherMechanismButtonLabel() const {
+  return base::FeatureList::IsEnabled(device::kWebAuthnNewPasskeyUI)
+             ? l10n_util::GetStringUTF16(IDS_WEBAUTHN_BACK)
+             : AuthenticatorSheetModelBase::GetOtherMechanismButtonLabel();
+}
+
 // AuthenticatorConnectingSheetModel ------------------------------------------
 
 AuthenticatorConnectingSheetModel::AuthenticatorConnectingSheetModel(
@@ -1459,4 +1485,138 @@ std::u16string AuthenticatorPhoneConfirmationSheet::GetAcceptButtonLabel()
 
 void AuthenticatorPhoneConfirmationSheet::OnAccept() {
   dialog_model()->ContactPriorityPhone();
+}
+
+// AuthenticatorMultiSourcePickerSheetModel --------------------------------
+
+AuthenticatorMultiSourcePickerSheetModel::
+    AuthenticatorMultiSourcePickerSheetModel(
+        AuthenticatorRequestDialogModel* dialog_model)
+    : AuthenticatorSheetModelBase(dialog_model) {
+  vector_illustrations_.emplace(kPasskeyHeaderIcon, kPasskeyHeaderDarkIcon);
+
+  using CredentialMech = AuthenticatorRequestDialogModel::Mechanism::Credential;
+  using ICloudKeychainMech =
+      AuthenticatorRequestDialogModel::Mechanism::ICloudKeychain;
+  bool has_local_passkeys =
+      std::ranges::any_of(dialog_model->mechanisms(), [](const auto& mech) {
+        return absl::holds_alternative<CredentialMech>(mech.type) &&
+               absl::get<CredentialMech>(mech.type).value().source !=
+                   device::AuthenticatorType::kPhone;
+      });
+  if (has_local_passkeys) {
+    primary_passkeys_label_ =
+        l10n_util::GetStringUTF16(IDS_WEBAUTHN_THIS_DEVICE_LABEL);
+    for (size_t i = 0; i < dialog_model->mechanisms().size(); ++i) {
+      const AuthenticatorRequestDialogModel::Mechanism& mech =
+          dialog_model->mechanisms()[i];
+      if ((absl::holds_alternative<CredentialMech>(mech.type) &&
+           absl::get<CredentialMech>(mech.type).value().source !=
+               device::AuthenticatorType::kPhone) ||
+          // iCloud Keychain appears in the primary list if present. This
+          // happens when Chrome does not have permission to enumerate
+          // credentials from iCloud Keychain. Thus this generic option is the
+          // only way for the user to trigger it.
+          absl::holds_alternative<ICloudKeychainMech>(mech.type)) {
+        primary_passkey_indices_.push_back(i);
+      } else {
+        secondary_passkey_indices_.push_back(i);
+      }
+    }
+    return;
+  }
+
+  const absl::optional<std::u16string>& phone_name =
+      dialog_model->GetPrioritySyncedPhoneName();
+  if (phone_name) {
+    primary_passkeys_label_ =
+        l10n_util::GetStringFUTF16(IDS_WEBAUTHN_FROM_PHONE_LABEL, *phone_name);
+  }
+  for (size_t i = 0; i < dialog_model->mechanisms().size(); ++i) {
+    const AuthenticatorRequestDialogModel::Mechanism& mech =
+        dialog_model->mechanisms()[i];
+    if (absl::holds_alternative<CredentialMech>(mech.type) &&
+        absl::get<CredentialMech>(mech.type).value().source ==
+            device::AuthenticatorType::kPhone) {
+      // There should not be any phone passkeys if the phone name is empty.
+      CHECK(phone_name);
+      primary_passkey_indices_.push_back(i);
+    } else {
+      secondary_passkey_indices_.push_back(i);
+    }
+  }
+}
+
+AuthenticatorMultiSourcePickerSheetModel::
+    ~AuthenticatorMultiSourcePickerSheetModel() = default;
+
+bool AuthenticatorMultiSourcePickerSheetModel::IsManageDevicesButtonVisible()
+    const {
+  using Mechanism = AuthenticatorRequestDialogModel::Mechanism;
+  // If any phones or passkeys from a phone are shown then also show a button
+  // that goes to the settings page to manage them.
+  return base::ranges::any_of(
+      dialog_model()->mechanisms(), [](const Mechanism& mech) {
+        return absl::holds_alternative<Mechanism::Phone>(mech.type) ||
+               (absl::holds_alternative<Mechanism::Credential>(mech.type) &&
+                absl::get<Mechanism::Credential>(mech.type).value().source ==
+                    device::AuthenticatorType::kPhone);
+      });
+}
+
+void AuthenticatorMultiSourcePickerSheetModel::OnManageDevices() {
+  if (dialog_model()) {
+    dialog_model()->ManageDevices();
+  }
+}
+
+std::u16string AuthenticatorMultiSourcePickerSheetModel::GetStepTitle() const {
+  return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_CHOOSE_PASSKEY_FOR_RP_TITLE,
+                                    GetRelyingPartyIdString(dialog_model()));
+}
+
+std::u16string AuthenticatorMultiSourcePickerSheetModel::GetStepDescription()
+    const {
+  return u"";
+}
+
+// AuthenticatorPriorityMechanismSheetModel --------------------------------
+
+AuthenticatorPriorityMechanismSheetModel::
+    AuthenticatorPriorityMechanismSheetModel(
+        AuthenticatorRequestDialogModel* dialog_model)
+    : AuthenticatorSheetModelBase(dialog_model,
+                                  OtherMechanismButtonVisibility::kVisible) {
+  vector_illustrations_.emplace(kPasskeyHeaderIcon, kPasskeyHeaderDarkIcon);
+}
+AuthenticatorPriorityMechanismSheetModel::
+    ~AuthenticatorPriorityMechanismSheetModel() = default;
+
+std::u16string AuthenticatorPriorityMechanismSheetModel::GetStepTitle() const {
+  return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_USE_PASSKEY_TITLE,
+                                    GetRelyingPartyIdString(dialog_model()));
+}
+
+std::u16string AuthenticatorPriorityMechanismSheetModel::GetStepDescription()
+    const {
+  return u"";
+}
+
+bool AuthenticatorPriorityMechanismSheetModel::IsAcceptButtonVisible() const {
+  return true;
+}
+
+bool AuthenticatorPriorityMechanismSheetModel::IsAcceptButtonEnabled() const {
+  return true;
+}
+
+std::u16string AuthenticatorPriorityMechanismSheetModel::GetAcceptButtonLabel()
+    const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_CONTINUE);
+}
+
+void AuthenticatorPriorityMechanismSheetModel::OnAccept() {
+  dialog_model()
+      ->mechanisms()[*dialog_model()->priority_mechanism_index()]
+      .callback.Run();
 }

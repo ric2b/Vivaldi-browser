@@ -10,11 +10,6 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 BASE_FEATURE(kNewOverflowMenu,
              "NewOverflowMenu",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -25,7 +20,7 @@ BASE_FEATURE(kSmartSortingPriceTrackingDestination,
 
 BASE_FEATURE(kNewOverflowMenuShareChromeAction,
              "kNewOverflowMenuShareChromeAction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOverflowMenuCustomization,
              "OverflowMenuCustomization",
@@ -43,10 +38,6 @@ bool IsNewOverflowMenuEnabled() {
   // The new overflow menu isn't available on iOS <= 14 because it relies on
   // `UISheetPresentationController`, which was introduced in iOS 15.
   return false;
-}
-
-bool IsSmartSortingPriceTrackingDestinationEnabled() {
-  return base::FeatureList::IsEnabled(kSmartSortingPriceTrackingDestination);
 }
 
 bool IsNewOverflowMenuShareChromeActionEnabled() {

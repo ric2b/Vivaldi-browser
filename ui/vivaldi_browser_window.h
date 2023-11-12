@@ -415,18 +415,22 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       const base::Feature& iph_feature) const override;
   bool MaybeShowFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoSpecification::StringReplacements
-          body_text_replacements = {},
       user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing()) override;
+          close_callback = base::DoNothing(),
+      user_education::FeaturePromoSpecification::FormatParameters body_params =
+          user_education::FeaturePromoSpecification::NoSubstitution(),
+      user_education::FeaturePromoSpecification::FormatParameters title_params =
+          user_education::FeaturePromoSpecification::NoSubstitution()) override;
   bool MaybeShowStartupFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoSpecification::StringReplacements
-          body_text_replacements = {},
       user_education::FeaturePromoController::StartupPromoCallback
           promo_callback = base::DoNothing(),
       user_education::FeaturePromoController::BubbleCloseCallback
-          close_callback = base::DoNothing()) override;
+          close_callback = base::DoNothing(),
+      user_education::FeaturePromoSpecification::FormatParameters body_params =
+          user_education::FeaturePromoSpecification::NoSubstitution(),
+      user_education::FeaturePromoSpecification::FormatParameters title_params =
+          user_education::FeaturePromoSpecification::NoSubstitution()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
@@ -464,9 +468,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   // Called from unload handler during the close sequence if the sequence is
   // aborted.
-  static void CancelWindowClose();
+  static void CancelWindowClose(Browser* browser);
 
  private:
+  enum class CloseDialogMode { CloseWindow = 0, QuitApplication };
+
   // Ensures only one window can display a quit dialog on exit.
   bool AcquireQuitDialog();
   // Signals all windows that the quit dialog confirms the action.
@@ -509,7 +515,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void OnViewWasResized();
 
   // VivaldiQuitConfirmationDialog::CloseCallback
-  void ContinueClose(bool quiting, bool close, bool stop_asking);
+  void ContinueClose(CloseDialogMode mode, bool close, bool stop_asking);
 
   void OnDidFinishNavigation(bool success);
 

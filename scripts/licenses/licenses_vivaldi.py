@@ -34,7 +34,6 @@ for mline in maindeps.splitlines():
       continue
   entry = {
       "name": modulename,
-      "License File": "", # Can't be None due to string conversion below
   }
 
   # get license file (in order of preference)
@@ -43,7 +42,7 @@ for mline in maindeps.splitlines():
       "license.txt", "License.md", "LICENSE.mkd", "UNLICENSE"]:
     file_name = join(moduledir, l)
     if exists(file_name):
-      entry["License File"] = file_name
+      entry["file_name"] = file_name
       f = open(file_name, mode="r", encoding="utf-8")
       entry["license"] = f.read()
       f.close()
@@ -129,61 +128,61 @@ SPECIAL_CASES = {
         "Name": "Opera",
         "URL": "http://www.opera.com/",
         "License": "BSD",
-        "License File": "/../platform_media/OPERA_LICENSE.txt",
+        "License File": ["/../platform_media/OPERA_LICENSE.txt"],
     },
     join('..', 'update_notifier/', 'thirdparty', 'winsparkle'): {
         "Name": "WinSparkle",
         "URL": "http://winsparkle.org/",
         "License": "MIT",
-        "License File": "/../update_notifier/thirdparty/winsparkle/COPYING",
+        "License File": ["/../update_notifier/thirdparty/winsparkle/COPYING"],
     },
     join('..', 'update_notifier/', 'thirdparty', 'wxWidgets'): {
         "Name": "wxWidgets",
         "URL": "https://www.wxwidgets.org/",
         "License": "Modified LGPL",
-        "License File": "/../update_notifier/thirdparty/wxWidgets/docs/licence.txt",
+        "License File": ["/../update_notifier/thirdparty/wxWidgets/docs/licence.txt"],
     },
     join('..', 'thirdparty', 'macsparkle'): {
         "Name": "Sparkle",
         "URL": "http://sparkle-project.org/",
         "License": "MIT",
-        "License File": "/../thirdparty/macsparkle/LICENSE",
+        "License File": ["/../thirdparty/macsparkle/LICENSE"],
     },
     join('..', 'vivapp', 'src', 'browserjs'): {
         "Name": "boss-select",
         "URL": "https://github.com/grks/boss-select#readme",
         "License": "MIT",
-        "License File": "/../vivapp/src/browserjs/boss-select-license.txt",
+        "License File": ["/../vivapp/src/browserjs/boss-select-license.txt"],
     },
     join('..', 'vivapp', 'src', 'components', 'image-inspector'): {
         "Name": "Exif.js",
         "URL": "https://github.com/exif-js/exif-js",
         "License": "MIT",
-        "License File": "/../vivapp/src/components/image-inspector/exif_js_license.txt",
+        "License File": ["/../vivapp/src/components/image-inspector/exif_js_license.txt"],
     },
     join('..', 'scripts', 'licenses'): {
         "Name": "Profile avatar illustrations",
         "URL": "https://www.flaticon.com/",
         "License": "attribution required",
-        "License File": "/../scripts/licenses/avatar_profiles_license.txt",
+        "License File": ["/../scripts/licenses/avatar_profiles_license.txt"],
     },
     join('..', 'vivapp', 'src', 'util'): {
         "Name": "Boyer-Moore-Horspool Search",
         "URL": "https://github.com/Chocobo1/bmhs",
         "License": "BSD-3-Clause",
-        "License File": "/../vivapp/src/util/bmhs_license.txt",
+        "License File": ["/../vivapp/src/util/bmhs_license.txt"],
     },
     join('..', 'vivapp', 'src', 'dispatcher'): {
         "Name": "Flux",
         "URL": "https://facebook.github.io/flux/",
         "License": "BSD",
-        "License File": "/../vivapp/fork_licenses/flux/LICENSE",
+        "License File": ["/../vivapp/fork_licenses/flux/LICENSE"],
     },
     join('..', 'vivapp', 'src', 'forked_modules', 'react-motion'): {
         "Name": "react-motion",
         "URL": "https://github.com/chenglou/react-motion",
         "License": "MIT",
-        "License File": "/../vivapp/src/forked_modules/react-motion/LICENSE",
+        "License File": ["/../vivapp/src/forked_modules/react-motion/LICENSE"],
     },
 }
 
@@ -195,6 +194,6 @@ def GetEntries(entry_template, EvaluateTemplate):
     entries.append({
         'name': license['name'],
         'content': EvaluateTemplate(entry_template, license),
-        'license_file': license['License File'],
+        'license_file': [] if not 'file_name' in license else [license['file_name']],
         })
   return entries

@@ -159,7 +159,7 @@ export const {{name | to_ts_var_name}} = css`var({{name | to_css_var_name}})`;
 {%- endif -%}
 {%- if font_families or typefaces %}
 {%-   for name, value in font_families.items() %}
-export const {{name | to_ts_var_name}} = css`var({{name | to_css_var_name}}-font)`;
+export const {{name | to_ts_var_name}} = css`var({{name | to_css_var_name}})`;
 {%-     endfor %}
 {%-   for name, typeface in typefaces.items() %}
 export const {{name | to_ts_var_name}}_FONT = css`var({{name | to_css_var_name}}-font)`;

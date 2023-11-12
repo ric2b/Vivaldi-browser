@@ -201,6 +201,20 @@ export interface PasswordManagerProxy {
       Promise<void>;
 
   /**
+   * Fetches family members (password share recipients).
+   * @return A promise that resolves the FamilyFetchResults.
+   */
+  fetchFamilyMembers(): Promise<chrome.passwordsPrivate.FamilyFetchResults>;
+
+  /**
+   * Sends sharing invitations to the recipients.
+   * @param id The id of the password entry to be shared.
+   * @param recipients The list of selected recipients.
+   */
+  sharePassword(
+      id: number, recipients: chrome.passwordsPrivate.RecipientInfo[]): void;
+
+  /**
    * Updates the given credential. Not all parameters can be updated.
    * @param credential the credential to update.
    * @return A promise that resolves if the credential was found and updated,
@@ -288,11 +302,6 @@ export interface PasswordManagerProxy {
    */
   removePasswordsFileExportProgressListener(
       listener: PasswordsFileExportProgressListener): void;
-
-  /**
-   * Cancels the export in progress.
-   */
-  cancelExportPasswords(): void;
 
   /**
    * Switches Biometric authentication before filling state after
@@ -498,6 +507,15 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
     chrome.passwordsPrivate.undoRemoveSavedPasswordOrException();
   }
 
+  fetchFamilyMembers() {
+    return chrome.passwordsPrivate.fetchFamilyMembers();
+  }
+
+  sharePassword(
+      id: number, recipients: chrome.passwordsPrivate.RecipientInfo[]) {
+    chrome.passwordsPrivate.sharePassword(id, recipients);
+  }
+
   importPasswords(toStore: chrome.passwordsPrivate.PasswordStoreSet) {
     return chrome.passwordsPrivate.importPasswords(toStore);
   }
@@ -527,10 +545,6 @@ export class PasswordManagerImpl implements PasswordManagerProxy {
       listener: PasswordsFileExportProgressListener) {
     chrome.passwordsPrivate.onPasswordsFileExportProgress.removeListener(
         listener);
-  }
-
-  cancelExportPasswords() {
-    chrome.passwordsPrivate.cancelExportPasswords();
   }
 
   switchBiometricAuthBeforeFillingState() {

@@ -11,66 +11,43 @@
 
 namespace ipcz {
 
-namespace {
-
-IpczTransaction AsTransaction(Parcel& parcel) {
-  return reinterpret_cast<IpczTransaction>(&parcel);
-}
-
-}  // namespace
-
 PendingTransactionSet::PendingTransactionSet() = default;
 
 PendingTransactionSet::~PendingTransactionSet() = default;
 
-IpczTransaction PendingTransactionSet::Add(Parcel parcel) {
-  if (!inline_parcel_) {
-    return AsTransaction(inline_parcel_.emplace(std::move(parcel)));
-  }
-
-  auto new_parcel = std::make_unique<Parcel>(std::move(parcel));
-  IpczTransaction transaction = AsTransaction(*new_parcel);
-  other_parcels_[transaction] = std::move(new_parcel);
+IpczTransaction PendingTransactionSet::Add(std::unique_ptr<Parcel> parcel) {
+  IpczTransaction transaction = AsIpczTransaction(*parcel);
+  transactions_.insert(std::move(parcel));
   return transaction;
 }
 
-absl::optional<Parcel> PendingTransactionSet::FinalizeForGet(
+std::unique_ptr<Parcel> PendingTransactionSet::FinalizeForGet(
     IpczTransaction transaction) {
-  if (inline_parcel_ && AsTransaction(*inline_parcel_) == transaction) {
-    Parcel parcel = std::move(*inline_parcel_);
-    inline_parcel_.reset();
-    return parcel;
+  Parcel* parcel = reinterpret_cast<Parcel*>(transaction);
+  auto it = transactions_.find(parcel);
+  if (it != transactions_.end() && parcel) {
+    return Extract(it);
   }
 
-  auto it = other_parcels_.find(transaction);
-  if (it != other_parcels_.end()) {
-    Parcel parcel = std::move(*it->second);
-    other_parcels_.erase(it);
-    return parcel;
-  }
-
-  return absl::nullopt;
+  return nullptr;
 }
 
-absl::optional<Parcel> PendingTransactionSet::FinalizeForPut(
+std::unique_ptr<Parcel> PendingTransactionSet::FinalizeForPut(
     IpczTransaction transaction,
     size_t num_data_bytes) {
-  if (inline_parcel_ && AsTransaction(*inline_parcel_) == transaction &&
-      inline_parcel_->data_view().size() >= num_data_bytes) {
-    Parcel parcel = std::move(*inline_parcel_);
-    inline_parcel_.reset();
-    return parcel;
+  Parcel* parcel = reinterpret_cast<Parcel*>(transaction);
+  auto it = transactions_.find(parcel);
+  if (it != transactions_.end() && parcel &&
+      parcel->data_view().size() >= num_data_bytes) {
+    return Extract(it);
   }
 
-  auto it = other_parcels_.find(transaction);
-  if (it != other_parcels_.end() &&
-      it->second->data_view().size() >= num_data_bytes) {
-    Parcel parcel = std::move(*it->second);
-    other_parcels_.erase(it);
-    return parcel;
-  }
+  return nullptr;
+}
 
-  return absl::nullopt;
+std::unique_ptr<Parcel> PendingTransactionSet::Extract(
+    TransactionSet::iterator it) {
+  return std::move(transactions_.extract(it).value());
 }
 
 }  // namespace ipcz

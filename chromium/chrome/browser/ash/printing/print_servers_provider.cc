@@ -242,6 +242,7 @@ class PrintServersProviderImpl : public PrintServersProvider {
 
   // Called when a new allowlist is available.
   void UpdateAllowlist() {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     allowlist_ = absl::nullopt;
     // Fetch and parse the allowlist.
     const PrefService::Preference* pref =
@@ -323,7 +324,8 @@ class PrintServersProviderImpl : public PrintServersProvider {
   // The current resultant list of servers.
   std::vector<PrintServer> result_servers_;
 
-  raw_ptr<PrefService, ExperimentalAsh> prefs_ = nullptr;
+  raw_ptr<PrefService, LeakedDanglingUntriaged | ExperimentalAsh> prefs_ =
+      nullptr;
   PrefChangeRegistrar pref_change_registrar_;
   std::string allowlist_pref_;
 

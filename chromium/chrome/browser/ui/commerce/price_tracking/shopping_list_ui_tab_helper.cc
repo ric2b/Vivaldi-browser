@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,8 @@ void ShoppingListUiTabHelper::DidFinishNavigation(
 
   if (shopping_service_->IsPriceInsightsEligible()) {
     UpdatePriceInsightsIconView();
-  } else if (shopping_service_->IsShoppingListEligible()) {
+  }
+  if (shopping_service_->IsShoppingListEligible()) {
     UpdatePriceTrackingIconView();
   }
 
@@ -183,9 +184,8 @@ void ShoppingListUiTabHelper::TriggerUpdateForIconView() {
   if (!ShouldDelayChipUpdate()) {
     if (shopping_service_->IsPriceInsightsEligible()) {
       UpdatePriceInsightsIconView();
-    } else {
-      UpdatePriceTrackingIconView();
     }
+    UpdatePriceTrackingIconView();
   } else {
     DelayUpdateForIconView();
   }
@@ -204,12 +204,8 @@ void ShoppingListUiTabHelper::DelayUpdateForIconView() {
                 &ShoppingListUiTabHelper::UpdatePriceInsightsIconView,
                 weak_ptr_factory_.GetWeakPtr()),
             kDelayIconView);
-
-  } else {
-    if (last_fetched_image_.IsEmpty()) {
-      return;
-    }
-
+  }
+  if (!last_fetched_image_.IsEmpty()) {
     content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
         ->PostDelayedTask(
             FROM_HERE,
@@ -286,7 +282,7 @@ bool ShoppingListUiTabHelper::ShouldShowPriceInsightsIconView() {
 
 void ShoppingListUiTabHelper::HandleProductInfoResponse(
     const GURL& url,
-    const absl::optional<ProductInfo>& info) {
+    const absl::optional<const ProductInfo>& info) {
   if (url != web_contents()->GetLastCommittedURL() || !info.has_value()) {
     return;
   }

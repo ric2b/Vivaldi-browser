@@ -36,6 +36,7 @@ class PriceTrackingView : public commerce::SubscriptionsObserver,
 
  private:
   friend class PriceTrackingViewTest;
+  friend class PriceTrackingViewTestBase;
 
   std::u16string GetToggleAccessibleName();
   void OnToggleButtonPressed(const GURL& url);
@@ -47,7 +48,7 @@ class PriceTrackingView : public commerce::SubscriptionsObserver,
   raw_ptr<views::Label> body_label_;
   raw_ptr<views::ToggleButton> toggle_button_;
 
-  raw_ptr<Profile, LeakedDanglingUntriaged> profile_;
+  raw_ptr<Profile> profile_;
   bool is_price_track_enabled_;
   commerce::ProductInfo product_info_;
 

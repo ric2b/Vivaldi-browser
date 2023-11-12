@@ -102,7 +102,7 @@ class InputMethodEngineBrowserTest
     extension_ime_ids.push_back(kToUpperIMEID);
     extension_ime_ids.push_back(kAPIArgumentIMEID);
     InputMethodManager::Get()->GetActiveIMEState()->SetEnabledExtensionImes(
-        &extension_ime_ids);
+        extension_ime_ids);
 
     InputMethodDescriptors extension_imes;
     InputMethodManager::Get()->GetActiveIMEState()->GetInputMethodExtensions(
@@ -135,7 +135,8 @@ class InputMethodEngineBrowserTest
     return nullptr;
   }
 
-  raw_ptr<const extensions::Extension, ExperimentalAsh> extension_;
+  raw_ptr<const extensions::Extension, DanglingUntriaged | ExperimentalAsh>
+      extension_;
 };
 
 class KeyEventDoneCallback {
@@ -277,7 +278,8 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, BasicScenarioTest) {
   IMEBridge::Get()->SetCandidateWindowHandler(nullptr);
 }
 
-IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, APIArgumentTest) {
+// Test is flaky. https://crbug.com/1462135.
+IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, DISABLED_APIArgumentTest) {
   // TODO(crbug.com/956825): Makes real end to end test without mocking the
   // input context handler. The test should mock the TextInputClient instance
   // hooked up with `InputMethodAsh`, or even using the real `TextInputClient`

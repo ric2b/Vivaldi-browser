@@ -11,7 +11,6 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -196,6 +195,12 @@ public interface TabSwitcher {
         long getLastDirtyTime();
 
         /**
+         * Call before showing the Grid Tab Switcher from Start Surface with refactor disabled to
+         * properly register the layout changed listener.
+         */
+        void prepareTabGridView();
+
+        /**
          * Before calling {@link Controller#showTabSwitcherView} to start showing the
          * TabSwitcher {@link TabListRecyclerView}, call this to populate it without making it
          * visible.
@@ -222,31 +227,26 @@ public interface TabSwitcher {
          * {@link TabListMediator.ThumbnailFetcher} for testing.
          * @param callback The callback to send bitmaps through.
          */
-        @VisibleForTesting
         void setBitmapCallbackForTesting(Callback<Bitmap> callback);
 
         /**
          * @return The number of thumbnail fetching for testing.
          */
-        @VisibleForTesting
         int getBitmapFetchCountForTesting();
 
         /**
          * Reset the current count of thumbnail fetches for testing.
          */
-        @VisibleForTesting
         default void resetBitmapFetchCountForTesting(){};
 
         /**
          * @return The soft cleanup delay for testing.
          */
-        @VisibleForTesting
         int getSoftCleanupDelayForTesting();
 
         /**
          * @return The cleanup delay for testing.
          */
-        @VisibleForTesting
         int getCleanupDelayForTesting();
 
         /**
@@ -258,7 +258,6 @@ public interface TabSwitcher {
         /**
          * @return The mode of the list of Tabs.
          */
-        @VisibleForTesting
         int getListModeForTesting();
 
         /**
@@ -290,4 +289,14 @@ public interface TabSwitcher {
     TabSwitcherCustomViewManager getTabSwitcherCustomViewManager();
 
     boolean onBackPressed();
+
+    /**
+     * @return The number of elements in the tab switcher's tab list model.
+     */
+    int getTabSwitcherTabListModelSize();
+
+    /**
+     * Set the tab switcher's current RecyclerViewPosition.
+     */
+    void setTabSwitcherRecyclerViewPosition(RecyclerViewPosition recyclerViewPosition);
 }

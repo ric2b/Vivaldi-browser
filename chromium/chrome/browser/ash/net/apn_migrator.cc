@@ -6,8 +6,15 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/network_config_service.h"
+#include "ash/public/cpp/notification_utils.h"
+#include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "base/containers/contains.h"
+#include "base/strings/escape.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/network/managed_cellular_pref_handler.h"
 #include "chromeos/ash/components/network/managed_network_configuration_handler.h"
@@ -18,6 +25,9 @@
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "components/device_event_log/device_event_log.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace ash {
 
@@ -75,17 +85,58 @@ std::vector<ApnType> GetMigratedApnTypes(
   return {ApnType::kDefault};
 }
 
+// Clicking on the notification will bring the user to the APN subpage.
+void ShowApnConfigurationDisabledNotification(
+    const std::string& access_point_name,
+    const std::string& guid) {
+  const std::string notification_id =
+      ApnMigrator::kShowApnConfigurationDisabledNotificationIdPrefix + guid;
+  auto on_click = base::BindRepeating(
+      [](const std::string& guid, const std::string& notification_id) {
+        message_center::MessageCenter::Get()->RemoveNotification(
+            notification_id, /*by_user=*/false);
+        const std::string apn_subpage =
+            ::chromeos::settings::mojom::kApnSubpagePath +
+            std::string("?guid=") +
+            base::EscapeUrlEncodedData(guid, /*use_plus=*/true);
+        chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+            ProfileManager::GetActiveUserProfile(), apn_subpage);
+      },
+      guid, notification_id);
+
+  // TODO(b/162365553): Get final strings after string meeting.
+  std::unique_ptr<message_center::Notification> notification =
+      ash::CreateSystemNotificationPtr(
+          message_center::NotificationType::NOTIFICATION_TYPE_SIMPLE,
+          notification_id,
+          u"Title for " + base::ASCIIToUTF16(access_point_name),
+          u"Message for " + base::ASCIIToUTF16(access_point_name),
+          /*display_source=*/std::u16string(), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierType::SYSTEM_COMPONENT, notification_id,
+              ash::NotificationCatalogName::kMobileData),
+          message_center::RichNotificationData(),
+          new message_center::HandleNotificationClickDelegate(on_click),
+          kNotificationCellularAlertIcon,
+          message_center::SystemNotificationWarningLevel::WARNING);
+
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+}
+
 }  // namespace
+
+// static
+const char ApnMigrator::kShowApnConfigurationDisabledNotificationIdPrefix[] =
+    "show_apn_configuration_disabled_notification_";
 
 ApnMigrator::ApnMigrator(
     ManagedCellularPrefHandler* managed_cellular_pref_handler,
     ManagedNetworkConfigurationHandler* network_configuration_handler,
-    NetworkStateHandler* network_state_handler,
-    NetworkMetadataStore* network_metadata_store)
+    NetworkStateHandler* network_state_handler)
     : managed_cellular_pref_handler_(managed_cellular_pref_handler),
       network_configuration_handler_(network_configuration_handler),
-      network_state_handler_(network_state_handler),
-      network_metadata_store_(network_metadata_store) {
+      network_state_handler_(network_state_handler) {
   if (!NetworkHandler::IsInitialized()) {
     return;
   }
@@ -147,7 +198,7 @@ void ApnMigrator::NetworkListChanged() {
     // The network has already been migrated, either the last time the flag was
     // on, or this time. Send Shill the revamp APN list.
     if (const base::Value::List* custom_apn_list =
-            network_metadata_store_->GetCustomApnList(network->guid())) {
+            GetNetworkMetadataStore()->GetCustomApnList(network->guid())) {
       NET_LOG(EVENT) << "Network has already been migrated, setting with the "
                      << "populated custom APN list: " << network->iccid();
       SetShillCustomApnListForNetwork(*network, custom_apn_list);
@@ -227,7 +278,7 @@ void ApnMigrator::MigrateNetwork(const NetworkState& network) {
 
   // Get the pre-revamp APN list.
   const base::Value::List* custom_apn_list =
-      network_metadata_store_->GetPreRevampCustomApnList(network.guid());
+      GetNetworkMetadataStore()->GetPreRevampCustomApnList(network.guid());
 
   // If the pre-revamp APN list is empty, set the revamp list as empty and
   // finish the migration.
@@ -283,7 +334,7 @@ void ApnMigrator::OnGetManagedProperties(
 
   // Get the pre-revamp APN list.
   const base::Value::List* custom_apn_list =
-      network_metadata_store_->GetPreRevampCustomApnList(guid);
+      GetNetworkMetadataStore()->GetPreRevampCustomApnList(guid);
 
   // At this point, the pre-revamp APN list should not be empty. However, there
   // could be the case where the custom APN list was cleared during the
@@ -305,8 +356,24 @@ void ApnMigrator::OnGetManagedProperties(
   const base::Value::Dict* cellular_dict =
       chromeos::network_config::GetDictionary(&properties.value(),
                                               ::onc::network_config::kCellular);
+  absl::optional<ApnPropertiesPtr> last_connected_attach_apn =
+      GetPreRevampApnFromDict(cellular_dict,
+                              ::onc::cellular::kLastConnectedAttachApnProperty);
+  NET_LOG(EVENT) << "last_connected_attach_apn: "
+                 << (last_connected_attach_apn.has_value()
+                         ? (*last_connected_attach_apn)->access_point_name
+                         : "none");
 
-  if (network->IsManagedByPolicy()) {
+  absl::optional<ApnPropertiesPtr> last_connected_default_apn =
+      GetPreRevampApnFromDict(
+          cellular_dict, ::onc::cellular::kLastConnectedDefaultApnProperty);
+  NET_LOG(EVENT) << "last_connected_default_apn: "
+                 << (last_connected_default_apn.has_value()
+                         ? (*last_connected_default_apn)->access_point_name
+                         : "none");
+
+  const bool is_network_managed = network->IsManagedByPolicy();
+  if (is_network_managed && !last_connected_default_apn) {
     ManagedApnPropertiesPtr selected_apn =
         chromeos::network_config::GetManagedApnProperties(
             cellular_dict, ::onc::cellular::kAPN);
@@ -335,14 +402,9 @@ void ApnMigrator::OnGetManagedProperties(
       SetShillCustomApnListForNetwork(*network, &empty_apn_list);
     }
   } else {
-    absl::optional<ApnPropertiesPtr> last_connected_attach_apn =
-        GetPreRevampApnFromDict(
-            cellular_dict, ::onc::cellular::kLastConnectedAttachApnProperty);
-
-    absl::optional<ApnPropertiesPtr> last_connected_default_apn =
-        GetPreRevampApnFromDict(
-            cellular_dict, ::onc::cellular::kLastConnectedDefaultApnProperty);
-
+    NET_LOG(EVENT)
+        << "Migrating network with non-managed flow, is network managed: "
+        << is_network_managed;
     if (!last_connected_attach_apn && !last_connected_default_apn) {
       absl::optional<ApnPropertiesPtr> last_good_apn =
           GetPreRevampApnFromDict(cellular_dict, ::onc::cellular::kLastGoodAPN);
@@ -369,8 +431,12 @@ void ApnMigrator::OnGetManagedProperties(
         CellularNetworkMetricsLogger::LogUnmanagedCustomApnMigrationType(
             CellularNetworkMetricsLogger::UnmanagedApnMigrationType::
                 kDoesNotMatchLastGoodApn);
-        // TODO(b/162365553): Surface a notification to the user indicating that
-        // their APN configuration was changed.
+
+        // Surfaces a notification that indicates that the Network's last good
+        // APN does not match the saved custom APN, and that the APN will be
+        // migrated in a disabled state to the new UI.
+        ShowApnConfigurationDisabledNotification(
+            pre_revamp_custom_apn->access_point_name, guid);
       }
       pre_revamp_custom_apn->apn_types =
           GetMigratedApnTypes(pre_revamp_custom_apn);
@@ -473,6 +539,14 @@ void ApnMigrator::OnGetManagedProperties(
                  << " as migrated";
   managed_cellular_pref_handler_->AddApnMigratedIccid(iccid);
   iccids_in_migration_.erase(iccid);
+}
+
+NetworkMetadataStore* ApnMigrator::GetNetworkMetadataStore() {
+  if (network_metadata_store_for_testing_) {
+    return network_metadata_store_for_testing_;
+  }
+
+  return NetworkHandler::Get()->network_metadata_store();
 }
 
 }  // namespace ash

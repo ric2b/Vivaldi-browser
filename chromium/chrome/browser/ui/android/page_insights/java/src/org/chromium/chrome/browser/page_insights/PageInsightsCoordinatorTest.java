@@ -5,7 +5,9 @@
 package org.chromium.chrome.browser.page_insights;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
@@ -29,14 +31,21 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.page_insights.proto.PageInsights;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.xsurface.ProcessScope;
+import org.chromium.chrome.browser.xsurface.pageinsights.PageInsightsSurfaceRenderer;
+import org.chromium.chrome.browser.xsurface.pageinsights.PageInsightsSurfaceScope;
+import org.chromium.chrome.browser.xsurface_provider.XSurfaceProcessScopeProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
@@ -50,6 +59,8 @@ import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.test.util.BlankUiTestActivity;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * This class tests the functionality of the {@link PageInsights Hub}
@@ -74,6 +85,9 @@ public class PageInsightsCoordinatorTest {
     private ArgumentCaptor<TabObserver> mTabObserverCaptor;
     @Captor
     private ArgumentCaptor<BottomSheetObserver> mBottomUiObserverCaptor;
+    @Captor
+    private ArgumentCaptor<BrowserControlsStateProvider.Observer>
+            mBrowserControlsStateObserverCaptor;
     @Mock
     private Tab mTab;
     @Mock
@@ -84,6 +98,16 @@ public class PageInsightsCoordinatorTest {
     private BottomSheetController mBottomUiController;
     @Mock
     private ExpandedSheetHelper mExpandedSheetHelper;
+    @Mock
+    private BooleanSupplier mIsPageInsightsHubEnabled;
+    @Mock
+    private ProcessScope mProcessScope;
+    @Mock
+    private PageInsightsSurfaceScope mSurfaceScope;
+    @Mock
+    private PageInsightsSurfaceRenderer mSurfaceRenderer;
+    @Mock
+    private Supplier<ShareDelegate> mShareDelegateSupplier;
 
     private PageInsightsCoordinator mPageInsightsCoordinator;
     private ManagedBottomSheetController mPageInsightsController;
@@ -98,6 +122,13 @@ public class PageInsightsCoordinatorTest {
     @Before
     public void setupTest() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> rootView().removeAllViews());
+        XSurfaceProcessScopeProvider.setProcessScopeForTesting(mProcessScope);
+        doReturn(mSurfaceScope).when(mProcessScope).obtainPageInsightsSurfaceScope(any());
+        doReturn(mSurfaceRenderer).when(mSurfaceScope).provideSurfaceRenderer();
+        doReturn(new View(ContextUtils.getApplicationContext()))
+                .when(mSurfaceRenderer)
+                .render(any(), any());
+        doReturn(false).when(mIsPageInsightsHubEnabled).getAsBoolean();
     }
 
     private static Activity getActivity() {
@@ -106,6 +137,12 @@ public class PageInsightsCoordinatorTest {
 
     private static ViewGroup rootView() {
         return getActivity().findViewById(android.R.id.content);
+    }
+
+    private void createAndLaunchPageInsightsCoordinator() throws Exception {
+        createPageInsightsCoordinator();
+        TestThreadUtils.runOnUiThreadBlocking(mPageInsightsCoordinator::launch);
+        waitForAnimationToFinish();
     }
 
     private void createPageInsightsCoordinator() throws Exception {
@@ -126,11 +163,12 @@ public class PageInsightsCoordinatorTest {
                     initializedCallback, activity.getWindow(),
                     KeyboardVisibilityDelegate.getInstance(), () -> rootView());
         });
+        doReturn(true).when(mIsPageInsightsHubEnabled).getAsBoolean();
         mPageInsightsCoordinator = new PageInsightsCoordinator(activity, mTabProvider,
-                mPageInsightsController, mBottomUiController, mExpandedSheetHelper,
-                mBrowserControlsStateProvider, mBrowserControlsSizer);
+                mShareDelegateSupplier, mPageInsightsController, mBottomUiController,
+                mExpandedSheetHelper, mBrowserControlsStateProvider, mBrowserControlsSizer,
+                mIsPageInsightsHubEnabled);
         mTestSupport = new BottomSheetTestSupport(mPageInsightsController);
-        TestThreadUtils.runOnUiThreadBlocking(mPageInsightsCoordinator::launch);
         waitForAnimationToFinish();
     }
 
@@ -157,10 +195,43 @@ public class PageInsightsCoordinatorTest {
         waitForAnimationToFinish();
     }
 
+    private void hideTopBar() throws Exception {
+        doReturn(1.f).when(mBrowserControlsStateProvider).getBrowserControlHiddenRatio();
+        verify(mBrowserControlsStateProvider)
+                .addObserver(mBrowserControlsStateObserverCaptor.capture());
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> mBrowserControlsStateObserverCaptor.getValue().onControlsOffsetChanged(
+                                0, 0, 0, 0, false));
+        waitForAnimationToFinish();
+
+        // Sheet might not have opened.
+        if (mPageInsightsController.getSheetState() == SheetState.HIDDEN) return;
+
+        // Assert that the sheet is translated all the way down below the container i.e. the bottom
+        // of the screen, thus invisible.
+        View container = mPageInsightsCoordinator.getContainerForTesting();
+        assertEquals(container.getHeight(), container.getTranslationY(), 0.01f);
+    }
+
+    private void setConfidenceTooLowForAutoTrigger() {
+        PageInsightsDataLoader testingPageInsightsDataLoader = new PageInsightsDataLoader();
+        testingPageInsightsDataLoader.setConfidenceForTesting(0.4f);
+        mPageInsightsCoordinator.setPageInsightsDataLoaderForTesting(testingPageInsightsDataLoader);
+    }
+
+    private void setAutoTriggerReady() {
+        mPageInsightsCoordinator.setAutoTriggerReadyForTesting();
+    }
+
     @Test
     @MediumTest
-    public void testRoundTopCornerAtExpandedState() throws Exception {
+    public void testRoundTopCornerAtExpandedStateAfterPeekState() throws Exception {
         createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        setAutoTriggerReady();
+
+        hideTopBar(); // Signal for auto triggering the PIH in Peek state
         assertEquals(0.f, mPageInsightsCoordinator.getCornerRadiusForTesting(), ASSERTION_DELTA);
 
         expandSheet();
@@ -172,28 +243,23 @@ public class PageInsightsCoordinatorTest {
 
     @Test
     @MediumTest
-    public void testHideOnPageLoad() throws Exception {
-        createPageInsightsCoordinator();
-        verify(mTabProvider).addObserver(mTabCallbackCaptor.capture());
-        mTabCallbackCaptor.getValue().onResult(mTab);
-        verify(mTab).addObserver(mTabObserverCaptor.capture());
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mTabObserverCaptor.getValue().onPageLoadFinished(mTab, null));
-        waitForAnimationToFinish();
+    public void testRoundTopCornerAtFirstExpandedState() throws Exception {
+        createAndLaunchPageInsightsCoordinator();
 
-        // The very first page load should be kept.
-        assertEquals(SheetState.PEEK, mPageInsightsController.getSheetState());
-
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mTabObserverCaptor.getValue().onPageLoadFinished(mTab, null));
-        waitForAnimationToFinish();
-        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        int maxCornerRadiusPx = sTestRule.getActivity().getResources().getDimensionPixelSize(
+                R.dimen.bottom_sheet_corner_radius);
+        assertEquals(maxCornerRadiusPx, mPageInsightsCoordinator.getCornerRadiusForTesting(),
+                ASSERTION_DELTA);
     }
 
     @Test
     @MediumTest
     public void testResizeContent() throws Exception {
         createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        setAutoTriggerReady();
+
+        hideTopBar(); // Signal for auto triggering the PIH
         int peekHeight = mPageInsightsController.getCurrentOffset();
         verify(mBrowserControlsSizer).setBottomControlsHeight(eq(peekHeight), eq(0));
 
@@ -210,7 +276,7 @@ public class PageInsightsCoordinatorTest {
     @Test
     @MediumTest
     public void testHideWhenOtherBottomUiOpens() throws Exception {
-        createPageInsightsCoordinator();
+        createAndLaunchPageInsightsCoordinator();
 
         // Invoke |onBottomUiStateChanged| directly - Contextual search
         TestThreadUtils.runOnUiThreadBlocking(
@@ -247,10 +313,59 @@ public class PageInsightsCoordinatorTest {
     @Test
     @MediumTest
     public void testExpandSheetHelper() throws Exception {
-        createPageInsightsCoordinator();
+        createAndLaunchPageInsightsCoordinator();
         expandSheet();
         verify(mExpandedSheetHelper).onSheetExpanded();
         collapseSheet();
         verify(mExpandedSheetHelper).onSheetCollapsed();
+    }
+
+    @Test
+    @MediumTest
+    public void testAutoTrigger() throws Exception {
+        createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        setAutoTriggerReady();
+
+        hideTopBar(); // Signal for auto triggering the PIH
+
+        assertEquals(SheetState.PEEK, mPageInsightsController.getSheetState());
+    }
+
+    @Test
+    @MediumTest
+    public void testAutoTrigger_notEnoughDuration() throws Exception {
+        createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+
+        hideTopBar(); // Signal for auto triggering the PIH
+
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+    }
+
+    @Test
+    @MediumTest
+    public void testAutoTrigger_notEnoughConfidence() throws Exception {
+        createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        setAutoTriggerReady();
+        setConfidenceTooLowForAutoTrigger(); // By default, the confidence is over the threshold
+
+        hideTopBar(); // Signal for auto triggering the PIH
+
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+    }
+
+    @Test
+    @MediumTest
+    public void testAutoTrigger_notEnabled() throws Exception {
+        createPageInsightsCoordinator();
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
+        setAutoTriggerReady();
+        doReturn(false).when(mIsPageInsightsHubEnabled).getAsBoolean();
+
+        hideTopBar(); // Signal for auto triggering the PIH
+
+        assertEquals(SheetState.HIDDEN, mPageInsightsController.getSheetState());
     }
 }

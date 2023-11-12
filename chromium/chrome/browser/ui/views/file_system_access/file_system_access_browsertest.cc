@@ -914,16 +914,17 @@ IN_PROC_BROWSER_TEST_F(PersistedPermissionsFileSystemAccessBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents();
   FileSystemAccessPermissionRequestManager::FromWebContents(web_contents)
       ->set_auto_response_for_test(permissions::PermissionAction::GRANTED);
-
+  permission_context->SetOriginHasExtendedPermissionForTesting(kTestOrigin);
   auto grant = permission_context->GetWritePermissionGrant(
       kTestOrigin, test_file,
       content::FileSystemAccessPermissionContext::HandleType::kFile,
       content::FileSystemAccessPermissionContext::UserAction::kSave);
 
-  EXPECT_TRUE(permission_context->HasPersistedPermissionForTesting(
+  EXPECT_TRUE(permission_context->HasExtendedPermissionForTesting(
       kTestOrigin, test_file,
       content::FileSystemAccessPermissionContext::HandleType::kFile,
       ChromeFileSystemAccessPermissionContext::GrantType::kWrite));
+
   EXPECT_EQ(content::FileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
             grant->GetStatus());
 
@@ -961,12 +962,9 @@ IN_PROC_BROWSER_TEST_F(PersistedPermissionsFileSystemAccessBrowserTest,
   // The usage indicator is not visible after navigating to another page.
   EXPECT_FALSE(IsUsageIndicatorVisible(browser()));
 
-  // Navigate back to the original page.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
-
-  // With Persisted Permissions enabled, the usage indicator should be visible
-  // on the original page.
-  EXPECT_TRUE(IsUsageIndicatorVisible(browser()));
+  // TODO(https://crbug.com/1011533): Once Extended Permission UI is
+  // implemented, mock user's response to the UI and assert that the usage
+  // indicator is visible when the original page is visited again.
 }
 
 class BackForwardCacheFileSystemAccessBrowserTest
@@ -1056,7 +1054,7 @@ class PrerenderFileSystemAccessBrowserTest
       const PrerenderFileSystemAccessBrowserTest&) = delete;
 
   void SetUp() override {
-    prerender_helper_.SetUp(embedded_test_server());
+    prerender_helper_.RegisterServerRequestMonitor(embedded_test_server());
     FileSystemAccessBrowserTest::SetUp();
   }
 

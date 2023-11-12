@@ -394,7 +394,20 @@ bool Surface::HasPendingAttachedBuffer() const {
 void Surface::Damage(const gfx::Rect& damage) {
   TRACE_EVENT1("exo", "Surface::Damage", "damage", damage.ToString());
 
-  pending_state_.damage.Union(damage);
+  gfx::Rect t_damage = damage;
+  if (t_damage.width() == 0x7FFFFFFF) {
+    t_damage.set_width(0x7FFFFFFE);
+  }
+  if (t_damage.height() == 0x7FFFFFFF) {
+    t_damage.set_height(0x7FFFFFFE);
+  }
+
+  // SkRegion forbids 0x7FFFFFFF (INT32_MAX) as width or height, see
+  // SkRegion_kRunTypeSentinel, and would mark the resulting region from the
+  // union below as empty. See https://crbug.com/1463905
+  gfx::Rect intersected_damage = gfx::Rect(0x7FFFFFFE, 0x7FFFFFFE);
+  intersected_damage.Intersect(t_damage);
+  pending_state_.damage.Union(intersected_damage);
 }
 
 void Surface::RequestFrameCallback(const FrameCallback& callback) {
@@ -583,12 +596,17 @@ void Surface::OnSubSurfaceCommit() {
     delegate_->OnSurfaceCommit();
 }
 
-void Surface::SetRoundedCorners(const gfx::RRectF& rounded_corners_bounds) {
+void Surface::SetRoundedCorners(const gfx::RRectF& rounded_corners_bounds,
+                                bool is_root_coordinates) {
   TRACE_EVENT1("exo", "Surface::SetRoundedCorner", "corners",
                rounded_corners_bounds.ToString());
-  if (rounded_corners_bounds != pending_state_.rounded_corners_bounds) {
+
+  if (rounded_corners_bounds != pending_state_.rounded_corners_bounds ||
+      is_root_coordinates !=
+          pending_state_.rounded_corners_is_root_coordinates) {
     has_pending_contents_ = true;
     pending_state_.rounded_corners_bounds = rounded_corners_bounds;
+    pending_state_.rounded_corners_is_root_coordinates = is_root_coordinates;
   }
 }
 
@@ -601,11 +619,27 @@ void Surface::SetClipRect(const absl::optional<gfx::RectF>& clip_rect) {
   TRACE_EVENT1("exo", "Surface::SetClipRect", "clip_rect",
                (clip_rect ? clip_rect->ToString() : "nullopt"));
 
-  if (pending_state_.clip_rect == clip_rect) {
+  if (pending_state_.clip_rect == clip_rect &&
+      !pending_state_.clip_rect_is_parent_coordinates) {
     return;
   }
   has_pending_contents_ = true;
   pending_state_.clip_rect = clip_rect;
+  pending_state_.clip_rect_is_parent_coordinates = false;
+}
+
+void Surface::SetClipRectOnParentSurface(
+    const absl::optional<gfx::RectF>& clip_rect) {
+  TRACE_EVENT1("exo", "Surface::SetClipRectOnParentSurface", "clip_rect",
+               (clip_rect ? clip_rect->ToString() : "nullopt"));
+
+  if (pending_state_.clip_rect == clip_rect &&
+      pending_state_.clip_rect_is_parent_coordinates) {
+    return;
+  }
+  has_pending_contents_ = true;
+  pending_state_.clip_rect = clip_rect;
+  pending_state_.clip_rect_is_parent_coordinates = true;
 }
 
 void Surface::SetSurfaceTransform(const gfx::Transform& transform) {
@@ -842,6 +876,10 @@ bool Surface::HasPendingAcquireFence() const {
   return !!pending_state_.acquire_fence;
 }
 
+bool Surface::HasAcquireFence() const {
+  return !!state_.acquire_fence;
+}
+
 void Surface::SetPerCommitBufferReleaseCallback(
     Buffer::PerCommitExplicitReleaseCallback callback) {
   TRACE_EVENT0("exo", "Surface::SetPerCommitBufferReleaseCallback");
@@ -876,8 +914,12 @@ void Surface::Commit() {
     pending_state_.buffer.reset();
   }
   cached_state_.rounded_corners_bounds = pending_state_.rounded_corners_bounds;
+  cached_state_.rounded_corners_is_root_coordinates =
+      pending_state_.rounded_corners_is_root_coordinates;
   cached_state_.overlay_priority_hint = pending_state_.overlay_priority_hint;
   cached_state_.clip_rect = pending_state_.clip_rect;
+  cached_state_.clip_rect_is_parent_coordinates =
+      pending_state_.clip_rect_is_parent_coordinates;
   cached_state_.surface_transform = pending_state_.surface_transform;
   cached_state_.acquire_fence = std::move(pending_state_.acquire_fence);
   cached_state_.per_commit_explicit_release_callback_ =
@@ -1023,7 +1065,11 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
         cached_state_.buffer.reset();
       }
       state_.rounded_corners_bounds = cached_state_.rounded_corners_bounds;
+      state_.rounded_corners_is_root_coordinates =
+          cached_state_.rounded_corners_is_root_coordinates;
       state_.clip_rect = cached_state_.clip_rect;
+      state_.clip_rect_is_parent_coordinates =
+          cached_state_.clip_rect_is_parent_coordinates;
       state_.surface_transform = cached_state_.surface_transform;
       state_.acquire_fence = std::move(cached_state_.acquire_fence);
       state_.per_commit_explicit_release_callback_ =
@@ -1148,10 +1194,9 @@ void Surface::AppendSurfaceHierarchyCallbacks(
 
 void Surface::AppendSurfaceHierarchyContentsToFrame(
     const gfx::PointF& origin,
-    float device_scale_factor,
-    bool client_submits_in_pixel_coords,
     bool needs_full_damage,
     FrameSinkResourceManager* resource_manager,
+    absl::optional<float> device_scale_factor,
     viz::CompositorFrame* frame) {
   // The top most sub-surface is at the front of the RenderPass's quad_list,
   // so we need composite sub-surface in reversed order.
@@ -1160,10 +1205,8 @@ void Surface::AppendSurfaceHierarchyContentsToFrame(
     // Synchronsouly commit all pending state of the sub-surface and its
     // decendents.
     sub_surface->AppendSurfaceHierarchyContentsToFrame(
-        origin + sub_surface_entry.second.OffsetFromOrigin(),
-
-        device_scale_factor, client_submits_in_pixel_coords, needs_full_damage,
-        resource_manager, frame);
+        origin + sub_surface_entry.second.OffsetFromOrigin(), needs_full_damage,
+        resource_manager, device_scale_factor, frame);
   }
 
   // Update the resource, or if not required, ensure we call the buffer release
@@ -1175,9 +1218,7 @@ void Surface::AppendSurfaceHierarchyContentsToFrame(
         std::move(state_.per_commit_explicit_release_callback_));
   }
 
-  AppendContentsToFrame(origin, device_scale_factor,
-                        client_submits_in_pixel_coords, needs_full_damage,
-                        frame);
+  AppendContentsToFrame(origin, needs_full_damage, device_scale_factor, frame);
 }
 
 bool Surface::IsSynchronized() const {
@@ -1449,9 +1490,8 @@ static viz::SharedQuadState* AppendOrCreateSharedQuadState(
 }
 
 void Surface::AppendContentsToFrame(const gfx::PointF& origin,
-                                    float device_scale_factor,
-                                    bool client_submits_in_pixel_coords,
                                     bool needs_full_damage,
+                                    absl::optional<float> device_scale_factor,
                                     viz::CompositorFrame* frame) {
   const std::unique_ptr<viz::CompositorRenderPass>& render_pass =
       frame->render_pass_list.back();
@@ -1471,24 +1511,31 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
     damage_rect += origin.OffsetFromOrigin();
     damage_rect.Intersect(output_rect);
 
-    if (device_scale_factor <= 1) {
-      damage_rect = gfx::ConvertRectToPixels(damage_rect, device_scale_factor);
-    } else {
-      // The damage will eventually be rescaled by 1/device_scale_factor. Since
-      // that scale factor is <1, taking the enclosed rect here means that that
-      // rescaled RectF is <1px smaller than |damage_rect| in each dimension,
-      // which makes the enclosing rect equal to |damage_rect|.
-      damage_rect.Scale(device_scale_factor);
+    if (device_scale_factor.has_value()) {
+      if (device_scale_factor.value() <= 1) {
+        damage_rect =
+            gfx::ConvertRectToPixels(damage_rect, device_scale_factor.value());
+      } else {
+        // The damage will eventually be rescaled by 1/device_scale_factor.
+        // Since that scale factor is <1, taking the enclosed rect here means
+        // that that rescaled RectF is <1px smaller than |damage_rect| in each
+        // dimension, which makes the enclosing rect equal to |damage_rect|.
+        damage_rect.Scale(device_scale_factor.value());
+      }
     }
   }
 
   absl::optional<gfx::Rect> quad_clip_rect;
   if (state_.clip_rect) {
-    // The clip rect will later be rescaled by 1/device_scale_factor, and the
-    // enclosing rect used. Take the enclosed rect here to mitigate error.
-    gfx::RectF clip_rect_px(*state_.clip_rect);
-    clip_rect_px.Scale(device_scale_factor);
-    quad_clip_rect = gfx::ToEnclosedRect(clip_rect_px);
+    // `state_.clip_rect` should be on local surface coordinates but the
+    // deprecated implementation still uses parent surface coordinates. If so,
+    // we skip translating into the root surface coordinates to keep the old
+    // behavior.
+    // TODO(crbug.com/1457446): Remove this.
+    auto clip_rect_offset = state_.clip_rect_is_parent_coordinates
+                                ? gfx::Vector2d()
+                                : origin.OffsetFromOrigin();
+    quad_clip_rect = gfx::ToEnclosedRect(*state_.clip_rect + clip_rect_offset);
   }
 
   state_.damage.Clear();
@@ -1527,13 +1574,18 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
   gfx::MaskFilterInfo msk;
   if (!state_.rounded_corners_bounds.IsEmpty()) {
     DCHECK(sub_surfaces_.empty());
-    auto rounded_corners_rect = state_.rounded_corners_bounds;
-
-    // Convert from dip to px.
-    rounded_corners_rect.Scale(device_scale_factor);
+    // `state_.rounded_corners_bounds` should be on local surface coordinates
+    // but the deprecated implementation still uses root surface coordinates.
+    // If so, we skip translating into the root surface coordinates to keep the
+    // old behavior.
+    // TODO(crbug.com/1470955): Remove this.
+    auto rounded_corners_rect_offset =
+        state_.rounded_corners_is_root_coordinates ? gfx::Vector2d()
+                                                   : origin.OffsetFromOrigin();
 
     // Set the mask.
-    msk = gfx::MaskFilterInfo(rounded_corners_rect);
+    msk = gfx::MaskFilterInfo(state_.rounded_corners_bounds +
+                              rounded_corners_rect_offset);
   }
 
   // Compute the total transformation from post-transform buffer coordinates to
@@ -1544,9 +1596,9 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
           scale, origin.OffsetFromOrigin() + translate));
   viewport_to_target_transform.PostConcat(state_.surface_transform);
 
-  if (!client_submits_in_pixel_coords) {
+  if (device_scale_factor.has_value()) {
     // Convert from DPs to pixels.
-    viewport_to_target_transform.PostScale(device_scale_factor);
+    viewport_to_target_transform.PostScale(device_scale_factor.value());
   }
 
   gfx::Transform quad_to_target_transform(buffer_transform_);
@@ -1569,11 +1621,6 @@ void Surface::AppendContentsToFrame(const gfx::PointF& origin,
       // Later in 'SurfaceAggregator' this transform will have 2d translation.
       quad_to_target_transform = gfx::Transform();
     }
-  }
-
-  if (client_submits_in_pixel_coords) {
-    // Client DPs are actually pixels. This coverts to target space of surface.
-    quad_to_target_transform.PostScale(device_scale_factor);
   }
 
   if (current_resource_.id) {
@@ -1880,6 +1927,13 @@ void Surface::OnFullscreenStateChanged(bool fullscreen) {
   for (const auto& [surface, point] : sub_surfaces_) {
     surface->OnFullscreenStateChanged(fullscreen);
   }
+}
+
+Buffer* Surface::GetBuffer() {
+  if (state_.buffer.has_value()) {
+    return state_.buffer->buffer().get();
+  }
+  return nullptr;
 }
 
 }  // namespace exo

@@ -15,20 +15,17 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
-#include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/overloaded.h"
+#include "base/memory/raw_ref.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "components/attribution_reporting/aggregation_keys.h"
-#include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/source_registration.h"
-#include "components/attribution_reporting/source_registration_error.mojom.h"
-#include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/attribution_debug_report.h"
@@ -52,11 +49,9 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/net_errors.h"
-#include "services/network/public/mojom/attribution.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
-#include "third_party/abseil-cpp/absl/utility/utility.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -81,7 +76,6 @@ attribution_internals::mojom::WebUISourcePtr WebUISource(
       source.source_event_id(), common_info.source_origin(),
       source.destination_sites(), common_info.reporting_origin(),
       source.source_time().ToJsTime(), source.expiry_time().ToJsTime(),
-      source.event_report_window_time().ToJsTime(),
       source.aggregatable_report_window_time().ToJsTime(),
       common_info.source_type(), source.priority(), source.debug_key(),
       source.dedup_keys(), source.filter_data().filter_values(),
@@ -229,10 +223,9 @@ AttributionInternalsHandlerImpl::AttributionInternalsHandlerImpl(
     WebUI* web_ui,
     mojo::PendingRemote<attribution_internals::mojom::Observer> observer,
     mojo::PendingReceiver<attribution_internals::mojom::Handler> handler)
-    : web_ui_(web_ui),
+    : web_ui_(raw_ref<WebUI>::from_ptr(web_ui)),
       observer_(std::move(observer)),
       handler_(this, std::move(handler)) {
-  DCHECK(web_ui_);
   if (auto* manager =
           AttributionManager::FromWebContents(web_ui_->GetWebContents())) {
     manager_observation_.Observe(manager);
@@ -255,8 +248,14 @@ void AttributionInternalsHandlerImpl::IsAttributionReportingEnabled(
           ContentBrowserClient::AttributionReportingOperation::kAny,
           /*rfh=*/nullptr, /*source_origin=*/nullptr,
           /*destination_origin=*/nullptr, /*reporting_origin=*/nullptr);
+
+  // TODO(apaseltiner): This is a layering violation: The internals handler
+  // should query the manager for its configuration, not the command line,
+  // especially since `AttributionManager::SetDebugMode()` can cause its value
+  // to change after initialization.
   bool debug_mode = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kAttributionReportingDebugMode);
+
   std::move(callback).Run(attribution_reporting_enabled, debug_mode,
                           AttributionManager::GetSupport());
 }
@@ -351,8 +350,7 @@ void AttributionInternalsHandlerImpl::OnSourceHandled(
                                                /*pretty_print=*/true),
                       cleared_debug_key);
   web_ui_source->type = source.common_info().source_type();
-  web_ui_source->status =
-      attribution_internals::mojom::SourceStatus::NewStoreSourceResult(result);
+  web_ui_source->status = std::move(result);
 
   observer_->OnSourceHandled(std::move(web_ui_source));
 }
@@ -402,27 +400,6 @@ void AttributionInternalsHandlerImpl::OnDebugReportSent(
                 net::ErrorToShortString(status));
 
   observer_->OnDebugReportSent(std::move(web_report));
-}
-
-// TODO(crbug/1351843): Consider surfacing this error in devtools instead of
-// internals, currently however this error is associated with a redirect
-// navigation, rather than a specific committed page.
-void AttributionInternalsHandlerImpl::OnFailedSourceRegistration(
-    const std::string& header_value,
-    base::Time source_time,
-    const attribution_reporting::SuitableOrigin& source_origin,
-    const attribution_reporting::SuitableOrigin& reporting_origin,
-    attribution_reporting::mojom::SourceType source_type,
-    attribution_reporting::mojom::SourceRegistrationError error) {
-  auto web_ui_source = WebUISourceRegistration::New();
-  web_ui_source->registration = GetRegistration(
-      source_time, source_origin, reporting_origin, header_value,
-      /*cleared_debug_key=*/absl::nullopt);
-  web_ui_source->type = source_type;
-  web_ui_source->status =
-      attribution_internals::mojom::SourceStatus::NewJsonError(error);
-
-  observer_->OnSourceHandled(std::move(web_ui_source));
 }
 
 void AttributionInternalsHandlerImpl::OnOsRegistration(
@@ -479,6 +456,8 @@ WebUITriggerStatus GetWebUITriggerStatus(EventLevelStatus status) {
       return WebUITriggerStatus::kNoMatchingConfigurations;
     case EventLevelStatus::kExcessiveReports:
       return WebUITriggerStatus::kExcessiveReports;
+    case EventLevelStatus::kReportWindowNotStarted:
+      return WebUITriggerStatus::kReportWindowNotStarted;
     case EventLevelStatus::kReportWindowPassed:
       return WebUITriggerStatus::kReportWindowPassed;
     case EventLevelStatus::kNotRegistered:

@@ -1,5 +1,5 @@
 {% from 'templates/macros.tmpl' import license, print_if, source_files_for_generated_file %}
-{% from 'templates/fields/field.tmpl' import encode, getter_expression, setter_expression, declare_storage, fieldwise_compare, fieldwise_copy, fieldwise_diff, fieldwise_pointer_compare_inherited, field_group_access_bit_name %}
+{% from 'templates/fields/field.tmpl' import encode, getter_expression, setter_expression, declare_storage, fieldwise_compare, fieldwise_diff, fieldwise_pointer_compare_inherited, field_group_access_bit_name %}
 {% from 'templates/fields/group.tmpl' import declare_field_group_class %}
 {{license()}}
 
@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/style/data_ref.h"
 #include "third_party/blink/renderer/core/style/member_copy.h"
 #include "third_party/blink/renderer/core/style/computed_style_initial_values.h"
+#include "third_party/blink/renderer/core/style/style_cached_data.h"
 {% for path in include_paths %}
 #include "{{path}}"
 {% endfor %}
@@ -44,6 +45,8 @@ namespace blink {
 
 // Forward declaration for diff functions.
 class ComputedStyle;
+
+struct ComputedStyleAccessFlags;
 
 // Forward declaration of friends:
 {% for property in longhands %}
@@ -88,7 +91,7 @@ namespace {{property.namespace}} { class {{property.classname}}; }
 // example, a field with the 'keyword' template has only one setter, whereas an
 // 'external' field has an extra setter that takes an rvalue reference. A list
 // of the available templates can be found in css_properties.json5.
-class ComputedStyleBase {
+class ComputedStyleBase : public GarbageCollected<ComputedStyleBase> {
   // Properties with protected accessors must be friends because
   // Longhand::Apply* functions typically need the "raw" computed value:
   {% for property in longhands %}
@@ -178,12 +181,29 @@ class ComputedStyleBase {
     {{field.name}},
     {% endfor %}
   };
+  struct DebugDiff {
+    DebugField field;
+    std::string correct;
+    std::string actual;
+  };
 
   CORE_EXPORT static String DebugFieldToString(DebugField);
 
   // Returns a list of all fields that differ between |this| and |o|.
-  CORE_EXPORT Vector<DebugField> DebugDiffFields(const ComputedStyleBase& o) const;
+  CORE_EXPORT Vector<DebugDiff> DebugDiffFields(const ComputedStyleBase& o) const;
 #endif // DCHECK_IS_ON()
+
+  CORE_EXPORT void Trace(Visitor* visitor) const;
+  void TraceAfterDispatch(Visitor* visitor) const {
+    {% for subgroup in computed_style.subgroups %}
+    visitor->Trace({{subgroup.member_name}});
+    {% endfor %}
+    {% for field in computed_style.fields %}
+    {% if field.wrapper_pointer_name == 'Member' %}
+    visitor->Trace({{field.name}});
+    {% endif %}
+    {% endfor %}
+  }
 
  private:
   {% for subgroup in computed_style.subgroups %}
@@ -195,6 +215,10 @@ class ComputedStyleBase {
   // Constructor and destructor are protected so that only the parent class ComputedStyle
   // can instantiate this class.
   ComputedStyleBase();
+  ComputedStyleBase(const ComputedStyleBase &initial_style) = default;
+  ComputedStyleBase(const ComputedStyleBase &source_for_noninherited,
+                    const ComputedStyleBase &parent_style,
+                    ComputedStyleAccessFlags &access_);
 
   {% for field in computed_style.all_fields|sort(attribute='name') %}
   {% if field.field_template not in ('pointer',) %}
@@ -203,8 +227,6 @@ class ComputedStyleBase {
 
   {% endif %}
   {% endfor %}
-
-  ~ComputedStyleBase() = default;
 
  private:
   friend class ComputedStyleBuilder;
@@ -220,6 +242,13 @@ class ComputedStyleBase {
   {% endfor %}
 };
 
+// Access flags. These are passed to DataRef::Access to ensure that we have
+// a private copy of the relevant DataRef before mutation.
+struct ComputedStyleAccessFlags {
+{% for group in computed_style.all_subgroups|sort(attribute='name') %}
+  bool {{group.member_name}} = false;
+{% endfor %}
+};
 
 class ComputedStyleBuilderBase {
   STACK_ALLOCATED();
@@ -251,9 +280,6 @@ class ComputedStyleBuilderBase {
     {% endfor %}
   }
 
-  CORE_EXPORT void InheritFrom(const ComputedStyleBase& other, IsAtShadowBoundary isAtShadowBoundary);
-  CORE_EXPORT void CopyNonInheritedFromCached(const ComputedStyleBase& other);
-
   void PropagateIndependentInheritedProperties(const ComputedStyleBase& parent_style);
 
   {% for field in computed_style_builder.all_fields|sort(attribute='name') %}
@@ -266,18 +292,36 @@ class ComputedStyleBuilderBase {
     memset(&access_, 0, sizeof(access_));
   }
 
+ protected:
+  // Used when constructing ComputedStyleBase, because the constructor may need
+  // to set access flags if allocating new subgroups.
+  ComputedStyleAccessFlags& GetAccessFlagsForConstructor() {
+    return access_;
+  }
+
  private:
-  // Access flags. These are passed to DataRef::Access to ensure that we have
-  // a private copy of the relevant DataRef before mutation.
-  mutable struct {
-  {% for group in computed_style.all_subgroups|sort(attribute='name') %}
-    bool {{group.member_name}} = false;
-  {% endfor %}
-  } access_;
+  mutable ComputedStyleAccessFlags access_;
 
   ComputedStyleBase* style_ = nullptr;
 };
 
+}  // namespace blink
+
+namespace blink {
+{% for group in computed_style.all_subgroups|sort(attribute='name') %}
+template <typename T>
+struct ThreadingTrait<
+    T,
+    std::enable_if_t<std::is_base_of<blink::ComputedStyleBase::{{group.type_name}}, T>::value>> {
+  static constexpr ThreadAffinity kAffinity = kMainThreadOnly;
+};
+{% endfor %}
+template <typename T>
+struct ThreadingTrait<
+    T,
+    std::enable_if_t<std::is_base_of<blink::ComputedStyleBase, T>::value>> {
+  static constexpr ThreadAffinity kAffinity = kMainThreadOnly;
+};
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_COMPUTED_STYLE_BASE_H_

@@ -78,6 +78,10 @@
             "type": "boolean",
             "description": "Boolean variable, stating if a folder is a speeddial folder"
           },
+          "themeColor": {
+            "type": "string",
+            "description": "The theme color from the website, to use as the background of the speed dials thumbnail, if no other thumbnail is available"
+          },
           "bookmarkbar": {
             "type": "boolean",
             "description": "Boolean variable, stating if a folder is a bookmark bar folder"
@@ -561,6 +565,10 @@
               },
               "speeddial": {
                 "type": "boolean",
+                "optional": true
+              },
+              "themeColor": {
+                "type": "string",
                 "optional": true
               },
               "bookmarkbar": {

@@ -79,6 +79,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
 #include "third_party/blink/renderer/core/loader/back_forward_cache_loader_helper_impl.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
@@ -456,6 +457,7 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   absl::optional<ClientHintImageInfo> image_info;
   absl::optional<WTF::AtomicString> prefers_color_scheme;
   absl::optional<WTF::AtomicString> prefers_reduced_motion;
+  absl::optional<WTF::AtomicString> prefers_reduced_transparency;
 
   if (document_) {  // Only get frame info if the frame is not detached
     image_info = ClientHintImageInfo();
@@ -473,6 +475,10 @@ void FrameFetchContext::AddClientHintsIfNecessary(
         AtomicString(GetSettings()->GetPrefersReducedMotion()
                          ? network::kPrefersReducedMotionReduce
                          : network::kPrefersReducedMotionNoPreference);
+    prefers_reduced_transparency =
+        AtomicString(GetSettings()->GetPrefersReducedTransparency()
+                         ? network::kPrefersReducedTransparencyReduce
+                         : network::kPrefersReducedTransparencyNoPreference);
   }
 
   // GetClientHintsPreferences() has things parsed for this document
@@ -480,7 +486,8 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   // with renderer-parsed http-equiv merged in.
   BaseFetchContext::AddClientHintsIfNecessary(
       GetClientHintsPreferences(), resource_origin, is_1p_origin, ua, policy,
-      image_info, prefers_color_scheme, prefers_reduced_motion, request);
+      image_info, prefers_color_scheme, prefers_reduced_motion,
+      prefers_reduced_transparency, request);
 }
 
 void FrameFetchContext::AddReducedAcceptLanguageIfNecessary(
@@ -530,6 +537,18 @@ bool FrameFetchContext::IsPrerendering() const {
   if (GetResourceFetcherProperties().IsDetached())
     return frozen_state_->is_prerendering;
   return document_->IsPrerendering();
+}
+
+bool FrameFetchContext::DoesLCPPHaveAnyHintData() {
+  if (GetResourceFetcherProperties().IsDetached()) {
+    return false;
+  }
+
+  LCPCriticalPathPredictor* lcpp = GetFrame()->GetLCPP();
+  if (!lcpp) {
+    return false;
+  }
+  return lcpp->HasAnyHintData();
 }
 
 void FrameFetchContext::SetFirstPartyCookie(ResourceRequest& request) {

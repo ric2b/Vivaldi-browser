@@ -174,7 +174,6 @@ uint32_t RenderWidgetHostViewBase::GetCaptureSequenceNumber() const {
 }
 
 ui::TextInputClient* RenderWidgetHostViewBase::GetTextInputClient() {
-  NOTREACHED();
   return nullptr;
 }
 
@@ -268,6 +267,14 @@ void RenderWidgetHostViewBase::CopyMainAndPopupFromSurface(
 }
 
 void RenderWidgetHostViewBase::CopyFromSurface(
+    const gfx::Rect& src_rect,
+    const gfx::Size& output_size,
+    base::OnceCallback<void(const SkBitmap&)> callback) {
+  NOTIMPLEMENTED_LOG_ONCE();
+  std::move(callback).Run(SkBitmap());
+}
+
+void RenderWidgetHostViewBase::CopyFromExactSurface(
     const gfx::Rect& src_rect,
     const gfx::Size& output_size,
     base::OnceCallback<void(const SkBitmap&)> callback) {
@@ -669,8 +676,7 @@ void RenderWidgetHostViewBase::TransformPointToRootSurface(gfx::PointF* point) {
   return;
 }
 
-void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {
-}
+void RenderWidgetHostViewBase::DidNavigateMainFramePreCommit() {}
 
 void RenderWidgetHostViewBase::OnFrameTokenChangedForView(
     uint32_t frame_token,
@@ -680,6 +686,11 @@ void RenderWidgetHostViewBase::OnFrameTokenChangedForView(
 }
 
 bool RenderWidgetHostViewBase::ScreenRectIsUnstableFor(
+    const blink::WebInputEvent& event) {
+  return false;
+}
+
+bool RenderWidgetHostViewBase::ScreenRectIsUnstableForIOv2For(
     const blink::WebInputEvent& event) {
   return false;
 }
@@ -778,10 +789,11 @@ void RenderWidgetHostViewBase::ImeCancelComposition() {
 
 void RenderWidgetHostViewBase::ImeCompositionRangeChanged(
     const gfx::Range& range,
-    const std::vector<gfx::Rect>& character_bounds) {
+    const absl::optional<std::vector<gfx::Rect>>& character_bounds,
+    const absl::optional<std::vector<gfx::Rect>>& line_bounds) {
   if (GetTextInputManager()) {
-    GetTextInputManager()->ImeCompositionRangeChanged(this, range,
-                                                      character_bounds);
+    GetTextInputManager()->ImeCompositionRangeChanged(
+        this, range, character_bounds, line_bounds);
   }
 }
 

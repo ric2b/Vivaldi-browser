@@ -10,7 +10,6 @@
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
-#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
@@ -35,10 +34,6 @@ using ui::DEVICE_FORM_FACTOR_PHONE;
 using ui::DEVICE_FORM_FACTOR_TABLET;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface PrimaryToolbarView ()
 // Factory used to create the buttons.
@@ -191,11 +186,6 @@ using vivaldi::IsVivaldiRunning;
   self.fakeOmniboxTarget = nil;
 }
 
-- (void)setTopCornersRounded:(BOOL)rounded {
-  _topCornersRounded = rounded;
-  self.layer.cornerRadius = rounded ? kTopCornerRadius : 0;
-}
-
 #pragma mark - UIView
 
 - (CGSize)intrinsicContentSize {
@@ -214,10 +204,6 @@ using vivaldi::IsVivaldiRunning;
   } else {
   self.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
-
-  if (base::FeatureList::IsEnabled(kExpandedTabStrip)) {
-    self.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
-  }
   } // End Vivaldi
 
   self.contentView = self;
@@ -625,9 +611,11 @@ using vivaldi::IsVivaldiRunning;
   self.trailingStackView.hidden = !show;
 }
 
-- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled {
+- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled
+                              atbSettingType:(ATBSettingType)type {
   self.vivaldiMoreButton.menu =
-      [self.buttonFactory contextMenuForMoreWithAllButtons:enabled];
+      [self.buttonFactory contextMenuForMoreWithAllButtons:enabled
+                                            atbSettingType:type];
 }
 
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
@@ -661,7 +649,7 @@ using vivaldi::IsVivaldiRunning;
     }
     default: {
       UIImage* trackersBlocking =
-        [[UIImage imageNamed:vATBShieldTrackers]
+        [[UIImage imageNamed:vATBShieldNone]
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
       [self.shieldButton setImage:trackersBlocking
                             forState:UIControlStateNormal];

@@ -21,10 +21,6 @@
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/gfx/image/image.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @interface AlertNSNotificationCenterDelegate
     : NSObject <NSUserNotificationCenterDelegate>
 - (instancetype)initWithActionHandler:
@@ -112,7 +108,7 @@ void AddActionButtons(
   // A default close button label is provided by the platform but we explicitly
   // override it in case the user decides to not use the OS language in Chrome.
   // macOS 11 already shows a close button in the top-left corner.
-  if (!base::mac::IsAtLeastOS11()) {
+  if (base::mac::MacOSMajorVersion() < 11) {
     [notification setOtherButtonTitle:l10n_util::GetNSString(
                                           IDS_NOTIFICATION_BUTTON_CLOSE)];
   }
@@ -153,7 +149,7 @@ void AddActionButtons(
   // will always show "Options" via this API. Setting actionButtonTitle just
   // appends another button into the overflow menu. Only the new UNNotification
   // API allows overriding this title on macOS 11.
-  if (base::mac::IsAtLeastOS11()) {
+  if (base::mac::MacOSMajorVersion() >= 11) {
     [notification setValue:@NO forKey:@"_hasActionButton"];
   } else {
     [notification setActionButtonTitle:l10n_util::GetNSString(
@@ -278,6 +274,15 @@ void MacNotificationServiceNS::CloseNotificationsForProfile(
 
 void MacNotificationServiceNS::CloseAllNotifications() {
   [notification_center_ removeAllDeliveredNotifications];
+}
+
+void MacNotificationServiceNS::OkayToTerminateService(
+    OkayToTerminateServiceCallback callback) {
+  GetDisplayedNotifications(
+      nullptr, base::BindOnce([](std::vector<mojom::NotificationIdentifierPtr>
+                                     notifications) {
+                 return notifications.empty();
+               }).Then(std::move(callback)));
 }
 
 }  // namespace mac_notifications

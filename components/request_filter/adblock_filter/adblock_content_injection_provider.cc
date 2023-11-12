@@ -27,8 +27,6 @@ bool IsOriginWanted(RuleService* service, RuleGroup group, url::Origin origin) {
 }
 }  // namespace
 
-ContentInjectionProvider::Observer::~Observer() = default;
-
 ContentInjectionProvider::ContentInjectionProvider(
     content::BrowserContext* context,
     std::array<RulesIndexManager*, kRuleGroupCount> index_managers,

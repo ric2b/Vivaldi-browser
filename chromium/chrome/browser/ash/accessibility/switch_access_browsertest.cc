@@ -208,7 +208,14 @@ IN_PROC_BROWSER_TEST_F(SwitchAccessTest, NavigateButtonsInTextFieldMenu) {
   utils()->WaitForFocusRing("primary", "button", "Keyboard");
 }
 
-IN_PROC_BROWSER_TEST_F(SwitchAccessTest, TypeIntoVirtualKeyboard) {
+// TODO(crbug.com/1472440): Enable after fixing flakiness on Linux ChromiumOS
+// MSAN.
+#if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
+#define MAYBE_TypeIntoVirtualKeyboard DISABLED_TypeIntoVirtualKeyboard
+#else
+#define MAYBE_TypeIntoVirtualKeyboard TypeIntoVirtualKeyboard
+#endif
+IN_PROC_BROWSER_TEST_F(SwitchAccessTest, MAYBE_TypeIntoVirtualKeyboard) {
   utils()->EnableSwitchAccess({'1', 'A'} /* select */, {'2', 'B'} /* next */,
                               {'3', 'C'} /* previous */);
 
@@ -242,7 +249,7 @@ IN_PROC_BROWSER_TEST_F(SwitchAccessTest, TypeIntoVirtualKeyboard) {
   // js-based tests that have the ability to ask the text field for its value.
 }
 
-#if defined(MEMORY_SANITIZER) && BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_PointScanClickWhenMouseEventsEnabled \
   DISABLED_PointScanClickWhenMouseEventsEnabled
 #else
@@ -282,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(SwitchAccessTest,
   ASSERT_TRUE(IsMouseEventsEnabled(600, 600));
 }
 
-#if defined(MEMORY_SANITIZER) && BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_PointScanClickWhenMouseEventsDisabled \
   DISABLED_PointScanClickWhenMouseEventsDisabled
 #else

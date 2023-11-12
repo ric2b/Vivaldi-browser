@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.SuggestionListViewBinder.
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewBinder;
-import org.chromium.chrome.browser.omnibox.suggestions.base.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionItemViewBuilder;
@@ -44,6 +43,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestion
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.history_clusters.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
@@ -260,7 +260,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         adapter.registerType(
             OmniboxSuggestionUiType.ENTITY_SUGGESTION,
             parent -> new BaseSuggestionView<View>(
-                parent.getContext(), R.layout.omnibox_entity_suggestion),
+                parent.getContext(), R.layout.omnibox_basic_suggestion),
             new BaseSuggestionViewBinder<View>(EntitySuggestionViewBinder::bind));
 
         adapter.registerType(
@@ -303,7 +303,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
         mUrlHasFocus = hasFocus;
-        mMediator.onUrlFocusChange(hasFocus);
+        mMediator.onOmniboxSessionStateChange(hasFocus);
 
         // Vivaldi - Handle the visibility of search engine suggestion layout as per url focus
         if (BuildConfig.IS_VIVALDI && mSearchEngineSuggestionView != null)
@@ -422,15 +422,15 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             return true;
         }
         if (KeyNavigationUtil.isEnter(event) && mParent.getVisibility() == View.VISIBLE) {
-            mMediator.loadTypedOmniboxText(event.getEventTime());
+            mMediator.loadTypedOmniboxText(event.getEventTime(), event.isAltPressed());
             return true;
         }
         return false;
     }
 
     @Override
-    public void onTextChanged(String textWithoutAutocomplete, String textWithAutocomplete) {
-        mMediator.onTextChanged(textWithoutAutocomplete, textWithAutocomplete);
+    public void onTextChanged(String textWithoutAutocomplete) {
+        mMediator.onTextChanged(textWithoutAutocomplete);
     }
 
     /**
@@ -448,30 +448,25 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     }
 
     /** @return Suggestions Dropdown view, showing the list of suggestions. */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public OmniboxSuggestionsDropdown getSuggestionsDropdownForTest() {
         return mDropdown;
     }
 
     /** @return The current receiving OnSuggestionsReceived events. */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public OnSuggestionsReceivedListener getSuggestionsReceivedListenerForTest() {
         return mMediator;
     }
 
     /** @return The ModelList for the currently shown suggestions. */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public ModelList getSuggestionModelListForTest() {
         return mMediator.getSuggestionModelListForTest();
     }
 
-    @VisibleForTesting
     public @NonNull ModalDialogManager getModalDialogManagerForTest() {
         assert mModalDialogManagerSupplier.hasValue();
         return mModalDialogManagerSupplier.get();
     }
 
-    @VisibleForTesting
     public void stopAutocompleteForTest(boolean clearResults) {
         mMediator.stopAutocomplete(clearResults);
     }

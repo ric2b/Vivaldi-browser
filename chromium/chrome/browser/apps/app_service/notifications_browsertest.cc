@@ -266,7 +266,7 @@ class AppNotificationsWebNotificationTest
   }
 
   std::string CreateWebApp(const GURL& url, const GURL& scope) const {
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
+    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
     web_app_info->start_url = url;
     web_app_info->scope = scope;
     std::string app_id = web_app::test::InstallWebApp(browser()->profile(),
@@ -778,7 +778,7 @@ class FakeArcNotificationManagerDelegate
   ~FakeArcNotificationManagerDelegate() override = default;
 
   // ArcNotificationManagerDelegate:
-  bool IsPublicSessionOrKiosk() const override { return false; }
+  bool IsManagedGuestSessionOrKiosk() const override { return false; }
   void ShowMessageCenter() override {}
   void HideMessageCenter() override {}
 };

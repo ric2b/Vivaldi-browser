@@ -172,12 +172,6 @@ void CheckClientDownloadRequestBase::FinishRequest(
         FROM_HERE, base::BindOnce(std::move(callback_), result));
   }
 
-  if (FileTypePolicies::GetInstance()
-          ->PolicyForFile(target_file_path_, GURL{}, nullptr)
-          .extension() == "exe") {
-    base::UmaHistogramEnumeration("SBClientDownload.CheckDownloadStats.Exe",
-                                  reason, REASON_MAX);
-  }
   base::UmaHistogramEnumeration("SBClientDownload.CheckDownloadStats", reason,
                                 REASON_MAX);
   MaybeLogDocumentMetrics(client_download_request_data_, reason);
@@ -577,8 +571,7 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
     if (should_prompt) {
       result = DownloadCheckResult::PROMPT_FOR_SCANNING;
       reason = DownloadCheckResultReason::REASON_DEEP_SCAN_PROMPT;
-      base::UmaHistogramEnumeration("SBClientDownload.DeepScanEvent",
-                                    DeepScanEvent::kPromptShown);
+      LogDeepScanningPrompt();
     }
 
     // Only record the UMA metric if we're in a population that potentially
